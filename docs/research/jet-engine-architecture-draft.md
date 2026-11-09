@@ -1,6 +1,6 @@
 # Jet/ACE-compatible engine: high-level architecture draft
 
-> Provenance: written by Claude (Opus 5.5) on 2026-11-09, before the CalcDb charter existed. Its FrankenSqlite/asupersync observations come from those projects' public README and status documents and their dependency surface, read before their OpenAI/Anthropic licence rider was noticed; no source code was read. Superseded where it differs from CHARTER.md.
+> Provenance: written by Claude (Opus 5.5) on 2026-11-09, before the CalcDb charter existed. Its FrankenSqlite/asupersync observations come from those projects' public README and status documents and their dependency surface, read before their OpenAI/Anthropic licence rider was noticed. Beyond those documents, only Cargo manifests, crate line counts and a search of the Rust sources for which asupersync modules are used (and how often) were looked at; no implementation code was read. Superseded where it differs from CHARTER.md.
 
 Status: first draft, 2026-11-09. For discussion; nothing here is settled.
 
