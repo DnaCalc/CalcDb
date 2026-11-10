@@ -419,26 +419,125 @@ def cmd_ask():
 IDENT = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]{5,}\b")
 
 
+DICT = Path("/usr/share/dict/words")
+# Names of the source projects and their crates/modules: any hit containing one is high.
+PROJECT_TOKENS = {"fsqlite", "franken", "frankensqlite", "asupersync", "asup"}
+WORD = re.compile(r"[a-z0-9]+")
+SHINGLE = 12          # words in a row shared with a source file count as verbatim text
+
+
+def ident_parts(t):
+    """Split snake_case / CamelCase into lowercase parts."""
+    parts = []
+    for chunk in t.strip("_").split("_"):
+        parts += re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+", chunk)
+    return [p.lower() for p in parts if p and not p.isdigit()]
+
+
+def is_word(w, words):
+    if w in words or len(w) <= 2:
+        return True
+    for suf in ("s", "es", "ed", "ing", "er", "ers"):
+        if w.endswith(suf) and w[: -len(suf)] in words:
+            return True
+    return False
+
+
+def severity(t, parts, words, in_code):
+    """high: names a source project, or quotes a coined name; medium: long compound name; low: generic."""
+    if any(p in PROJECT_TOKENS or p.startswith(("fsqlite", "franken", "asupersync")) for p in parts):
+        return "high"
+    coined = any(not is_word(p, words) for p in parts)
+    if coined:
+        return "high" if in_code or len(parts) >= 3 else "medium"
+    if in_code or len(parts) >= 3:
+        return "medium"
+    return "low"
+
+
+def shingles(text):
+    w = WORD.findall(text.lower())
+    return {hash(" ".join(w[i:i + SHINGLE])): i for i in range(len(w) - SHINGLE + 1)}, w
+
+
 def cmd_leakcheck():
-    """Flag identifiers from the source code that appear in outputs, and code fences."""
+    """Rank source identifiers found in outputs by severity, find verbatim source text, count code.
+
+    Only counts go to stdout. Terms and passages go to leakcheck.json for the human reviewer.
+    """
     d = run_dir()
     allow = set((PROMPTS / "allow_terms.txt").read_text().lower().split()) if (PROMPTS / "allow_terms.txt").exists() else set()
-    idents = set()
+    words = set(DICT.read_text(errors="replace").lower().split()) if DICT.exists() else set()
+    words |= allow
+    if not words:
+        log("leakcheck: no word list at /usr/share/dict/words (apt install wamerican); severities will be pessimistic")
+
+    outputs = sorted(d.rglob("*.md"))
+    out_sh = {}                      # shingle hash -> list of (output index, word position)
+    out_words = []
+    for k, p in enumerate(outputs):
+        sh, w = shingles(p.read_text(errors="replace"))
+        out_words.append(w)
+        for h, i in sh.items():
+            out_sh.setdefault(h, []).append((k, i))
+
+    idents = {}                      # identifier -> occurrences in source code
+    verbatim = {}                    # output index -> {word position: source file}
     for repo in SOURCES.iterdir():
-        for p in repo.rglob("*.rs"):
-            if any(s in p.parts for s in SKIP_DIRS):
+        for p in repo.rglob("*"):
+            if not p.is_file() or any(s in p.parts for s in SKIP_DIRS) or p.suffix not in TEXT_EXT:
                 continue
-            for t in IDENT.findall(p.read_text(errors="replace")):
-                if ("_" in t.strip("_") or re.search(r"[a-z][A-Z]", t)) and t.lower() not in allow:
-                    idents.add(t)
-    report = []
-    for p in sorted(d.rglob("*.md")):
+            if p.stat().st_size > 5_000_000:
+                continue
+            txt = p.read_text(errors="replace")
+            if p.suffix == ".rs":
+                for t in IDENT.findall(txt):
+                    if ("_" in t.strip("_") or re.search(r"[a-z][A-Z]", t)) and t.lower() not in allow:
+                        idents[t] = idents.get(t, 0) + 1
+            w = WORD.findall(txt.lower())
+            for i in range(len(w) - SHINGLE + 1):
+                hits = out_sh.get(hash(" ".join(w[i:i + SHINGLE])))
+                if hits:
+                    for k, j in hits:
+                        verbatim.setdefault(k, {}).setdefault(j, f"{repo.name}/{p.relative_to(repo)}")
+
+    report, totals = [], {"high": 0, "medium": 0, "low": 0, "verbatim_passages": 0, "code_fences": 0}
+    files_with = {k: 0 for k in totals}
+    for k, p in enumerate(outputs):
         txt = p.read_text(errors="replace")
-        report.append({"file": str(p.relative_to(d)), "identifier_hits": sorted({t for t in IDENT.findall(txt) if t in idents}),
-                       "code_fences": txt.count("```") // 2})
+        code_spans = set(re.findall(r"`([^`\n]+)`", txt))
+        in_code = {t for s in code_spans for t in IDENT.findall(s)}
+        hits = {"high": [], "medium": [], "low": []}
+        for t in sorted({t for t in IDENT.findall(txt) if t in idents}):
+            hits[severity(t, ident_parts(t), words, t in in_code)].append(
+                {"term": t, "source_count": idents[t], "in_code_span": t in in_code})
+        # merge overlapping shingles into passages
+        passages, pos = [], sorted(verbatim.get(k, {}))
+        for j in pos:
+            if passages and j <= passages[-1]["end"]:
+                passages[-1]["end"] = j + SHINGLE
+            else:
+                passages.append({"start": j, "end": j + SHINGLE, "source": verbatim[k][j]})
+        w = out_words[k]
+        passages = [{"words": p_["end"] - p_["start"], "source": p_["source"],
+                     "text": " ".join(w[p_["start"]:p_["end"]])} for p_ in passages]
+        fences = txt.count("```") // 2
+        entry = {"file": str(p.relative_to(d)), "high": hits["high"], "medium": hits["medium"],
+                 "low": hits["low"], "verbatim": passages, "code_fences": fences}
+        report.append(entry)
+        for key, n in (("high", len(hits["high"])), ("medium", len(hits["medium"])), ("low", len(hits["low"])),
+                       ("verbatim_passages", len(passages)), ("code_fences", fences)):
+            totals[key] += n
+            files_with[key] += 1 if n else 0
+    report.sort(key=lambda e: (-len(e["verbatim"]), -len(e["high"]), -len(e["medium"]), e["file"]))
     (d / "leakcheck.json").write_text(json.dumps(report, indent=1))
-    flagged = [r for r in report if r["identifier_hits"] or r["code_fences"]]
-    log(f"leakcheck: {len(report)} files, {len(flagged)} flagged -> {d/'leakcheck.json'} (review before release)")
+    key_files = [e for e in report if e["file"] == "SYNTHESIS.md" or re.fullmatch(r"reduce/[^/.]+\.md", e["file"])]
+    log(f"leakcheck: {len(report)} files -> {d/'leakcheck.json'} (review before release)")
+    for key in totals:
+        log(f"  {key:18} {totals[key]:6} in {files_with[key]} files")
+    for e in sorted(key_files, key=lambda e: e["file"]):
+        log(f"  {e['file']:28} high {len(e['high'])}  medium {len(e['medium'])}  low {len(e['low'])}"
+            f"  verbatim {len(e['verbatim'])}  fences {e['code_fences']}")
 
 
 def main():

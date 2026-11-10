@@ -64,4 +64,11 @@ on re-run. Change model with `--model` (default deepseek/deepseek-v4-pro).
 - `out/<run>/reduce/<repo>.md`: per-repo report
 - `out/<run>/SYNTHESIS.md`: lessons for CalcDb
 - `out/<run>/provenance.jsonl`: model, provider, repo commit, input hash, usage and cost per call
-- `out/<run>/leakcheck.json`: source identifiers or code fences found in outputs
+- `out/<run>/leakcheck.json`: per output file, worst first:
+  - source identifiers found in it, ranked `high` (names a source project, or a coined name
+    that is quoted as code or has three or more parts), `medium` (other coined names, quoted
+    names, long compound names) or `low` (two ordinary English words, e.g. a generic
+    `page_size`); dictionary from `/usr/share/dict/words` (`apt install wamerican`);
+  - `verbatim`: runs of 12 or more words shared with a source file, with the file;
+  - code fences.
+  Stdout shows only counts. Add generic terms to `prompts/allow_terms.txt` to silence them.
