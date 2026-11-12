@@ -1,0 +1,53 @@
+# I-10. Expressions, sandbox and CalcVBA functions
+
+Revision 2 · Stage 1, response 3 · 2026-11-12
+
+## One semantic service with explicit context
+
+**D-EXPR-1 — shared semantics decided; execution form recommended.** Bind expressions to compact typed nodes with stable node IDs. Use a simple scalar evaluator over those nodes first; register-based instructions or compiled specialization remain later measured substitutions for the same service. SQL, Find, defaults, validation and QueryDef execution do not implement independent coercions. Internal borrowed values become owned Automation values only when the called contract requires them, following I-02.
+
+An evaluation context supplies expression use, field/parameter bindings, locale/collation, wildcard mode, sandbox policy, function-registry generation and injected time/random services. Context-sensitive Access adapters reuse shared primitives. Access documents different omitted-replacement behavior for Nz in VBA and query fields; unqualified forwarding to a VBA routine would therefore be insufficient.[^nz] Database-aware functions use the same ISAM/SQL services and visibility context, not another evaluator.
+
+Keep Null, Empty, missing arguments, errors and zero-length text distinct. Shared And/Or operations retain their logical/bitwise rules; SQL predicate acceptance is a separate context rule. Validation has its own acceptance policy rather than reusing WHERE's treatment of Null. Default and validation expressions also have different name/function admission rules.[^context] Required, AllowZeroLength and validation checks remain distinct constraints.
+
+## Effects constrain evaluation
+
+Each bound node/function records return-type constraints, Null behavior, determinism, possible errors, database reads, host calls and clock/random effects. Unknown effects are conservative. Metadata is sufficient to reject an unsafe transformation, not to declare a pure but erroring expression freely reorderable.
+
+VBA and Access documentation describe eager evaluation of IIf's result arms.[^iif] Use that as the provisional baseline; R-EXPR-1 distinguishes literal, row-dependent and host-call cases before admitting folding, branch elimination or moved evaluation. It also determines argument/error order and coercion timing. A query must not become safer or faster by skipping an error that ACE exposes. Calls to time/random services occur at the evidenced evaluation points; injection does not imply one timestamp or random value per query.
+
+The shared pattern service supports both Access wildcard modes over the required UTF-16/collation semantics. Prefer bounded compiled matching state cached by pattern, mode, collation and semantic generation; do not route arbitrary BSTR units through a UTF-8-only regex conversion. LIKE-to-range access needs an exact inclusion argument and any required residual test. Comparison, conversion and index-key construction retain I-05's distinct contracts.
+
+## Sandbox and host functions
+
+Sandbox admission is an explicit capability check attached to function binding and the evidenced invocation point. Resolve the registered function's identity, not merely its textual alias, and invalidate plans when registry/policy changes. Microsoft distinguishes Access-hosted and non-Access sandbox modes, and trust does not simply remove sandbox restrictions.[^sandbox] Capture the actual host/policy; do not alter Trust Center, macro security or HKLM to make an experiment pass.
+
+**D-UDF-1 — prefer an explicit versioned host callback, provisional under R-UDF-1/I-HOST-1.** CalcDb requires function resolution, argument/result ownership, effect metadata and error delivery from the host. These are requirements on an integration boundary, not invented existing CalcVBA ABI entry points. If observation requires in-process runtime discovery, replace the resolver adapter without changing the evaluator.
+
+VBA invocation stays on the caller thread. Prepare stable arguments and release internal latches before entry; on return, revalidate cursor, catalog and transaction generations and retained-plan dependencies, including function registry, sandbox and semantic context. Never repeat a callback to recover from stale physical preparation. Reentrancy may alter or close objects used by the outer query, so keep the outer operation's ownership distinct from its continuing validity. R-UDF-1 determines permitted reentry and public failures. Access.Application.Eval's host-UDF support does not prove standalone ACE can locate arbitrary VBA projects.[^eval]
+
+DNA Calc's extra host functions are opt-in and mark dependent queries as nonportable. Stored Access modules remain preserved/readable and are not executed by CalcDb. Domain functions and other database-context functions use explicit host/database adapters with measured name, scope and visibility behavior; unknown availability is an exposed compatibility gap, not a fabricated result.
+
+## Costs, experiments and reopening
+
+Cache binding and constant patterns, reuse an operation-local value arena and avoid per-node heap allocation on the scalar path. Count conversions, BSTR materializations, node visits, comparisons, database reentries and host crossings. A compiled evaluator is justified only by measured savings after exact result/error/effect equivalence; it is not required for initial correctness.
+
+R-EXPR-1 crosses projection, predicate, Find, default and validation contexts with Null/Empty/missing values, numeric/Decimal/date boundaries, text modes, Nz and IIf. Capture types, exact values, errors and instrumented UDF invocation order. Run the scalar/context baseline first, then R-UDF-1 routing/instrumentation, then R-EXPR-1's host-effect extension. R-UDF-1 crosses Access-hosted versus standalone DAO/ADO, policy/registry state and reentrant operations. Outcomes select context adapters, effect metadata and resolver behavior. The mutation path develops needed default/validation adapters early in this same service; W-06 adds full SELECT binding/execution. Repeated differences extend the shared service or policy; they do not justify divergent SQL and VBA arithmetic implementations. No target-build expression result is claimed observed here.
+
+## Detailed experiment cards
+
+All cards in this chapter are planned experiments, with no target-build observations claimed. I-15 defines the shared capture, comparison, ambiguity and cross-build conditions; the conditions below extend that contract. Research prerequisites require the relevant evidence or minimal probe, not completion of a later production subsystem.
+
+### R-EXPR-1 — Shared values with Access context
+
+**Question / conditions:** which context adapters and effect rules are necessary? Cross projection, predicate, Find, default and field/table validation; host/standalone and sandbox settings already present in the environment. **Fixture / operations:** Null, Empty, omitted arguments, errors, zero-length/unpaired-surrogate text, Decimal/Currency/date/numeric boundaries; And/Or, Nz, IIf, comparisons, patterns and database-context functions. Instrument an admitted UDF to record call order and failures; vary constant versus row-dependent expressions. **Capture / comparison:** raw result subtype/value, evaluation trace, conversion/error point and accepted/rejected expression context. **Decides:** observed context differences become adapters around shared primitives; observable effects or error changes prohibit folding/reordering. Admission differences change capability policy, not machine security settings. Unknown UDF delivery does not block the scalar probe subset. **Depends / size:** R-ORACLE-1; L. Run the scalar/context baseline first, R-UDF-1 routing/instrumentation next, then the host-effect extension of this card. Mutation defaults/validation use the same early semantic service; full SELECT work follows in W-06. Unknown host delivery leaves the scalar subset available, without a circular prerequisite.
+
+### R-UDF-1 — Resolver, ownership and reentry
+
+**Question / conditions:** how does supported host integration resolve functions and continue after callbacks? Compare Access-hosted and standalone DAO, with ADO as its policy probes become available, with recorded function registry, trust and sandbox state. **Fixture / operations:** built-ins, declared host functions, absent/ambiguous names, arguments/results with owned strings/arrays/objects, callback errors, and reentry that edits, requeries, closes or changes a relevant registry/context. Do not execute preserved database front-end modules in CalcDb. **Capture / comparison:** resolution/call/error sequence, caller thread, argument ownership and outer-operation usability; exclude internal-latch ownership at callback entry. **Decides:** explicit host callbacks remain preferred if sufficient; evidenced runtime discovery changes only the resolver. Reentry outcomes select continuation validation and public failure policy; an unsupported host route remains visible. **Depends / size:** R-EXPR-1 scalar baseline, I-HOST-1; M. Minimal host prototype precedes accepting host-UDF SQL, not full DAO delivery.
+
+[^nz]: Microsoft, [Application.Nz](https://learn.microsoft.com/en-us/office/vba/api/access.application.nz), accessed 2026-11-12; documented context difference, not an observed ACE capture.
+[^context]: Microsoft, [And](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/and-operator), [Or](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/or-operator), [DefaultValue](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-defaultvalue-property-dao) and [ValidationRule](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/field-validationrule-property-dao), accessed 2026-11-12.
+[^iif]: Microsoft, [VBA IIf](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/iif-function) and [Access IIf](https://support.microsoft.com/en-gb/access/functions/iif-function), accessed 2026-11-12.
+[^sandbox]: Microsoft, [Functions and properties blocked by sandbox mode](https://support.microsoft.com/en-us/access/functions-and-properties-in-access-blocked-by-sandbox-mode), accessed 2026-11-12; current support guidance, not permission to change machine security settings.
+[^eval]: Microsoft, [Application.Eval](https://learn.microsoft.com/en-us/office/vba/api/access.application.eval), accessed 2026-11-12. Access host contract only; portable host requirements derive from the supplied CalcVBA note and one-pager.
