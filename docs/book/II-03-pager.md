@@ -1,6 +1,6 @@
 # II-03. VFS, pager and page cache
 
-Revision 3 · Stage 2, response 7 · 2026-11-13
+Revision 4 · Stage 2, response 8 · 2026-11-13
 
 The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
@@ -371,27 +371,34 @@ Checking a generation after a read detects a stale result but cannot turn a mixe
 
 A native-source permit is a logical lifetime obligation. Acquisition briefly checks `Readable` and the expected `native_source_image`, increments the page's active-load count, then releases the metadata latch before I/O. A spill-source permit instead retains an immutable spill record. These permits are distinct from the cache's short mutex and from the external admission lease.
 
-**Figure F-21 — preserving the old image before native overwrite.** Mermaid source emitted; not render-verified. Existing pins keep their own buffers; native loads must drain.
+**Figure F-21 — preserving the old image before native overwrite.** Mermaid source emitted; not render-verified. Existing pins keep their own buffers; native loads must drain. The logical admission hold precedes preservation selection and can span I/O without holding a metadata latch.
 
 ```mermaid
 flowchart TD
     A["Native page backs image D17.0"] --> B["Read permit: count active load"]
     B --> C["Positioned read outside latch"]
     C --> D["Settle permit; immutable frame"]
-    A --> E["Writer freezes new native loads"]
+    A --> V["Claim fresh-view admission hold"]
+    V --> S["Select obligations; reserve preservation"]
+    S --> E["Writer freezes new native loads"]
     E --> F["Drain active loads outside latch"]
     F --> G["Retain D17.0 in frame or spill"]
     G --> H["Detach D17.0 from native source"]
     H --> I["Write authorized new image or spans"]
     I --> J["Coordinator resolves physical outcome"]
     G --> K["Older views and pending loads use retained source"]
+    J --> L["Selected outcome releases or converts admission"]
 ```
 
-Before the first overwrite, reserve the writer's preservation workspace, freeze affected native sources in a deterministic order, drain active loads, and preserve every old image still required by pins, retained visibility owners, rollback scopes **or pending target loads**. A load token may already own a target without yet holding a native read permit. Redirect that target to a retained frame/spill source before overwriting; waiting until logical commit loses its old data.
+Before selecting the preservation set or submitting any effect that can invalidate a native source, claim a logical `ViewAdmissionHold`. Selection and registration of a fresh required-current view use the same short visibility synchronization as this claim. Otherwise a reader can register the old current view after the writer selected its preservation set and require an image that was omitted. Already registered views and valid transfers/clones of their ownership continue; fresh selections retain a dependency on the exact attempt and wait or take the selected public continuation outside latches. This is local reader/writer coordination, not external exclusion of ACE.
 
-Reserve preservation capacity before the freeze. Otherwise loaders can hold all frames while waiting for a frozen page, while the writer waits for a frame to preserve it. The first implementation has one admitted writer, which simplifies this ordering; a coordinator may not wait on an unfinished load that itself needs that coordinator to unfreeze its source.
+The writer retains its required input/private-read context before claiming the hold and reserves the hold's metadata before installation. With admission held, select the registered obligations and reserve preservation capacity outside latches, before freezing affected native sources in deterministic order. Drain active native reads and preserve every old image still required by pins, retained visibility owners, rollback scopes **or pending targets/load tokens**. A target may already be owned without holding a native read permit. Redirect it to complete retained frame/spill backing before overwriting; waiting until logical commit loses its old data. In a qualified external-writer mode, preservation also needs the native source role that protects those bytes.
 
-After physical effects, a coordinator-issued publication permit changes the affected current-image bindings together at the selected logical boundary. This is in-memory visibility coordination, not a claim that disk writes were atomic. Unchanged pages keep their existing image identities. If a write has unresolved effects, the native source remains `Uncertain`; neither an old nor a final new image is advertised as reloadable merely because the cache has a copy of it. Subsequent public operation policy is the transaction coordinator's responsibility.
+Reserving preservation capacity before the freeze avoids loaders holding all frames while waiting for a frozen page and the writer waiting for a frame to preserve it. The first implementation has one admitted writer, which simplifies this ordering. The writer must not wait on a pending load that needs the writer to unfreeze its source; its owned preservation transition instead adopts a completed image or uses the admitted preservation-read role to establish alternative backing. No metadata latch crosses a wait, I/O, callback or potentially reentrant destruction. The admission hold may span I/O, and its duration must be measured.
+
+A coordinator-issued publication permit changes the affected current-image bindings together at II-08's selected logical or failure boundary. This short publication transition is distinct from the earlier admission hold and does not claim atomic or durable disk writes. Unchanged pages keep their existing image identities. The selected outcome releases or converts the hold; unresolved effects can retain restricted admission and the same resolution owner. The relationship to flush completion follows that outcome program rather than a hardcoded release point. An `Uncertain` native source does not become reloadable as an old or final new image merely because the cache has a copy.
+
+Failure before source detachment or native effects settles the private attempt and its hold according to the permitted unchanged state. Later failure retains its exact progress, source obligations and restrictions. Never reopen admission solely to let a destructor callback progress. Defer reentrant destruction to an owner-safe boundary or use the selected same-attempt continuation, without waiting for the current call or callback ancestor to unblock itself. Subsequent public operation policy remains the transaction coordinator's responsibility; II-09 specifies the admission/ownership mechanism.
 
 ### 4.3 CLOCK and scan admission
 
