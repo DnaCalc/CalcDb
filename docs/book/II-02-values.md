@@ -1,6 +1,6 @@
 # II-02. Values, strings and ownership algorithms
 
-Revision 1 · Stage 2, response 1 · 2026-11-13
+Revision 2 · Stage 2, response 3 · 2026-11-13
 
 This is the complete first design of the value and ownership chapter. Its algorithms are proposed CalcDb mechanisms, not descriptions of an unpublished CalcVBA implementation. It develops **RQ-VAL-01**, **RQ-VAL-03** and **RQ-TYPE-01**, and supports **RQ-COM-01**, **RQ-PORT-03** and the shared semantics required by **RQ-VAL-02**. Its binding contracts are **K-VALUE**, **K-STRING**, **K-PAGE**, **K-ADMISSION**, **K-THREAD**, **K-ERROR** and **K-EXPR**. Native layout facts have documentary support; target Windows/ACE/CalcVBA execution is still outstanding.
 
@@ -107,7 +107,7 @@ Scalar construction and moves perform constant local work. String clone cost gro
 
 ## 5. Materializing a native field
 
-The cursor supplies a checked field view; the value layer does not independently parse catalog or page layouts. Its descriptor includes the native kind, width, precision/scale, null interpretation, text encoding, long-value locator and the evidenced public projection. The same descriptor is consumed by DAO, ADO and SQL. SQL may retain a borrowed physical value for a local operation without constructing a public VARIANT, but any semantic comparison or conversion still uses the shared rules and explicit context.
+The wrapper-aware physical decoding and calculated Boolean/Numeric/Memo exceptions are detailed in II-04 §5.6. The cursor supplies a checked field view; the value layer does not independently parse catalog or page layouts. Its descriptor includes the native kind, width, precision/scale, null interpretation, text encoding, long-value locator and the evidenced public projection. The same descriptor is consumed by DAO, ADO and SQL. SQL may retain a borrowed physical value for a local operation without constructing a public VARIANT, but any semantic comparison or conversion still uses the shared rules and explicit context.
 
 ### Algorithm contract
 
@@ -117,6 +117,7 @@ The cursor supplies a checked field view; the value layer does not independently
 materialize_field(view, projection, context, owner, budget) -> owned_value | failure
   validate view identity, page pin, row generation and descriptor generation
   inspect checked null/type/length information through the format service
+  resolve any calculated-result envelope through that same format service
   result := initialized empty canonical VARIANT
   if native value is Null:
       construct the evidenced null projection in result
@@ -138,7 +139,7 @@ materialize_field(view, projection, context, owner, budget) -> owned_value | fai
 
 Ordinary decoding from native integer bytes into the corresponding canonical field does not introduce a second semantic representation. It is unavoidable format work. Likewise, the format layer can preserve an original Decimal or extended temporal payload when copying an untouched row. It must not route that preservation through a narrower intermediate public type.
 
-Integer range/sign checks, native Yes/No interpretation, AutoNumber identity, Currency scale and public DAO/ADO type selection belong to their evidenced descriptors and shared conversion rules. A Boolean's canonical arm and a native packed Boolean field have different physical shapes; do not copy one directly over the other. GUID, OLE and Hyperlink metadata must survive even if a selected API projects a display value that does not expose all of it. Unsupported semantic operations stay explicit rather than silently replacing a typed value with a string.
+Integer range/sign checks, native Yes/No interpretation, AutoNumber identity, Currency scale and public DAO/ADO type selection belong to their evidenced descriptors and shared conversion rules. A Boolean's canonical arm and an ordinary native packed Boolean field have different physical shapes; do not copy one directly over the other. GUID, OLE and Hyperlink metadata must survive even if a selected API projects a display value that does not expose all of it. Unsupported semantic operations stay explicit rather than silently replacing a typed value with a string.
 
 Extended date/time is an initial requirement. If the corrected shared foundation lacks a representation or operation required by its evidenced DAO/ADO behavior, I-FOUNDATION-1 and R-FMT-2 must extend the shared contract and establish the exact public projection. The design does not reserve a private CalcDb tag or silently turn the value into Double. Until the mapping is established, preserving bytes is useful reader/writer groundwork but does not count as complete semantic support.
 

@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r2** · 2026-11-13 · Current state only.
+Revision **S2-r3** · 2026-11-13 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-03 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-04 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 3 — II-04 Format, rows, long values and allocation**, with concrete codecs, record layouts, native allocation transitions and worked byte examples.
+- Next: **Stage 2, response 4 — II-05 Indexes and sort-order keys**, with native index pages/entries, exact keys, traversal and mutation algorithms.
 
 ## Contents and estimates
 
@@ -20,9 +20,9 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 9.9 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.0 / 19.9 | I revised; II drafted |
-| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.4 / 0.0 | I revised; II pending |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.0 | I revised; II drafted |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.0 / 20.1 | I revised; II drafted |
+| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.3 / 0.0 | I revised; II pending |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 1.8 / 0.0 | I revised; II pending |
 | 07 | ISAM, cursors and constraints | 1.5 / 9 | 2.1 / 0.0 | I revised; II pending |
@@ -36,7 +36,7 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
 | 16 | Research and development sequence | 1 / 4 | 9.5 / 0.0 | I revised; II pending |
 
-Part I ≈ **55.6 pages**; current Part II ≈ **38.7**. Appendices separate: A-01 sources ≈ **19.4**, A-02 experiments ≈ **20.4**.
+Part I ≈ **55.7 pages**; current Part II ≈ **69.4**. Appendices separate: A-01 sources ≈ **22.8**, A-02 experiments ≈ **21.4**.
 
 ## Scope owner index
 
@@ -70,7 +70,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-ARCH-1 | Decided | One format, ISAM, evaluator, oracle and harness. | 01,07,11,12 |
 | D-VALUE-1 | Decided representation; provisional package | Real platform VARIANT/BSTR; 24-byte Windows x64; corrected CalcVBA assumed; I-FOUNDATION-1. | 02,10,13 |
 | D-STRING-1 | Provisional | Pinned fields; owned BSTR results; direct output versus bounded decode reuse, R-STRING-1. | 02,03,07,12 |
-| D-FMT-1 | Recommended | One evidenced description drives codecs, validators, inspection and generators. | 04,06 |
+| D-FMT-1 | Recommended | Compiled native row/scalar/wrapper/map rules; independent ACE evidence, R-FMT-1/2. | 04,06 |
 | D-OPAQUE-1 | Recommended | Preserve unknown bytes and references; preflight unsafe relocation before mutation. | 04,06,14 |
 | D-PAGER-1 | Recommended | Buffered positioned VFS; image keys/source permits, stable pins, private images and bounded spill. | 03,08,09 |
 | D-SORT-1 | Provisional | Exact native keys from evidenced descriptors; R-SORT-3. | 05,10,11 |
@@ -221,6 +221,8 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Image identity | An immutable per-page image; distinct from a database view token, native allocation lifetime and RAM-slot generation. |
 | Native-source permit | An owned read-source lifetime that drains before overwrite; metadata latches are released during I/O. |
 | Stored image | The bytes actually encoded for the file; distinct from a decoded header or logical native-page view. |
+| Physical column coordinate | Stored column number/variable index/fixed offset, distinct from column ID, active position and display order. |
+| Calculated-result wrapper | Native envelope and type-specific inner codec, selected from flags/ResultType; Memo resolves LV content before unwrap. |
 
 ## Source ledger — compact current index
 
@@ -233,7 +235,7 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | V | 8115aa781; user-corrected | F | P |
 | U | 2026-11-13 | R | P |
 | A | Attached assignment | R | P |
-| B | S2-r2 | S | P |
+| B | S2-r3 | S | P |
 | S-MS-TXN | Updated 2022-03-18; Applies to Access 2013 / Office 2013 | F | U |
 | S-MS-VARIANT | Updated 2021-04-02 | F | U |
 | S-MS-FACTORY | Updated 2022-01-31 | F | U |
@@ -250,8 +252,8 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | L-ASYNC-4 | Supplied snapshot/hash A-01 | C | P |
 | L-ASYNC-5 | Supplied snapshot/hash A-01 | C | P |
 | L-ASYNC-6 | Supplied snapshot/hash A-01 | C | P |
-| S-JACK-FMT | Live@2026-11-12 + pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-COL | Live/unpinned@2026-11-12 | F/C | H |
+| S-JACK-FMT | be0a2139… | F/C | H |
+| S-JACK-COL | be0a2139…; live separately | F/C | H |
 | S-JACK-LONG | Live@2026-11-12 + pin be0a2139b087@2026-11-13 | F/C | H |
 | S-JACK-MAP | Live@2026-11-12 + pin be0a2139b087@2026-11-13 | F/C | H |
 | S-JACK-INDEX | Live/unpinned@2026-11-12 | F/C | H |
@@ -404,10 +406,19 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | S-LINUX-WRITE | Linux man-pages 6.19 | F | U |
 | S-LINUX-FSYNC | Linux man-pages 6.19 | F | U |
 | S-LINUX-TRUNCATE | Linux man-pages 6.19 | F | U |
+| S-JACK-DATATYPE | be0a2139… | F/C | H |
+| S-MS-FIELD-SIZE | Doc@2026-11-13 | F | U |
+| S-MS-LARGE-NUMBER | Doc@2026-11-13 | F | U |
+| S-MS-DATE-TYPE | Doc@2026-11-13 | F | U |
+| S-MS-EXT-DATETIME | Doc@2026-11-13 | F | U |
+| S-JACK-CALC | be0a2139… | F | H |
+| S-JACK-NULLMASK | be0a2139… | F/C | H |
+| S-MS-AUTONUM | Doc@2026-11-13 | F | U |
+| S-MS-DAO-FIELD-ATTR | Doc@2026-11-13 | F | U |
 
 ## Figures
 
-All **22 IDs / 24 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
+All **28 IDs / 30 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
 
 | Figure | Location | Actual form/status |
 | --- | --- | --- |
@@ -433,6 +444,12 @@ All **22 IDs / 24 captions emitted**; none render-verified. Tables are identifie
 | F-20 | II-03 | Mermaid source; emitted |
 | F-21 | II-03 | Mermaid source; emitted |
 | F-22 | II-03 | Markdown hypothesis table; emitted |
+| F-23 | II-04 | Markdown hypothesis table; emitted |
+| F-24 | II-04 | Markdown hypothesis table; emitted |
+| F-25 | II-04 | Markdown hypothesis table; emitted |
+| F-26 | II-04 | Markdown hypothesis table; emitted |
+| F-27 | II-04 | Mermaid source; emitted |
+| F-28 | II-04 | Markdown hypothesis table; emitted |
 
 ## Open issues / next actions
 
@@ -445,7 +462,7 @@ All **22 IDs / 24 captions emitted**; none render-verified. Tables are identifie
 | O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
 | O-UNDO | R-CRASH-1/2: qualify native baseline; optional whole-file eligibility/disarm/recovery only where survival classes remain unchanged. | 03,08 |
 | O-ORACLES | R-ORACLE-1: capture remaining environment metadata and validate owned-process/capture behavior; initial targets already selected. | 15 |
-| O-FORMAT | R-FMT/SORT/CAT/PRESERVE and D-WRITE-1: settle native graphs, keys, publication and unknown-reference limits. | 04–06 |
+| O-FORMAT | R-FMT-1/2: qualify row/text/calculated/LV/map mechanics; then native keys/catalog/preservation and D-WRITE-1 phases. | 04–06 |
 | O-POLICY | R-CURSOR/TXN/SQL/DAO/ADO/ERR: settle undocumented or contradictory target transitions. | 07–12 |
 | O-LOCK | R-LOCK-1/2 first; R-LOCK-3/4 settle later native/SMB coherence and shared writes. | 09 |
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
@@ -454,5 +471,5 @@ All **22 IDs / 24 captions emitted**; none render-verified. Tables are identifie
 ## Short changelog
 
 - 2026-11-13: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-13: II-03 adds pinned native-format evidence, byte examples, VFS/cache algorithms and 16 designed checks; I-03/I-08/A-02 reconciled.
-- 2026-11-13: II-01–03 drafted; 22 figure IDs emitted; next II-04. No ACE execution or rendered-figure result claimed.
+- 2026-11-13: II-04 adds row/scalar/calculated/LV/map mechanics, checked byte examples and 22 designed tests; I-04/II-02/II-03/A-02 reconciled.
+- 2026-11-13: II-01–04 drafted; 28 figure IDs emitted; next II-05. No ACE execution or rendered-figure result claimed.

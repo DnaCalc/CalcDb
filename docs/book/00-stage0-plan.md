@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r2 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
+Revision S2-r3 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-03, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-04, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -43,9 +43,9 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 9.9 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.0 / 19.9 | I revised; II drafted |
-| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.4 / 0.0 | I revised; II pending |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.0 | I revised; II drafted |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.0 / 20.1 | I revised; II drafted |
+| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.3 / 0.0 | I revised; II pending |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 1.8 / 0.0 | I revised; II pending |
 | 07 | ISAM, cursors and constraints | 1.5 / 9 | 2.1 / 0.0 | I revised; II pending |
@@ -177,7 +177,7 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | D-ARCH-1 — Decided | 01,07,11,12 | One ISAM engine serves DAO, ADO and SQL; one evaluator and one format description. | Direct cursor access is central to the first-priority workload. A dependency DAG places shared value/error/schema contracts below their consumers; checks enforce portability. | Scope fixes one engine. Refine module boundaries only for a demonstrated contract/cost conflict; never create a SQL-only storage path or an independent DAO evaluator. |
 | D-VALUE-1 — Decided representation; provisional package | 02,10,13 | Share the platform's real Automation VARIANT and real BSTR with corrected CalcVBA; Windows x64 VARIANT is 24 bytes. Prefer a common interpreter-independent foundation package. | Current CalcVBA has a private 16-byte form and COM-boundary conversion; the user says it is being corrected. CalcDb assumes the exact platform layout, with borrowed encoded fields remaining storage views rather than a second semantic representation. | I-FOUNDATION-1 settles package ownership and dependencies. ABI tests check size, alignment, array stride and allocator ownership routinely. |
 | D-STRING-1 — Provisional | 02,03,07,12 | Borrow encoded fields under pins; decode lazily to reusable UTF-16 when useful, or directly into an owned BSTR for a single public result. | Explicit lengths preserve embedded nulls and arbitrary UTF-16. Returned BSTRs never alias scratch or frames. Reserve before materialization and account for retained pins. | R-STRING-1 compares direct output decode, scratch reuse and repeated access using allocations, copied/decoded bytes and working set; choose measured policies without duplicating semantics. |
-| D-FMT-1 — Recommended | 04,06 | Describe each supported format variant once, then generate or specialise checked codecs, validation, generators and inspection from it. | Evidence IDs attach to format rules. Generated direct field access avoids interpreting a schema on each row-loop call. Variant parameters express real file differences; the layout of a COM Boolean is not the on-disk Boolean encoding. | R-FMT-1/2 settle layouts and mutation rules. Add a format variant when evidence demands it; do not fork independent reader and writer descriptions. |
+| D-FMT-1 — Recommended | 04,06 | One evidenced format description compiles checked page/row/scalar/wrapper/map codecs, validators, inspection and generators. | Bind physical column coordinates separately from API order; preserve native bytes/precision; calculated result flags/properties select their own wrappers; internal agreement still needs independent ACE evidence. | R-FMT-1/2 confirm or change profile coordinates, text/scalar/wrapper/LV forms, ownership and native creator/reuse rules. |
 | D-OPAQUE-1 — Recommended | 04,06,14 | Protect unknown byte ranges and their ownership/reference relationships; plan the full mutation before applying any part. | Preservation includes unsupported properties, fields and front-end payloads. If an edit would move or rewrite unknown references, return a typed refusal before mutation; that refusal remains a compatibility failure. | R-PRESERVE-1 can permit more operations once ownership and relocation rules are known. Do not rebuild the whole database from only understood objects. |
 | D-PAGER-1 — Recommended | 03,08,09 | Blocking buffered positioned VFS; sparse image-keyed cache, stable pins, native-source permits, private images and bounded spill. | Resolve views to per-page image identity; keep old reload sources valid before overwrite; coalesce loads with bounded handoff ownership. Event-based Windows requests remain owned until terminal completion; CLOCK/scan tuning is measured. | Native adapter/ownership failures change the mechanism; R-LOCK-1/2 settle admission, R-FMT-2/R-CRASH-1/2 physical effects, and I-15 workload measurements replacement/admission tuning. |
 | D-SORT-1 — Provisional | 05,10,11 | Prefer evidence-backed table-driven ACE sort keys and explicit database sort descriptors. | Key bytes and comparison semantics are compatibility contracts. Generic host Unicode collation is insufficient evidence. Unsupported key generation refuses writes rather than creating an index that needs repair. | R-SORT-3 distinguishes database descriptor, locale and build effects. Extend descriptors only for observable file/options dimensions; unresolved build differences require a declared baseline, never a hidden oracle-build switch. |
@@ -237,7 +237,7 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-02 | I-02-values.md | VBA → DAO → cursor → page, including borrowed/owned value transitions. | Mermaid source; emitted; not render-verified |
 | F-03 | I-02-values.md | Encoded field, decoded UTF-16 and BSTR ownership/lifetimes. | Markdown table; table emitted; no separate Mermaid diagram; not render-verified |
 | F-04 | I-03-pager.md | Page pin, clean/dirty/version states and reclamation. | Mermaid source; emitted; not render-verified |
-| F-05 | I-04-format.md | Jet 4/ACE page headers, rows, null/variable directories; unconfirmed offsets labelled hypotheses. | Markdown table; hypothesis tables emitted; numeric offsets unconfirmed; not render-verified |
+| F-05 | I-04-format.md | Numeric Jet4-family data-page and row coordinates; physical counts, reverse trailer and ordinary/calculated Boolean distinction. | Markdown table; numeric source-backed hypothesis tables emitted; target offsets unconfirmed; not render-verified |
 | F-06 | I-04-format.md | Long-value chains, usage maps and allocation ownership. | Mermaid source; emitted; not render-verified |
 | F-07 | I-05-indexes.md | Index interior/leaf structure and encoded composite sort key. | Mermaid source + Markdown table; tree source and key-layer hypothesis table emitted; not render-verified |
 | F-08 | I-06-catalog.md | Catalog, QueryDef, property and opaque-object references. | Mermaid source; emitted; not render-verified |
@@ -255,6 +255,12 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-20 | II-03-pager.md | Table and global usage-map declarations versus their physical bitmap backing. | Mermaid source; emitted; not render-verified |
 | F-21 | II-03-pager.md | Native-read drain and old-image preservation before overwrite. | Mermaid source; emitted; not render-verified |
 | F-22 | II-03-pager.md | Phase-specific images of repeated global/ownership map and index pages. | Markdown hypothesis table; emitted; not render-verified |
+| F-23 | II-04-format.md | Ordinary row regions, reverse variable directory and mask coordinates. | Markdown hypothesis table; emitted; not render-verified |
+| F-24 | II-04-format.md | Complete19-byte ordinary row with fixed Long, Text, Boolean and Null. | Markdown hypothesis table; emitted; not render-verified |
+| F-25 | II-04-format.md | Schema-evolution row with deleted variable position and padding before trailer. | Markdown hypothesis table; emitted; not render-verified |
+| F-26 | II-04-format.md | 4080-byte long value in two LVAL rows, with page offsets and free counters. | Markdown hypothesis table; emitted; not render-verified |
+| F-27 | II-04-format.md | Separate table and column LVAL ownership paths versus global allocation-state lookup. | Mermaid source; emitted; not render-verified |
+| F-28 | II-04-format.md | Private global-map growth includes allocation of its own bitmap and preservation of a free hole. | Markdown hypothesis table; emitted; not render-verified |
 
 ## Research and development references
 
@@ -335,10 +341,10 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
 | O-UNDO | R-CRASH-1/2: qualify native baseline; optional whole-file eligibility/disarm/recovery only where survival classes remain unchanged. | 03,08 |
 | O-ORACLES | R-ORACLE-1: capture remaining environment metadata and validate owned-process/capture behavior; initial targets already selected. | 15 |
-| O-FORMAT | R-FMT/SORT/CAT/PRESERVE and D-WRITE-1: settle native graphs, keys, publication and unknown-reference limits. | 04–06 |
+| O-FORMAT | R-FMT-1/2: qualify row/text/calculated/LV/map mechanics; then native keys/catalog/preservation and D-WRITE-1 phases. | 04–06 |
 | O-POLICY | R-CURSOR/TXN/SQL/DAO/ADO/ERR: settle undocumented or contradictory target transitions. | 07–12 |
 | O-LOCK | R-LOCK-1/2 first; R-LOCK-3/4 settle later native/SMB coherence and shared writes. | 09 |
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 
-Next task: **Stage 2, response 3 — II-04 Format, rows, long values and allocation**: the single format description; fixed/variable record decoding and encoding; Null/Boolean/offset structures; inline/external/chained long values; usage-map and allocation transitions; opaque preservation; worked native bytes, pseudocode and acceptance. Then II-05/06/07 before the full transaction/concurrency chapters.
+Next task: **Stage 2, response 4 — II-05 Indexes and sort-order keys**: native interior/leaf envelopes, entry masks/prefix compression, composite keys/sort descriptors, traversal and split/delete algorithms, page/reference mutation plans, worked bytes and R-SORT-3/R-FMT-2 acceptance. Then II-06/07 before the full transaction/concurrency chapters.

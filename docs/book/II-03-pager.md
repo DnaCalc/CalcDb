@@ -1,6 +1,6 @@
 # II-03. VFS, pager and page cache
 
-Revision 1 · Stage 2, response 2 · 2026-11-13
+Revision 2 · Stage 2, response 3 · 2026-11-13
 
 The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
@@ -468,7 +468,7 @@ Separate charges cover resident clean/loading frames, dirty images, rollback his
 
 ### 6.1 A concrete multi-page program
 
-Extend the running example with an update on data page 17 that grows a long value and changes an index key. Use old LVAL page 31, new LVAL page 80, index leaf 44, TableDef page 9, and whichever declaration/bitmap pages actually hold their native maps. These page assignments are constructed; the actual allocator and native references supply them in a real file.
+Extend the running example with an update on data page 17 that grows a long value and changes an index key. Use old LVAL page 31, new LVAL page 80, index leaf 44, TableDef page 9, and whichever declaration/bitmap pages actually hold their native maps. Assume page31 contains no other live LV rows and that its retirement is admitted by the selected native rule; otherwise retiring this value does not free the page. These page assignments are constructed; the actual allocator and native references supply them in a real file.
 
 | Native object | Prepared images or effects | Why final dirty pages alone are insufficient |
 | --- | --- | --- |
@@ -479,13 +479,13 @@ Extend the running example with an update on data page 17 that grows a long valu
 | TableDef/catalog pages | Changes only if this operation requires them | Counts/roots/descriptors publish after their referenced structures are valid. |
 | Old LVAL page 31 | Release only after it becomes unreachable | Reuse cannot precede removal of references and retained-image preservation. |
 
-**Figure F-22 — phase-specific images of repeated native pages.** A constructed dependency table; no claim about ACE write ordinals or durability barriers. This instantiation uses an inline global free-map declaration on page 1 and table-ownership bitmap page 40. Every additional affected available-space/declaration page is expanded into its own program step.
+**Figure F-22 — phase-specific images of repeated native pages.** A constructed dependency table; no claim about ACE write ordinals or durability barriers. This instantiation uses an inline global free-map declaration on page 1 and the applicable, validated LVAL ownership bitmap on page 40, selected by this column's native descriptors. Every additional affected available-space/declaration page is expanded into its own program step. LVAL ownership can be column-specific; an absent or invalid column-map descriptor does not imply membership in the ordinary table data-owned map. II-04 gives the concrete metadata path.[^long][^table]
 
 | Step | Native page / image | Must follow | Constraint illustrated |
 | --- | --- | --- | --- |
 | A | 80 / `L80.initialized` | Admitted extent operation | Full native page initialized before incoming reference. |
 | B1 | 1 / `G1.reserve80` | A | Clear page 80's global free bit. |
-| B2 | 40 / `M40.own80` | B1 | Set page 80's table-ownership bit. |
+| B2 | 40 / `M40.own80` | B1 | Set page 80's bit in that LVAL owner's map. |
 | C | 44 / `I44.old_key_removed` | B2 | Old index reference removed before the row change. |
 | D | 17 / `D17.new_row` | C | New LV locator and row payload installed. |
 | E | 44 / `I44.final` | D | Same leaf receives a distinct later image. |

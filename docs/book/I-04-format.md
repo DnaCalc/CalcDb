@@ -1,6 +1,6 @@
 # I-04. Format, rows, long values and allocation
 
-Revision 3 · Part I review · Stage 2, response 1 · 2026-11-13
+Revision 4 · Part I reconciliation · Stage 2, response 3 · 2026-11-13
 
 **Requirement trace:** Primary: RQ-PROD-03, RQ-PROD-04, RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-FMT-02, RQ-FMT-03. Shared obligations: RQ-LATE-01, RQ-LATE-03, RQ-LATE-04, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01, RQ-ORACLE-02, RQ-STORE-01, RQ-STORE-02, RQ-TYPE-01. Full requirement text and Part II ownership are in I-16.
 
@@ -12,31 +12,28 @@ Select an immutable `FormatDescriptor` from verified file-header facts, then pas
 
 ## Bounded row and text decoding
 
-**Figure F-05a — candidate data-page byte regions.** This is a layout hypothesis for R-FMT-1/2, expressed as bounded intervals rather than guessed numeric offsets. It is an emitted Markdown table, not a render-verified or oracle-confirmed layout.
+**Figure F-05a — candidate data-page byte regions.** Numeric hypothesis from the pinned Jet 4-family reference; emitted as a Markdown table, not ACE-confirmed or render-verified. II-03 gives complete page and map examples; II-04 binds their record bodies to real column descriptors.[^format][^table]
 
-Let `P` be the selected descriptor's page size; all other symbols below are descriptor fields or values read from checked metadata. The 4096-byte Jet 4 reference observation above does not fix every supported variant. A row below names a candidate region, not its confirmed location relative to every other region.
-
-| Candidate page region | Symbolic byte extent | Interpretation and confirmation needed |
+| Page region / offset | Candidate interpretation | Required checks |
 | --- | --- | --- |
-| Header | `[0, H)` | Candidate page kind, owner, counts, flags and free-space metadata; field offsets, widths and applicable page types remain to be identified. |
-| Slot directory | `[S, S + N × E)` | `N` candidate entries of encoded width `E`; determine offset origin, flags, direction and how deleted/overflow slots are represented. |
-| Row or overflow body `i` | `[R_i, R_i + L_i)` | Extent established through the evidenced slot/row rules; test relocation, overlap restrictions and any shared or indirect form before exposing a slice. |
-| Remaining intervals | Page bytes outside established regions | May contain reusable space, padding or opaque data; zero bytes and lack of a known reference do not establish free space. |
+| `+0`, `+2..3` | Kind byte; little-endian free-byte count | Kind01 alone does not distinguish ordinary, map-declaration and LVAL data. |
+| `+4..7`, `+8..11` | Ordinary TableDef owner or subtype-specific bytes; opaque/write-stamp area | Interpret by subtype; preserve unexplained bytes. LVAL uses literal `4C 56 41 4C`. |
+| `+12..13` | u16LE slot count | Reference maximum255 slots; directory and actual page bounds are checked separately. |
+| `[14,14+2N)` | Two-byte slot entries | Offset mask 1FFF; deleted 8000 and overflow 4000 need contextual root/target interpretation. |
+| Masked slot start to preceding start, or 4096 for slot 0 | Candidate row extent | Validate boundaries, overlap and contextual ownership before exposing a slice. |
+| Other ranges | Padding, admitted free space or protected bytes | Neither zeros nor a missing known reference proves reusable space. |
 
-Every extent must fit within `[0, P)` before use. The hypotheses do not assume that the slot directory grows from a particular end or that free space is one contiguous gap; the boundary fixtures decide those facts.
+**Figure F-05b — candidate stored-record regions.** Numeric hypothesis for the ordinary Jet 4-family table-row envelope; emitted table, not ACE-confirmed or render-verified. Let L be its checked extent, C the initial u16LE physical-column count, M=ceil(C/8), T=L−M and V its stored variable-slot count when that trailer exists.[^table][^column]
 
-**Figure F-05b — candidate stored-record regions.** This companion layout hypothesis uses offsets relative to one established record extent `[0, L)`. It names the regions the decoder must locate; the table order does not assert their physical ordering, and the source-only table has not been render-verified.
-
-| Candidate record region | Symbolic byte extent | Interpretation and deciding evidence |
+| Record region / coordinate | Candidate interpretation | Required distinction |
 | --- | --- | --- |
-| Record header | `[0, h)` | Physical field/count/version information, if present in the selected form; deleted columns and physical versus visible order distinguish meanings. |
-| Fixed-width field area | `[f0, f1)` | Type-specific extents from physical column metadata; establish gaps, deleted-column storage and conditional layouts. |
-| Variable payload area | `[v0, v1)` or several evidenced spans | Text, binary and in-row descriptors; offsets and lengths must resolve inside the containing record or a checked external reference. |
-| Variable-field directory | `[d0, d1)` | Determine entry width, direction, offset base, terminal entry and absent-field representation; do not infer these from current column display order. |
-| Null/Boolean metadata | `[b0, b1)` | Per-type bit interpretation and column numbering; Boolean and Null meanings remain distinct. |
-| Unclassified bytes or flags | Explicit retained intervals | Preserve until a field rule or reference interpretation is established; do not remove them when re-encoding known values. |
+| `[0,2)` | Row's own physical-column count C | Historical/deleted positions differ from today's active count and display order. |
+| `2 + fixedOffset` | Fixed field extent from its column descriptor | Ordinary Null fixed fields retain their storage; payload width is type/wrapper dependent. |
+| Payload end EOD through trailer start D | Possible padding | EOD can be less than D; padding is not variable-field content. |
+| `T−2`, `T−4−2j`, `T−6−2j` | V, start[j], end[j], all u16LE | The variable directory stores reversed starts; final end is EOD at D=T−2V−4. |
+| `[T,L)` | Low-bit-first physical-column mask | Ordinary fields use presence; ordinary Boolean uses the value bit. Calculated Boolean has a wrapped payload. |
 
-R-FMT-1 identifies the family and structural coordinates; R-FMT-2 confirms each mutation-sensitive interpretation and codec round trip. II-04 will replace these symbols with evidenced descriptors, not promote the hypotheses to facts by repetition.
+An old row can predate the current variable columns and lack a variable trailer. Check row presence before a variable lookup; do not infer a trailer from today's schema alone. The 255 active-column and 255 page-slot limits do not bound the row's u16 historical count to 255. II-04 supplies two complete row fixtures, safe lookup/encoding and the calculated-field exceptions; R-FMT-1/2 confirm the coordinates and valid native shapes.
 
 **Decoder obligations.** The following checks apply after selecting the evidenced physical layout.
 
@@ -52,15 +49,15 @@ R-FMT-1 identifies the family and structural coordinates; R-FMT-2 confirms each 
 
 The table describes required checks, not new rejection semantics. A malformed-input outcome carries enough detail for the boundary to reproduce the oracle's error; accepting damaged data must never permit an out-of-bounds access.
 
-Jackcess stores Boolean values through its null-mask handling and distinguishes them from ordinary field payload. Its compressed-text reader handles alternating compressed and uncompressed segments.[^column] Accordingly, CalcDb uses a checked state machine for native text, preserving arbitrary UTF-16 units and checking segment boundaries. It neither assumes a whole value has one compression state nor rewrites untouched text into a preferred encoding. Null, empty text, embedded zero units, unpaired surrogates and malformed transitions receive separate corpus cases. Reader acceptance and writer encoding policy are separate evidenced rules.
+For ordinary noncalculated Boolean fields, Jackcess stores the value through the row mask. Calculated fields instead use a result wrapper selected by native flags and ResultType metadata; calculated Boolean and Numeric have distinct inner codecs.[^calculated] The ordinary compressed-text reader handles alternating compressed and uncompressed segments.[^column] Accordingly, CalcDb uses a checked state machine for native text, preserving arbitrary UTF-16 units and checking segment boundaries. It neither assumes a whole value has one compression state nor rewrites untouched text into a preferred encoding. Null, empty text, embedded zero units, unpaired surrogates and malformed transitions receive separate corpus cases. Reader acceptance and writer encoding policy are separate evidenced rules.
 
 ## Long values and space ownership
 
 Long values use explicit native forms and location references. The inspected reference implementation supports inline, single-external and chained forms; usage maps have inline and reference forms.[^long] CalcDb models those structures directly. A chunk iterator owns its current pin, validates each next locator and cumulative length, and has bounded traversal with cycle detection. Consumers may stream when their contract permits; materialization reserves its complete budget first. Premature chain termination, contradictory lengths and duplicate ownership produce a typed damaged-data result for oracle mapping, never silent truncation adopted from a reference reader.
 
-Separate the database's allocation view, each object's ownership map and its available-space candidates. “Owned” does not mean “has room,” and “has room” does not mean “free.” Allocation reserves candidate pages/slots privately, checks the encoded result's capacity, and updates all required native maps and references in the mutation plan. Usage-map expansion and inline-to-reference transitions are structural operations. R-FMT-2 exercises boundaries, reuse after deletion and long-value growth/shrinkage rather than only small round trips.
+Separate the database's allocation view, each object's ownership map and its available-space candidates. LVAL ownership may be described by a pair of per-column maps, distinct from the table's data maps; a reference reader's legacy buffer fallback does not establish native ownership.[^long][^table] “Owned” does not mean “has room,” and “has room” does not mean “free.” Allocation reserves candidate pages/slots privately, checks the encoded result's capacity, and updates all required native maps and references in the mutation plan. Usage-map expansion and inline-to-reference transitions are structural operations. R-FMT-2 exercises boundaries, reuse after deletion and long-value growth/shrinkage rather than only small round trips.
 
-**Figure F-06 — row, long-value and allocation relationships.** The graph is the proposed ownership model, not a claim that these labels correspond to specific native fields. R-FMT-2 confirms each reference and ownership edge. Mermaid source only; not render-verified.
+**Figure F-06 — row, long-value and allocation relationships.** The graph distinguishes ordinary table maps from the applicable LVAL-column maps identified in native metadata. R-FMT-2 confirms each reference and ownership edge for the target. Mermaid source only; not render-verified.
 
 ```mermaid
 flowchart TD
@@ -74,7 +71,9 @@ flowchart TD
     D --> I["Inline bytes"]
     D --> X["External chunk"]
     X -->|"checked next locator"| N["Next chunk or terminator"]
-    O -.->|"format-specific ownership rule"| X
+    T --> C["LVAL column map descriptors"]
+    C --> L["Applicable LVAL owner and available maps"]
+    L -->|"native membership"| X
 ```
 
 The allocator's global free-space view is checked separately before any reservation. A next pointer proves reachability only after bounds and identity checks; it does not alone prove exclusive ownership, and any sharing rule remains explicit.
@@ -107,7 +106,9 @@ The full fixtures, captures, branch choices and effort estimates are in [A-02](A
 
 **R-PRESERVE-1 (M)** permits a mutation only after protected bytes and their identity, references, ownership and reachability survive the independent interoperability checks. It builds on R-FMT-1/2; unknown relocation keeps the affected write refused and counted as missing compatibility, under the [full card](A-02-experiments.md#r-preserve-1--opaque-objects-protected-bytes-and-shared-references).
 
-[^format]: Jackcess, live official [JetFormat.java xref](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/JetFormat.html), selected descriptor passages, accessed 2026-11-12. Apache-2.0 file header inspected; immutable revision linkage pending. Reference implementation facts, not observed ACE 16 behavior.
-[^column]: Jackcess, [ColumnImpl.java xref](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/ColumnImpl.html), selected Boolean and text passages, same access/version limitation. Apache-2.0 header inspected; no code adaptation.
-[^long]: Jackcess, [LongValueColumnImpl.java](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/LongValueColumnImpl.html) and [UsageMap.java](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/UsageMap.html), selected structural passages and Apache-2.0 headers inspected, accessed 2026-11-12. Source behavior does not determine CalcDb's damaged-value policy.
+[^format]: [S-JACK-FMT] Jackcess, [JetFormat.java at be0a2139b087a227d14cafd4ea231306a5a3a862](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/JetFormat.java), selected profile constants; exact pinned licence/header/hash/read extent in A-01. Earlier unpinned readings are separately retained there; no target ACE observation is claimed.
+[^table]: [S-JACK-TABLE, S-JACK-NULLMASK] Jackcess, [TableImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/TableImpl.java) and [NullMask.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/NullMask.java), same pin; row, overflow, mask and column-map facts, not native writer-policy evidence.
+[^column]: [S-JACK-COL] Jackcess, [ColumnImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/ColumnImpl.java), same pin; selected ordinary Boolean/text and descriptor facts; no Java coercion or source adaptation.
+[^calculated]: [S-JACK-CALC] Jackcess, [CalculatedColumnUtil.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/CalculatedColumnUtil.java), same pin; wrapper/Boolean/numeric distinctions, with native qualification in R-FMT-2.
+[^long]: [S-JACK-LONG, S-JACK-MAP] Jackcess, [LongValueColumnImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/LongValueColumnImpl.java) and [UsageMap.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/UsageMap.java), same pin; native forms/map descriptors; reference truncation and allocation choices are not adopted as ACE behavior.
 [^preflight]: Supplied `asupersync-report.stage1-part2.md` §§2, 4, 8; `asupersync-report.stage1-part4.md` §5; `frankensqlite-report.stage1-part1.md` §7 and `frankensqlite-report.stage1-part2.md` §§4–7. Concept input only; generated-test agreement does not establish ACE semantics.
