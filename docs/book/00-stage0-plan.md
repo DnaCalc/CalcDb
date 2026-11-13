@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r8 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
+Revision S2-r9 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-09, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-10, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -43,21 +43,21 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.0 | I revised; II drafted |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
 | 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.6 | I revised; II drafted |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
-| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.6 | I revised; II drafted |
+| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.8 | I revised; II drafted |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I revised; II drafted |
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I revised; II drafted |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 1.6 / 0.0 | I revised; II pending |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.8 | I revised; II drafted |
 | 11 | Access SQL and execution | 2 / 12 | 2.9 / 0.0 | I revised; II pending |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 3.7 / 0.0 | I revised; II pending |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 5.3 / 0.0 | I revised; II pending |
 | 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 10.1 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 10.4 / 0.0 | I revised; II pending |
 
 | File family | Current contents |
 | --- | --- |
@@ -191,8 +191,8 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | D-LOCK-1 — Decided scope; provisional protocol | 03,08,09 | One interface covers all four sharing steps. Provisionally use held Windows share=0 for exclusion, and GENERIC_READ plus FILE_SHARE_READ only for reader-only admission. | Authority-bound FileSessions and public BindingPermits preserve rights/identity/lifetime. Logical edit, coherent read and physical publication roles map to captured native recipes; exact pending/granted/release owners remain indexed. No internal latch spans I/O, waits or foreign code. | R-LOCK-1/2 qualify both orders, authority/aliases, actual ACE reader access and continuous late-writer denial. R-LOCK-3/4 select protected input capture, fresh physical rebase, scoped rollback and local/SMB lifetimes; no guessed offsets. |
 | D-SNAPSHOT-1 — Provisional | 03,07,08,09 | Initially one admitted writer; bounded immutable page histories and retained input cuts for evidenced visibility, with fresh-view admission held before preservation selection. | Atomically register/select versus admission hold; include pending targets, allocation/schema intervals and private cuts. Publish/release-or-convert at qualified outcomes; uncertainty can retain restriction. Retained sources and native reuse/rollback authority remain distinct; external reload needs a valid certificate. | R-TXN-1/TXN-VIEW and CUR-POP/ID/LIFE select policy and admission waits; R-LOCK-3 selects protected source/materialization beside ACE. Any faster admission scheme must retain pre-overwrite source coverage and public behavior. |
 | D-CALL-1 — Decided | 09,10,12,13 | Public calls block the caller; call-owned work settles before return. Retained prefetch has a named cursor/session owner, stable context, budget and cancellation, and settles before owner close. | VBA callbacks execute only on that caller with no internal lock held. Cleanup tracks page pins, locks and uncertain persistent outcomes. COM reference lifetime is not identical to database Close behavior. | Reopen only on scope change. R-DAO-1 and R-UDF-1 settle reentrancy/close details; an actor mailbox per DAO object and a general async runtime are rejected. |
-| D-EXPR-1 — Recommended | 10,11 | One typed-node scalar service over CalcVBA primitives, with explicit expression-use/binding/collation/wildcard/sandbox/function context and conservative effect/error metadata. | SQL, Find, defaults and validation use context adapters, not duplicate coercions. Nz context and documented eager IIf motivate probes. Predicate acceptance differs from value evaluation. Pure-but-erroring nodes are not freely movable; bounded UTF-16 pattern matching preserves arbitrary BSTR units. | R-EXPR-1 scalar baseline precedes R-UDF-1 instrumentation and the host-effect extension; R-SQL-1 restricts rewrites. Compiled forms require measured exact equivalence. Do not assume unconditional short-circuiting or require the VBA interpreter for library primitives. |
-| D-UDF-1 — Provisional | 10,13 | Prefer an explicit versioned host callback into CalcVBA, on the caller thread. | Resolve function identity/capabilities, ownership and errors through a versioned host boundary. Caller-thread callbacks run outside internal latches; continuation validates cursor/catalog/transaction and retained-plan registry/sandbox/semantic dependencies. Never repeat a callback after invalidation. | R-UDF-1 compares standalone ACE/Access-hosted behavior; I-HOST-1 defines actual host requirements. Runtime discovery may replace the resolver only. Access.Application.Eval is not proof of standalone discovery; existing CalcVBA internal entry points are not invented. |
+| D-EXPR-1 — Recommended | 10,11 | Compact typed nodes and resumable scalar policies over the shared foundation; retain declared origin, runtime tags, context and logical occurrences. | One value/failure service; policy can interleave child evaluation/coercion/selection/cleanup. Candidate conversion is not edit acceptance. Compiled patterns retain counted payload, ordered classes, partial positions and diagnostics; finite-profile bounds and range inclusion/demand proofs are separate. | R-EXPR-1 qualifies types, error/demand phases, field/table Null adapters, two grammars and function manifest. Scalar baseline precedes R-UDF-1 instrumentation. R-SORT-3 qualifies ranges; register/worker forms need exact equivalence and measured net gain. |
+| D-UDF-1 — Provisional | 10,13 | Explicit versioned caller-thread host resolver/invoker with stable provider/signature identity and owned InvocationAttempt. | Register before reentrant preparation; preserve actual signature/default/ByRef alias and interval ownership. Current policy admission is distinct from retained code lifetime. Capture errors promptly and revalidate after each foreign boundary; no ancestor self-wait, replay or accidental memoization. | R-UDF-1/I-HOST-1 confirm actual standalone/Access routing, metadata, entry/revocation and continuation. Discovery may replace resolver only; no private ABI assumed. Domain/Eval adapters reuse database state, current authority and parent budgets. |
 | D-SQL-1 — Recommended | 10,11 | Access parser/binder and a small physical operator engine over one ISAM/evaluator; scalar pull plus eligible bounded batches, actual-plan diagnostics and explicit memory/spill ownership. | Bind types, parameters, provenance/updateability, dependencies and effects before access-path choice. Start scans/seeks and nested-loop joins; constrain other rewrites by semantics. TOP ties, DISTINCTROW and dynamic crosstab metadata have dedicated policies. Spills retain types, precision, order and identity. | R-SQL-1/3 settle semantics and metadata before complete W-06; measurements choose admissible operators. No another-engine SQL translation, private SQL dialect or mandatory eager population. Source provenance alone does not settle DISTINCTROW for value-identical base rows. |
 | D-ACTION-1 — Provisional | 07,08,11 | Stabilize candidate identity when mutation changes its own access path; prefer an ordered spool only at an evidenced selection/evaluation boundary, otherwise relocation-stable traversal. | Reuse one constraint/edit path and Workspace statement policy. Preserve candidate and assignment effects, counts, generated values and failure disposition. Do not evaluate callbacks early or repeat them to repair physical traversal. | R-SQL-2 selects stabilization points for key-moving/join/self-target actions and per-option failure rules. An unconditional eager candidate/materialized-expression phase is rejected because it can change errors and effects. |
 | D-PAR-1 — Decided | 09,10,11 | Only parallelise work whose merged outcome equals the selected serial execution. | First establish an ACE-compatible serial plan. Ordinal-tagged work and ordered consumption preserve rows, exact Double fold order, effects and first errors. Pure prefetch still cannot expose earlier errors. Caller-thread UDFs and scalar DAO entry have no mandatory worker crossing. | R-PAR-1 tests equivalence and actual cost, including spill, memory and synchronization. Ineligible or unprofitable paths remain serial. Deterministic partial sums alone do not establish equivalent floating-point results. |
@@ -316,6 +316,23 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-77 | II-09-locking.md | native role ownership is independent of a memory latch | Markdown constructed/design table; emitted; not render-verified |
 | F-78 | II-09-locking.md | a late native grant remains owned after cancellation | Mermaid source; emitted; not render-verified |
 | F-79 | II-09-locking.md | constructed cancellation and publication races | Markdown constructed/design table; emitted; not render-verified |
+| F-80 | II-10-expressions.md | a seven-node expression bound to native fields and a parameter | Markdown constructed/design table; emitted; not render-verified |
+| F-81 | II-10-expressions.md | physical inputs, semantic values and acceptance | Markdown constructed/design table; emitted; not render-verified |
+| F-82 | II-10-expressions.md | Binding metadata selects one shared semantic operation | Mermaid source; emitted; not render-verified |
+| F-83 | II-10-expressions.md | Constructed Decimal prefix inside a Windows x64 VARIANT | Markdown constructed/design table; emitted; not render-verified |
+| F-84 | II-10-expressions.md | Boolean/Null results and a separate numeric witness | Markdown constructed/design table; emitted; not render-verified |
+| F-85 | II-10-expressions.md | Evaluation phases that a conditional-expression trace must distinguish | Markdown constructed/design table; emitted; not render-verified |
+| F-86 | II-10-expressions.md | representative function families and the service they require | Markdown constructed/design table; emitted; not render-verified |
+| F-87 | II-10-expressions.md | original counted-text fixtures and the distinctions they preserve | Markdown constructed/design table; emitted; not render-verified |
+| F-88 | II-10-expressions.md | provisional token selection for the two Access wildcard modes | Markdown constructed/design table; emitted; not render-verified |
+| F-89 | II-10-expressions.md | why original offsets alone cannot identify every matching state | Markdown constructed/design table; emitted; not render-verified |
+| F-90 | II-10-expressions.md | complete text keys are not string-prefix bounds | Markdown constructed/design table; emitted; not render-verified |
+| F-91 | II-10-expressions.md | proposed assignment and Update schedule, with native-selectable error order | Mermaid source; emitted; not render-verified |
+| F-92 | II-10-expressions.md | four separate checks determine whether a named function may run | Mermaid source; emitted; not render-verified |
+| F-93 | II-10-expressions.md | argument preparation preserves the semantic distinctions that a raw VARIANT array would lose | Markdown constructed/design table; emitted; not render-verified |
+| F-94 | II-10-expressions.md | a callback survives reentry while its continuation is decided | Mermaid source; emitted; not render-verified |
+| F-95 | II-10-expressions.md | a constructed domain lookup reaches the ordinary index and row resolver | Markdown constructed/design table; emitted; not render-verified |
+| F-96 | II-10-expressions.md | transformation eligibility | Markdown constructed/design table; emitted; not render-verified |
 
 ## Research and development references
 
@@ -338,8 +355,8 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-LOCK-2 | Reader coexistence and continuous writer exclusion | R-LOCK-1; native reader drivers; cursor/Close evidence only for affected lifetimes | M |
 | R-LOCK-3 | Protected input graphs and refresh beside ACE | R-LOCK-1/2; cursor/TXN-VIEW; format/sort/catalog/host evidence by branch | L |
 | R-LOCK-4 | Shared rebase, rollback and local/SMB ownership | R-LOCK-3; relevant semantic/format/transaction evidence; shared R-CRASH-1/2; local then SMB | XL |
-| R-EXPR-1 | Context adapters, coercion, sandbox, errors and evaluation effects | R-ORACLE-1 | L |
-| R-UDF-1 | Standalone/host resolver, value ownership and reentrant continuation | R-EXPR-1 scalar baseline; I-HOST-1; then feeds R-EXPR-1 host-effect extension | M |
+| R-EXPR-1 | Declared/value types, staged evaluation, patterns, mutation and context capabilities | R-ORACLE-1; I-FOUNDATION-1 declarations for exact captures; scalar/mutation/pattern branches first; host effects add R-UDF-1/I-HOST-1 | L |
+| R-UDF-1 | Host resolution, signature ownership, current admission and reentrant continuation | R-EXPR-1 scalar baseline; I-HOST-1; then feeds R-EXPR-1 host-effect extension | M |
 | R-SQL-1 | SQL typing, Null, wildcard, comparison and aggregates | R-EXPR-1; R-SORT-3 | L |
 | R-SQL-2 | Candidate stability, actions/DDL, counts and per-option failures | R-TXN-1 + R-FMT-2 for row actions; R-CAT-1 only catalog/DDL/QueryDef branches; relevant expression evidence | L |
 | R-SQL-3 | DISTINCTROW, TOP ties/PERCENT, parameters and crosstab metadata | R-CAT-1 research; R-SQL-1; R-CURSOR-1; no W-07 implementation prerequisite | L |
@@ -372,7 +389,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | K-TXN | 08 | Workspace owns explicit/operation frames and exact participant receipts. Child merge preserves earliest parent obligations; logical nodes, visibility, native effects, force and return stay distinct even for empty commit or handoff. Failures retain the same owned continuation; no own WAL or stronger cross-file crash claim. |
 | K-LOCK | 09 | Authority-bound real leases and exact native request/grant/release owners enforce admitted sharing. Logical edit, coherent read, physical publication, memory latches and view policy are distinct. No internal latch spans I/O/waits/foreign code; captured source/role lifetimes qualify refresh and shared rebase. |
 | K-WORK | 09 | Every task/pin/grant has a named owner and budget. Register before submission; cancellation is not completion; one CloseAttempt coordinates live work/resolution and exact releases. Call work settles before return; retained work before its resource owner closes, or transfers to a permitted named continuation. |
-| K-THREAD | 10,13 | Calls block the caller; VBA executes only there outside internal latches. Callbacks receive stable values; continuation validates object and retained-plan dependencies. Logical database locks follow ACE lifetime policy. Invalidation never authorizes repeated host effects. |
+| K-THREAD | 10,13 | VBA and required foreign conversion/cleanup run on the caller outside internal latches. Register owned invocation before reentrant preparation; retain demanded inputs and revalidate before each subsequent dependent writeback/publication. Never replay an accepted effect or wait on its suspended ancestor. |
 | K-PAR | 11 | Worker results equal the serial plan, including row order, Double accumulation, observable effects and selected error behavior; eligibility is proven per operator path. |
 | K-ERROR | 12,13 | A typed internal failure carries stable context; the boundary produces the evidenced HRESULT/DAO/ADO number and collection state. Missing features are explicit failures, not fabricated results. |
 | K-COM | 13 | Real interfaces/identity and exact platform ABI everywhere; portable services include type info/name dispatch, errors, enumeration, factories, ADO connection points and Automation allocation. Activation coverage is separately proven. |
@@ -381,7 +398,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | K-ADMISSION | 02,03 | Validate lengths before allocation; reserve capacity before construction. Account separately for owned capacity, pinned/historical frames, dirty images, long values and spill. |
 | K-CRASH | 03,08 | ACE-first crash/survival parity needs no sidecar. Optional undo validates identity/integrity/eligibility and the full database: uncovered unchanged; covered exactly before or intended new image; permitted extent/presence states only; otherwise discard. Known mismatch is irreversible within an audit; optional cleanup or recovery failure retains its obligation and never supplies ACE-first safety. |
 | K-PREFLIGHT | 04 | Prepare the physical write/reference/allocation set before publishing it, then revalidate dependencies. Preflight may not speculatively invoke/repeat user code or change observable effect/error order. |
-| K-EXPR | 10 | One CalcVBA semantic service, with explicit Access context, admission and effect/error metadata. Predicate acceptance, default/validation rules and host resolution are context adapters. Shared semantics do not imply identical context defaults. |
+| K-EXPR | 10 | One semantic foundation with declared operand origin, runtime values, explicit Access context and resumable demand/coercion/error/cleanup policy. Separate value/failure, predicate/validation acceptance, function admission and logical occurrences; patterns retain required diagnostic/character state. |
 | K-PLAN | 11 | The inspected plan is the executed operator graph. Each operator carries type/ownership/provenance/order/effect/budget obligations. Spills preserve exact continuation; action stabilization cannot move or repeat callbacks/errors. |
 | K-BROWSER | 03,14 | Blocking local COM with bounded direct/broker VFS effects; dynamic acquisition has an owner and terminal outcome. Timeout never permits buffer reuse, lost-write denial or automatic mutation replay. |
 
@@ -391,7 +408,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | --- | --- | --- |
 | O-STRING | R-STRING-1: measure direct BSTR/decode reuse on the first real DAO read loop. | 02 |
 | O-FOUNDATION | I-FOUNDATION-1: publish actual declarations/package ownership and portable client prototype. | 02,13 |
-| O-UDF | R-UDF-1/I-HOST-1: demonstrate caller-thread resolution, reentry and shutdown. | 10,13 |
+| O-UDF | R-UDF-1/I-HOST-1: demonstrate real resolver/signature/interval/alias, policy-entry, caller-thread cleanup and ancestor-safe continuation. | 10,13 |
 | O-ACTIVATION | R-ACT-1: prove unchanged native/PIA routes and loaded implementation identity. | 13 |
 | O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
@@ -406,5 +423,6 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 | O-VIEW | Qualify view-admission waits, external input retention and caller/Close ownership through CUR/TXN/UDF/HOST cases. | 03,07,08,09,13 |
+| O-EXPR | R-EXPR-1: qualify declaration/type and demand/error rules, field/table acceptance, function manifest and finite text profiles; range proof joins R-SORT-3. | 10,11 |
 
-Next task: **Stage 2, response 9 — II-10 Expressions, sandbox and CalcVBA functions**: shared scalar evaluation and Access context, coercion/Null/error behavior, function capabilities, caller-thread host UDFs, sandbox policy, reentry and stable ownership. Then II-11 for SQL execution.
+Next task: **Stage 2, response 10 — II-11 Access SQL and execution**: Access grammar/binding, native ISAM and scalar operator integration, joins, grouping/aggregates, TOP/DISTINCTROW, crosstabs, action candidates, effects/errors and concrete execution plans.

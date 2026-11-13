@@ -1,6 +1,6 @@
 # A-02. Complete experiment specifications
 
-Revision 8 · Stage 2, response 8 · 2026-11-13
+Revision 9 · Stage 2, response 9 · 2026-11-13
 
 This appendix holds all 34 research/integration cards formerly expanded in Part I, plus acceptance protocol T-COMPACT-1 within R-ORACLE-1. Part I retains short deciding summaries and complete architecture. These are planned experiments, not executed ACE results. Full source/version/use metadata is in A-01-sources.md; source identifiers in cards resolve there.
 
@@ -31,7 +31,7 @@ Each case captures original fixture/hash, operation sequence, typed results/orde
 | R-LOCK-2 | 09 | M | R-LOCK-1; native reader drivers; cursor/Close evidence only for affected lifetimes |
 | R-LOCK-3 | 09 | L | R-LOCK-1/2; cursor/TXN-VIEW; format/sort/catalog/host evidence by branch |
 | R-LOCK-4 | 09 | XL | R-LOCK-3; relevant semantic/format/transaction evidence; shared R-CRASH-1/2; local then SMB |
-| R-EXPR-1 | 10 | L | R-ORACLE-1 |
+| R-EXPR-1 | 10 | L | R-ORACLE-1; I-FOUNDATION-1 declarations for exact captures; scalar/mutation/pattern branches first; host effects add R-UDF-1/I-HOST-1 |
 | R-UDF-1 | 10 | M | R-EXPR-1 scalar baseline; I-HOST-1; then feeds R-EXPR-1 host-effect extension |
 | R-SQL-1 | 11 | L | R-EXPR-1; R-SORT-3 |
 | R-SQL-2 | 11 | L | R-TXN-1 + R-FMT-2 for row actions; R-CAT-1 only catalog/DDL/QueryDef branches; relevant expression evidence |
@@ -204,6 +204,25 @@ The pinned shortening path drops the final byte of the pre-shortened compound ke
 **Outcomes and next step.** Identical evidenced rules select the preferred native encoder; visible file/options differences select descriptor variants. Locale/build differences require explicit target conditions or a baseline decision, never an invisible build switch. Order/equality lost in shortened keys changes planner eligibility and residual checking, while actual native uniqueness behavior remains the rule to match. Refuse unqualified key writes before publication and count them as missing compatibility, without reducing required scope. Pinned Java headers do not by themselves clear the separate weight resources for copying. Begin with small A/a/é, integer and Null fixtures, then the510-byte compound counterexample before committing to a universal comparator or bulk uniqueness algorithm.
 
 **Dependencies / size.** R-ORACLE-1 and R-FMT-1 supply immutable fixtures and entry extraction; **L**. R-FMT-2 supplies structural transitions, R-CURSOR-1 public selection/state, R-DAO-1 property/error policy and R-SQL-1 semantic consumers. These are branch-specific additions, not a cycle requiring a complete SQL or DAO implementation before key research.
+
+### II-10 Like candidate-completeness and demand branch
+
+**Purpose:** qualify each proposed `Like` candidate-range transformation jointly with R-EXPR-1's semantic profile. Reuse R-SORT-3's existing exact-key/collision fixtures; do not recapture an entire native format merely to prove an expression optimization.
+
+**Prerequisites:** the relevant semantic matcher profile, existing native descriptor/key captures and a read-only scan/index harness. Query-plan comparison joins once SQL access paths exist. Native key research and the scalar pattern experiments proceed independently until this joint branch.
+
+| Case | Constructed comparison | Required capture/decision |
+| --- | --- | --- |
+| LIKE-RANGE-01 | `A*`/active-mode equivalent over `A`, `AA`, `Aé`, ligature/spelling variants, embedded controls and leading/trailing ignorables. | Exact matching row IDs versus proposed interval row IDs; a single missing match rejects the bound. Retain original residual for admitted candidates. |
+| LIKE-RANGE-02 | Prefix ends immediately before or inside an admitted contraction/expansion; literal classes and character ranges around that boundary. | Determine whether a wider interval/finite union is provable or the plan must scan. Preserve class priority. |
+| LIKE-RANGE-03 | Ascending, descending and mixed compound indexes with the text field first and later; leading fields both fixed and varying. | Verify typed bounds against complete reconstructed entries; no fictional locator or complete-text-key byte-prefix substitution. |
+| LIKE-RANGE-04 | Existing 509/510/511-byte and source-derived omitted-final-byte collision fixtures, with differing semantic tails and shortened compound keys. | Establish candidate completeness, residual necessity and whether the index supplies any requested semantic order. Equality and order are separate decisions. |
+| LIKE-RANGE-05 | A no-wildcard pattern versus `=`, equal-key candidates and full scans, including NUL/space and Unicode witnesses. | Admit literal-pattern equality lowering only for the proved domain; no inference from equal keys alone. |
+| LIKE-RANGE-06 | Malformed row-dependent patterns and conversion errors in rows that an alternative access path might skip; host-produced operands added through R-UDF-1 later. | Compare required error/effect frontier as well as final row sets. Candidate inclusion alone does not authorize a change in observable evaluation. |
+
+**Proof artifact for each admitted transformation:** expression grammar/profile identity, raw native descriptor and encoder version, admissible value domain, exact lower/upper or union construction, treatment of shortening/mixed directions, a structural inclusion argument, independent counterexample fixtures, residual requirement and error/effect conditions. Finite differential fixtures validate the implementation but are not a proof over all strings. Where the proof cannot cover a profile, choose the complete scan path and keep its optimization pending.
+
+**Success:** identical required typed results and error/effect observations with a complete candidate set for every admitted transformation. Native key qualification continues to use the existing R-SORT-3 criteria. No new guarantee about ACE's crash state, writer ordering or Compact & Repair is introduced.
 
 <!-- Source chapter: I-05-indexes.md -->
 
@@ -567,18 +586,252 @@ The predicate is the user's selected external-change check, without a continuous
 
 ## R-EXPR-1 — Shared values with Access context
 
-**Question / conditions:** which context adapters and effect rules are necessary? Cross projection, predicate, Find, default and field/table validation; host/standalone and sandbox settings already present in the environment. **Fixture / operations:** Null, Empty, omitted arguments, errors, zero-length/unpaired-surrogate text, Decimal/Currency/date/numeric boundaries; And/Or, Nz, IIf, comparisons, patterns and database-context functions. Instrument an admitted UDF to record call order and failures; vary constant versus row-dependent expressions. **Capture / comparison:** raw result subtype/value, evaluation trace, conversion/error point and accepted/rejected expression context. **Decides:** observed context differences become adapters around shared primitives; observable effects or error changes prohibit folding/reordering. Admission differences change capability policy, not machine security settings. Unknown UDF delivery does not block the scalar probe subset. **Depends / size:** R-ORACLE-1; L. Run the scalar/context baseline first, R-UDF-1 routing/instrumentation next, then the host-effect extension of this card. Mutation defaults/validation use the same early semantic service; full SELECT work follows in W-06. Unknown host delivery leaves the scalar subset available, without a circular prerequisite.
+**Question and preferred design.** Which declared/value types, context adapters, resumable evaluation policies, text profiles and function capabilities reproduce the required public behavior? D-EXPR-1 remains Recommended: one scalar service over the shared foundation, with separate consumer/admission policies and effect occurrences. The following branches specify fixtures and outcomes; none has executed against ACE here. Primary requirements are RQ-SEM-01, RQ-VAL-02, RQ-SQL-07 and RQ-EXPR-01, with RQ-SEM-02/03, RQ-CALL-03 and the typed-value/ownership obligations.
 
-<!-- Source chapter: I-10-expressions.md -->
+### Purpose and dependencies
+
+Determine the operand contracts, context adapters, result projections and evaluation schedules required by **D-EXPR-1 — Recommended**, supporting **RQ-VAL-02**, **RQ-SEM-01**, **RQ-TYPE-01**, **RQ-CALL-03** and the existing expression requirements. The first scalar/context series depends only on **R-ORACLE-1** and the smallest admitted input/output adapter. **I-FOUNDATION-1** validates the actual platform ABI before raw native result capture is trusted. Instrumented host-effect tests follow **R-UDF-1/I-HOST-1** and do not block the scalar baseline or early mutation defaults/validation.
+
+Record the actual loaded ACE/DAO and provider identities. The expected first oracle is the user's reported ACEDAO.DLL version 16.0.20527.20016; the capture must verify the loaded binary rather than substituting a product marketing version. Use disposable fixtures and existing permitted host/security contexts. Do not change Trust Center, macro security or HKLM to obtain a result.
+
+### Branch A — Value versus failure and argument presence
+
+**Question:** Which boundaries admit Null, Empty, Error and omission, and when do they become a consumer failure?
+
+**Fixture:** Create independent direct Automation/DAO parameter inputs and legal stored row values. Do not claim that a special Automation input is stored in a native field merely because a client can construct it. Keep a manifest of original canonical tag and active payload, declared parameter type, argument direction and whether an argument was omitted or explicitly supplied. Include Null, Empty, ordinary Error value, optional-argument marker, empty BSTR, embedded-U+0000 BSTR and an unpaired-surrogate BSTR. Array/object cases go through their admitted boundary, not an invented scalar field representation.
+
+**Actions:** Compare direct function results, a projection, a selection predicate, Find, a default input and field/table validation. Test `IsNull`, `IsEmpty`, `IsError`, `CVErr`, explicit conversions and a simple arithmetic consumer where each name is admitted. For functions with optional arguments, compare omission with explicit Empty, Null and Error; record signature binding separately from evaluation. Do not require an unavailable builtin to succeed in every context.
+
+**Capture:** Successful canonical value versus failure; active tag/payload; boundary error surface; exact failing API call and expression phase; argument-presence map before substitution; applicable locale and expression use. If the host displays a token, capture the underlying DAO/Automation result independently where available. Maintain Error-valued output separately from HRESULT/EXCEPINFO/DAO errors.
+
+**Decision branches:** Different successful values select an explicit context/argument adapter. A conversion that fails becomes a failing shared-service rule at that site, not a global ban on Error-valued data. An unadmitted input/function is recorded as a context capability result. If two public surfaces hide the same underlying distinction, retain both hypotheses and use a lower public boundary already permitted by the task; do not inspect proprietary internals.
+
+### Branch B — Operator dispatch and exact result types
+
+**Question:** Does each Access context use a declared operand domain, a Variant runtime domain or a specific query conversion rule, and what result domain does it publish?
+
+**Fixture matrix:** Pair Byte, Integer, Long, required Large Number/LongLong forms where admitted, Single, Double, Currency, Decimal, Date, Boolean, numeric text, nonnumeric text, Empty and Null. Systematically cover a small representative cross-product and targeted exceptional pairs; do not enumerate huge redundant value ranges. Supply each relevant pair through literal expressions, explicitly declared QueryDef parameters, native fields and direct VBA/host code. For a subset, keep canonical payloads identical while changing declared origin.
+
+| Discriminator | Specific values or shapes | Required distinction |
+| --- | --- | --- |
+| Numeric/text comparison | Numeric 7 versus string `"7"` and nonnumeric `"q"`; declared versus Variant lanes | Category ordering, conversion, or failure; the same display text is insufficient. |
+| Addition versus concatenation | Numeric 7, text `"7"`, Empty, Null; `+` and `&` | Operation dispatch and result tag, including single/both Null. |
+| Integer widening | Byte 255, Integer 32767, Long 2147483647 with a separately typed 1 | Arithmetic result before destination assignment; typed versus Variant overflow. |
+| Mixed numeric precedence | Currency/Double and Single/Long in both operand orders | Addition and multiplication result types independently. |
+| Integer conversion | ±2.5, ±3.5, neighbors around those values, and boundary-adjacent halves | Round first versus truncate; overflow phase and result width. |
+| Integer division/remainder | Nonintegral dividend/divisor; small divisor rounding to zero; negatives | Operand coercion before operation and divide-by-zero timing. |
+| Decimal fidelity | Negative scale-4 magnitude `2^64+5`; scale-28 low values; equal values with different scales | High-word preservation, explicit loss point, result scale. |
+| Currency fidelity | Scaled payload 123456; maximum/minimum and one-unit neighbors | Exact four-decimal representation and range handling. |
+| Floating fidelity | Adjacent Single/Double payloads, signed zeros; nonfinite inputs only where admitted | Exact comparison/coercion and acceptance instead of formatted-text equality. |
+
+**Capture:** Per-operand declared category and runtime tag; exact active numeric payload; inner result tag if observable; DAO/ADO field metadata and caller-returned tag separately; all conversion and overflow failures. No intermediate result is reconstructed solely by parsing a formatted decimal string.
+
+**Decision branches:** A stable context difference adds a shared semantic-service policy entry. Public field type differences with equivalent inner results select a projection adapter. Mixed results across prepared/reprepared plans require parameter typing and generation invalidation investigation before specialization. If the frontend does not expose an inner value, record the projection result and leave the inner rule unresolved; do not invent its tag.
+
+### Branch C — DATE encoding versus comparison and arithmetic
+
+**Question:** Which operations preserve Automation DATE payloads, and which comparison/arithmetic policies does ACE use around negative values and aliases?
+
+**Fixture:** Native DATE parameters with `−0.25`, `+0.25`, `−1.25`, `−1.5`, zero and selected modern dates. Verify input tags and payloads independently. Add corresponding Double-tagged parameters and parsed date strings as separate cases. Include Date/Time Extended only through its evidenced adapter; never narrow it silently to populate this fixture.
+
+**Actions:** Compare equality/order, explicit conversion, subtraction/addition and public round trip. Compare a row predicate with an indexed access plus residual test when the relevant index experiment provides a supported path. Run formatting only as an additional observation. Use ambiguous locale strings separately from already typed DATE values.
+
+**Capture:** Original and returned payload, selected row identities, comparison result tag/value, metadata, explicit conversion/error phase and the locale/calendar context. Preserve raw payload aliases rather than normalizing them in the harness.
+
+**Decision branches:** Matching chronological order does not establish raw-payload equality or conversion normalization; each operation gets its observed rule. Any index/predicate disagreement returns to comparison/key/seek contracts instead of replacing scalar semantics with a generic timeline. Inconclusive public projections leave normalization unresolved while exact input preservation remains required.
+
+### Branch D — Logical/bitwise operation and consumer acceptance
+
+**Question:** What does the scalar produce, and what does each consumer do with that produced value?
+
+**Fixture:** Full True/False/Null operand grid; integer pairs including 6 and 3; mixed Boolean/integer and integer widths; selected nonintegral values. Construct predicate/validation results that are Null, zero, nonzero, empty text, numeric text and Error where admitted. Keep Required and AllowZeroLength configuration visible and separate.
+
+**Actions:** First project `And`/`Or` results without a predicate, then feed equivalent expressions to selection, Find and each validation context. Exercise successful defaults followed by target conversion separately from validation. Use the existing mutation card for update order and persistence rather than duplicating its transaction protocol here.
+
+**Capture:** Scalar result type/value, accepted/rejected row or proposed edit, constraint/error identity, and first failure phase. Report logical operator failure independently from a later consumer rejection.
+
+**Decision branches:** Same scalar/different acceptance means a consumer policy difference. Different scalar values mean operator dispatch/coercion differences. Do not infer that a numeric result can be replaced by Boolean merely because one predicate accepts both. If a context cannot directly expose its scalar, use a paired projection and mark that pair as inferential evidence, not a direct internal trace.
+
+### Branch E — Conditional functions, eager arguments and phase order
+
+**Question:** For IIf, Switch, Choose and Nz, which child/argument/coercion events occur, in what order, and before which public API boundary?
+
+**Fixtures:** A disposable table with unique `Id`, numeric `Denominator` and `TextValue`. Use zero rows, one row and multiple rows, including `Denominator=0`, valid numeric text and invalid text. Compare all-constant expressions, declared parameters and row-dependent arms. Include a filter selecting no rows and a projection that the caller never reads. Vary only one factor per comparison and retain prepared-plan/reprepare status.
+
+**Required discriminators:**
+
+1. An unselected constant division by zero versus an unselected `1/[Denominator]` versus an unselected `CInt([TextValue])`.
+2. Two distinct potential failures with operand/arm order reversed, so the first visible diagnostic identifies a precedence hypothesis.
+3. IIf condition Null and mixed result tags; Switch first-true, no-true, Null and malformed pairing; Choose out-of-range, Null and half-index cases.
+4. Nz omitted replacement versus explicit Null, Empty, text and numeric replacement; explicitly supplied failing replacement with both Null and non-Null first values.
+5. After R-UDF-1, admitted marker calls in condition, each result arm, Switch condition/value positions and Choose choices. Markers record invocation sequence and return a chosen typed value; they may raise a controlled distinct error in a separate run.
+6. After an admitted object route exists, separate construction/return of an object from default-member coercion. Capture reference lifetime and invocation events; never infer coercion timing from object-construction timing alone.
+
+**Capture vocabulary:** Bind/admit; prepare/constant evaluation; child evaluation; condition/argument coercion; selection; result projection; cleanup/reference events. Capture open/execute/first-read/movement/full-traversal/Update boundaries and exact row identity. A trace cannot use the same failing conversion to render its diagnostic values. Child effects need a monotonic sequence number maintained by the owned test process; do not depend on wall-clock timestamps alone.
+
+**Decision branches:** Documentary eager behavior is the provisional implementation. Context-specific selective evaluation changes the function descriptor only for the evidenced context. Different failure phase blocks folding/movement across that phase. Different cleanup timing blocks early retirement of unused owned values. If constant and row cases differ, retain separate preparation and execution rules. Where no host route is available, complete all scalar cases and mark effect order unresolved; do not manufacture native observations from the proposed CalcDb evaluator.
+
+### Replay, ownership and acceptance of evidence
+
+No result is accepted on formatted equality alone. Match values, types, errors, order and boundary-specific acceptance. Use independent A/A runs before interpreting A/B differences, and fresh fixtures when a previous action changed schema, data or prepared-plan state. Real .NET Framework 4.8-family and .NET 10 callers are separate adapter lanes; their marshalling results do not define the core scalar rule. CalcVBA early/late binding follows its corrected real platform VARIANT layout, including 24-byte Windows x64 objects.
+
+Host/default-member probes run on the caller thread with stable owned or legally borrowed inputs and no internal latch spanning foreign calls or cleanup. A callback that changes a dependency invalidates the continuation without being called again. An error/error-valued return must not cause the harness to replay a completed callback. Context or generation changes invalidate retained descriptors and captured occurrence assumptions.
+
+The card is complete for a branch only when its result distinguishes the listed alternatives or explicitly records why it cannot. A disagreement selects an adapter, result rule, schedule or exposed compatibility gap; it never licenses a second independent SQL arithmetic implementation. Preserve raw captures and fixture identity alongside the concise result matrix so future engine builds can reproduce the observation.
+
+
+### EXPR-BIND — source grammar, operand origin and stable execution inputs
+
+**Question and preferred choice.** Can the bound-node representation retain every context/declaration distinction without reparsing on each row? Prefer immutable nodes and scoped identities, with separate parameter values and resumable evaluation policies. This branch resolves dependencies shared with R-CAT-1/R-SQL-3; it does not repeat the native catalog-byte experiment.
+
+Use saved and temporary QueryDefs, standalone criteria strings and field/table property expressions. Include explicitly typed parameters, inferred/unresolved names, names shared by a field/function/parameter, bracketed punctuation, qualification, quoted delimiters, embedded NUL and deep nesting. Run locale-sensitive values as typed arguments and separately as formatted text, recording the exact source string. Use owned fixture files for grammar/database options; native security configuration remains unchanged.
+
+Start from II-04's Row A construction only in the local decoder witness. Independently create its logical field values through the native engine for differential cases. Compare mask-driven Null, ordinary Boolean, fixed scalar, empty Text and unloaded Memo cases; do not label a locally constructed body as an ACE-written row. Bind a query, change a parameter, retain an existing recordset, replace SQL, refresh/requery under the qualified lifecycle, and alter a referenced schema/namespace. Capture declaration identity, supplied/unsupplied state, output field metadata, actual returned subtype/value and failing public call. Cache-hit/miss and recompile runs must preserve the outcome.
+
+Different literal/value conversion behavior selects different grammar/context services, not a second arithmetic implementation. Different declaration/runtime behavior changes the bound operand contract. A schema or namespace change modifies only the necessary dependency/invalidation recipe. Ambiguous hidden inner typing remains an explicit uncertainty when public projection cannot discriminate it. Deep-input local failures must leave owned stacks/caches bounded and return a declared implementation limit rather than overflowing the native stack.
+
+### EXPR-STAGE — evaluation, coercion, selection, cleanup and acceptance boundaries
+
+**Question and preferred choice.** Which operations occur before a later child, and when does an evaluated candidate become accepted? Prefer a resumable scalar policy able to interleave EvaluateChild, Coerce, Select, Invoke, Retire and Complete; keep conversion candidates provisional until an explicit edit acceptance stage.
+
+After an admitted host route exists, make argument1 return a value whose coercion fails and argument2 record a marker. Reverse the roles, vary literal/parameter/row inputs, and compare a child that fails before producing any value. Add default-member coercion with a distinct marker, result conversion and foreign cleanup markers. A fully owned local fault-injection harness verifies failures at reservation, dependency validation, leaf/LV load, argument stabilization, result construction and cleanup; these are constructed invariants, not claims about where ACE injects memory failures.
+
+Record every produced value, coercion, effect, selection and reference-cleanup event with source node, logical occurrence and API phase. A later marker before an earlier coercion failure selects a different schedule from a marker that is absent. Any failure stops subsequent ordinary scheduled actions while required cleanup remains owned. Repeated same-text calls and repeated visits to one row must have distinct logical occurrences unless native evidence proves reuse. Forced effect-free native-page replanning must retain one completed receipt for the original occurrence and must not invoke its callback again.
+
+For assignments, begin with an accepted cell A, propose B that converts successfully but fails ValidateOnSet, and read the field/EditMode immediately afterward. Repeat with validation deferred to Update, with an earlier accepted default, and with a row rule using another field. Capture whether B was ever exposed, the old/edit/persisted values and complete errors. Conversion success alone does not select AcceptCell. The native outcome chooses each assignment/Update disposition; the design never infers it from the cleanup of a temporary.
+
+### EXPR-MUTATION — default and validation context, Null and failure order
+
+Use the existing R-CURSOR-1 edit/mutation and R-TXN-1 fixture ownership. Bind an ordinary scalar default, an admitted clock/random default, restricted UDF/other-field/form/query expressions, field-local shorthand rules and multi-field table rules. Explicitly distinguish a missing rule, a rule returning Null, True, False, numeric nonzero/zero and an evaluation error. Test Required and AllowZeroLength as separate variables, not as a replacement for the rule's outcome.
+
+Cross AddNew, later explicit Null assignment, repeated field reads, ValidateOnSet True/False, Update, correctable failure, CancelUpdate and a later explicit retry. SQL INSERT contributes omitted versus explicitly supplied columns when its action slice exists. Defaults/validation can be researched before full SELECT by their direct property/edit entry points. An unavailable UDF in a restricted default is an admission result; it is not a replay instrument. Use admitted runtime services there and host effects in separately admitted query contexts.
+
+Capture property-set/open/assignment/Update failure phase; exact candidate/public/persisted value; default/sample occurrence count where observable; returned value/error type; ValidationText and ordered Errors entries; edit/transaction state and affected pages only for operations that actually publish. With two independent invalid fields, swap assignment order and physical/declaration order to determine error precedence. Keep the documented ValidateOnSet disagreement visible until both assignment and actual persistence are compared.
+
+The initial field adapter requires True, with Null rejected; the initial table adapter uses the same choice as a separately marked hypothesis. If native field or table rules accept Null, change only that context adapter and its fixtures. A different AddNew/default sampling point moves the stage while preserving accepted receipts. A native-dependent stage order changes MutationSemantics ordinals. Inconclusive display-only results require a lower owned DAO observation, not a guessed universal rule.
+
+### EXPR-INVENTORY — shared builtin manifest and per-function contracts
+
+Build the function×context manifest described in II-10 from official reference families and actual CalcVBA declarations. Every required name receives signature/arity/omission, type/result, effects, ownership, context/sandbox, implementation and evidence entries. A category index is a seed, not an availability result. Qualified names, `$` String forms, byte-oriented string functions and identical names in different hosts remain distinct until their contracts prove equivalence.
+
+Generate ordinary, boundary and invalid cases from those descriptors, then add mechanism-specific inputs: counted NUL/surrogate/odd-byte BSTRs where admitted; text positions just inside/outside a boundary; date month-end/leap/week settings; exact numeric half and range boundaries; financial zero/extreme rates and convergence/failure cases; empty/all-Null domain/aggregate cases. Capture active values and public metadata rather than formatted strings. Use the shared foundation directly as a third comparison where its exposed API permits it, without treating it as the native oracle.
+
+Any shared-function mismatch becomes a foundation/context-adapter issue with one correction path. A missing function remains a visible implementation obligation. No SQL-only numeric or text substitute is created to conceal the gap. The manifest's acceptance report counts executed context/type cells and unresolved availability separately. W-05 consumes its restricted mutation subset; W-06 consumes the full required scalar query surface; host/domain routes add their independently satisfied dependencies.
+
+### Shared capture, ambiguity, decisions and cost
+
+Run A/A controls before classifying A/B differences. Input-addressed captures include exact file/content/sort descriptors, expression text and grammar, loaded engine/provider/client identities, bitness, locale/calendar, host and existing security context, parameter declarations/active payloads, preparation state and operation order. Windows x64 and actual .NET Framework4.8-family/.NET10 clients are independently identified lanes. These records do not infer intermediate types or hidden native callback counts from a final formatted output.
+
+Keep public phase observations separate from instrumented local evaluator traces. If native effects cannot be exposed without an unavailable host route, complete scalar/value/error branches and record effect-order evidence missing. Build-specific differences select explicit supported context/version profiles; no successful newer-build fixture silently rewrites the initial oracle. Size remains **L**, staged scalar→pattern/mutation→admitted host effects. Only dependent transformations wait for their own unresolved evidence; defaults/validation and the conservative scalar implementation proceed.
+
+Counters cover prepare versus repeated evaluation, field/LV demand, conversions, BSTR/array copies, pattern states, domain scans, callback occurrences, reference cleanup and live capacity. Compare scalar versus specialized candidates with the same inputs and public demand trace. A result/error/effect mismatch rejects the optimization. A semantically equal path without measured end-to-end improvement retains the simpler implementation. Full source particulars remain in II-10/A-01; this card adds original experiments, not executed findings.
+
+### Pattern and comparison profiles
+
+**Purpose:** qualify the text-context selector, two grammar profiles, semantic cursor/control state, diagnostic timing and memo/cache identity. Preferred branch: compiled scalar matching with retained origin/partial positions and deferred diagnostics. Revise the profile or state identity when evidence differs; do not patch SQL and VBA with independent conversion algorithms.
+
+**Prerequisites:** R-ORACLE-1 and a scalar read-only harness; the exact payload transport established by II-02/R-STRING-1. Use DAO expressions, saved and ad-hoc QueryDefs, Access-hosted expressions/VBA, and the provider routes that are actually available. Full SQL optimization, the writer and host-UDF instrumentation are not prerequisites for these intrinsic cases. Join R-UDF-1 later for expression inputs with observable host effects. ADO can contribute its expression route when its connection slice exists.
+
+**Capture for every case:** file identity/family and raw sort descriptor; API route, provider and exact module identities; user-reported oracle build independently captured from the loaded DLL; process bitness; database ANSI setting and connection/query properties; module comparison setting; regional/NLS identity where applicable; both operands' VARIANT tags and exact BSTR byte payloads; result tag/payload or complete error surfaces; expression phase and row ordinal. Use actual .NET Framework 4.8-family and .NET 10 lanes separately when managed wrappers participate. Preserve raw observations before classifying outcomes.
+
+| Case | Original fixture | Discriminating outcome/design consequence |
+| --- | --- | --- |
+| PAT-01 | Subjects `Q`, `Q*`, `Q%`, `Q7`, `Q*7`, `Q7%`; patterns `Q*`, `Q%`, `Q*%`, `Q?`, `Q_`. Repeat through each route and both database option settings on owned fixture copies. | Select one grammar and establish option/provider/query precedence. No auto-detection from the pattern. |
+| PAT-02 | Literal bracket/hyphen/closing-bracket subjects; patterns `[[]`, `]`, `[[]]`, `[-a]`, `[a-]`, `[]`, `[!]`, `[^]`; include empty subjects. | Resolve empty/negative-empty classes, escape grammar and inactive negation marker behavior independently in each mode. |
+| PAT-03 | `[C-A]`, `[A-C]`, `[a-C]`, accented endpoints and a ligature endpoint under Binary/Text/Database profiles. | Separate malformed syntax from collation-dependent range validity; preserve target-specific behavior where the general language description is undefined. |
+| PAT-04 | Pattern `q[` against `x`, `qx`, `q`, and empty; pattern `xq[` against `yq` and `xqx`. | Locate an unvisited versus encountered structural diagnostic and exhaustion precedence. |
+| PAT-05 | `q*[` and `q*[C-A]` against an initial mismatch and a subject reaching `*`; ANSI-92 counterparts where active. | Determine which suffix diagnostics a wildcard triggers immediately and which remain deferred. Distinguish structural faults from reversed ranges. |
+| PAT-06 | Null subject with valid/invalid/nontext pattern; Null pattern with nontext subject; Empty and zero-length strings separately. | Establish operand, Null, conversion and pattern-validation order; verify cached preparation does not expose an unvisited fault. |
+| PAT-07 | Exact `æ`, `ae`, `Æ`, `AE` units; literal patterns, `a?`, `?e`, `a*`, `*e`, and the active-mode equivalents. | Establish partial semantic positions and wildcard advancement for each qualified locale. Do not assume an expansion exists in every profile. |
+| PAT-08 | `æ` and `ae` against `[æa]`, `[aæ]`, `a[ef]`, negated counterparts, and versions followed by a matching/failing suffix. | Establish member commitment, partial-class consumption, retry behavior and required memo identity. |
+| PAT-09 | Locale-tailored pairs such as `ch` under an admitted traditional-Spanish context, plus `c`, `h`, `c-h`; literals and one/two-wildcard patterns. | Distinguish collation contractions from wildcard cardinality and establish necessary contextual state. No expected target result is assumed. |
+| PAT-10 | Units D83D DE00, lone D800, lone DC00, reversed surrogate halves; `?`, `??`, `_`, `__`, bracket literals and surrounding ASCII. | Determine actual-character boundaries and admitted/rejected inputs without replacement-character conversion. |
+| PAT-11 | `A`, `A\u0000`, `A\u0000B`, `A\u0000C`; patterns containing the same counted NUL positions. | Verify explicit-length transport, exact cache identity, and semantic treatment independent of byte preservation. |
+| PAT-12 | `A`, `A `, `A  `, `A\u00A0`, `A\t`; compare literal, terminal-wildcard and one-character patterns as well as `=`, `StrComp` and `Len`. | Distinguish key trimming from the different semantic operations. |
+| PAT-13 | ASCII digits, Arabic-Indic digit U+0661, full-width digit U+FF11, punctuation and combining marks against `#`, `[0-9]`, `?`, `_`. | Select digit membership and reject the documentary alphabetic-only interpretation if the target contradicts it. |
+| PAT-14 | Literal pattern `MN` against `MN`, `MNO`, `AMN`, `AMNO`, case variants and empty. | Resolve whole-pattern versus substring behavior without adopting an inconsistent example row. |
+| PAT-15 | `StrComp` omitted selector, -1/0/1/2, Null, Empty, unsupported numbers and erroring selector expressions; same operands in different modules/databases. | Bind selector/default context and capture result subtype/error ordering; do not read an ambient setting on each comparison. |
+| PAT-16 | Same pattern bytes under changed grammar/context generation; alternate `A\u0000B` and `A\u0000C`; change row scratch and parameter storage after calls. | Confirm no semantic alias, stale cache reuse, retained borrow or result change after eviction. |
+| PAT-17 | Long repeated wildcard/literal patterns with a final mismatch, long zero-width constructs, large classes and many distinct parameters. | Compare exact outcomes while measuring states, transitions, bytes, cancellation and admitted resource failures; identify history omitted by a proposed memo state. |
+| PAT-18 | `e\u0301` versus U+00E9; leading/reordered combining marks; `ß`/`ss`, dotted/dotless I, kana/width pairs and punctuation under admitted profiles. | Inventory semantic equality, pattern transitions and profile distinctions without generic normalization or case folding. |
+
+**Decision outputs:** immutable resolved-context rules; grammar/extension table; diagnostic-event precedence; admitted actual-character and partial-position schema; class priority and negation rules; profile-specific state/transition bounds; complete typed error projections; cache invalidation requirements. A counterexample to locality expands the state model or keeps that optimization unavailable while the profile implementation remains required. A result mismatch always wins over a lower allocation count.
+
+**Cost/effort:** extend the existing L-sized R-EXPR-1 card with staged intrinsic batches, not a new global prerequisite. Initial ASCII/mode/error fixtures can run before the locale matrix and optimization evidence. Report actual executed case × route × context counts rather than treating this designed table as completed coverage.
+
+### Sandbox, database context and runtime extensions
+
+Retain the existing full card and scalar-first dependency sequence. These branches extend its coverage after the necessary minimal host routing exists; they do not replace scalar/coercion/pattern probes or require full SELECT before defaults and validation can run.
+
+### EXPR-SANDBOX — binding and invocation under an unchanged native configuration
+
+Cross the already available Access/non-Access contexts, database trust/content states and sandbox settings. Record unavailable combinations. Use harmless admitted builtins and inert harness-owned host functions; a policy-denied object-creation fixture may target an already available inert harness-owned class with a counted factory, never an arbitrary external object. Establish valid syntax/host availability independently so “function unavailable” is not misclassified as a sandbox denial. Do not call destructive blocked functions to test their names.
+
+Compare direct expressions, qualified/aliased names, property/default-member access, cached plans, dynamic Eval text and domain expression/criteria text. Include a function resolved before a policy/registry change and a nested call after a change inside an outer callback. In CalcDb-only fault injection, serialize policy publication against entry-permit acquisition and prove that the loser receives the selected disposition while an active call retains its code/value ownership.
+
+Capture resolution identity, admission cause, error point and side-effect counter. No denied route may execute the inert effect merely because an alias, dynamic string or cached descriptor bypassed admission. An already configured native lane decides the public mapping; internal denial labels are not new DAO error numbers. No HKLM, Trust Center, macro-security, machine-policy or host message-filter modifications are made. [S-MS-SANDBOX] supplies context categories only.
+
+### EXPR-DOMAIN — domain child operation semantics and native inputs
+
+Create a named table with Long key, Currency and Null values, duplicate lookup matches, zero rows and rows on distinct pages; include a parameter-free saved QueryDef and one requiring parameters. Use DLookup and DSum where the route actually exposes them. Vary omitted versus Empty/Null/zero-length criteria, criteria with an absent domain field, an unresolved domain, malformed text, a missing projection field, numeric overflow, an illegal nested domain/SQL aggregate and an admitted UDF that errors after recording its position.
+
+For lookup ordering, compare unique versus multiple matches, indexed versus unindexed access and repeated reads after controlled index/layout changes in fixture copies. Capture the actual selected row/root, rather than treating the documented first-occurrence description as a universal key order. For DSum, vary numeric subtype, all-Null versus no-row input, expression errors and placement in an outer totals query. Preserve exact result subtype and ordered evaluation trace.
+
+Cross a DAO edit buffer before Update, an updated row inside the current Workspace transaction, another Database in that Workspace, a separate Workspace and a competing owned process. Sample before/after commit and rollback. Repeat a domain call with identical text around a host edit or reentry. Determine the database-context source and view boundary, then use II-08/09's existing owners to realize it. Tests must distinguish an Access active database/form namespace from the connection's executing database; missing host context is not repaired by a silent extra connection.
+
+Capture query/catalog identity, parameter requirements, decoded row/root observations, admitted view/native source, accepted transaction deltas, scan order, aggregate subtype and exact public failure. No blanket mapping of binder failure to Null. The documented absent-criteria-field outcome gets its own case. [S-MS-DLOOKUP] and [S-MS-DSUM] provide public starting points; transaction visibility and stable ordering remain measured results.
+
+### EXPR-EVAL — recursive binding with inherited authority and limits
+
+Use constant and row-dependent expression strings, nested Eval, syntax failure, a host name, a denied capability, a domain call and a function that changes the registry or policy. Separate Application.Eval from any engine-query spelling; record unsupported entry routes. Include embedded-null/lone-surrogate text under the actual string admission rules and expressions whose rejected outer row must never reach their dynamic child.
+
+The child uses the inherited scope and parent's resource account while obtaining current binding/policy admission. Stress nesting, accumulated parse nodes and bytes, retained values, nested database operations and failure during child cleanup. Capture the precise denial/error occurrence and active ownership. Exhaustion must not reset its allowance by nesting, replay a completed callback or strand a cursor/native grant. Portable implementation-limit mapping is explicit and must not be reported as an observed ACE error.
+
+### EXPR-RUNTIME — clock/random state and evaluation occurrences
+
+Interleave direct VBA calls with query/default/validation calls to clock/random functions, where supported. Use deterministic fixture services in CalcDb and capture native runtime state boundaries separately. Vary repeated equal arguments, constant versus row-dependent calls, two occurrences in one expression, rejected rows, repeated prepared-query execution, nested callbacks and an expression error between calls. Check Rnd argument classes without assuming the ACE expression evaluator shares one state owner with every VBA project.
+
+Capture result subtype, sequence of samples/state transitions and any host/query state sharing. Force an effect-free physical replan after acceptance to show that the same accepted occurrence retains its sampled value; contrast with a later legitimate AddNew or reevaluation, which must follow native sampling behavior. [S-MS-RND] and [S-MS-NOW] establish function-level facts only, not per-row/per-statement counts.
+
+**Decides.** These branches select context adapters, visibility/lookup policy, dynamic admission dependencies and sampling ownership. An observed evaluation order or error change prohibits the associated fold, reorder, reuse or parallel substitution. Missing host delivery leaves scalar results usable. Full result records include exact context and dependency profile, not a universal label such as “ACE behavior.”
+
+<!-- Source chapter: I-10-expressions.md; detailed mechanism II-10-expressions.md -->
 
 ## R-UDF-1 — Resolver, ownership and reentry
 
-**Question / conditions:** how does supported host integration resolve functions and continue after callbacks? Compare Access-hosted and standalone DAO, with ADO as its policy probes become available, with recorded function registry, trust and sandbox state. **Fixture / operations:** built-ins, declared host functions, absent/ambiguous names, arguments/results with owned strings/arrays/objects, callback errors, and reentry that edits, requeries, closes or changes a relevant registry/context. Do not execute preserved database front-end modules in CalcDb. **Capture / comparison:** resolution/call/error sequence, caller thread, argument ownership and outer-operation usability; exclude internal-latch ownership at callback entry. **Decides:** explicit host callbacks remain preferred if sufficient; evidenced runtime discovery changes only the resolver. Reentry outcomes select continuation validation and public failure policy; an unsupported host route remains visible. **Depends / size:** R-EXPR-1 scalar baseline, I-HOST-1; M. Minimal host prototype precedes accepting host-UDF SQL, not full DAO delivery.
+**Question and provisional choice.** Which supported host route resolves a function, what values and ownership cross that boundary, and how does the outer operation continue after reentry? **D-UDF-1 remains Provisional:** prefer an explicit versioned host resolver/invoker. A demonstrated native discovery requirement changes the resolver, not argument ownership, caller-thread execution or the database object model. An Access.Application.Eval success is evidence for that Access-host route only. CalcDb does not execute preserved Access front-end modules.
 
+**Conditions and lanes.** Begin after the scalar/context subset of R-EXPR-1 and a minimal I-HOST-1 callback prototype. Compare Access-hosted expression evaluation and Access-hosted DAO QueryDef execution with standalone DAO. Record standalone native/CalcVBA callers and the installed .NET Framework 4.8-family and .NET 10 Windows x64 clients separately. Add ADO when its relevant policy path exists; do not make complete ADO a prerequisite for the DAO/host result. Record the actual loaded ACEDAO.DLL identity, Access host identity, runtime/client identity, database identity and existing trust/sandbox context. The user-reported initial ACE oracle is 16.0.20527.20016; directory name alone is not a loaded identity. Run only in harness-owned databases/processes with already configured native security state.
 
-**Wait and ancestor branch (II-09).** Reenter while an ancestor owns view admission, an edit grant, a queued predecessor dependency or a protected resolution attempt. Compare compatible retained-view/grant borrowing with the native incompatible-operation outcome. No callback waits on its own ancestor or repeats accepted effects. Reentrant destruction stays outside internal latches and does not reopen unsafe view admission. Capture Windows STA/MTA host wait behavior separately from portable callback behavior; I-HOST-1 selects dispatch policy.
+**Fixture.** Supply an explicit test host namespace with a pure typed echo function, a trace-and-return function, an error-after-trace function and a controlled reentry function. Its trace is an owned in-memory sequence, not a database write that might roll back with the tested statement. Give every trace entry the provider incarnation, function identity, logical evaluation occurrence, nesting, argument tags/values and thread. Include scalar, BSTR, array and interface lifetimes, as accepted by each native route. Use one row, repeated equal-valued rows, two references to the same function and row-dependent versus constant arguments. All constructed function names are harness fixtures, not assumed CalcVBA APIs.
 
-<!-- Source chapter: I-10-expressions.md -->
+| Branch | Concrete operation | Capture and decisive distinction |
+| --- | --- | --- |
+| UDF-NAME | Resolve builtin, declared host function, missing name, qualified name, ambiguous name and a name shadowing a field or builtin. Remove/reload the provider under the same name. | Name lookup versus function/parameter binding; resolved identity and scope; descriptor replacement does not silently retarget a retained call. |
+| UDF-CONTEXT | Evaluate the same expression through Application.Eval, Access-hosted QueryDef and standalone DAO, followed by each admitted ADO lane. Include a host control reference where that namespace exists. | Actual host capability and error/result trace; no inference from Access success to standalone runtime discovery. |
+| UDF-SIGNATURE | Omit optional arguments; supply explicit Empty/Null/error; use typed defaults; mix named/positional arguments where syntax admits them; vary coercion failures. | Imported signature/default metadata, source-to-DISPPARAMS mapping, actual type and timing of conversion/error. |
+| UDF-BYREF | Supply a field expression, temporary expression and genuine writable host variable to ByRef declarations; pass one writable variable twice. | Temporary versus lvalue behavior, alias observation and writeback/error order. No assumed direct writeback into table page bytes. |
+| UDF-ENTRY | Bind/cache a call, then replace its function, unload its provider or revoke its policy before entry; repeat during an active callback and before a nested call. | Compile validity versus current admission, retained code lifetime and precise denial/continuation boundary. Record the public outcome without inventing an ACE error number. |
+| UDF-OWNERSHIP | During a callback, Move, Requery, edit, close and pressure the page cache; inspect invocation-borrowed values and explicitly clone/retain values for later use. Return owned strings, arrays and interfaces, or a permitted indirect result. | Stable input/result ownership, required materialization, surviving provider/objects, array locks and deferred cleanup; no borrowed page or scratch escapes. |
+| UDF-EFFECT | Force a physical page/index preparation retry after a completed host call; compare separate legitimate expression occurrences with an accidental retry of one occurrence. | Every accepted foreign-entry receipt remains singular for that occurrence; no deduplication of distinct native evaluations and no replay to repair a physical plan. |
+| UDF-REENTRY | Change the outer cursor, catalog dependency, transaction, namespace, function registry or sandbox policy from the callback. Also change an unrelated dependency. | Which dependency invalidates continuation, permits effect-free reprepare or is irrelevant; accepted results/effects remain owned. |
+| UDF-CLOSE | Close/release the current cursor, Database or Workspace from inside the callback; trigger concurrent Close in an admitted native lane. | One CloseAttempt, selected immediate/deferred/failure outcome, no ancestor self-wait and no rival rollback; memory lifetime distinct from public open state. |
+| UDF-ERROR | Fail before entry, after a trace effect, during result conversion and during foreign cleanup. Exercise nested errors and deferred EXCEPINFO fill when the provider supports it. | HRESULT, argument index, EXCEPINFO, IErrorInfo, VBA Err and DAO/ADO Errors separately; prompt error capture and preservation of primary versus cleanup failures. |
+| UDF-THREAD | Invoke through the supported caller lanes while pure internal worker work is active. | Provider entry, result conversion and relevant foreign cleanup remain on the required caller/runtime thread with no internal latch held. |
+
+**Wait and ancestor branch (II-09), retained.** Reenter while an ancestor owns view admission, an edit grant, a queued predecessor dependency or a protected resolution attempt. Compare compatible retained-view/grant borrowing with the native incompatible-operation outcome. No callback waits on its own ancestor or repeats accepted effects. Reentrant destruction stays outside internal latches and does not reopen unsafe view admission. Capture Windows STA/MTA host wait behavior separately from portable callback behavior; I-HOST-1 selects dispatch policy.
+
+**Detailed ancestor fixtures.** Use A holding shared resource X, B queued for exclusive X, then a callback under A requesting shared X. Capture the queue-precedence dependency even when direct grant compatibility would appear harmless. In a second fixture, suspend an outer call after it owns fresh-view admission and reenter a domain read needing that admission. In a third, reenter Close during a transaction ResolutionAttempt and during pending native work. Test a compatible retained-source borrow separately from an incompatible request. The experiment does not release native locks or admit fresh readers merely to avoid a deadlock.
+
+**Capture.** Collect an ordered public call trace, typed input/output images, retained provider/type-information owners, real caller/runtime threads, function/namespace/policy generations, logical and physical owner state, source-view identity, callback count, active ancestry and relevant native lock/wait events. Add allocation/failure injection at reservation, registration, argument materialization, entry, result capture, writeback and cleanup. Place an erroring later child or unread LV after an earlier host effect to detect premature materialization; require revalidation after every conversion/default-member/writeback/cleanup reentry before subsequent publication. Raw arguments that may contain interface pointers are recorded as owned identity tokens, not treated as serialization-stable pointer bytes.
+
+**Comparison and outcomes.** A returned value alone is insufficient. Compare typed value, admitted/denied route, effect and error order, entry count, resource ownership and surviving object usability. Explicit callbacks remain preferred if they express the supported behavior. Evidence that the native host locates a runtime differently adds a resolver capability; it does not authorize guessed private CalcVBA entrypoints. A wrong-thread callback, internal latch across foreign code, exposed scratch, duplicated accepted effect, obsolete provider invocation or continuation into a new cursor incarnation rejects the candidate. Unavailable native host/security lanes remain visible evidence gaps.
+
+**Dependencies, size and next action.** R-ORACLE-1 capture; R-EXPR-1 scalar baseline; I-FOUNDATION-1 metadata/value declarations; minimal I-HOST-1. Size **M**, with signature/ownership and reentry branches expanding by supported route. First execute one typed echo and one controlled reentry in actual CalcVBA, then add a trace/error function. Do not wait for complete DAO or SQL, and do not make scalar expression research depend on UDF delivery. Primary owning chapter I-10; mechanism in II-10, ownership prerequisites II-09.
+
+**Requirement and source scope.** RQ-EXPR-01/02/03, RQ-CALL-03, RQ-HOST-01 and the real Automation requirements. [S-MS-EVAL], [S-MS-IDISPATCH], [S-MS-ITYPEINFO], [S-MS-FUNCDESC], [S-MS-PARAMDESC], [S-MS-PARAMDESCEX], [S-MS-PARAMFLAGS], [S-MS-VARIANTCOPY], [S-MS-VARIANTCOPYIND], [S-MS-GETERRORINFO] and [S-MS-EXCEPINFO] document public mechanisms; none supplies a native UDF-discovery, reentry or once-per-row result. The published II-10 source notes contain the documentary claims; this card specifies original tests.
+
+<!-- Source chapter: I-10-expressions.md; detailed mechanism II-10-expressions.md -->
 
 ## R-SQL-1 — Typed relational semantics and admissible rewrites
 
@@ -695,6 +948,12 @@ The initial oracle is the user-reported ACE 16.0.20527.20016; each run verifies 
 
 **Dependencies, effort and next action.** Discovery depends only on supplied/available material, not a completed portable prototype. Execution depends on the corrected CalcVBA shared value implementation and its own minimal portable services. Size **S** for contract investigation; estimate implementation separately after inventory. Next action: publish declarations and demonstrate one allocation/value/dispatch round trip, then early-binding/enumeration/error/event paths. Owning chapters I-02, I-13 and II-02.
 
+### II-10 scalar and text service contract extension
+
+Publish actual shared-library descriptors for declared operand categories as well as runtime VARIANT tags, expression-use and locale/calendar/comparison contexts, typed successful/Error-valued outcomes versus failures, and ownership. Demonstrate one mixed-origin comparison, exact Currency/Decimal construction, a conversion that fails before a later effect, and counted BSTR text/byte operation. The interface must support the resumable evaluator's already-completed coercion steps without repeating them. Identify functions and native text profiles still missing from the common foundation in the required manifest; no independent SQL implementation conceals a missing entry.
+
+Pattern support needs explicit original/partial-character transitions and diagnostic policy where the qualified language profile requires them, not just a generic comparator or regex export. I-FOUNDATION-1 discovers actual available declarations; R-EXPR-1 qualifies semantic behavior. These requirements do not claim an existing CalcVBA ABI or make the entire function inventory a prerequisite for the first value/DAO-read prototype. The user's corrected real platform VARIANT/BSTR remains the sole shared semantic representation.
+
 ## I-HOST-1 — activation, callbacks and shutdown ownership
 
 **Question and provisional choice.** Can a small explicit versioned capability boundary assign host loading, runtime initialization, type-library resolution, activation scope, VFS/configuration, function invocation and diagnostics without introducing another database API? Prefer that boundary under **D-HOST-1 — Provisional**. Database operations remain real COM calls into the shared engine.
@@ -709,6 +968,24 @@ The initial oracle is the user-reported ACE 16.0.20527.20016; each run verifies 
 
 
 **Owned Windows wait branch (II-09).** Prototype the narrow host-approved CoWaitForMultipleHandles/default policy for STA, corresponding MTA/portable waits, and predicate/deadline rechecking after every wake or dispatch. Preserve the host's message filter; compare only explicitly admitted flag changes. Reenter Close/Requery while a target request remains pending, trigger wake without target completion, and vary the installed .NET Framework 4.8-family and .NET 10 clients. A stale generation stops semantic publication but does not complete or free pending I/O. Observe exact native/public outcomes and caller-thread callbacks. [S-MS-COWAIT], [S-MS-COWAIT-FLAGS] and [S-MS-CANCELIOEX] document API constraints only.
+
+### II-10 metadata, entry ownership and revocation
+
+Retain the full I-HOST-1 activation/version/callback/shutdown card and its II-09 owned Windows wait branch.
+
+**Metadata and ABI slice.** Use actual CalcVBA and I-FOUNDATION-1 declarations to publish one resolver result with stable function identity, provider incarnation, signature/default/direction metadata, retained implementation owner and explicit effects. The interface description must identify allocation/free pairs, caller/runtime ownership, canonical result transfer, error capture and shutdown. Real platform Automation values/BSTR apply, including 24-byte Windows x64 VARIANT. The prototype must not infer private runtime/JIT entrypoints from implementation names or assume the current 16-byte transitional value is the shared ABI.
+
+**Ownership slice.** Register an InvocationAttempt with active operation admission before any preparation that can reenter. Inject failure after each partial argument/default/type-info retention; unload/revoke a provider with an active frame; close the caller while an output or cleanup obligation survives. Verify owned frame/results/aliases, foreign cleanup outside latches and exact once-only transfer to the successor owner. A local descriptor reference must retain already prepared foreign lifetime without executing AddRef under registry synchronization.
+
+**Signature slice.** Compare actual type-info-based dispatch with the published direct adapter when available. Include omitted/default/missing values, named arguments, ByRef temporaries and actual shared lvalues, legal array shapes, object references and result conversion. Validate source-to-ABI argument-error mapping. Passing one Rust-only mock pair is local evidence; it does not establish actual CalcVBA early binding or portable COM behavior.
+
+**Entry and continuation slice.** Race current-policy publication against atomic entry admission using deterministic CalcDb scheduling, and capture native behavior where the host exposes an equivalent supported change. A revoked future invocation cannot run through a cached descriptor. An admitted active invocation retains its code; its nested calls acquire new permission. On return, invalidate only the dependencies the continuation needs. Reprepare pure physical work from accepted results, distinguish separate logical occurrences and preserve error/effect receipts through Close. No reentry waits on its own ancestor.
+
+**Runtime-service slice.** Publish clock/random/database-context services with explicit state owners and inherited budgets. Exercise a domain/Eval child operation through the same COM/ISAM/query state, rather than an alternative object model. The adapter identifies the actual selected namespace and database context. Missing capabilities/version remain named integration failures; extending the adapter is integration work, not permission to manufacture a different database API.
+
+**Acceptance and measurements.** Keep cold provider/type-library acquisition separate from warm invocation and policy validation. Record BSTR/array copy bytes, reference operations, provider entry count, child query reads, result/error ownership, wait/dispatch events and cleanup completion. Compare Windows COM, explicit host adapter and future portable stand-in lanes independently. A memory-safe retained result that belongs to a closed operation must still receive the correct public continuation outcome.
+
+**Dependencies.** Actual foundation declarations and a minimal real host; no full SQL/DAO prerequisite. R-UDF-1 owns expression routing and reentry semantics; R-ADO-1 owns event ordering. This addendum is an original boundary proposal supported by the public metadata/ownership sources cited in II-10, not evidence that CalcVBA already exports the proposed operations.
 
 ## R-ENC-1 — Encryption
 

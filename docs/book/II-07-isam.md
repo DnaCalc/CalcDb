@@ -1,6 +1,6 @@
 # II-07. ISAM, cursors and constraints
 
-Revision 1 · Stage 2, response 6 · 2026-11-13
+Revision 2 · Stage 2, response 9 · 2026-11-13
 
 **Requirement trace:** Primary RQ-DAO-02 and RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-03, RQ-CALL-04, RQ-PERF-01 and RQ-PERF-02. I-16 owns the complete scope text. K-CURSOR is implemented using II-03's page-image ownership, II-04's native row roots and codecs, II-05's full-entry/index mutation service and II-06's schema/relationship descriptors. II-08 owns transaction and persistent failure resolution.
 
@@ -541,6 +541,8 @@ This is the property-level documentary matrix, before validation rules, indexes,
 Default expressions and validation rules use their own expression contexts. Microsoft's DefaultValue reference excludes UDFs, aggregate functions, query/form/other-field references, and says it does not apply to AutoNumber or Long Binary. A field validation rule is confined to that field; a TableDef rule can reference multiple fields in its row, subject to the documented restrictions. These admission rules are checked when binding metadata and again where a schema change invalidates it. Do not test replay using a UDF in a default context that ACE rejects; use admitted clock/random expressions there and put host-function effect probes in admitted SQL assignment contexts. [^e-m-default][^e-m-validation][^e-m-table-validation]
 
 Validation acceptance is not SQL WHERE acceptance. Bind a context-specific result adapter for True, False, Null and errors, then qualify its outcomes against the native oracle. `Required=False` does not settle what a particular rule does with Null. Capture validation text, error number, the complete Errors collection and the phase of failure. Contradictory rules and malformed/unsupported expressions are not silently treated as True.
+
+II-10 makes the initial preference explicit: require True for field rules, with Null rejected; use the same initial choice for table rules as a separately marked hypothesis. R-EXPR-1 can change either adapter independently. Its resumable evaluator retains conversion/default candidates provisionally and uses an explicit AcceptCell/AcceptRowValues stage; a conversion that succeeds before a rejecting ValidateOnSet rule cannot prematurely overwrite the prior accepted cell. Update failure still follows this chapter's captured edit-buffer disposition.
 
 ### Generated-value tickets
 

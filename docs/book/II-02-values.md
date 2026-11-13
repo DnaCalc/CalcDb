@@ -1,6 +1,6 @@
 # II-02. Values, strings and ownership algorithms
 
-Revision 2 · Stage 2, response 3 · 2026-11-13
+Revision 3 · Stage 2, response 9 · 2026-11-13
 
 This is the complete first design of the value and ownership chapter. Its algorithms are proposed CalcDb mechanisms, not descriptions of an unpublished CalcVBA implementation. It develops **RQ-VAL-01**, **RQ-VAL-03** and **RQ-TYPE-01**, and supports **RQ-COM-01**, **RQ-PORT-03** and the shared semantics required by **RQ-VAL-02**. Its binding contracts are **K-VALUE**, **K-STRING**, **K-PAGE**, **K-ADMISSION**, **K-THREAD**, **K-ERROR** and **K-EXPR**. Native layout facts have documentary support; target Windows/ACE/CalcVBA execution is still outstanding.
 
@@ -198,6 +198,8 @@ Object values keep canonical COM reference semantics. A value can retain an obje
 The shared value layout solves representation, not every context-dependent Access behavior. **K-EXPR** requires one conversion/function implementation with explicit context. DAO field assignment, query expression evaluation, parameter binding, ADO projection and VBA argument passing may select different documented/observed rules. Those differences belong in context and adapters, not copied conversion algorithms.
 
 The proposed context identifies the database type/sort descriptor, locale-sensitive conversion inputs, wildcard/comparison mode where relevant, expression use, target field precision/scale, error projection policy and host-function environment. Immutable context carries generation references for any state a retained plan depends on. It does not hold an unbounded borrowed pointer to a temporary caller VARIANT.
+
+II-10 retains declared operand category and field/parameter/literal origin alongside runtime tags when selecting a shared operation. That metadata stays outside the real VARIANT. Its resumable policy can interleave a child result, its coercion and a later child; the value service must not force all conversions to occur only after all children have run. A successfully constructed value is also distinct from mutation acceptance: a setter's provisional candidate does not replace its prior cell before the required validation succeeds.
 
 For a requested conversion, preserve the original value until success is known. The result is constructed in a fresh owner. Overflow, invalid coercion, Null handling and error ordering come from the shared service and oracle cases. A failing assignment must not partially replace the edit buffer merely because text decoding or numeric conversion already allocated work. Actual edit/transaction rollback remains the cursor/coordinator's responsibility.
 

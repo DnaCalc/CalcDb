@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r8** · 2026-11-13 · Current state only.
+Revision **S2-r9** · 2026-11-13 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-09 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-10 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 9 — II-10 Expressions, sandbox and CalcVBA functions**, with shared evaluation, context/coercion, caller-thread callbacks and reentry.
+- Next: **Stage 2, response 10 — II-11 Access SQL and execution**, with relational operators, concrete plans and native ISAM/evaluator integration.
 
 ## Contents and estimates
 
@@ -20,23 +20,23 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.0 | I revised; II drafted |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
 | 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.6 | I revised; II drafted |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
-| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.6 | I revised; II drafted |
+| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.8 | I revised; II drafted |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I revised; II drafted |
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I revised; II drafted |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 1.6 / 0.0 | I revised; II pending |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.8 | I revised; II drafted |
 | 11 | Access SQL and execution | 2 / 12 | 2.9 / 0.0 | I revised; II pending |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 3.7 / 0.0 | I revised; II pending |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 5.3 / 0.0 | I revised; II pending |
 | 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 10.1 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 10.4 / 0.0 | I revised; II pending |
 
-Part I ≈ **60.9 pages**; current Part II ≈ **250.1**. Appendices separate: A-01 sources ≈ **51.8**, A-02 experiments ≈ **41.2**.
+Part I ≈ **61.6 pages**; current Part II ≈ **291.2**. Appendices separate: A-01 sources ≈ **59.5**, A-02 experiments ≈ **53.2**.
 
 ## Scope owner index
 
@@ -84,8 +84,8 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-LOCK-1 | Decided scope; provisional protocol | Four steps fixed; authority-bound coarse leases, then captured read/publication profiles; R-LOCK-1/2/3/4. | 03,08,09 |
 | D-SNAPSHOT-1 | Provisional | One writer; close fresh-view admission before preserving old sources; exact histories/certificates; CUR/TXN/LOCK probes. | 03,07,08,09 |
 | D-CALL-1 | Decided | Blocking caller; call work settles before return, retained work before named owner close. | 09,10,12,13 |
-| D-EXPR-1 | Recommended | One contextual scalar service over shared CalcVBA semantics; conservative effects/errors. | 10,11 |
-| D-UDF-1 | Provisional | Explicit caller-thread host callback; R-UDF-1/I-HOST-1. | 10,13 |
+| D-EXPR-1 | Recommended | Shared typed nodes and resumable demand/coercion policies; fault-preserving patterns; R-EXPR-1. | 10,11 |
+| D-UDF-1 | Provisional | Owned caller-thread invocation; stable identity/current admission, aliases and boundary revalidation; UDF/HOST probes. | 10,13 |
 | D-SQL-1 | Recommended | Access binder/actual operators over shared ISAM/evaluator; bounded scalar/batch work. | 10,11 |
 | D-ACTION-1 | Provisional | Stabilize candidates at evidenced evaluation boundary; R-SQL-2. | 07,08,11 |
 | D-PAR-1 | Decided | Workers must preserve accepted serial rows, Double folds, effects and errors. | 09,10,11 |
@@ -112,7 +112,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-TXN | Workspace frames and participant receipts; logical nodes/native effects stay distinct through failure and handoff. | 08 |
 | K-LOCK | Real leases; external locks differ from latches/visibility; no internal latch across foreign code or waits. | 09 |
 | K-WORK | Register ownership before submission; one CloseAttempt; cancellation retains exact work/grants through settlement. | 09 |
-| K-THREAD | VBA only on caller outside latches; stable callback values and revalidated continuation; no repeated effects. | 10,13 |
+| K-THREAD | Caller-thread foreign work outside latches; own demanded inputs, revalidate each boundary; no replay/ancestor wait. | 10,13 |
 | K-PAR | Worker outcome equals serial rows, Double order, effects and selected error. | 11 |
 | K-ERROR | Typed context/progress/uncertainty; evidenced per-surface HRESULT/error collections and lifetime. | 12,13 |
 | K-COM | Real ABI/identity; portable type info, dispatch/errors/enumeration/factories/ADO events and Automation allocation. | 13 |
@@ -121,7 +121,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-ADMISSION | Checked bounds then reservation; separately account owned capacity, pins/history, dirty images and spill. | 02,03 |
 | K-CRASH | ACE-first parity independent of undo; optional full-file U unchanged/C before-or-new, identity/eligibility/extent valid. | 03,08 |
 | K-PREFLIGHT | Prepare references/allocations before publication; never move or repeat user effects to do so. | 04 |
-| K-EXPR | Shared semantics with explicit Access context, binding and conservative effect/error metadata. | 10 |
+| K-EXPR | Declared origin and shared values; resumable demand/coercion/errors, explicit acceptance, occurrences and pattern state. | 10 |
 | K-PLAN | Inspected plan is executed; spill/action continuation preserves exact ownership, order and effects. | 11 |
 | K-BROWSER | Blocking local COM; owned direct/broker I/O; timeout never permits unsafe buffer reuse or denied write uncertainty. | 03,14 |
 
@@ -146,8 +146,8 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 | R-LOCK-2 | Reader coexistence and continuous writer exclusion | 09 / M |
 | R-LOCK-3 | Protected input graphs and refresh beside ACE | 09 / L |
 | R-LOCK-4 | Shared rebase, rollback and local/SMB ownership | 09 / XL |
-| R-EXPR-1 | Context adapters, coercion, sandbox, errors and evaluation effects | 10 / L |
-| R-UDF-1 | Standalone/host resolver, value ownership and reentrant continuation | 10 / M |
+| R-EXPR-1 | Declared/value types, staged evaluation, patterns, mutation and context capabilities | 10 / L |
+| R-UDF-1 | Host resolution, signature ownership, current admission and reentrant continuation | 10 / M |
 | R-SQL-1 | SQL typing, Null, wildcard, comparison and aggregates | 11 / L |
 | R-SQL-2 | Candidate stability, actions/DDL, counts and per-option failures | 11 / L |
 | R-SQL-3 | DISTINCTROW, TOP ties/PERCENT, parameters and crosstab metadata | 11 / L |
@@ -245,6 +245,10 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | HeldGrantSet | Logical grouping of exact native acquisitions/borrows, preserving every original release identity. |
 | Shared physical rebase | Compose retained effect-free owned deltas onto protected fresh native pages without replaying accepted effects. |
 | CloseAttempt | Single incarnation-qualified owner of Close admission, semantic handoff, drain and exact cleanup outcomes. |
+| Operand contract | Declared/bound origin and possible runtime tags selecting a shared scalar operation; metadata outside VARIANT. |
+| Evaluation occurrence | One logical demand of a node, distinct from repeated syntax/rows; completed receipts prevent only replay of that occurrence. |
+| Pattern program | Counted wildcard instructions with ordered class members, diagnostic facts and qualified text/control state. |
+| InvocationAttempt | Registered owner of one foreign occurrence, exact provider, arguments/results/errors, admission and cleanup. |
 
 ## Source ledger — compact current index
 
@@ -257,7 +261,7 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | V | 8115aa781; user-corrected | F | P |
 | U | 2026-11-13 | R | P |
 | A | Attached assignment | R | P |
-| B | S2-r8 | S | P |
+| B | S2-r9 | S | P |
 | S-MS-TXN | Updated 2022-03-18; Applies to Access 2013 / Office 2013 | F | U |
 | S-MS-VARIANT | Updated 2021-04-02 | F | U |
 | S-MS-FACTORY | Updated 2022-01-31 | F | U |
@@ -563,10 +567,50 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | S-MS-SMB2-LOCK | Doc@2026-11-13 | F | U |
 | S-MS-SMB2-LOCKELEMENT | Doc@2026-11-13 | F | U |
 | S-MS-SMB2-DISCONNECT | Doc@2026-11-13 | F | U |
+| S-MS-VBA-COMPARE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-PLUS | Doc@2026-11-13 | F | U |
+| S-MS-VBA-MULTIPLY | Doc@2026-11-13 | F | U |
+| S-MS-VBA-VARIANT-TYPE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-CVERR | Doc@2026-11-13 | F | U |
+| S-MS-OAUT-OPTIONAL | Doc@2026-11-13 | F | U |
+| S-MS-VBA-ISMISSING | Doc@2026-11-13 | F | U |
+| S-MS-VBA-AMPERSAND | Doc@2026-11-13 | F | U |
+| S-MS-VBA-DIVIDE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-INTDIVIDE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-MOD | Doc@2026-11-13 | F | U |
+| S-MS-VBA-CONVERSIONS | Doc@2026-11-13 | F | U |
+| S-MS-VBA-CURRENCY | Doc@2026-11-13 | F | U |
+| S-MS-OAUT-DECIMAL | Doc@2026-11-13 | F | U |
+| S-MS-VARENUM | Doc@2026-11-13 | F | U |
+| S-MS-VBA-BOOLEAN | Doc@2026-11-13 | F | U |
+| S-MS-VBA-CHOOSE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-SWITCH | Doc@2026-11-13 | F | U |
+| S-MS-CALC-FUNCTION-SCOPE | Doc@2026-11-13 | F | U |
+| S-MS-OPTION-COMPARE | Doc@2026-11-13 | F | U |
+| S-MS-STRCOMP | Doc@2026-11-13 | F | U |
+| S-MS-NLS-SORT-HANDLING | Doc@2026-11-13 | F | U |
+| S-MS-ACCESS-ANSI-COMPARE | Doc@2026-11-13 | F | U |
+| S-MS-VBA-LIKE | Doc@2026-11-13 | F | U |
+| S-MS-ACCESS-SQL-LIKE | Doc@2026-11-13 | F | U |
+| S-MS-VBAL-LIKE | Doc@2026-11-13 | F | U |
+| S-MS-PATTERN-ERROR93 | Doc@2026-11-13 | F | U |
+| S-MS-FUNCDESC | Doc@2026-11-13 | F | U |
+| S-MS-PARAMDESC | Doc@2026-11-13 | F | U |
+| S-MS-PARAMDESCEX | Doc@2026-11-13 | F | U |
+| S-MS-PARAMFLAGS | Doc@2026-11-13 | F | U |
+| S-MS-DLOOKUP | Doc@2026-11-13 | F | U |
+| S-MS-DSUM | Doc@2026-11-13 | F | U |
+| S-MS-RND | Doc@2026-11-13 | F | U |
+| S-MS-NOW | Doc@2026-11-13 | F | U |
+| S-MS-ACCESS-VALIDATION | Doc@2026-11-13 | F | U |
+| S-MS-ACCESS-FUNCTION-CATEGORIES | Doc@2026-11-13 | F | U |
+| S-MS-VBA-STRING-FORMS | Doc@2026-11-13 | F | U |
+| S-MS-VBA-MID | Doc@2026-11-13 | F | U |
+| S-MS-VBAL-RELATIONAL | Doc@2026-11-13 | F | U |
 
 ## Figures
 
-All **79 IDs / 81 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
+All **96 IDs / 98 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
 
 | Figure | Location | Actual form/status |
 | --- | --- | --- |
@@ -649,6 +693,23 @@ All **79 IDs / 81 captions emitted**; none render-verified. Tables are identifie
 | F-77 | II-09 | Markdown constructed/design table; emitted |
 | F-78 | II-09 | Mermaid source; emitted |
 | F-79 | II-09 | Markdown constructed/design table; emitted |
+| F-80 | II-10 | Markdown constructed/design table; emitted |
+| F-81 | II-10 | Markdown constructed/design table; emitted |
+| F-82 | II-10 | Mermaid source; emitted |
+| F-83 | II-10 | Markdown constructed/design table; emitted |
+| F-84 | II-10 | Markdown constructed/design table; emitted |
+| F-85 | II-10 | Markdown constructed/design table; emitted |
+| F-86 | II-10 | Markdown constructed/design table; emitted |
+| F-87 | II-10 | Markdown constructed/design table; emitted |
+| F-88 | II-10 | Markdown constructed/design table; emitted |
+| F-89 | II-10 | Markdown constructed/design table; emitted |
+| F-90 | II-10 | Markdown constructed/design table; emitted |
+| F-91 | II-10 | Mermaid source; emitted |
+| F-92 | II-10 | Mermaid source; emitted |
+| F-93 | II-10 | Markdown constructed/design table; emitted |
+| F-94 | II-10 | Mermaid source; emitted |
+| F-95 | II-10 | Markdown constructed/design table; emitted |
+| F-96 | II-10 | Markdown constructed/design table; emitted |
 
 ## Open issues / next actions
 
@@ -656,7 +717,7 @@ All **79 IDs / 81 captions emitted**; none render-verified. Tables are identifie
 | --- | --- | --- |
 | O-STRING | R-STRING-1: measure direct BSTR/decode reuse on the first real DAO read loop. | 02 |
 | O-FOUNDATION | I-FOUNDATION-1: publish actual declarations/package ownership and portable client prototype. | 02,13 |
-| O-UDF | R-UDF-1/I-HOST-1: demonstrate caller-thread resolution, reentry and shutdown. | 10,13 |
+| O-UDF | R-UDF-1/I-HOST-1: demonstrate real resolver/signature/interval/alias, policy-entry, caller-thread cleanup and ancestor-safe continuation. | 10,13 |
 | O-ACTIVATION | R-ACT-1: prove unchanged native/PIA routes and loaded implementation identity. | 13 |
 | O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
@@ -671,9 +732,10 @@ All **79 IDs / 81 captions emitted**; none render-verified. Tables are identifie
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 | O-VIEW | Qualify view-admission waits, external input retention and caller/Close ownership through CUR/TXN/UDF/HOST cases. | 03,07,08,09,13 |
+| O-EXPR | R-EXPR-1: qualify declaration/type and demand/error rules, field/table acceptance, function manifest and finite text profiles; range proof joins R-SORT-3. | 10,11 |
 
 ## Short changelog
 
 - 2026-11-13: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-13: II-09 adds native admission, protected sharing, versions and owned-work mechanics; 13 figures/60 designed cases; pager/transaction summaries reconciled.
-- 2026-11-13: II-01–09 drafted; 79 figure IDs emitted; next II-10. No ACE execution or rendered-figure result claimed.
+- 2026-11-13: II-10 adds typed/resumable evaluation, native row values, patterns and owned host calls; 17 figures/72 designed cases; value/ISAM summaries reconciled.
+- 2026-11-13: II-01–10 drafted; 96 figure IDs emitted; next II-11. No ACE execution or rendered-figure result claimed.
