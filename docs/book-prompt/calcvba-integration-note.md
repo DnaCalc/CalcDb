@@ -17,8 +17,16 @@ the book should recommend and say what settles it).
 
 ## Values and strings
 
-- **Fact.** CalcVBA's `Variant` uses the 16-byte COM VARIANT layout and can be read from
-  and written to that wire form directly. Its type tags follow COM's VARTYPE values.
+- **Fact (corrected 2026-11-13).** CalcVBA's runtime `Variant` is currently its own
+  16-byte form: a VARTYPE tag, three reserved words and an 8-byte payload, with records
+  held as one pointer to CalcVBA's own record data. It is not the platform Automation
+  VARIANT on 64-bit targets, where VARIANT is 24 bytes because of the `BRECORD` arm. Every
+  COM, `Declare` and native-export boundary converts to the real VARIANT. Its type tags
+  follow COM's VARTYPE values.
+- **Decided.** This difference was not intended and is being corrected in CalcVBA. The
+  shared value is the platform's real Automation VARIANT, 24 bytes on Windows x64 and
+  16 bytes where pointers are 32-bit (wasm32), together with real BSTRs. CalcDb assumes
+  the corrected layout and does not design around the current 16-byte form.
 - **Fact.** VBA strings are held as BSTR: a 32-bit byte-length prefix, UTF-16 code units
   and a terminating null. On Windows they are allocated with the OLE Automation allocator
   (`SysAllocString` family); elsewhere CalcVBA allocates the same layout itself. Strings
