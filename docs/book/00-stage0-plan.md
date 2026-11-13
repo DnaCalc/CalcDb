@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r5 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
+Revision S2-r6 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-06, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-07, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -48,7 +48,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
-| 07 | ISAM, cursors and constraints | 1.5 / 9 | 2.1 / 0.0 | I revised; II pending |
+| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.6 | I revised; II drafted |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.0 / 0.0 | I revised; II pending |
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 2.8 / 0.0 | I revised; II pending |
 | 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 1.6 / 0.0 | I revised; II pending |
@@ -57,7 +57,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 5.3 / 0.0 | I revised; II pending |
 | 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 9.6 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 9.7 / 0.0 | I revised; II pending |
 
 | File family | Current contents |
 | --- | --- |
@@ -183,7 +183,7 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | D-SORT-1 — Provisional | 05,10,11 | Bind exact descriptor/type/direction key encoders; retain semantic values where collation or whole-key shortening loses information. | Native key bytes, physical full-entry order and semantic comparison differ; no generic collation, broken-index fallback or hidden oracle-build dispatch. Exact resource provenance is separate from Java headers. | R-SORT-3 qualifies scalar/text/length/collision rules and locale/build differences; observable descriptor variants remain explicit and conflicts require a target policy. |
 | D-INDEX-1 — Provisional | 03,04,05,07,08,16 | Use inclusive high fences, stable root identity and byte-balanced recompression; retain nonempty underfull pages and unlink empty children. | Native entry/root/peer/tail forms constrain the editor; byte occupancy changes when prefixes change. Fewer changed pages suit DAO edits, while ancestor maxima and map/phase closure remain explicit. | R-FMT-2/R-CURSOR-1/R-CRASH-1/2 confirm accepted shapes, identities and survival; change tail/merge/root-contraction or count rules where required. |
 | D-CATALOG-1 — Recommended | 06,11,12 | Native catalog/raw property/query records remain authoritative; property-free bootstrap, typed identities, immutable descriptors and owned execution bindings. | Preserve raw dictionaries/flags/order and unknown references. Public SQL, semantic query form, reusable parameter values and captured execution frames have distinct ownership. Positive/negative name and context dependencies validate derived plans. | R-CAT-1 selects native identity/property/Order/write recipes and API transitions; runtime generations never become native fields. A private catalog, generic opaque text rewrite or reference ACL fallback is rejected. |
-| D-CURSOR-1 — Provisional | 07,12 | One cursor mechanism with table/dynaset/snapshot/forward-only policies; independent position, BOF/EOF, NoMatch, population and edit state; identity separate from locator/bookmark representation. | Retain pins/scratch on the scalar path; clone shares eligible data/identity but owns position/edit state. All edits use one constraint service. Close/Requery reach Workspace policy. Count native row reconstruction/page copying as well as changed-field encoding. | R-CURSOR-1/R-DAO-1 settle population, relocation, bookmark ABI/lifetime, clone-close rollback and failed-edit rules. Identity probes precede API commitment; a universal snapshot or eager COUNT is rejected. |
+| D-CURSOR-1 — Provisional | 07,12 | One ISAM with root/body distinction, full-entry navigation, independently owned cursor state and qualified table/dynaset/snapshot/forward policies. | Prefer opening dynaset membership with refreshable values, retained-view lazy snapshot, clone-family bookmarks and caller-detaching Requery; public issued tickets are family-owned, not client-copy reference-counted. Owned edit/generated tickets and one constraint/cascade service preserve effects. | CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE plus R-DAO/TXN/SQL evidence select exact policies, duplicate/partial-key rules, conflict/cycle/failure scope and lifecycle. No universal snapshot, eager cardinality, implicit posting or effect replay. |
 | D-TXN-1 — Provisional | 08,12 | Workspace coordinator owns explicit nesting, separate statement/edit frames, enlisted identities and outcome receipts; current-level logical resolution is the documented provisional baseline. | Successful child commit merges rollback obligations; child rollback restores the selected scope. Logical scope, visibility, persistence and public outcome are independent dimensions. dbFailOnError statement undo is provisional; multi-file coordination does not establish durable atomicity. | R-TXN-1/R-SQL-2/R-CRASH-2 choose nesting, Close triggers, failure scope and exhaustion behavior. Retain the Database.Execute documentation conflict; no blanket all-or-nothing rule or independent durable savepoints. |
 | D-WRITE-1 — Provisional | 03,04,08,09,16 | Prepare privately; initialize unreachable storage; publish allocation ownership; remove obsolete index references, publish row/LV changes, install new index references; catalog then reclamation/truncation; resolve native/logical state and acknowledge the evidenced durability intent. II-03 starts provisionally with complete initialized/phase transfers through a span-capable executor. | Use only evidenced native in-progress/repair marking. Submission/completion is distinct from persistence; ordinary commit is not automatically forced. If complete ACE tracing is impossible, continue a bounded exclusive native writer with full CalcDb cut analysis and established ACE crash classes. Complete stored-byte images preserve unknown bytes; physical granularity remains separate and no full-page atomicity is assumed. | R-FMT-2/R-CAT-1 establish graph constraints; R-TXN-1 and R-CRASH-1/2 confirm or change order, barriers, marking and acknowledgement. Unresolved operation/environment cases stay visible and unqualified; no side WAL or invented guarantee substitutes for evidence. |
 | D-UNDO-1 — Decided | 03,08,09,15,16 | Match ACE crash states and commit-survival rules for ACE-, Access- or CalcDb-first reopening, including dbForceOSFlush. Private undo is optional CalcDb-first help only. | The optional record covers the whole database extent: same file identity; under exclusion, full-read every page, require uncovered pages unchanged and covered pages exactly before-image or intended new image, with validated before/intended lengths and ABSENT states. Otherwise discard. Validate record integrity and rollback eligibility; durable disarming must precede the earliest evidenced native commit-survival point, whether or not success returned, without changing ordinary/forced survival classes. No continuous-history witness is required. | R-CRASH-1/2 qualify the native baseline and optional eligibility/disarm/recovery behavior. The 2026-11-13 review replaces the former history predicate, without changing ACE-first parity or making undo mandatory. |
@@ -227,6 +227,8 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | Implementation order | The one-pager gives a first-pass linear order. | Nonprescriptive ordering remains. With the review's alternatives unselected, retain ADO alongside DAO where dependencies permit and prioritize DAO; no full-DAO prerequisite. | 12,13,14,16 |
 | Length guidance | Original 20/110-page guidance appeared as a fixed allocation. | User makes lengths nonprescriptive, including naturally longer sections; retain descriptive estimates without cutting required detail. | All |
 | Working-record detail | Detailed cards and design reasons accumulated in the record. | Keep current-state one-line entries and short changelog; full source ledger and experiment cards live in A-01/A-02, full scope map in I-16, design reasons in chapters. | All |
+| Cursor boundary/context docs | BOF movement table conflicts with broad Move wording; PercentPosition and Recordset.OpenRecordset contain context/signature inconsistencies. | Use explicit provisional method policies and actual interface signatures; CUR-POS/LIFE and R-DAO-1 capture target outcomes. | 07,12 |
+| ValidateOnSet and edit docs | ValidationRule and ValidateOnSet disagree on deferred checks; broad edit unique-index/dbSeeChanges and CancelUpdate scope wording lacks context. | Prefer assignment conversion plus qualified immediate/deferred checks and owned edit continuation; paired native failures/local-linked controls decide scope. | 07,08,10,12 |
 
 ## Figure inventory
 
@@ -278,6 +280,15 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-42 | II-06-catalog.md | Twelve-row parameterized join with opaque Order tags | Markdown hypothesis table; emitted; not render-verified |
 | F-43 | II-06-catalog.md | QueryDef instances and captured execution bindings sharing immutable plans | Mermaid source; emitted; not render-verified |
 | F-44 | II-06-catalog.md | In-memory catalog epochs/incarnations and binding dependencies | Markdown constructed table; emitted; not render-verified |
+| F-45 | II-07-isam.md | complete constructed page 17 with a same-page overflow target | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-46 | II-07-isam.md | deleted-anchor continuation in a duplicate group | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-47 | II-07-isam.md | constructed state trace | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-48 | II-07-isam.md | constructed mixed-direction discriminator | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-49 | II-07-isam.md | proposed identity and lifetime ownership | Mermaid source; emitted; not render-verified |
+| F-50 | II-07-isam.md | constructed result occurrences and base-row ownership | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-51 | II-07-isam.md | constructed same-width row and index mutation | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-52 | II-07-isam.md | constructed compound-key cascade and collisions | Markdown constructed/hypothesis table; emitted; not render-verified |
+| F-53 | II-07-isam.md | constructed bulk result and cursor frontier | Markdown constructed/hypothesis table; emitted; not render-verified |
 
 ## Research and development references
 
@@ -292,7 +303,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-PRESERVE-1 | Unknown objects and shared opaque references | R-FMT-1/2 | M |
 | R-SORT-3 | Exact native keys: descriptors, scalar/text rules, shortening and collisions | R-FMT-1 | L |
 | R-CAT-1 | Native catalog/property/query recipes, public lifetimes and binding invalidation | R-ORACLE-1/R-FMT-1 start raw capture; add R-SORT-3 for affected key writes, R-FMT-2/R-PRESERVE-1 for mutations, expression/SQL for typed execution, R-TXN/CRASH for publication, and host/sharing only to those branches | L |
-| R-CURSOR-1 | Identity, orthogonal state, population, bookmarks and edit/Close transitions | R-FMT-1; R-ORACLE-1 | L |
+| R-CURSOR-1 | Native cursor state, population, identity, search, edit, provenance and lifetime | R-ORACLE-1/native fixtures start public transitions; R-FMT-1 adds identity; key/write/expression/catalog/transaction/query/provider evidence only for affected branches | L |
 | R-TXN-1 | Workspace nesting, statement failures, Close triggers and multi-file outcomes | R-ORACLE-1 | M |
 | R-CRASH-1 | Every-write ACE interruptions, forced flush, commit survival and independent reopeners | R-TXN-1; W-PROBE external observation; relevant R-FMT-1/2/R-CAT-1; CalcDb replay alongside W-05 | L |
 | R-CRASH-2 | Exhaustion, uncertain completion and guarded optional undo | R-TXN-1; R-CRASH-1 harness; exclusion/identity probes | M |
@@ -330,7 +341,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | K-FORMAT | 04 | One evidenced format description drives all readers/writers/validators/generators/inspectors. Unknown bytes and unsafe unknown references are preserved or the mutation is refused before application. |
 | K-KEY | 05 | Index key bytes follow evidenced ACE rules for the database sort descriptor. A generic OS/Unicode comparison cannot silently replace a missing key encoder. |
 | K-CATALOG | 06 | Native catalog/raw properties/query records authoritative; typed identities and immutable descriptors; public collection/parameter/execution state is separately owned and derived binding validates object, namespace and context dependencies. |
-| K-CURSOR | 07 | Position validity, BOF/EOF, NoMatch, population, edit state and visibility are independent. Row identity and locator are distinct; public bookmarks validate their family/lifetime. Close/Requery reach coordinator policy. |
+| K-CURSOR | 07 | Root identity differs from physical body and result occurrence; position/flags/search/population/edit/visibility remain independent. Family owns issued bookmark mappings; Close/Requery/LastModified transitions reach the coordinator and captured incarnation policy. |
 | K-TXN | 08 | Workspace coordinates files and explicit nesting; statement/edit rollback frames are separate. Successful child commit merges obligations; rollback restores the selected scope. Logical resolution, visibility, acknowledgement, flush and survival are distinct; no own WAL or stronger cross-file crash claim. |
 | K-LOCK | 09 | Actual leases establish exclusion/readers-only modes. External locks, internal latches and visibility are distinct; coherent external reads require an evidenced protocol. Release internal latches before I/O, waits, callbacks and controlled destruction; revalidate before publication. |
 | K-WORK | 09 | Every task/pin/lock has an owner. Call-owned work settles before return; explicitly retained work has stable cursor/session context, budget/cancellation and settles before owner close. Persistent uncertainty is never reported as rollback success. |
@@ -361,9 +372,10 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
 | O-CATALOG | R-CAT-1: capture native MR2 edits, query Order/SQL, identity/ACL/relationship closure and held-object/parameter invalidation. | 06,11,12 |
 | O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
+| O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-POLICY | R-CURSOR/TXN/SQL/DAO/ADO/ERR: settle undocumented or contradictory target transitions. | 07–12 |
 | O-LOCK | R-LOCK-1/2 first; R-LOCK-3/4 settle later native/SMB coherence and shared writes. | 09 |
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 
-Next task: **Stage 2, response 6 — II-07 ISAM, cursors and constraints**: recordset population/position, index and table navigation, Seek, bookmarks, edits, generated values, constraints/cascades and concrete cursor/native-row algorithms. Then II-08/09 for the full transaction/concurrency design.
+Next task: **Stage 2, response 7 — II-08 Transactions, write ordering and crash recovery**: Workspace nesting and operation frames, logical versus persistent outcomes, native write/flush phase programs, uncertain completion, ACE-first crash states and optional guarded undo. Then II-09 for locking/snapshots.
