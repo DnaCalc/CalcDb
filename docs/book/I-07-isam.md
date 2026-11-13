@@ -1,6 +1,6 @@
 # I-07. ISAM, cursors and constraints
 
-Revision 3 · Part I review · Stage 2, response 1 · 2026-11-13
+Revision 4 · Part I review · Stage 2, response 4 · 2026-11-13
 
 **Requirement trace:** Primary: RQ-DAO-02, RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-04, RQ-PERF-01, RQ-PERF-02. Full requirement text and Part II ownership are in I-16.
 
@@ -55,7 +55,7 @@ An internal row token names its file/table incarnation and row identity within a
 
 A bookmark adapter owns the public value and validates its recordset/result family before resolving it. Documentation permits exchange between clones but not independent recordsets; prose differs about Byte-array versus String storage, so capture the actual VARIANT subtype and shape.[^bookmark] A clone shares eligible identity/data state but owns its position and edit state. Close and Requery also notify transaction/lifecycle policy: clone closure is documented to trigger rollback during a pending transaction, so it cannot be implemented as only a local reference decrement.[^clone]
 
-MoveNext advances within the retained page/index state, invalidates row-local decoded views, and obtains another page only when required. Seek uses I-05 bounds; Find binds its criterion through I-10 and scans or uses a proven equivalent index range. Repeated criteria and field lookups cache against schema/semantic generations. RecordCount and movement expose observed population rather than an invented eager cursor. Prefetch remains optional and cannot move an error or externally visible read effect ahead of the serial contract.
+MoveNext advances within the retained page/index state, invalidates row-local decoded views, and obtains another page only when required. Seek lowers evidenced DAO arguments onto I-05's typed bounds; omitted trailing arguments are not automatically an internal prefix wildcard; Find binds its criterion through I-10 and scans or uses a proven equivalent index range. Repeated criteria and field lookups cache against schema/semantic generations. RecordCount and movement expose observed population rather than an invented eager cursor. Prefetch remains optional and cannot move an error or externally visible read effect ahead of the serial contract.
 
 ## Editing and constraints
 

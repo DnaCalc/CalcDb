@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r3 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
+Revision S2-r4 · 2026-11-13 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-04, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-05, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -46,7 +46,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.0 | I revised; II drafted |
 | 03 | VFS, pager and page cache | 1.25 / 7 | 3.0 / 20.1 | I revised; II drafted |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
-| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.3 / 0.0 | I revised; II pending |
+| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 1.8 / 0.0 | I revised; II pending |
 | 07 | ISAM, cursors and constraints | 1.5 / 9 | 2.1 / 0.0 | I revised; II pending |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.0 / 0.0 | I revised; II pending |
@@ -180,7 +180,8 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | D-FMT-1 — Recommended | 04,06 | One evidenced format description compiles checked page/row/scalar/wrapper/map codecs, validators, inspection and generators. | Bind physical column coordinates separately from API order; preserve native bytes/precision; calculated result flags/properties select their own wrappers; internal agreement still needs independent ACE evidence. | R-FMT-1/2 confirm or change profile coordinates, text/scalar/wrapper/LV forms, ownership and native creator/reuse rules. |
 | D-OPAQUE-1 — Recommended | 04,06,14 | Protect unknown byte ranges and their ownership/reference relationships; plan the full mutation before applying any part. | Preservation includes unsupported properties, fields and front-end payloads. If an edit would move or rewrite unknown references, return a typed refusal before mutation; that refusal remains a compatibility failure. | R-PRESERVE-1 can permit more operations once ownership and relocation rules are known. Do not rebuild the whole database from only understood objects. |
 | D-PAGER-1 — Recommended | 03,08,09 | Blocking buffered positioned VFS; sparse image-keyed cache, stable pins, native-source permits, private images and bounded spill. | Resolve views to per-page image identity; keep old reload sources valid before overwrite; coalesce loads with bounded handoff ownership. Event-based Windows requests remain owned until terminal completion; CLOCK/scan tuning is measured. | Native adapter/ownership failures change the mechanism; R-LOCK-1/2 settle admission, R-FMT-2/R-CRASH-1/2 physical effects, and I-15 workload measurements replacement/admission tuning. |
-| D-SORT-1 — Provisional | 05,10,11 | Prefer evidence-backed table-driven ACE sort keys and explicit database sort descriptors. | Key bytes and comparison semantics are compatibility contracts. Generic host Unicode collation is insufficient evidence. Unsupported key generation refuses writes rather than creating an index that needs repair. | R-SORT-3 distinguishes database descriptor, locale and build effects. Extend descriptors only for observable file/options dimensions; unresolved build differences require a declared baseline, never a hidden oracle-build switch. |
+| D-SORT-1 — Provisional | 05,10,11 | Bind exact descriptor/type/direction key encoders; retain semantic values where collation or whole-key shortening loses information. | Native key bytes, physical full-entry order and semantic comparison differ; no generic collation, broken-index fallback or hidden oracle-build dispatch. Exact resource provenance is separate from Java headers. | R-SORT-3 qualifies scalar/text/length/collision rules and locale/build differences; observable descriptor variants remain explicit and conflicts require a target policy. |
+| D-INDEX-1 — Provisional | 03,04,05,07,08,16 | Use inclusive high fences, stable root identity and byte-balanced recompression; retain nonempty underfull pages and unlink empty children. | Native entry/root/peer/tail forms constrain the editor; byte occupancy changes when prefixes change. Fewer changed pages suit DAO edits, while ancestor maxima and map/phase closure remain explicit. | R-FMT-2/R-CURSOR-1/R-CRASH-1/2 confirm accepted shapes, identities and survival; change tail/merge/root-contraction or count rules where required. |
 | D-CATALOG-1 — Recommended | 06,11,12 | Operate on native catalog structures and preserve their unmodelled properties; cache schema descriptors by explicit generation. | QueryDef source, parameters and native catalog representation round-trip together. DDL invalidates dependent descriptors/plans. The catalog supplies descriptors to ISAM rather than creating a dependency cycle. | R-CAT-1 settles exact QueryDef mappings and changes that invalidate plans. A private saved-query catalog is rejected. |
 | D-CURSOR-1 — Provisional | 07,12 | One cursor mechanism with table/dynaset/snapshot/forward-only policies; independent position, BOF/EOF, NoMatch, population and edit state; identity separate from locator/bookmark representation. | Retain pins/scratch on the scalar path; clone shares eligible data/identity but owns position/edit state. All edits use one constraint service. Close/Requery reach Workspace policy. Count native row reconstruction/page copying as well as changed-field encoding. | R-CURSOR-1/R-DAO-1 settle population, relocation, bookmark ABI/lifetime, clone-close rollback and failed-edit rules. Identity probes precede API commitment; a universal snapshot or eager COUNT is rejected. |
 | D-TXN-1 — Provisional | 08,12 | Workspace coordinator owns explicit nesting, separate statement/edit frames, enlisted identities and outcome receipts; current-level logical resolution is the documented provisional baseline. | Successful child commit merges rollback obligations; child rollback restores the selected scope. Logical scope, visibility, persistence and public outcome are independent dimensions. dbFailOnError statement undo is provisional; multi-file coordination does not establish durable atomicity. | R-TXN-1/R-SQL-2/R-CRASH-2 choose nesting, Close triggers, failure scope and exhaustion behavior. Retain the Database.Execute documentation conflict; no blanket all-or-nothing rule or independent durable savepoints. |
@@ -239,7 +240,7 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-04 | I-03-pager.md | Page pin, clean/dirty/version states and reclamation. | Mermaid source; emitted; not render-verified |
 | F-05 | I-04-format.md | Numeric Jet4-family data-page and row coordinates; physical counts, reverse trailer and ordinary/calculated Boolean distinction. | Markdown table; numeric source-backed hypothesis tables emitted; target offsets unconfirmed; not render-verified |
 | F-06 | I-04-format.md | Long-value chains, usage maps and allocation ownership. | Mermaid source; emitted; not render-verified |
-| F-07 | I-05-indexes.md | Index interior/leaf structure and encoded composite sort key. | Mermaid source + Markdown table; tree source and key-layer hypothesis table emitted; not render-verified |
+| F-07 | I-05-indexes.md | Logical aliases and physical tree; concrete Long42 key/full-entry/compressed-page layers. | Mermaid source + Markdown table; tree Mermaid source plus numeric key hypothesis table emitted; not render-verified |
 | F-08 | I-06-catalog.md | Catalog, QueryDef, property and opaque-object references. | Mermaid source; emitted; not render-verified |
 | F-09 | I-07-isam.md | Navigation, edit state, clone and bookmark invalidation. | Mermaid source; emitted; not render-verified |
 | F-10 | I-08-transactions.md | Workspace/participant commit, flush, rollback and uncertain-outcome boundaries. | Markdown table; table emitted; no separate Mermaid diagram; not render-verified |
@@ -261,6 +262,14 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-26 | II-04-format.md | 4080-byte long value in two LVAL rows, with page offsets and free counters. | Markdown hypothesis table; emitted; not render-verified |
 | F-27 | II-04-format.md | Separate table and column LVAL ownership paths versus global allocation-state lookup. | Mermaid source; emitted; not render-verified |
 | F-28 | II-04-format.md | Private global-map growth includes allocation of its own bitmap and preservation of a free hole. | Markdown hypothesis table; emitted; not render-verified |
+| F-29 | II-05-indexes.md | Three TableDef index structures | Markdown hypothesis table; emitted; not render-verified |
+| F-30 | II-05-indexes.md | Index header, end-boundary mask and3616-byte payload | Markdown hypothesis table; emitted; not render-verified |
+| F-31 | II-05-indexes.md | Complete duplicate-Long42 leaf with locator-bearing prefix | Markdown hypothesis table; emitted; not render-verified |
+| F-32 | II-05-indexes.md | Complete high-key node and its header-tail/child relationships | Markdown hypothesis table; emitted; not render-verified |
+| F-33 | II-05-indexes.md | Mixed-direction Long/Text/Null key with exact field and locator offsets | Markdown hypothesis table; emitted; not render-verified |
+| F-34 | II-05-indexes.md | Prefix-collapse occupancy and byte-balanced259/344 split | Markdown hypothesis table; emitted; not render-verified |
+| F-35 | II-05-indexes.md | Tail maximum changes ancestor fence through unchanged parent bytes | Markdown hypothesis table; emitted; not render-verified |
+| F-36 | II-05-indexes.md | Provisional Long42→43 update with two images for the same leaf | Markdown hypothesis table; emitted; not render-verified |
 
 ## Research and development references
 
@@ -273,7 +282,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-FMT-1 | Format families and minimal valid files | R-ORACLE-1 | L |
 | R-FMT-2 | Rows, long values, allocation and mutations | R-FMT-1 | L |
 | R-PRESERVE-1 | Unknown objects and shared opaque references | R-FMT-1/2 | M |
-| R-SORT-3 | Text key dependence on sort descriptor, locale and build | R-FMT-1 | L |
+| R-SORT-3 | Exact native keys: descriptors, scalar/text rules, shortening and collisions | R-FMT-1 | L |
 | R-CAT-1 | QueryDef/catalog round-trip and invalidation | R-ORACLE-1 + R-FMT-1 for bootstrap/read structure; R-FMT-2 only mutation branches; R-EXPR-1 only expression execution; R-TXN-1 only transaction branches | M |
 | R-CURSOR-1 | Identity, orthogonal state, population, bookmarks and edit/Close transitions | R-FMT-1; R-ORACLE-1 | L |
 | R-TXN-1 | Workspace nesting, statement failures, Close triggers and multi-file outcomes | R-ORACLE-1 | M |
@@ -341,10 +350,11 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
 | O-UNDO | R-CRASH-1/2: qualify native baseline; optional whole-file eligibility/disarm/recovery only where survival classes remain unchanged. | 03,08 |
 | O-ORACLES | R-ORACLE-1: capture remaining environment metadata and validate owned-process/capture behavior; initial targets already selected. | 15 |
-| O-FORMAT | R-FMT-1/2: qualify row/text/calculated/LV/map mechanics; then native keys/catalog/preservation and D-WRITE-1 phases. | 04–06 |
+| O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; catalog/preservation follows. | 04–06 |
+| O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-POLICY | R-CURSOR/TXN/SQL/DAO/ADO/ERR: settle undocumented or contradictory target transitions. | 07–12 |
 | O-LOCK | R-LOCK-1/2 first; R-LOCK-3/4 settle later native/SMB coherence and shared writes. | 09 |
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 
-Next task: **Stage 2, response 4 — II-05 Indexes and sort-order keys**: native interior/leaf envelopes, entry masks/prefix compression, composite keys/sort descriptors, traversal and split/delete algorithms, page/reference mutation plans, worked bytes and R-SORT-3/R-FMT-2 acceptance. Then II-06/07 before the full transaction/concurrency chapters.
+Next task: **Stage 2, response 5 — II-06 Catalog, properties and QueryDefs**: native catalog bootstrap and records, property blocks, object/reference preservation, saved-query serialization, invalidation, concrete examples and R-CAT-1 acceptance. Then II-07 before the full transaction/concurrency chapters.
