@@ -1,10 +1,12 @@
 # I-11. Access SQL planning and execution
 
-Revision 2 · Stage 1, response 3 · 2026-11-12
+Revision 3 · Part I review · Stage 2, response 1 · 2026-11-13
+
+**Requirement trace:** Primary: RQ-SQL-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-05, RQ-SQL-06, RQ-CALL-02, RQ-PLAN-01. Shared obligations: RQ-SQL-07, RQ-SQL-08, RQ-SEM-01, RQ-SEM-02, RQ-SEM-03, RQ-LATE-02, RQ-LATE-06, RQ-OUT-02, RQ-ORACLE-02, RQ-ISAM-01, RQ-VAL-02, RQ-EXPR-03, RQ-PERF-01, RQ-PERF-02. Full requirement text and Part II ownership are in I-16.
 
 ## Bind Access semantics before choosing operators
 
-**D-SQL-1 — recommended.** Use an Access grammar, typed binding and a small physical-operator engine over the shared ISAM and expression services. Cover SELECT, joins, subqueries, UNION, aggregates, crosstabs, PARAMETERS, actions and DDL; do not translate through another engine's SQL semantics. The binder produces result metadata, parameter declarations, row provenance, updateability, ordering/evaluation obligations and dependency generations.
+**D-SQL-1 — Recommended.** Use an Access grammar, typed binding and a small physical-operator engine over the shared ISAM and expression services. Cover SELECT, joins, subqueries, UNION, aggregates, crosstabs, PARAMETERS, actions and DDL; do not translate through another engine's SQL semantics. The binder produces result metadata, parameter declarations, row provenance, updateability, ordering/evaluation obligations and dependency generations.
 
 Bind explicit PARAMETERS before the statement body; keep declarations separate from owned execution values.[^parameters] Unresolved names follow ACE's context-specific inference/error rules rather than always becoming “unknown column.” Resolve catalog and function dependencies through I-06/I-10. Reuse plans only after cheap dependency validation; changed schema, function registry, sandbox or semantic options invalidate the affected bindings.
 
@@ -46,37 +48,57 @@ Both wildcard modes are binding context, not parser-wide replacements. The effec
 
 ## Actions share the cursor mutation path
 
-**D-ACTION-1 — provisional under R-SQL-2.** Stabilize candidate identity when an update can change its own access path. Prefer an ordered identity spool when ACE's selection/evaluation boundary permits it; otherwise use a relocation-stable traversal whose physical changes cannot revisit or skip candidates. Eagerly collecting every predicate or assignment result is not automatically equivalent: it can move callback effects and errors ahead of mutations. The experiment selects the admissible stabilization point.
+**D-ACTION-1 — Provisional.** R-SQL-2 selects the stabilization boundary. Stabilize candidate identity when an update can change its own access path. Prefer an ordered identity spool when ACE's selection/evaluation boundary permits it; otherwise use a relocation-stable traversal whose physical changes cannot revisit or skip candidates. Eagerly collecting every predicate or assignment result is not automatically equivalent: it can move callback effects and errors ahead of mutations. The experiment selects the admissible stabilization point.
 
 Each action uses the I-07 constraint/mutation service and I-08 statement/Workspace policy. Preserve evaluation counts and order, original-value dependencies, generated defaults/identities, cascades, affected counts and failure disposition. Test INSERT SELECT against its own target, key-moving UPDATE, join actions, DELETE, make-table queries and DDL. QueryDefs publish through the native catalog path. SQL has no second constraint implementation or durability protocol. The documented dbFailOnError conflict remains explicit until the full action/failure matrix settles it.[^execute]
 
 ## Serial equivalence and inspectable plans
 
-**D-PAR-1 — decided constraint; thresholds measured.** Establish an ACE-compatible serial plan first. Workers may prepare independent blocks only where an ordered consumer can preserve row order, expression evaluation/error order and exact Double results. Preserve ordinals and perform order-sensitive folds serially; do not reassociate floating-point sums. Host VBA calls execute on the caller thread outside internal latches, and their multiplicity cannot change. Fall back to scalar execution when those obligations cannot be met. Worker admission also accounts for thread crossings, copied bytes and memory amplification, particularly on WASM.
+**D-PAR-1 — Decided.** Eligibility and profitable thresholds require evidence. **K-PAR** requires establishing an ACE-compatible serial plan first. Workers may prepare independent blocks only where an ordered consumer can preserve row order, expression evaluation/error order and exact Double results. Preserve ordinals and perform order-sensitive folds serially; do not reassociate floating-point sums. Host VBA calls execute on the caller thread outside internal latches, and their multiplicity cannot change. Fall back to scalar execution when those obligations cannot be met. Worker admission also accounts for thread crossings, copied bytes and memory amplification, particularly on WASM.
 
-Inspection returns the actual operator graph with stable IDs, access predicates, estimated costs/bounds and optional observed counters. Record why an otherwise plausible rewrite was ineligible. Expose this through diagnostics, without adding a private SQL dialect. SQLite's plan inspection illustrates useful access-path distinctions; its output format and planning semantics are not adopted.[^plans]
+**Figure F-13 — ordered worker preparation and caller-thread VBA reentry.** Workers are optional and prepare only eligible independent work; the caller owns observable expression evaluation and continuation. This is the provisional scheduling design selected by R-PAR-1/R-UDF-1, not an observed ACE schedule. Mermaid source only; not render-verified.
 
-R-SQL-1 compares typed values, Null/error behavior, joins and wildcard contexts; R-SQL-2 compares actions and failure boundaries; R-SQL-3 compares DISTINCTROW, TOP, crosstab metadata and parameters. R-PAR-1 compares exact ordered rows, Double bit patterns, callback traces and first errors against the accepted serial path. Capture the executed plan with every case. Acceptance combines ACE differentials with required seek/scan shapes and bounded-spill invariants; a faster incompatible plan is a failure.
+```mermaid
+sequenceDiagram
+    participant C as Caller operator
+    participant W as Eligible worker
+    participant V as CalcVBA host
+    participant D as Shared database objects
+    C->>W: Prepare block with ordinal and budget
+    W-->>C: Prepared block and owned resources
+    C->>C: Consume in serial order
+    C->>C: Stabilize arguments and release latches
+    C->>V: Invoke function on caller thread
+    opt Admitted callback reentry
+        V->>D: Edit, requery, close or context change
+        D-->>V: Result and state changes
+    end
+    V-->>C: Owned value or error
+    C->>C: Validate continuation dependencies
+    alt Dependencies valid
+        C->>C: Continue accepted serial plan
+    else Dependencies invalid
+        C->>C: Apply evidenced failure policy
+    end
+```
 
-## Detailed experiment cards
+The callback cannot be replayed to rebuild stale preparation. A worker failure is published at the corresponding serial consumption point when that ordering is required, and retained worker resources remain bounded until consumed or safely discarded.
 
-All cards in this chapter are planned experiments, with no target-build observations claimed. I-15 defines the shared capture, comparison, ambiguity and cross-build conditions; the conditions below extend that contract. Research prerequisites require the relevant evidence or minimal probe, not completion of a later production subsystem.
+**K-PLAN** inspection returns the actual operator graph with stable IDs, access predicates, estimated costs/bounds and optional observed counters. Record why an otherwise plausible rewrite was ineligible. Expose this through diagnostics, without adding a private SQL dialect. SQLite's plan inspection illustrates useful access-path distinctions; its output format and planning semantics are not adopted.[^plans]
 
-### R-SQL-1 — Typed relational semantics and admissible rewrites
+Capture the executed plan with every semantic or performance case. Acceptance combines ACE differentials with required seek/scan shapes and bounded-spill invariants; a faster incompatible plan is a failure.
 
-**Question / conditions:** which binder/operator contracts preserve Access results and effects? Cross ANSI modes and direct SQL/saved QueryDef/DAO, with ADO as a separately captured surface when available. **Fixture / operations:** controlled joins including outer Null extension, correlated subqueries, UNION variants, group/empty aggregates, mixed type/coercion boundaries, text ranges and LIKE patterns; compare candidate scan and seek shapes against the same semantic input. **Capture / comparison:** exact types, values, multiplicity/order, effects and first error; include the CalcDb executed plan, not a separately reconstructed explanation. Order freedom is classified, while each parallel path still owes its serial reference. **Decides:** equivalence admits a rewrite/access path; changed coercion, effects or errors keep the less transformed plan. Missing coverage produces an explicit unresolved feature entry. **Depends / size:** R-EXPR-1, R-SORT-3; L. Precedes W-06; counters then determine costs among admissible plans.
+## Deciding experiments
 
-### R-SQL-2 — Action stability and failure disposition
+The full fixtures, captures, branch choices and effort estimates are in [A-02](A-02-experiments.md); the complete source ledger is in [A-01](A-01-sources.md). No experiment result is claimed here.
 
-**Question / conditions:** where may selection be stabilized, and which effects survive failure? Cross action kind, dbFailOnError, dbSeeChanges, explicit/nested transactions and failure class. **Fixture / operations:** indexed key-moving updates in both directions, joined duplicate candidates, self-target INSERT SELECT, DELETE/cascades, make-table/DDL and native QueryDef changes. Place unique/validation/conversion/UDF/lock failures at first, middle and last candidates; storage failures link to R-CRASH-2. **Capture / comparison:** candidate identities/order, assignment/predicate effects, generated values, affected counts, errors, subsequent transaction usability and surviving file/catalog changes. **Decides:** an evidenced selection boundary permits an ordered spool; interleaved effects require relocation-stable traversal without speculative callbacks. Per-option failure results choose statement undo or retained partial progress. Do not generalize the documented lock-failure example to all failures. **Depends / size:** R-TXN-1, R-FMT-2, R-CAT-1; L. Before W-07.
+**R-SQL-1 (L)** uses R-EXPR-1 and R-SORT-3 to select admissible binder rules, operators and rewrites before W-06 completion. Exact typed results, errors and effects decide eligibility; actual-plan counters select cost among equivalent alternatives, under the [full card](A-02-experiments.md#r-sql-1--typed-relational-semantics-and-admissible-rewrites).
 
-### R-SQL-3 — DISTINCTROW, TOP, parameters and crosstab schema
+**R-SQL-2 (L)** decides the action-selection boundary and failure disposition before W-07, using R-TXN-1 and R-FMT-2 plus R-CAT-1 for catalog-changing branches. Its [full card](A-02-experiments.md#r-sql-2--action-stability-and-failure-disposition) selects an ordered identity spool or relocation-stable traversal without speculative or repeated callbacks.
 
-**Question / conditions:** what identity, tie and metadata rules need dedicated operators? **Fixture / operations:** equal projected values from distinct and fully equal base rows, repeated joins, aliases/outer joins and one/all-table projection; TOP boundary ties, multicolumn/Null ordering, PERCENT and unordered inputs; fixed/dynamic PIVOT headings with absent data, collisions, Null, empty results and repeated parameter values. **Capture / comparison:** multiplicity/order/updateability, typed parameters, field names/order/types and availability after each call, plus expression/effect trace. **Decides:** duplicate outcomes select identity/value keys; tie outcomes select cutoff comparator and count/rounding; metadata timing selects discovery/materialization boundaries without repeating effects. Documentation leaves these detailed cases unconfirmed. **Depends / size:** R-CAT-1 research, R-SQL-1, R-CURSOR-1; L. SELECT/operator evidence precedes completion of W-06; saved-catalog write acceptance remains W-07.
+**R-SQL-3 (L)** combines R-CAT-1's structure research, R-SQL-1 and R-CURSOR-1 to decide DISTINCTROW identity, TOP ties, parameter and crosstab metadata rules. SELECT evidence belongs before W-06 completion; saved-catalog write acceptance remains W-07, as separated in the [full card](A-02-experiments.md#r-sql-3--distinctrow-top-parameters-and-crosstab-schema).
 
-### R-PAR-1 — Serial equivalence before worker admission
-
-**Question / conditions:** which worker paths preserve the accepted serial execution and improve measured cost? Use fixed input/capture IDs, plan/operator IDs, budgets and reproducible scheduler seeds; compare no-worker with each proposed parallel path. **Fixture / operations:** cancellation-sensitive Double sequences, ties, skewed/spilling groups, mixed errors, UDF traces and memory-pressure/close/cancel cases. Use numerical cancellation patterns, not only small positive sums. **Capture / comparison:** exact ordered typed rows, Double bit patterns, effects/first error, resource conservation, page/spill/copy/synchronization counters and timing with A/A noise controls. Both modes are separately checked against ACE where applicable. **Decides:** any semantic difference rejects eligibility; equivalence without a measured net gain keeps serial execution. No profitable threshold is invented. **Depends / size:** R-SQL-1/2/3 and R-UDF-1; M. Optional parallelism cannot delay the scalar path or justify a separate evaluator.
+**R-PAR-1 (M)** follows the relevant R-SQL-1/2/3 and R-UDF-1 evidence, comparing every candidate worker path with the accepted serial plan and ACE where applicable. A semantic difference rejects the path and a missing measured net gain retains serial execution; the [full card](A-02-experiments.md#r-par-1--serial-equivalence-before-worker-admission) never delays scalar delivery.
 
 [^parameters]: Microsoft, [PARAMETERS declaration](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/parameters-declaration-microsoft-access-sql), updated 2022-06-14, accessed 2026-11-12. Documentary baseline, not a target-build execution result.
 [^predicates]: Microsoft, [ALL, DISTINCT, DISTINCTROW, TOP](https://learn.microsoft.com/en-us/office/vba/access/concepts/structured-query-language/all-distinct-distinctrow-top-predicates-microsoft-access-sql), updated 2026-04-25, accessed 2026-11-12.

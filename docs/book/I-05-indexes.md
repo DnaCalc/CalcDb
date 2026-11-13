@@ -1,14 +1,42 @@
 # I-05. Indexes and sort-order keys
 
-Revision 2 · Stage 1, response 3 · 2026-11-12
+Revision 3 · Part I review · Stage 2, response 1 · 2026-11-13
+
+**Requirement trace:** Primary: RQ-SEM-02. Shared obligations: RQ-LATE-04, RQ-FMT-03, RQ-TYPE-01. Full requirement text and Part II ownership are in I-16.
 
 ## Three distinct contracts
 
-The catalog distinguishes a logical index's name, fields, flags and constraints from its physical tree. Several logical definitions may refer to one physical structure in the inspected Jackcess model, so ownership is explicit rather than inferred from index count.[^tree] Each cursor receives the physical root and a checked descriptor; SQL and DAO `Seek` share the same implementation.
+The catalog distinguishes a logical index's name, fields, flags and constraints from its physical tree. Several logical definitions may refer to one physical structure in the inspected Jackcess model, so ownership is explicit rather than inferred from index count.[^tree] Each cursor receives the physical root and a checked descriptor under **K-KEY**; SQL and DAO `Seek` share the same implementation.
 
-**D-SORT-1 — provisional, settled by R-SORT-3.** Use an evidence-backed table-driven encoder selected by the native sort identifier/version and applicable field flags. Separate semantic comparison, full ordered index entries, and compressed page representation. They share validated rules without being treated as identical byte strings. SQL text comparison is not automatically a comparison of stored entries, which include structural information and tie-breaking locators.
+**D-SORT-1 — Provisional.** R-SORT-3 settles the encoder choice. Use an evidence-backed table-driven encoder selected by the native sort identifier/version and applicable field flags. Separate semantic comparison, full ordered index entries, and compressed page representation. They share validated rules without being treated as identical byte strings. SQL text comparison is not automatically a comparison of stored entries, which include structural information and tie-breaking locators.
 
 General Legacy and General have distinct implementations/tables in Jackcess; its General implementation also treats surrogate weights explicitly.[^sort] Therefore a generic OS collation function, Unicode normalization or BSTR binary comparison cannot be assumed to construct native keys. Build the descriptor from file metadata and evidenced options. If keys vary by machine locale or build in R-SORT-3, record the difference and revise the explicit compatibility policy; do not add an invisible “oracle build” switch unrelated to the file or chosen product target.
+
+**Figure F-07a — logical definitions, shared physical tree and row locators.** This is the design topology; fan-out, separator encoding, sibling fields and split policy remain format evidence. Mermaid source only; not render-verified.
+
+```mermaid
+flowchart TD
+    A["Logical index A"] --> R["Physical root"]
+    B["Logical index B, if shared"] --> R
+    R --> L1["Leaf 1"]
+    R --> L2["Leaf 2"]
+    L1 -.->|"ordered continuation"| L2
+    L1 --> X1["Native row locator"]
+    L2 --> X2["Native row locator"]
+    X1 --> D1["Checked row access"]
+    X2 --> D2["Checked row access"]
+```
+
+**Figure F-07b — composite key and page-entry layers.** This symbolic layout table is a hypothesis under R-SORT-3, not an asserted sequence of native bytes; it is emitted but not render-verified.
+
+| Layer | Symbolic construction | Rule still to establish for each descriptor |
+| --- | --- | --- |
+| One field key | `K_i = encode(type_i, value_i, flags_i, sort)` | Null markers, descending transforms, text weights and type-specific boundaries. |
+| Compound value key | `K = compose(K_1, …, K_n)` | Separators, escaping, prefix-seek bounds and exact byte comparison rules. |
+| Complete ordered entry | `E = attach_locator(K, native_locator)` | Locator representation, placement and duplicate tie-breaking rules; no assumption that SQL equality includes it. |
+| On-page representation | `C = compress(E, page_context)` | Prefix context, entry boundaries and required reconstruction before comparison; structural bytes can participate. |
+
+Keeping these layers explicit permits one checked key service to serve native navigation and mutations while SQL comparison uses only its applicable semantic rule.
 
 ## Navigation and page encoding
 
@@ -30,24 +58,16 @@ Unknown key encoding causes a pre-mutation failure until implemented. Writing kn
 
 ## Evidence and reopening conditions
 
-R-SORT-3 compares typed key inputs, returned order and physical key bytes across the selected ACE build's supported sort/format combinations, then other available builds/locales. Fixtures cover Nulls, numeric boundaries, text ties, case, accents, expansions, punctuation, surrogate units, ascending/descending and compound keys. R-FMT-2 adds split/merge/root changes and allocation boundaries; crash tests interrupt their constituent writes.
+Validate physical keys and public ordering independently: a byte-level match alone does not establish correct Seek/SQL behavior, and matching logical order alone does not establish interoperable mutation. Structural changes also require I-15's ordinary reopen/Compact & Repair checks and I-08's crash-state comparisons.
 
 Retain a simple scalar encoder as the checked implementation path while measuring specializations against complete output bytes. No performance ratio from the cleared notes becomes a target.[^method] Reopen D-SORT-1 if evidence requires a richer descriptor or different encoding mechanism. Reuse of Jackcess's referenced weight resources requires their own pinned provenance/licence review; inspecting the Java headers did not clear those resources.
 
-## Detailed experiment cards
+## Deciding experiments
 
-All cards in this chapter are planned experiments, with no target-build observations claimed. I-15 defines the shared capture, comparison, ambiguity and cross-build conditions; the conditions below extend that contract. Research prerequisites require the relevant evidence or minimal probe, not completion of a later production subsystem.
+The full fixtures, captures, branch choices and effort estimates are in [A-02](A-02-experiments.md); the complete source ledger is in [A-01](A-01-sources.md). No experiment result is claimed here.
 
-### R-SORT-3 — Native key dependence on descriptor, locale and build
-
-**Question and conditions.** Do file-visible sort identifiers/options fully select the native key encoder, or do additional observable environment dimensions matter? Apply I-15's common conditions, crossing the supported General Legacy/General and other evidenced descriptor combinations with field flags, Jet 4/ACE formats, recorded locales and subsequently available engine builds. Preserve each baseline separately; do not claim cross-build agreement from one installation.
-
-**Fixtures and operations.** Insert carefully ordered and shuffled input sets covering Nulls, duplicate user values, numeric boundaries, case/accent ties, expansions, punctuation, spaces, embedded zero units and surrogate units. Build ascending/descending and compound indexes, including mixed types and prefix seeks, under unique/nonunique settings where valid. Compare table/index traversal, exact/range Seek and relevant SQL comparison/order behavior. Exercise insertion, deletion, key movement and page splits so key semantics are not inferred only from a freshly built tree.
-
-**Capture and comparison.** Preserve typed inputs, returned order, seek position/NoMatch state, duplicates/constraint errors and native index entries. Separate field-key bytes from structural row locators, separators and common-prefix compression before comparing encoders; retain both complete entries and page encoding. Compare CalcDb's scalar encoder and any specialization byte for byte, and independently compare public results with ACE. SQL semantic equality, cutoff ties and native locator ordering remain distinct observations. If valid index bytes cannot yet be isolated, mark that part unresolved rather than substituting an OS comparison result.
-
-**Outcomes, dependencies and next step.** Identical evidenced rules select one table-driven encoder; file/option-dependent differences select explicit descriptor variants. Environment/build conflicts require a declared baseline policy and possible descriptor revision under D-SORT-1, never silent Unicode normalization or whichever answer passes. Behavioral equality without correct native keys is insufficient for writes. Any reused weight resource still needs its own pinned provenance/licence clearance. Dependency: R-FMT-1; size **L**, with R-FMT-2 supplying structural transitions and R-CURSOR-1 public cursor consequences. Begin with a small discriminating text-key fixture and independently decoded entries, then extend to compounds and environment variation.
+**R-SORT-3 (L)** decides whether native descriptors and field flags fully determine key encoding or whether additional evidenced target conditions must be explicit. Start from R-FMT-1; add R-FMT-2 and R-CURSOR-1 evidence for structural mutation and navigation branches, as specified in the [full card](A-02-experiments.md#r-sort-3--native-key-dependence-on-descriptor-locale-and-build).
 
 [^tree]: Jackcess, live official [IndexData.java xref](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/IndexData.html), selected physical-index/page/entry passages, accessed 2026-11-12. Apache-2.0 file header checked; source revision unpinned; no port. These are reference facts to test against ACE.
 [^sort]: Jackcess, [GeneralLegacyIndexCodes.java](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/GeneralLegacyIndexCodes.html) and [GeneralIndexCodes.java](https://jackcess.sourceforge.io/xref/com/healthmarketscience/jackcess/impl/GeneralIndexCodes.html), selected descriptions/encoding passages and Apache-2.0 headers inspected, accessed 2026-11-12. Referenced data tables were not opened or cleared for reuse.
-[^method]: Supplied `frankensqlite.stage1.part1.md` §§4, 7 and part 3 §§8, 10; `asupersync.stage1.part2.md` §§7–8. Concept input for bulk work, exact-path comparison and measurement.
+[^method]: Supplied `frankensqlite-report.stage1-part1.md` §§4, 7 and `frankensqlite-report.stage1-part3.md` §§8, 10; `asupersync-report.stage1-part2.md` §§7–8. Concept input for bulk work, exact-path comparison and measurement.

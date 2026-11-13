@@ -1,10 +1,12 @@
 # I-07. ISAM, cursors and constraints
 
-Revision 2 · Stage 1, response 3 · 2026-11-12
+Revision 3 · Part I review · Stage 2, response 1 · 2026-11-13
+
+**Requirement trace:** Primary: RQ-DAO-02, RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-04, RQ-PERF-01, RQ-PERF-02. Full requirement text and Part II ownership are in I-16.
 
 ## One cursor mechanism, explicit policies
 
-**D-CURSOR-1 — recommended mechanism; visibility and lifecycle policy provisional under R-CURSOR-1/R-DAO-1.** A cursor contains a source descriptor, visibility token, position, population state, current page pin, decode scratch and optional edit buffer. Public recordset type selects policy; DAO, SQL and ADO share navigation and mutation primitives without inheriting each other's surface behavior.
+**D-CURSOR-1 — Provisional.** The shared mechanism is recommended; R-CURSOR-1/R-DAO-1 settle visibility and lifecycle policy. Under **K-CURSOR**, a cursor contains a source descriptor, visibility token, position, population state, current page pin, decode scratch and optional edit buffer. Public recordset type selects policy; DAO, SQL and ADO share navigation and mutation primitives without inheriting each other's surface behavior.
 
 | DAO policy | Selected mechanism |
 | --- | --- |
@@ -16,6 +18,36 @@ Revision 2 · Stage 1, response 3 · 2026-11-12
 These mechanisms implement documented recordset distinctions, not a blanket isolation level. Updateability is derived separately from source provenance, query shape and options. Explicitly requested types must not silently fall back to a cheaper type.[^types]
 
 Position validity, BOF/EOF, NoMatch, population progress and EditMode are separate state. Microsoft documents that failed Seek/Find invalidates the current record while later Move calls leave NoMatch unchanged. RecordCount for non-table cursors can reflect population progress; forcing COUNT(*) or full materialization would change behavior.[^state] R-CURSOR-1 records every property after successful and failed transitions, including empty/singleton results, discovered deletions and Requery.
+
+**Figure F-09 — independent position and edit state.** This is the proposed cursor state model, with public transition and failure policies provisional under R-CURSOR-1/R-TXN-1. Population, open-resource lifetime and shared bookmark-family incarnation remain additional independent state. Mermaid source only; not render-verified.
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    state "Open cursor mechanism" as Open {
+        state "Position" as Position {
+            state "No current row" as NoCurrent
+            state "Current row token" as Current
+            NoCurrent --> Current: successful positioning
+            Current --> NoCurrent: policy invalidates position
+            Current --> Current: next valid position
+        }
+        --
+        state "Editing" as Editing {
+            state "No edit buffer" as Idle
+            state "Private edit buffer" as Buffered
+            state "Prepared mutation" as Prepared
+            Idle --> Buffered: accepted Edit or AddNew
+            Buffered --> Prepared: Update preparation
+            Prepared --> Idle: successful publication
+            Prepared --> Buffered: failure policy retains edit
+            Prepared --> Idle: failure policy ends edit
+            Buffered --> Idle: accepted CancelUpdate
+        }
+    }
+```
+
+The two failure edges are alternatives chosen by the evidenced operation/context, not permission to choose an arbitrary outcome. Positioning can invalidate borrowed row views without destroying an owned edit buffer; whether a particular public movement is permitted or posts/abandons that buffer is the adapter policy. A clone receives its own state vector while sharing only the eligible identity/data family.
 
 ## Identity, bookmarks and navigation
 
@@ -37,15 +69,13 @@ Prepare physical row/index/map changes only after the appropriate semantic steps
 
 The priority loop retains a cursor, page pin and reusable scratch. Resident MoveNext and scalar field reads avoid per-row container allocation. Encode only changed fields where possible, counting any required row reconstruction, page-image copying and index/allocation work separately. Count name lookups, COM crossings, copied row/long-value bytes, decoded fields, page transitions and retained/spilled identities independently.
 
-R-CURSOR-1 crosses type, index, population, clones/independent cursors, key movement, bookmarks, deletion, Requery and Workspace resolution. Capture typed values, all state properties, bookmark payloads, errors and affected files after each operation. The deciding outcomes select live versus retained membership, token validity and exact transition/error rules; inconclusive visibility runs remain unresolved. The contradictory current Delete reference and deletion concept article are recorded documentary conflicts, not grounds to remove Delete support.[^delete] R-DAO-1 completes the member/state inventory; ADO reuses mechanisms with its own policy captures as the shared contracts become available.
+The contradictory current Delete reference and deletion concept article are recorded documentary conflicts, not grounds to remove Delete support.[^delete] R-DAO-1 completes the member/state inventory; ADO reuses mechanisms with its own policy captures as the shared contracts become available.
 
-## Detailed experiment cards
+## Deciding experiments
 
-All cards in this chapter are planned experiments, with no target-build observations claimed. I-15 defines the shared capture, comparison, ambiguity and cross-build conditions; the conditions below extend that contract. Research prerequisites require the relevant evidence or minimal probe, not completion of a later production subsystem.
+The full fixtures, captures, branch choices and effort estimates are in [A-02](A-02-experiments.md); the complete source ledger is in [A-01](A-01-sources.md). No experiment result is claimed here.
 
-### R-CURSOR-1 — Identity, population and cursor transitions
-
-**Question / conditions:** which visibility, bookmark and state policies implement each recordset type? Use the shared conditions, crossing table/dynaset/snapshot/forward-only, indexed/unindexed sources, clones/independent opens and same/different Workspace. **Fixture / operations:** empty, singleton, duplicate-value and multi-page tables with relocation-sized text; Move/Seek/Find successes and failures, partial population/MoveLast, Edit/AddNew/CancelUpdate/failed Update, key movement/deletion, Requery and transaction resolution. Change rows through a second cursor at controlled points. **Capture / comparison:** every cursor property, typed bookmark payload, row identity/value order and subsequent operation result; distinguish NoMatch from current-position validity and RecordCount from cardinality. Observation itself must not force extra population. **Decides:** live changes select refresh policies; stable membership/value evidence selects retained identities/versions or spool; bookmark survival selects incarnation checks. Inconclusive population timing gets a smaller fixture. **Depends / size:** R-ORACLE-1, R-FMT-1; L. Required before stable cursor APIs and accepted W-05 identity behavior.
+**R-CURSOR-1 (L)** starts after R-ORACLE-1 and R-FMT-1 and selects cursor visibility, population, identity, bookmark and lifecycle policies from per-transition observations. Inconclusive timing remains unresolved; the [full card](A-02-experiments.md#r-cursor-1--identity-population-and-cursor-transitions) must settle the relevant policy before accepting stable W-05 cursor behavior.
 
 [^types]: Microsoft, [Recordset object](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-object-dao), DAO reference, accessed 2026-11-12; labelled Access/Office 2013, not observed target-build behavior.
 [^state]: Microsoft, [NoMatch](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-nomatch-property-dao) and [RecordCount](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-recordcount-property-dao), accessed 2026-11-12.

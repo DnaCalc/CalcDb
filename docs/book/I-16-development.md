@@ -1,10 +1,12 @@
 # I-16. Research and development sequence
 
-Revision 1 · Stage 1, response 3 · 2026-11-12
+Revision 2 · Part I review and Stage 2, response 1 · 2026-11-13
+
+**Requirement trace:** Primary: RQ-PROCESS-01, RQ-DEV-01, RQ-DEV-02. Shared obligations: RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-03, RQ-ORACLE-04, RQ-LEDGER-01, RQ-ORACLE-05, RQ-TEST-01, RQ-STORE-04. Full requirement text and Part II ownership are in I-16.
 
 ## Plan from dependencies and risk
 
-The one-pager fixes product scope, including initial and later capabilities. Its suggested implementation order is superseded by the user's instruction to do the actual planning here. The sequence below puts evidence that could overturn an expensive choice before that choice is embedded in a large implementation. It preserves the workload priority: DAO row loops from VBA, then bulk SQL, then WASM where their requirements compete.
+The one-pager fixes product scope, including initial and later capabilities. Its suggested implementation order is superseded by the user's instruction to do the actual planning here. For the review's bracketed sequencing alternatives, the retained provisional scheduling choice is explicit: **ADO may start alongside DAO as written; DAO retains priority.** No full-DAO completion dependency is added to ADO construction or research. The sequence below puts evidence that could overturn an expensive choice before that choice is embedded in a large implementation. It preserves the workload priority: DAO row loops from VBA, then bulk SQL, then WASM where their requirements compete.
 
 Develop small real paths through the intended architecture. The first useful path is an unchanged caller creating a genuine CalcDb DAO object, opening a native table, moving a cursor and obtaining owned field values through the shared foundation. It tests activation, ownership, format decoding, cursor lifetime and the dominant cost boundary together. A fake object returning constants can establish ABI mechanics but cannot complete that read milestone. A successful read milestone cannot complete the object-model inventory.
 
@@ -14,7 +16,7 @@ Use **S** for one bounded question or local mechanism, **M** for several interac
 
 ## Research before commitment
 
-The detailed cards reside in their owning Part I sections. I-15 supplies common capture conditions, evidence classes and treatment of incomplete or conflicting runs. Begin with the user-reported ACE 16.0.20527.20016 and verify the loaded binaries before capturing answers. Nothing in this plan claims that the Windows experiments have run.
+The detailed cards and common capture conditions reside in A-02-experiments.md. Each Part I section retains a short question/outcome summary; I-15 defines evidence classes and T-COMPACT-1. A-01-sources.md contains the full source ledger. Begin with the user-reported ACE 16.0.20527.20016 and verify the loaded binaries before capturing answers. Nothing in this plan claims that the Windows experiments have run.
 
 | Investigation bundle | Start when | Choice it must settle before broad construction |
 | --- | --- | --- |
@@ -22,12 +24,13 @@ The detailed cards reside in their owning Part I sections. I-15 supplies common 
 | I-FOUNDATION-1, I-HOST-1 discovery | Supplied integration facts, available declarations and host capability inspection. | Shared ABI/allocators, actual loader/runtime ownership and the requirements for the smallest host/portable prototypes. |
 | R-ACT-1, I-HOST-1 execution cases | The discovered declarations and minimal real host/factory prototype exist. | Unchanged caller activation, callback/shutdown ownership and route-specific gaps before broad object-model construction. |
 | R-STRING-1 | Shared values plus a small decoded-row/public-call path exist. | Direct owned output versus reusable decode state and selective caches, measured on the DAO path. |
-| R-FMT-1, R-CAT-1, R-SORT-3 | Immutable native fixtures and capture/inspection work. | Supported format descriptions, QueryDef/catalog mapping and exact key families; independent read facts can be gathered concurrently. |
+| R-FMT-1, R-SORT-3 | Immutable native fixtures and capture/inspection work. | Format descriptors and exact key families; read facts can be gathered concurrently. |
+| R-CAT-1 | R-ORACLE-1 plus R-FMT-1 read structure start catalog bootstrap. | Native catalog/QueryDef mapping and invalidation. Add R-FMT-2 only for mutation branches, R-EXPR-1 for expression-execution branches, and R-TXN-1 for transaction branches; none is a blanket prerequisite for basic catalog inspection. |
 | R-CURSOR-1 core | Native table fixtures and observable calls exist. | Row identity versus locator, bookmark representation/lifetime and relocation constraints before cursor interfaces are frozen. |
-| R-LOCK-1/2 and W-PROBE | Disposable native test files and externally controlled observation exist. | Actual exclusion and readers-only admission; sufficiently complete ACE write/flush observation before accepting a writer design. |
+| R-LOCK-1/2 and W-PROBE | Disposable native files, W-01 capture core and the small K-IO/K-LOCK interface sketch; no production W-03 prerequisite. | Basic native open/share/I/O/identity behavior first; independently develop crash observation and measure its actual coverage. Full tracing is the preferred evidence path, with the bounded alternative in I-08 if it proves impossible. |
 | R-FMT-2, R-PRESERVE-1, R-TXN-1, R-CRASH-1/2 | The external oracle can mutate and interrupt ACE. | Native mutation dependencies, opaque ownership, live rollback, commit survival and first-opener crash classes. A CalcDb writer is not needed to obtain these answers. |
 | R-EXPR-1, R-UDF-1 | Scalar capture works; add an instrumented host for host-sensitive cases. | Scalar/context baseline first; resolver/callback behavior second; effect-sensitive expression extensions then use that evidence. |
-| R-SQL-1/3, R-SQL-2 | Scalar semantics and discriminating fixtures exist. | SELECT/metadata and rewrite boundaries; separately, action candidate/effect order, failure scope and affected counts. |
+| R-SQL-1/3, R-SQL-2 | Scalar semantics and discriminating fixtures exist; R-SQL-2 row actions need R-TXN-1/R-FMT-2, with R-CAT-1 added for catalog/DDL/QueryDef branches. | SELECT/metadata and rewrite boundaries; separately, action candidate/effect order, failure scope and affected counts. |
 | R-DAO-1, R-ADO-1, R-ERR-1 | Construction and read cases work. | Member/collection/lifecycle/error policies incrementally; add write and SQL cases only when those prerequisites are relevant. |
 | R-WASM-1 | Portable caller and VFS prototypes exist. | Dynamic open/create, storage ownership, bounded blocking rendezvous and honest durability outcomes before a complete browser engine depends on them. |
 | R-PAR-1 | An accepted serial path and cost baseline exist. | Exact serial equivalence and net benefit for each proposed parallel path. It never blocks ordinary serial delivery. |
@@ -36,11 +39,11 @@ The detailed cards reside in their owning Part I sections. I-15 supplies common 
 
 ```mermaid
 flowchart TD
-    O["Oracle capture and fixtures"] --> N["Native locks and complete I/O traces"]
+    O["Oracle capture and fixtures"] --> N["Native lock / I/O probes"]
     O --> S["Format, keys and semantic probes"]
     H["Shared ABI and host prototypes"] --> C["Real DAO read and portable caller"]
     S --> C
-    N --> P["Crash, preservation and transaction policy"]
+    N --> P["Crash classes and write protocol"]
     S --> P
     C --> R["Row-loop costs and object policies"]
     H --> B["Browser dynamic-storage probe"]
@@ -48,7 +51,9 @@ flowchart TD
     R --> W
 ```
 
-The last edge means the writer must respect evidenced cursor identity and edit/error policies; it does not require all DAO methods. Likewise, formatting a native page correctly cannot settle when its write is permitted. W-PROBE first provides basic native I/O/exclusion probes for the read path; its fuller crash-observation slice validates cached/paging effects and complete interruption coverage before a trace supports writer acceptance. If that completeness cannot be demonstrated, retain an inconclusive crash result and continue unrelated read/ABI work; do not replace the missing answer with a preferred atomicity model.
+The last edge means the writer must respect evidenced cursor identity and edit/error policies; it does not require all DAO methods. W-PROBE is a small external driver over public native effects, using a contract sketch rather than the completed W-03 implementation. Its basic open/share/identity/I/O probes feed W-03. Its crash-observation slice proceeds in parallel, attempting complete ACE database/lock/TEMP/cached-write capture and explicitly recording missing coverage. This removes the circular dependency in which the production VFS would have to exist before its prerequisite probe could start.
+
+If complete ACE tracing proves impossible, **continue the bounded exclusive native writer in D-WRITE-1**, with complete CalcDb persistence-cut exploration, semantically bracketed ACE interruption, native-state inspection and independent reopeners. Qualify operation/environment cases only where every CalcDb cut fits an established ACE survival/repair class; unresolved cases remain experimental or write-refused and visible in coverage. Unknown marking or persistence rules are not filled with an invented marker, private WAL or stronger atomicity. This is a writer development direction with explicit evidence limits, not a requirement to postpone all writing until perfect instrumentation exists.
 
 ## Work packages and observable acceptance
 
@@ -58,10 +63,10 @@ Work identifiers remain stable. Early and later slices within a package are name
 | --- | --- | --- |
 | W-01 · L | One oracle controller, corpus manifests, capture/replay/comparison and reduction; R-ORACLE-1 and the selected test installation. | Repeated and reduced SQL/object/file cases retain exact typed payloads, provenance and original evidence; transport loss never silently re-executes an uncertain mutation. |
 | W-02 · M | Shared value/string declarations, ownership and allocators; I-FOUNDATION-1, with R-STRING-1 refining materialization after the read slice exists. | Native/managed/portable round trips preserve target layout, exact payloads and cleanup, including malformed UTF-16, array bounds, ByRef and allocation failure. |
-| W-PROBE · M | External native I/O, lock and failure observation/control; W-01 and candidate VFS effects. | Basic slice validates native effects/exclusion independently; crash slice captures before/after write/flush/acknowledgement cuts, database/lock/TEMP and cached/paging I/O, detecting incomplete coverage. No CalcDb writer is needed. |
-| W-03 · L | Blocking VFS, pager/cache, controlled effects and real exclusion; W-02 declarations/native ownership, W-PROBE basics, R-LOCK-1 and the approved crash contract. | Bounds, pins, generations, short/uncertain I/O and cleanup hold under faults; both ACE/CalcDb opening orders exclude unsafe access. Read-path delivery need not await complete crash tracing. |
+| W-PROBE · M | Small public-native-effects probe and external ACE observation; W-01 capture core plus K-IO/K-LOCK contract sketch, without production W-03. | Basic slice validates open/share, file identity, progress/uncertainty and exclusion. Crash slice attempts complete write/flush/acknowledgement coverage, records gaps, and supplies bounded crash classes when full tracing is unavailable. |
+| W-03 · L | Blocking VFS, pager/cache, controlled effects and exclusion; the minimal native handle/ownership/error declarations, W-PROBE basics and R-LOCK-1. Shared value integration uses the available W-02 native declarations; portable package completion is separate. | Bounds, pins, generations, short/uncertain I/O and cleanup hold under faults; real exclusion works in both open orders. Native read delivery does not await W-PROBE full tracing, a CalcDb writer or the full browser/portable-COM branch. |
 | W-04 · XL | One format description, reader, validator, inspector and read ISAM/catalog path; W-01 capture core, W-02 native contracts, W-03 read foundation, R-FMT-1 and core R-CURSOR-1 identity evidence. | Jet 4/ACCDB fixtures decode through shared rules, including long values/catalogs/indexes; malformed references cannot escape bounds or budgets; public read results match captures. Native reads do not await full browser integration. |
-| W-05 · XL | Exclusive row/LV/allocation/index mutator and live rollback; W-04, R-FMT-2/R-SORT-3/R-PRESERVE-1, cursor relocation, R-TXN-1, mutation-context R-EXPR-1 and W-PROBE's complete crash slice with early crash evidence. | Completed operations reopen normally with correct keys and preserved objects; failures/rollback have evidenced state; every applicable interrupted state meets the ACE-first baseline without private undo. |
+| W-05 · XL | Exclusive row/LV/allocation/index mutator and live rollback using provisional D-WRITE-1; W-04, relevant R-FMT-2/R-SORT-3/R-PRESERVE-1, cursor relocation, R-TXN-1 and mutation-expression evidence. W-PROBE/R-CRASH-1/2 develop and qualify crash behavior alongside construction. | Completed operations pass T-COMPACT-1 with correct keys/preservation. Every cut of a qualified operation/environment fits its established ACE crash class without private undo; incomplete tracing uses the explicit bounded-evidence route, and unresolved cases remain counted. |
 | W-06 · L | SELECT, binder and common expression service; W-04, scalar R-EXPR-1, R-SQL-1/3 and read-cursor evidence. Host-sensitive paths add R-UDF-1/I-HOST-1. | Exact types, Nulls, metadata, order and errors for Access syntax, joins, TOP, DISTINCTROW, subqueries/unions and crosstabs; actual plans demonstrate intended scans/seeks. W-05 is not a blanket prerequisite. |
 | W-07 · XL | Action queries, DDL and native QueryDefs; W-05/06, R-SQL-2, R-CAT-1 and transaction evidence. | Saved queries round-trip natively; constraints, generated values, effects, counts and partial failures agree; multi-file Workspace cases preserve their evidenced limits. |
 | W-08 · XL | DAO/host delivery in activation, read, edit and coverage slices; prerequisites differ by slice below. | Required unchanged native/VBA clients and each managed-runtime lane use genuine interfaces, correct ownership/lifecycle/error policy and the shared engine. |
@@ -127,7 +132,7 @@ The initial ADO implementation never depends on W-L5. Linked-source semantics do
 
 Each implemented slice gets four related checks: differential observable behavior; structural/ownership invariants; failures at the actual effect boundaries; and representative cost measurements. Use minimal fixtures first, then boundary values, generated combinations and maintained regression captures. Do not wait for feature completion to test failed allocation, short I/O, Close or reentry: those outcomes shape ownership and continuation design.
 
-For ordinary writes, acceptance includes independent ACE/Access opening and Compact & Repair inspection without requiring repair to make the file usable. For interrupted writes, use I-08's corresponding ACE baseline and independent first-opener branches. Record public acknowledgement, dbForceOSFlush and persistence events separately. Optional undo remains an additional CalcDb-first mechanism and is disabled without trustworthy proof that no external modification occurred. Do not reject an evidenced ACE repair class merely to claim stronger guarantees, or accept an invented repair class because it appears conservative.
+For ordinary writes, acceptance includes **T-COMPACT-1** in I-15/A-02: independent ACE/Access opening, calibrated repair detection and before/after content/structure comparison. Repair cannot make an otherwise unacceptable original write pass. For interrupted writes, use I-08's corresponding ACE baseline and independent first-opener branches. Record public acknowledgement, dbForceOSFlush and persistence events separately. Optional undo remains additional CalcDb-first help. Under exclusion, validate file identity, manifest/extent and eligibility; full-read every database page, require each uncovered page unchanged and each covered page exactly its before-image or intended new image, and otherwise discard. No continuous-history witness is required by this revised external-change predicate; stale committed or ambiguous undo still cannot be applied. Do not reject an evidenced ACE repair class merely to claim stronger guarantees, or accept an invented repair class because it appears conservative.
 
 For queries, compare values, schema, errors/effects and ordering, and inspect the plan actually executed. For object models, compare state transitions and error lifetime, not only returned rows. For portability, use the actual CalcVBA client on the target, including dynamic browser acquisition and memory exhaustion. A generic native unit test does not discharge COM activation, browser persistence or process-lock obligations.
 
@@ -135,100 +140,98 @@ An optimization enters only after its applicable compatibility cases remain matc
 
 ## Decision changes and current unresolved facts
 
-This response updates D-LOCK-1, D-OBJECT-1 and D-LATER-1 scheduling because the user explicitly removed the suggested order's prescriptive status. It updates D-WASM-1's provisional mechanism because dynamic open/create requires an asynchronous acquisition path as well as prepared synchronous handles. I-12/13/14 and the plan carry those consequences; I-03 points to the browser VFS contract. D-UNDO-1's approved crash baseline is unchanged. Decisions and tasks in book-record remain one-line current entries; design reasons live in the chapters.
+The Part I review adds provisional D-WRITE-1, makes D-LOCK-1's first two native mechanisms concrete, replaces D-UNDO-1's former history-witness predicate with the user's exact full-file image test, and corrects D-VALUE-1 to the intended real platform VARIANT/BSTR contract. I-03/08/09 and I-02/13 carry those changes. Full source/experiment material now lives in A-01/A-02; figure status records actual emitted tables and diagram source. Decision status labels and scope IDs are synchronized with book-record; reasons remain in chapters.
 
 The most consequential remaining facts are the actual crash/flush sequence, complete native lock protocol, identity/visibility/error policies, exact format/key/catalog variants, unchanged-client activation coverage, CalcVBA's shared/portable declarations, and browser dynamic-storage/durability feasibility. Each has a named card and next experiment. Documentary differences and unavailable builds stay unresolved rather than being hidden by a compatibility mode. A result requiring a material scope change returns to the user; routine mechanism changes within these contracts update the affected chapters directly.
 
-Part I now contains designs for every mapped requirement, with unresolved behavior expressed as a preferred mechanism and a deciding experiment. Part II deepens those same sections into structures, algorithms, invariants and acceptance cases. Begin with II-01 and II-02 so the dependency boundaries, values and ownership needed by every later algorithm are explicit; then continue II-03/04/05/06/07 before the full persistence and concurrency detail. The content determines response boundaries. Page guidance remains descriptive and never justifies dropping a required design or experiment.
+Part I now contains designs for every mapped requirement, with unresolved behavior expressed as a preferred mechanism and a deciding experiment. Part II deepens those same sections into structures, algorithms, invariants and acceptance cases. Stage 2 starts in this response with II-01 and II-02, making dependency boundaries, values and ownership explicit; the next task is II-03, followed by II-04/05/06/07 before the full persistence and concurrency detail. The content determines response boundaries. Page guidance remains descriptive and never justifies dropping a required design or experiment.
 
 ## Complete scope map
 
-The following map retains all 83 stable requirement IDs. The owner is both the Part I section and its matching Part II chapter; supporting sections are additional design locations. “Initial” and “Later” describe capability scope, not a mandatory implementation sequence. N denotes the one-pager, C the charter, V the integration note, A the assignment and U a user clarification. The current concise owner index is repeated in book-record; this table holds the full requirement text.
+The 83 stable requirements retain their scope/phase and owner. The Nov 13 corrections refine RQ-PROD-04, RQ-VAL-01, RQ-PORT-03 and RQ-STORE-05 without reducing initial coverage. Every Part I owner explicitly cites its IDs; Part II chapter numbers match those owners.
 
-<!-- SCOPE_MAP_START -->
-| ID | Scope | Requirement | Owner I / II | Supports | Authority |
+| Requirement | Authority | Phase | Required behavior | Owner I / II | Supporting I / II |
 | --- | --- | --- | --- | --- | --- |
-| RQ-PROD-01 | Initial | Clean-room Rust Jet 4/ACE engine for DNA Calc; systems-language design remains readable outside Rust. | 01 | 13 | N What it is |
-| RQ-PROD-02 | Initial | Existing VBA, .xll and .NET add-ins using ACE run unchanged inside DNA Calc. | 13 | 07,12 | N What it is |
-| RQ-PROD-03 | Initial | Jet 4 .mdb and ACE .accdb read and write interoperability; no Jet 3 support. | 04 | 01 | N What it is; In |
-| RQ-PROD-04 | Initial | Ordinary completed writes open in Access/ACE without repair; Compact & Repair finds nothing to fix. Interrupted states follow RQ-STORE-04. | 04 | 08,15 | N What it is |
-| RQ-PROD-05 | Initial | Unknown content survives rewrites byte for byte; stored front-end objects remain readable. | 04 | 06,14 | N What it is; Out; P3 |
-| RQ-PROD-06 | Initial | Core runs off Windows and in DNA Calc browser/wasm32 builds. | 14 | 01,03,13 | N What it is; P9 |
-| RQ-SQL-01 | Initial | All Access SQL; SELECT, joins, unions and subqueries; no private SQL dialect. | 11 | 10 | N In; C SQL |
-| RQ-SQL-02 | Initial | Crosstabs: TRANSFORM and PIVOT, including result-schema construction. | 11 | 06 | N In |
-| RQ-SQL-03 | Initial | PARAMETERS declarations, typed binding and QueryDef parameter behavior. | 11 | 06,12 | N In |
-| RQ-SQL-04 | Initial | DISTINCTROW and its Access-specific row identity semantics. | 11 | 07 | N In |
-| RQ-SQL-05 | Initial | Append, update, delete and make-table action queries. | 11 | 07,08 | N In; C SQL |
-| RQ-SQL-06 | Initial | Access DDL and its catalog/constraint effects. | 11 | 06,08 | N In |
-| RQ-SQL-07 | Initial | Both ANSI-89 and ANSI-92 wildcard modes. | 10 | 11 | N In |
-| RQ-SQL-08 | Initial | QueryDefs read and written in Access catalog form, in both directions. | 06 | 11,12 | N In |
-| RQ-SEM-01 | Initial | ACE results, value types and Null handling. | 10 | 02,11,15 | N In; P1 |
-| RQ-SEM-02 | Initial | ACE comparison/sort behavior and byte-identical index keys, including legacy sort orders. | 05 | 10,11 | N In; P3 |
-| RQ-SEM-03 | Initial | ACE error numbers, error collections, timing and surface propagation. | 12 | 08,10,11,13,15 | N In |
-| RQ-DAO-01 | Initial | Full DAO: DBEngine, Workspace, Database, and the complete required member inventory. | 12 | 07,08 | N In; C Object models |
-| RQ-DAO-02 | Initial | Table/dynaset/snapshot/forward-only recordsets; navigation, Seek, Find and bookmarks. | 07 | 12 | N P2; C Object models |
-| RQ-DAO-03 | Initial | Edit/AddNew/Update, TableDef, QueryDef, Field, Index, Relation and Parameter. | 12 | 06,07 | N P2; C Object models |
-| RQ-DAO-04 | Initial | Properties, Containers/Documents, collections, Errors and transactions. | 12 | 06,08 | N In; C Object models |
-| RQ-ADO-01 | Initial | ADO from VBA: Connection, Recordset, Command and related observable behavior. | 12 | 07,13 | N In; Next |
-| RQ-ADO-02 | Initial | Microsoft.ACE.OLEDB.12.0 connection strings work through the CalcDb ADO surface. | 12 | 13 | N In |
-| RQ-COM-01 | Initial | DAO real interfaces, IUnknown, IDispatch, IIDs and dispids; early and late binding. | 13 | 02,12 | N In; P9 |
-| RQ-COM-02 | Initial | Side-by-side identity: own ProgIDs/CLSIDs; host compatibility activation without registry changes. | 13 | 12 | N In; C COM identity |
-| RQ-COM-03 | Initial elaboration | Windows x64; DAO PIA/.NET interoperability on installed .NET Framework 4.8-family and .NET 10 LTS; explicit per-user external redirection only, never HKLM. | 13 | 01 | C COM identity; Platforms; U runtime targets |
-| RQ-LOCK-01 | Initial | Step 1: exclusion correct both ways between CalcDb and ACE processes. | 09 | 03,08 | N In; P6; Next |
-| RQ-LOCK-02 | Initial | Step 2: multiple processes may read while all writers are excluded. | 09 | 03,15 | N In; P6; Next |
-| RQ-LOCK-03 | Later | Step 3: CalcDb reads beside an ACE writer. | 09 | 14,15,16 | N Later; P6; Next |
-| RQ-LOCK-04 | Later | Step 4: shared writing through the ACE lock-file protocol, including later network-share validation. | 09 | 14,15,16 | N Later; P6; Next |
-| RQ-LATE-01 | Later | Encryption; preserve codec and key-service seams in the early file/pager design. | 14 | 03,04 | N Later |
-| RQ-LATE-02 | Later | Linked tables; catalog identity, source capabilities and delegated access paths. | 14 | 06,07,11 | N Later |
-| RQ-LATE-03 | Later | Complex fields: attachment, multivalue and calculated fields. | 14 | 02,04,06,07 | N Later |
-| RQ-LATE-04 | Later | CalcDb compact and repair; separate validated rebuilding from conservative repair. | 14 | 04,05,06,08 | N Later |
-| RQ-LATE-05 | Later | OLE DB provider; early ADO support must not depend on this later provider. | 14 | 12,13 | N Later |
-| RQ-LATE-06 | Later | ODBC driver over the same engine and semantic services. | 14 | 11,12 | N Later |
-| RQ-OUT-01 | Excluded execution | Forms, reports, macros and database modules are preserved/readable, never run by CalcDb. | 01 | 04,06,14 | N Out |
-| RQ-OUT-02 | Excluded | Jet 3, server roles and a CalcDb SQL dialect. | 01 | 04,11 | N Out |
-| RQ-SRC-01 | Continuous | Use public documents, observed ACE, licensed Jackcess material and mdbtools format facts only. | 01 | 04,15 | N Sources; A Sources |
-| RQ-SRC-02 | Continuous | No proprietary decompilation/disassembly; FrankenSqlite/asupersync only through reviewed attached notes. | 01 | 15 | N Sources; P11 |
-| RQ-SRC-03 | Continuous | Per-source/version use and licence ledger; exact-material checks before adaptation or code reuse. | 15 | 01,16 | N Sources; A Sources |
-| RQ-ORACLE-01 | Continuous | ACE/Access are behavior oracles on Windows; capture answers keyed by their inputs. | 15 | 16 | N P1 |
-| RQ-ORACLE-02 | Continuous | One differential harness runs SQL, DAO and file operations; compares rows, types, errors and relevant bytes. | 15 | 04,07,11,12 | N P1 |
-| RQ-ORACLE-03 | Continuous | Refused, missing and mismatching cases all fail; never hide them from the denominator. | 15 | 16 | N P1 |
-| RQ-ORACLE-04 | Continuous | Corpus is a maintained product: version/options provenance, immutable originals and reduced failures. | 15 | 16 | N P1 |
-| RQ-ISAM-01 | Initial | One ISAM layer supplies tables, indexes, cursors and transactions to SQL, DAO and ADO. | 07 | 01,08,11,12 | N P2 |
-| RQ-STORE-01 | Initial | The Access file is authoritative; no alternative database side format and no CalcDb WAL. | 08 | 03,04 | N P3 |
-| RQ-STORE-02 | Initial | Every completed commit leaves a valid Access file; write ordering is a defined protocol. | 08 | 04,09 | N P3 |
-| RQ-STORE-03 | Initial | Opaque bytes are carried without reinterpretation or silent degradation. | 04 | 06 | N P3 |
-| RQ-FMT-01 | Initial | One data description defines pages, table definitions, usage maps and catalog rows. | 04 | 06 | N P4 |
-| RQ-FMT-02 | Initial | Reader, writer, validator, fuzzer and page inspector use that description; each rule cites evidence. | 04 | 15 | N P4 |
-| RQ-FMT-03 | Initial elaboration | Rows, long values, allocation, index mutations and all listed Jet/ACE scalar field types/AutoNumber variants. | 04 | 02,05,07 | A Coverage; C Values |
-| RQ-VAL-01 | Initial | Canonical COM Variant, BSTR, Currency, Decimal, Date and other basic values come from CalcVBA. | 02 | 13 | N P5; V Values; user clarification |
-| RQ-VAL-02 | Initial | Conversions and VBA functions are shared; query and VBA value semantics agree. | 10 | 02,11 | N P5 |
-| RQ-VAL-03 | Early design | Settle strings, borrowing, decoding, ownership and BSTR materialisation before the hot DAO path. | 02 | 03,07,12 | N P5; Next |
-| RQ-EXPR-01 | Initial | ACE sandbox rules apply; function capability policy is explicit. | 10 | 12,13 | N P5 |
-| RQ-EXPR-02 | Initial | UDF routing follows investigation of ACE/host integration; callback/runtime discovery remains an evidence-driven choice. | 10 | 13 | N P5; Next |
-| RQ-EXPR-03 | Initial elaboration | Host functions are opt-in; queries using them carry nonportability metadata. | 10 | 06,11 | C SQL and expression |
-| RQ-CONC-01 | Initial | Measure the exclusive path first; add in-process page snapshots without taxing every scalar call. | 09 | 02,03,07,15 | N P6 |
-| RQ-CONC-02 | Initial | One locking interface covers all four process-sharing steps from the first write path. | 09 | 03,08 | N P6 |
-| RQ-SIM-01 | Continuous | Inject time, I/O, scheduling and randomness; no hidden nondeterministic engine effects. | 15 | 03,09,10 | N P7 |
-| RQ-SIM-02 | Continuous | Seeded replay, interleaving search and fault injection; interrupt real ACE and CalcDb at every write point and compare independently captured reopening states. | 15 | 08,09 | N P7; U crash correction |
-| RQ-CALL-01 | Initial | Object calls block their caller thread; no async runtime is required. | 13 | 07,09,12 | N P8 |
-| RQ-CALL-02 | Initial | Measured internal workers preserve serial row order, Double sums and other observable outcomes. | 11 | 09,10,15 | N P8 |
-| RQ-CALL-03 | Initial | VBA user code executes only on the caller thread and never under an internal lock. | 10 | 09,13 | N P8 |
-| RQ-CALL-04 | Initial | Background work has an owner, budget and cancellation protocol; locks/cursors settle at owner close. | 09 | 07,08,12 | N P8 |
-| RQ-PORT-01 | Initial | Format/ISAM/catalog/expression/SQL crates perform no direct I/O and compile for wasm32. | 01 | 03,14 | N P9 |
-| RQ-PORT-02 | Initial | The object model uses COM interfaces on every platform. | 13 | 12,14 | N P9 |
-| RQ-PORT-03 | Initial | CalcVBA owns the portable COM stand-in: activation/allocation/BSTR/VARIANT/SAFEARRAY; no apartments or marshaling. | 13 | 02,14 | N P9 |
-| RQ-PLAN-01 | Initial | Inspectable plans describe the plan actually executed; tests assert seek/scan shape as well as results. | 11 | 15 | N P10 |
-| RQ-PERF-01 | Continuous | Performance budgets, noise control and failed-experiment ledger; DAO row loops > bulk SQL > WASM when they conflict. | 15 | 02,03,07,11,14 | N P10; A Priorities |
-| RQ-PERF-02 | Continuous | Count allocations, bytes copied, conversions, locality/working set, branches, I/O, synchronization and crossings; invent no targets. | 15 | 02,03,07,11 | A Priorities |
-| RQ-LEDGER-01 | Continuous | Oracle-derived compatibility ledger for DAO members, SQL features and types. | 15 | 12,16 | N P10 |
-| RQ-ARCH-01 | Continuous | One format, ISAM, evaluator, oracle and harness; narrow mechanically checked dependency rules. | 01 | 15 | N P11; C Architecture |
-| RQ-PROCESS-01 | Continuous | Working implementation and clear tests take precedence over process apparatus. | 16 | 15 | N P11 |
-| RQ-DEV-01 | Sequence | Choose implementation order from evidence and actual dependencies; prove risky foundations early, prioritize DAO costs, and preserve initial/later capability scope. | 16 | 09,14 | N Next; U implementation-order correction |
-| RQ-DEV-02 | Sequence elaboration | Work packages specify result, prerequisites, S/M/L/XL size and observable acceptance tests; expensive uncertainty is resolved first. | 16 | 15 | A Development |
-| RQ-HOST-01 | Initial elaboration | Host external-data integration and an optional service interface reuse COM/ISAM; no second object model. | 13 | 12 | C Purpose; V Open; N Next |
-| RQ-ORACLE-05 | Continuous elaboration | Long-lived batched oracle; private desktop; only owned Office processes; UI Automation dialogs; no Trust Center or HKLM changes. | 15 | 16 | C Oracles |
-| RQ-TYPE-01 | Initial elaboration | Boolean; integer widths; Single/Double; Currency/Decimal; Date/extended date; Text/Memo/Hyperlink; binary/OLE; GUID; AutoNumber. | 02 | 04,05,10 | C Values; V Values |
-| RQ-TEST-01 | Continuous elaboration | Differential behavior, storage invariants, malformed inputs, crash cases and workload measurements; immutable expected evidence. | 15 | 16 | A Tests; C Quality |
-| RQ-STORE-04 | Initial | After a CalcDb crash, ACE/Access/CalcDb-first reopening finds a state no worse than an ACE crash at the corresponding point, with the same commit-survival rules including dbForceOSFlush and evidenced repair marking. | 08 | 03,09,15,16 | U Q1 answer, 2026-11-12 |
-| RQ-STORE-05 | Optional enhancement constraint | Private undo may help CalcDb-first recovery only; record file identity and covered-page fingerprints and discard, never apply, if any external modification occurred or cannot be ruled out. | 08 | 03,09,15 | U Q1 answer, 2026-11-12 |
-<!-- SCOPE_MAP_END -->
+| RQ-PROD-01 | N What it is | Initial | Clean-room Rust Jet 4/ACE engine for DNA Calc; systems-language design remains readable outside Rust. | 01 | 13 |
+| RQ-PROD-02 | N What it is | Initial | Existing VBA, .xll and .NET add-ins using ACE run unchanged inside DNA Calc. | 13 | 07,12 |
+| RQ-PROD-03 | N What it is; In | Initial | Jet 4 .mdb and ACE .accdb read and write interoperability; no Jet 3 support. | 04 | 01 |
+| RQ-PROD-04 | N What it is | Initial | Ordinary completed writes open in Access/ACE without repair and pass calibrated T-COMPACT-1: independent branches, no repair indicators or required structural correction, preserved content and clean-control compaction changes. Interrupted states follow RQ-STORE-04. | 04 | 08,15 |
+| RQ-PROD-05 | N What it is; Out; P3 | Initial | Unknown content survives rewrites byte for byte; stored front-end objects remain readable. | 04 | 06,14 |
+| RQ-PROD-06 | N What it is; P9 | Initial | Core runs off Windows and in DNA Calc browser/wasm32 builds. | 14 | 01,03,13 |
+| RQ-SQL-01 | N In; C SQL | Initial | All Access SQL; SELECT, joins, unions and subqueries; no private SQL dialect. | 11 | 10 |
+| RQ-SQL-02 | N In | Initial | Crosstabs: TRANSFORM and PIVOT, including result-schema construction. | 11 | 06 |
+| RQ-SQL-03 | N In | Initial | PARAMETERS declarations, typed binding and QueryDef parameter behavior. | 11 | 06,12 |
+| RQ-SQL-04 | N In | Initial | DISTINCTROW and its Access-specific row identity semantics. | 11 | 07 |
+| RQ-SQL-05 | N In; C SQL | Initial | Append, update, delete and make-table action queries. | 11 | 07,08 |
+| RQ-SQL-06 | N In | Initial | Access DDL and its catalog/constraint effects. | 11 | 06,08 |
+| RQ-SQL-07 | N In | Initial | Both ANSI-89 and ANSI-92 wildcard modes. | 10 | 11 |
+| RQ-SQL-08 | N In | Initial | QueryDefs read and written in Access catalog form, in both directions. | 06 | 11,12 |
+| RQ-SEM-01 | N In; P1 | Initial | ACE results, value types and Null handling. | 10 | 02,11,15 |
+| RQ-SEM-02 | N In; P3 | Initial | ACE comparison/sort behavior and byte-identical index keys, including legacy sort orders. | 05 | 10,11 |
+| RQ-SEM-03 | N In | Initial | ACE error numbers, error collections, timing and surface propagation. | 12 | 08,10,11,13,15 |
+| RQ-DAO-01 | N In; C Object models | Initial | Full DAO: DBEngine, Workspace, Database, and the complete required member inventory. | 12 | 07,08 |
+| RQ-DAO-02 | N P2; C Object models | Initial | Table/dynaset/snapshot/forward-only recordsets; navigation, Seek, Find and bookmarks. | 07 | 12 |
+| RQ-DAO-03 | N P2; C Object models | Initial | Edit/AddNew/Update, TableDef, QueryDef, Field, Index, Relation and Parameter. | 12 | 06,07 |
+| RQ-DAO-04 | N In; C Object models | Initial | Properties, Containers/Documents, collections, Errors and transactions. | 12 | 06,08 |
+| RQ-ADO-01 | N In; Next | Initial | ADO from VBA: Connection, Recordset, Command and related observable behavior. | 12 | 07,13 |
+| RQ-ADO-02 | N In | Initial | Microsoft.ACE.OLEDB.12.0 connection strings work through the CalcDb ADO surface. | 12 | 13 |
+| RQ-COM-01 | N In; P9 | Initial | DAO real interfaces, IUnknown, IDispatch, IIDs and dispids; early and late binding. | 13 | 02,12 |
+| RQ-COM-02 | N In; C COM identity | Initial | Side-by-side identity: own ProgIDs/CLSIDs; host compatibility activation without registry changes. | 13 | 12 |
+| RQ-COM-03 | C COM identity; Platforms; U runtime targets | Initial elaboration | Windows x64; DAO PIA/.NET interoperability on installed .NET Framework 4.8-family and .NET 10 LTS; explicit per-user external redirection only, never HKLM. | 13 | 01 |
+| RQ-LOCK-01 | N In; P6; Next | Initial | Step 1: exclusion correct both ways between CalcDb and ACE processes. | 09 | 03,08 |
+| RQ-LOCK-02 | N In; P6; Next | Initial | Step 2: multiple processes may read while all writers are excluded. | 09 | 03,15 |
+| RQ-LOCK-03 | N Later; P6; Next | Later | Step 3: CalcDb reads beside an ACE writer. | 09 | 14,15,16 |
+| RQ-LOCK-04 | N Later; P6; Next | Later | Step 4: shared writing through the ACE lock-file protocol, including later network-share validation. | 09 | 14,15,16 |
+| RQ-LATE-01 | N Later | Later | Encryption; preserve codec and key-service seams in the early file/pager design. | 14 | 03,04 |
+| RQ-LATE-02 | N Later | Later | Linked tables; catalog identity, source capabilities and delegated access paths. | 14 | 06,07,11 |
+| RQ-LATE-03 | N Later | Later | Complex fields: attachment, multivalue and calculated fields. | 14 | 02,04,06,07 |
+| RQ-LATE-04 | N Later | Later | CalcDb compact and repair; separate validated rebuilding from conservative repair. | 14 | 04,05,06,08 |
+| RQ-LATE-05 | N Later | Later | OLE DB provider; early ADO support must not depend on this later provider. | 14 | 12,13 |
+| RQ-LATE-06 | N Later | Later | ODBC driver over the same engine and semantic services. | 14 | 11,12 |
+| RQ-OUT-01 | N Out | Excluded execution | Forms, reports, macros and database modules are preserved/readable, never run by CalcDb. | 01 | 04,06,14 |
+| RQ-OUT-02 | N Out | Excluded | Jet 3, server roles and a CalcDb SQL dialect. | 01 | 04,11 |
+| RQ-SRC-01 | N Sources; A Sources | Continuous | Use public documents, observed ACE, licensed Jackcess material and mdbtools format facts only. | 01 | 04,15 |
+| RQ-SRC-02 | N Sources; P11 | Continuous | No proprietary decompilation/disassembly; FrankenSqlite/asupersync only through reviewed attached notes. | 01 | 15 |
+| RQ-SRC-03 | N Sources; A Sources | Continuous | Per-source/version use and licence ledger; exact-material checks before adaptation or code reuse. | 15 | 01,16 |
+| RQ-ORACLE-01 | N P1 | Continuous | ACE/Access are behavior oracles on Windows; capture answers keyed by their inputs. | 15 | 16 |
+| RQ-ORACLE-02 | N P1 | Continuous | One differential harness runs SQL, DAO and file operations; compares rows, types, errors and relevant bytes. | 15 | 04,07,11,12 |
+| RQ-ORACLE-03 | N P1 | Continuous | Refused, missing and mismatching cases all fail; never hide them from the denominator. | 15 | 16 |
+| RQ-ORACLE-04 | N P1 | Continuous | Corpus is a maintained product: version/options provenance, immutable originals and reduced failures. | 15 | 16 |
+| RQ-ISAM-01 | N P2 | Initial | One ISAM layer supplies tables, indexes, cursors and transactions to SQL, DAO and ADO. | 07 | 01,08,11,12 |
+| RQ-STORE-01 | N P3 | Initial | The Access file is authoritative; no alternative database side format and no CalcDb WAL. | 08 | 03,04 |
+| RQ-STORE-02 | N P3 | Initial | Every completed commit leaves a valid Access file; write ordering is a defined protocol. | 08 | 04,09 |
+| RQ-STORE-03 | N P3 | Initial | Opaque bytes are carried without reinterpretation or silent degradation. | 04 | 06 |
+| RQ-FMT-01 | N P4 | Initial | One data description defines pages, table definitions, usage maps and catalog rows. | 04 | 06 |
+| RQ-FMT-02 | N P4 | Initial | Reader, writer, validator, fuzzer and page inspector use that description; each rule cites evidence. | 04 | 15 |
+| RQ-FMT-03 | A Coverage; C Values | Initial elaboration | Rows, long values, allocation, index mutations and all listed Jet/ACE scalar field types/AutoNumber variants. | 04 | 02,05,07 |
+| RQ-VAL-01 | N P5; V Values; U correction 2026-11-13 | Initial | Shared values use the exact platform Automation VARIANT and real BSTR, including 24-byte Windows x64 VARIANT; CalcVBA is being corrected from its current private 16-byte form. Shared Currency/Decimal/Date and conversions/functions remain CalcVBA-owned. | 02 | 13 |
+| RQ-VAL-02 | N P5 | Initial | Conversions and VBA functions are shared; query and VBA value semantics agree. | 10 | 02,11 |
+| RQ-VAL-03 | N P5; Next | Early design | Settle strings, borrowing, decoding, ownership and BSTR materialisation before the hot DAO path. | 02 | 03,07,12 |
+| RQ-EXPR-01 | N P5 | Initial | ACE sandbox rules apply; function capability policy is explicit. | 10 | 12,13 |
+| RQ-EXPR-02 | N P5; Next | Initial | UDF routing follows investigation of ACE/host integration; callback/runtime discovery remains an evidence-driven choice. | 10 | 13 |
+| RQ-EXPR-03 | C SQL and expression | Initial elaboration | Host functions are opt-in; queries using them carry nonportability metadata. | 10 | 06,11 |
+| RQ-CONC-01 | N P6 | Initial | Measure the exclusive path first; add in-process page snapshots without taxing every scalar call. | 09 | 02,03,07,15 |
+| RQ-CONC-02 | N P6 | Initial | One locking interface covers all four process-sharing steps from the first write path. | 09 | 03,08 |
+| RQ-SIM-01 | N P7 | Continuous | Inject time, I/O, scheduling and randomness; no hidden nondeterministic engine effects. | 15 | 03,09,10 |
+| RQ-SIM-02 | N P7; U crash correction | Continuous | Seeded replay, interleaving search and fault injection; interrupt real ACE and CalcDb at every write point and compare independently captured reopening states. | 15 | 08,09 |
+| RQ-CALL-01 | N P8 | Initial | Object calls block their caller thread; no async runtime is required. | 13 | 07,09,12 |
+| RQ-CALL-02 | N P8 | Initial | Measured internal workers preserve serial row order, Double sums and other observable outcomes. | 11 | 09,10,15 |
+| RQ-CALL-03 | N P8 | Initial | VBA user code executes only on the caller thread and never under an internal lock. | 10 | 09,13 |
+| RQ-CALL-04 | N P8 | Initial | Background work has an owner, budget and cancellation protocol; locks/cursors settle at owner close. | 09 | 07,08,12 |
+| RQ-PORT-01 | N P9 | Initial | Format/ISAM/catalog/expression/SQL crates perform no direct I/O and compile for wasm32. | 01 | 03,14 |
+| RQ-PORT-02 | N P9 | Initial | The object model uses COM interfaces on every platform. | 13 | 12,14 |
+| RQ-PORT-03 | N P9; U Part I review 2026-11-13 | Initial | CalcVBA-owned portable COM includes IUnknown, type info/GetIDsOfNames/Invoke, IErrorInfo/EXCEPINFO, IEnumVARIANT, class factories, ADO connection points/events, allocation and real BSTR/VARIANT/SAFEARRAY. No apartments or cross-thread/process marshaling. | 13 | 02,14 |
+| RQ-PLAN-01 | N P10 | Initial | Inspectable plans describe the plan actually executed; tests assert seek/scan shape as well as results. | 11 | 15 |
+| RQ-PERF-01 | N P10; A Priorities | Continuous | Performance budgets, noise control and failed-experiment ledger; DAO row loops > bulk SQL > WASM when they conflict. | 15 | 02,03,07,11,14 |
+| RQ-PERF-02 | A Priorities | Continuous | Count allocations, bytes copied, conversions, locality/working set, branches, I/O, synchronization and crossings; invent no targets. | 15 | 02,03,07,11 |
+| RQ-LEDGER-01 | N P10 | Continuous | Oracle-derived compatibility ledger for DAO members, SQL features and types. | 15 | 12,16 |
+| RQ-ARCH-01 | N P11; C Architecture | Continuous | One format, ISAM, evaluator, oracle and harness; narrow mechanically checked dependency rules. | 01 | 15 |
+| RQ-PROCESS-01 | N P11 | Continuous | Working implementation and clear tests take precedence over process apparatus. | 16 | 15 |
+| RQ-DEV-01 | N Next; U implementation-order correction | Sequence | Choose implementation order from evidence and actual dependencies; prove risky foundations early, prioritize DAO costs, and preserve initial/later capability scope. | 16 | 09,14 |
+| RQ-DEV-02 | A Development | Sequence elaboration | Work packages specify result, prerequisites, S/M/L/XL size and observable acceptance tests; expensive uncertainty is resolved first. | 16 | 15 |
+| RQ-HOST-01 | C Purpose; V Open; N Next | Initial elaboration | Host external-data integration and an optional service interface reuse COM/ISAM; no second object model. | 13 | 12 |
+| RQ-ORACLE-05 | C Oracles | Continuous elaboration | Long-lived batched oracle; private desktop; only owned Office processes; UI Automation dialogs; no Trust Center or HKLM changes. | 15 | 16 |
+| RQ-TYPE-01 | C Values; V Values | Initial elaboration | Boolean; integer widths; Single/Double; Currency/Decimal; Date/extended date; Text/Memo/Hyperlink; binary/OLE; GUID; AutoNumber. | 02 | 04,05,10 |
+| RQ-TEST-01 | A Tests; C Quality | Continuous elaboration | Differential behavior, storage invariants, malformed inputs, crash cases and workload measurements; immutable expected evidence. | 15 | 16 |
+| RQ-STORE-04 | U Q1 answer, 2026-11-12 | Initial | After a CalcDb crash, ACE/Access/CalcDb-first reopening finds a state no worse than an ACE crash at the corresponding point, with the same commit-survival rules including dbForceOSFlush and evidenced repair marking. | 08 | 03,09,15,16 |
+| RQ-STORE-05 | U Q1 plus Part I review correction, 2026-11-13 | Optional enhancement constraint | Private undo is optional CalcDb-first help. Under exclusion validate identity, integrity, rollback eligibility and full-file manifest/extent; every uncovered page unchanged and every covered page exactly its before-image or intended new image, otherwise discard. No continuous-history witness is required; never undo a commit the native survival rules require retaining, even before public success. | 08 | 03,09,15 |
