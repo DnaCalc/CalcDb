@@ -1,6 +1,6 @@
 # I-03. VFS, pager and page cache
 
-Revision 4 · Stage 2 pager detail · 2026-11-13
+Revision 5 · Stage 2, response 7 · 2026-11-13
 
 **Requirement trace:** Shared obligations: RQ-PROD-06, RQ-LOCK-01, RQ-LOCK-02, RQ-LATE-01, RQ-STORE-01, RQ-VAL-03, RQ-CONC-01, RQ-CONC-02, RQ-SIM-01, RQ-PORT-01, RQ-PERF-01, RQ-PERF-02, RQ-STORE-04, RQ-STORE-05. Full requirement text and Part II ownership are in I-16.
 
@@ -57,9 +57,11 @@ At recovery, acquire exclusion, verify the same file identity and the complete r
 
 This is the user's selected external-change check. It does not claim that equal bytes prove an absence of past external activity, and it requires no continuous history witness or USN journal. The check may conservatively reject CalcDb's own interrupted intermediate page image if it is neither recorded alternative. The native crash baseline then applies without private recovery.
 
-An otherwise matching sidecar must never undo a commit that the native baseline requires to survive, whether or not the caller received success. Rollback eligibility must therefore be durably disarmed before crossing the earliest evidenced commit-survival frontier for that operation and declared fault model; disarming only before the API returns is too late if the native commit has already crossed that frontier. Record creation, disarm failure, the native frontier, acknowledgement and interrupted disposal belong to the coordinator's outcome protocol. This must preserve ACE's ordinary and forced-flush survival classes, without silently forcing additional native database durability. If the frontier or sound eligibility/disarming cannot be established with those properties for an operation/backend, leave optional undo disabled there. Absence, rejection or interruption of optional recovery never weakens ACE-first safety; each recovery write cut must independently satisfy the native baseline.
+An otherwise matching sidecar must never undo a commit that the native baseline requires to survive, whether or not the caller received success. Rollback eligibility must therefore be durably disarmed before submission of the first effect that can cross the earliest evidenced commit-survival frontier for that operation and declared fault model; waiting for that effect to complete or for the API to return is too late. Record creation, disarm failure, the native frontier, acknowledgement and interrupted disposal belong to the coordinator's outcome protocol. This must preserve ACE's ordinary and forced-flush survival classes, without silently forcing additional native database durability. If the frontier or sound eligibility/disarming cannot be established with those properties for an operation/backend, leave optional undo disabled there. Absence, rejection or interruption of optional recovery never weakens ACE-first safety; each recovery write cut must independently satisfy the native baseline.
 
 File identity comes from the opened handle and the backend's supported identity contract, with reuse/incarnation limitations recorded. A path or timestamp alone is insufficient; the Windows identity documentation describes filesystem-specific limitations.[^identity] The full-read predicate above is identical to I-08's and replaces the earlier history-witness proposal.
+
+**D-UNDO-2 — Provisional.** Prefer a bounded, immutable private record and one-shot optional restoration: finish the full audit, compile and reserve a qualified native rollback program, then durably disarm before the first recovery database write. Begin with single-file complete-before restoration profiles; native effects that must survive rollback disable that profile. A second crash uses the already required native baseline. A failed seal or retirement can leave a credible Armed record, so its owned retirement obligation must settle before later conflicting work. II-08 supplies the codec, state machine and failure paths; R-CRASH-2 confirms or changes this protocol without changing D-UNDO-1's predicate.
 
 ## Evidence and bounded writer development
 

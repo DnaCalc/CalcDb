@@ -1,6 +1,6 @@
 # II-03. VFS, pager and page cache
 
-Revision 2 · Stage 2, response 3 · 2026-11-13
+Revision 3 · Stage 2, response 7 · 2026-11-13
 
 The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
@@ -472,7 +472,7 @@ Extend the running example with an update on data page 17 that grows a long valu
 
 | Native object | Prepared images or effects | Why final dirty pages alone are insufficient |
 | --- | --- | --- |
-| New LVAL page 80 | Absent → fully initialized LVAL image | Extent and initialization precede incoming references in the preferred program. |
+| New LVAL page 80 | Existing-free stored bytes, or physical ABSENT only if appended → initialized LVAL image | Preserve actual before bytes within the old extent; an append additionally requires an admitted extent transition before incoming references. |
 | Map declaration page 33 and/or bitmap page 40 | Before → allocation image → final free-space/release image | Distinct logical maps can share a physical page; intermediate revisions can be required. |
 | Index leaf 44 | Before → old-key-removed image → final new-key image | Removal and installation surround the row change in the provisional program. |
 | Data page 17 | Before → new row/LV-reference image | Old readers/rollback need the complete before-image independently of disk progress. |
@@ -483,7 +483,7 @@ Extend the running example with an update on data page 17 that grows a long valu
 
 | Step | Native page / image | Must follow | Constraint illustrated |
 | --- | --- | --- | --- |
-| A | 80 / `L80.initialized` | Admitted extent operation | Full native page initialized before incoming reference. |
+| A | 80 / `L80.initialized` | Reservation; admitted extent operation only for append | Full native page initialized before incoming reference; existing-free and appended before states remain distinct. |
 | B1 | 1 / `G1.reserve80` | A | Clear page 80's global free bit. |
 | B2 | 40 / `M40.own80` | B1 | Set page 80's bit in that LVAL owner's map. |
 | C | 44 / `I44.old_key_removed` | B2 | Old index reference removed before the row change. |
@@ -513,6 +513,8 @@ NativeBarrier {
 ```
 
 Seal each logical phase image, then produce its encoded stored-byte image in private output storage before issuing native writes. Identity-codec pages can share the immutable backing; page 0 must reapply its selected header mask. The step's source bytes, receipts and optional-undo before/intended images all use the stored-byte domain. A complete page image is the unit of preparation, preservation and inspection. It is **not necessarily the physical write unit**. The preferred provisional start is full initialization for a new page and complete phase images for existing pages; emit a full-page transfer for an existing phase unless native format/crash evidence selects bounded spans. Keep the span-capable interface from the outset. For the insertion in §1.3, the candidate dirty spans are `[2,4)`, `[12,20)` and `[4036,4056)`; the middle span includes unchanged old slot bytes. Their physical starts are `0x11002`, `0x1100C` and `0x11FC4`. Selecting separate writes also selects new crash cuts, so it requires evidence rather than a byte-count optimization alone.
+
+II-08 expands these phases into concrete key, LV/map and stable-root programs, distinguishing build order, transfer completion and persistence dependencies. A page newly assigned to an object can still have real before bytes in the existing file; allocation status never makes those bytes ABSENT.
 
 This preferred full-page starting candidate is provisional, not a claim of atomicity or a promise to reproduce ACE with 4096-byte writes. R-FMT-2/R-CRASH-1 can require a different span order, repeated overwrite or flush boundary. Conversely, assuming small changed spans are safer is also unsupported. Preserve every required intermediate image of page 33 or 44; sorting a set of dirty page numbers or writing only their final images loses the dependency program.
 
