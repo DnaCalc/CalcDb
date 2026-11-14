@@ -1,6 +1,6 @@
 # I-03. VFS, pager and page cache
 
-Revision 6 · Stage 2, response 8 · 2026-11-13
+Revision 7 · Stage 2, response 13 · 2026-11-14
 
 **Requirement trace:** Shared obligations: RQ-PROD-06, RQ-LOCK-01, RQ-LOCK-02, RQ-LATE-01, RQ-STORE-01, RQ-VAL-03, RQ-CONC-01, RQ-CONC-02, RQ-SIM-01, RQ-PORT-01, RQ-PERF-01, RQ-PERF-02, RQ-STORE-04, RQ-STORE-05. Full requirement text and Part II ownership are in I-16.
 
@@ -10,7 +10,7 @@ Revision 6 · Stage 2, response 8 · 2026-11-13
 
 The browser VFS also handles files first requested during a blocking call. Preopened handles cover admitted files; dynamic OpenDatabase/CreateDatabase calls and temporary-file expansion can require asynchronous handle acquisition. The provisional D-WASM-1 adapter uses a dedicated VFS worker that owns those handles and services an engine-worker rendezvous through same-agent-cluster SharedArrayBuffer/Atomics capabilities tested by R-WASM-1. I-14 specifies ownership, timeout and uncertain-completion handling. The engine retains the synchronous contract above.
 
-**K-IO:** every I/O result reports completed progress and whether further persistent effects are uncertain. A short write followed by an error is not “no change.” The coordinator retains the operation state until it can return a supported outcome; cancellation neither reverses a write nor licenses retrying the entire mutation. Submission order, ordinary completion, a requested flush, flush completion, public acknowledgement and later survival are distinct events. Microsoft documents a specific `dbForceOSFlush` option; actual survival on the selected ACE build remains R-CRASH-1/2 evidence.[^commit]
+**K-IO:** every I/O result preserves the backend count separately from proved completed progress and whether further persistent effects are uncertain. A returned short-write count becomes an exact reusable prefix only for a qualified adapter; the browser specification leaves partial-write ordering underspecified, so an unqualified short write retains the entire attempted range as possibly changed and stops.[^browser-progress] A short write followed by an error is not “no change.” The coordinator retains the operation state until it can return a supported outcome; cancellation neither reverses a write nor licenses retrying the entire mutation. Submission order, ordinary completion, a requested flush, flush completion, public acknowledgement and later survival are distinct events. Microsoft documents a specific `dbForceOSFlush` option; actual survival on the selected ACE build remains R-CRASH-1/2 evidence.[^commit]
 
 ## Frames, pins and bounded ownership
 
@@ -80,3 +80,5 @@ Source identifiers and exact-material/licence records resolve in [A-01-sources.m
 [^correction]: User's Stage 0 approval/Q1 and Part I review of 2026-11-13; the review selects the whole-file before/intended-image check and keeps private recovery optional.
 [^identity]: [S-MS-FILEID] Microsoft, [BY_HANDLE_FILE_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information), updated 2021-04-02, read 2026-11-13.
 [^traces]: [L-ASYNC-4], [L-FRANK-3], [S-MS-FILTER] Supplied `asupersync-report.stage1-part4.md` §§7–8 and `frankensqlite-report.stage1-part3.md` §§8, 10; Microsoft, [Registering preoperation and postoperation callback routines](https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/registering-preoperation-and-postoperation-callback-routines). The API permits instrumentation; its completeness must be demonstrated.
+
+[^browser-progress]: [S-WEB-FS] WHATWG, [File System Standard, sync-handle write](https://fs.spec.whatwg.org/#dom-filesystemsyncaccesshandle-write), live text inspected 2026-11-14: the write algorithm explicitly leaves write order and partial-write results underspecified. [II-14](II-14-platforms.md) supplies the qualified adapter and browser acceptance cases; no browser result is claimed.

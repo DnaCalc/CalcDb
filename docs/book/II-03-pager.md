@@ -1,6 +1,6 @@
 # II-03. VFS, pager and page cache
 
-Revision 4 · Stage 2, response 8 · 2026-11-13
+Revision 5 · Stage 2, response 13 · 2026-11-14
 
 The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
@@ -140,13 +140,14 @@ TransferReceipt {
     file_incarnation, request_id, request_generation
     attempted_range
     status: Complete | EndOfFile | Failed | Cancelled
+    backend_reported_count: Optional<u64>
     proven_prefix_bytes
     possible_effect_range: Optional<ByteRange>
     native_error
 }
 ```
 
-A successful short transfer supplies an exact completed prefix. A failed write may have an uncertain suffix or whole attempted range even if an API output variable happens to contain zero. The adapter must justify its stronger “no effect” classification from the actual result, not infer it from zero initialization. Requests return only after their native operation has settled. These receipts describe transfers, not transaction success or durability.
+A short transfer supplies a reusable exact completed prefix only when that backend result and adapter profile justify the prefix interpretation. Preserve the raw returned count separately. In particular, the browser File System Standard leaves write order and partial-write results underspecified: without stronger qualified evidence, a short write yields a failed/uncertain receipt with zero proved prefix and the whole attempted range as possible effects, rather than an exact-suffix retry.[^browser] A failed write may have an uncertain suffix or whole attempted range even if an API output variable happens to contain zero. The adapter must justify its stronger “no effect” classification from the actual result, not infer it from zero initialization. Requests return only after their native operation has settled. These receipts describe transfers, not transaction success or durability.
 
 ### 2.3 Reading exactly one existing page
 
@@ -209,7 +210,7 @@ The Linux adapter uses `pread`/`pwrite` with checked `off_t` conversion and no `
 
 This is a Linux mapping, not a claim that every POSIX or native filesystem has identical semantics. Its locking adapter must supply the required participation/exclusion model; an advisory lock cannot promise Windows-style denial against an arbitrary nonparticipating process. The page and receipt algorithms remain shared.
 
-For WASM, keep I-14's direct preopened OPFS sync-handle path and its dedicated owning broker for dynamic acquisition. Supply an explicit `at` offset, check returned counts and retain buffers until the exact request settles. Handle creation is asynchronous even though access-handle methods are synchronous. Browser flush is an underlying-storage operation with the specified platform limitations; neither `close()` nor a successful write establishes the selected ACE forced-flush class. R-WASM-1 determines admitted deployments and honest outcomes. No extra browser scheduler or COM transport is introduced here.[^browser]
+For WASM, keep I-14's direct preopened OPFS sync-handle path and its dedicated owning broker for dynamic acquisition. Supply an explicit `at` offset, retain the backend count without promoting an unqualified short write to a proved prefix, and retain buffers until the exact request settles. II-14 supplies the direct/broker request protocol and the separately qualified reader-only route. Handle creation is asynchronous even though access-handle methods are synchronous. Browser flush is an underlying-storage operation with the specified platform limitations; neither `close()` nor a successful write establishes the selected ACE forced-flush class. R-WASM-1 determines admitted deployments and honest outcomes. No extra browser scheduler or COM transport is introduced here.[^browser]
 
 ## 3. Image identity, frame storage and pins
 
@@ -680,6 +681,6 @@ The following references identify facts and cleared concepts; the chosen cache s
 [^linux-write]: [S-LINUX-WRITE] Linux man-pages 6.19, [write](https://man7.org/linux/man-pages/man2/write.2.html), dated 2026-02-08, read 2026-11-13; short transfers and error effects.
 [^linux-fsync]: [S-LINUX-FSYNC] Linux man-pages 6.19, [fsync](https://man7.org/linux/man-pages/man2/fsync.2.html), dated 2026-02-08, read 2026-11-13; synchronization, delayed errors and directory-entry qualification.
 [^linux-truncate]: [S-LINUX-TRUNCATE] Linux man-pages 6.19, [truncate/ftruncate](https://man7.org/linux/man-pages/man2/ftruncate.2.html), dated 2026-04-12, read 2026-11-13; explicit length and extension semantics.
-[^browser]: [S-WEB-FS] WHATWG File System, [snapshot d76d3455d5afe2f85754ed24ffdbf99fe30032d4](https://fs.spec.whatwg.org/commit-snapshots/d76d3455d5afe2f85754ed24ffdbf99fe30032d4/), 2026-10-19; sync access-handle acquisition/read/write/flush/close. Same pinned document as I-14; live page reread 2026-11-13.
+[^browser]: [S-WEB-FS] WHATWG File System, [snapshot d76d3455d5afe2f85754ed24ffdbf99fe30032d4](https://fs.spec.whatwg.org/commit-snapshots/d76d3455d5afe2f85754ed24ffdbf99fe30032d4/), 2026-10-19; sync access-handle acquisition/read/write/flush/close. Same pinned document as I-14; live page reread 2026-11-13 and 2026-11-14, including the explicit partial-write-order limitation. The latter bounds what may be classified as a proved prefix.
 [^cache-concepts]: [L-FRANK-1], [L-FRANK-2] Supplied `frankensqlite-report.stage1-part1.md` §4 and `frankensqlite-report.stage1-part2.md` §§4,7: sparse page/version identity, persistent reclamation position, coalesced loads, owned images and cost measurement. Cleared concept input; no transferred engine behavior or performance result.
 [^async-concepts]: [L-ASYNC-2], [L-ASYNC-5] Supplied `asupersync-report.stage1-part2.md` §§3–4 and `asupersync-report.stage1-part5.md` §7: explicit reservations, operation settlement and bounded retention. Cleared concepts; no report-specific runtime or external repository used.

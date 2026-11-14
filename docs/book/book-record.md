@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r12** · 2026-11-14 · Current state only.
+Revision **S2-r13** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-13 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-14 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 13 — II-14 WASM and later capabilities**, with browser execution/storage and the early hooks and phased designs for encryption, linked tables, complex fields, compact and repair, OLE DB and ODBC.
+- Next: **Stage 2, response 14 — II-15 Oracle, corpus, tests and performance**: actual oracle/provenance, native fixture corpus, differential and fault tests, and representative performance measurements.
 
 ## Contents and estimates
 
@@ -21,7 +21,7 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
 | 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.6 | I revised; II drafted |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I revised; II drafted |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
@@ -32,11 +32,11 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
-| 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
+| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 11.6 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 12.0 / 0.0 | I revised; II pending |
 
-Part I ≈ **65.5 pages**; current Part II ≈ **426.4**. Appendices separate: A-01 sources ≈ **98.5**, A-02 experiments ≈ **82.4**.
+Part I ≈ **66.6 pages**; current Part II ≈ **471.0**. Appendices separate: A-01 sources ≈ **113.8**, A-02 experiments ≈ **94.4**.
 
 ## Scope owner index
 
@@ -92,11 +92,11 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-OBJECT-1 | Recommended | Typed member recipes and family policies; DAO priority, ADO alongside; DAO/ADO/ERR probes. | 07,12,13 |
 | D-ACT-1 | Provisional | Private native mappings/factories; synchronized Both provisional; unchanged routes and lifetime, R-ACT-1. | 13 |
 | D-HOST-1 | Provisional | Explicit Active bootstrap and retained capabilities; standalone choice, runtime/caller and residual owners, I-HOST-1. | 13 |
-| D-WASM-1 | Provisional | Local caller-worker COM; tested direct/broker storage and dynamic acquisition, R-WASM-1. | 03,13,14 |
+| D-WASM-1 | Provisional | Actual shared wasm32 domains; direct/broker ownership, qualified readers and fault receipts; R-WASM-1. | 03,13,14 |
 | D-EVIDENCE-1 | Recommended | Immutable captures; calibrated T-COMPACT-1; raw evidence and production-logic simulation. | 04,09,11,15 |
 | D-ORACLE-1 | Decided | Batched owned-process service; selected ACE target; independently identified native/.NET lanes. | 15,16 |
 | D-PERF-1 | Recommended | DAO loops > bulk SQL > WASM; counters, noise controls and negative results. | 02,03,07,11,15 |
-| D-LATER-1 | Recommended | Later capabilities retain early seams and feature-specific prerequisites. | 03–14,16 |
+| D-LATER-1 | Recommended | Native codec/source/child/rebuild and genuine provider seams; six cards, feature-specific prerequisites. | 03–14,16 |
 
 ## Shared contracts
 
@@ -117,13 +117,13 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-ERROR | Owned effects and independent channels; capture first, bounded diagnostic retirement, no replay through failure. | 12,13 |
 | K-COM | Real target ABI/type graph; proven activation, retained host/code/allocator owners and complete portable services. | 13 |
 | K-EVIDENCE | Raw input-addressed captures/provenance; refused/missing remain failures; observation classes stay distinct. | 15 |
-| K-IO | Report actual progress and persistent uncertainty; cancellation is not rollback or mutation retry authority. | 03 |
+| K-IO | Raw count differs from proved prefix; retain possible effects; no unqualified suffix retry or cancellation rollback. | 03 |
 | K-ADMISSION | Checked bounds then reservation; separately account owned capacity, pins/history, dirty images and spill. | 02,03 |
 | K-CRASH | ACE-first parity independent of undo; optional full-file U unchanged/C before-or-new, identity/eligibility/extent valid. | 03,08 |
 | K-PREFLIGHT | Prepare references/allocations before publication; never move or repeat user effects to do so. | 04 |
 | K-EXPR | Declared origin and shared values; resumable demand/coercion/errors, explicit acceptance, occurrences and pattern state. | 10 |
 | K-PLAN | Inspect installed graph/actual continuation; spill preserves global accepted frontier; action membership/value views separate. | 11 |
-| K-BROWSER | Blocking local COM; owned direct/broker I/O; timeout never permits unsafe buffer reuse or denied write uncertainty. | 03,14 |
+| K-BROWSER | Qualified local domains; owned direct/broker requests and reader leases; failed workers/timeouts do not prove settlement. | 03,14 |
 
 ## Research and integration tasks
 
@@ -155,16 +155,16 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 | R-ADO-1 | ADO native routing, parameters, client/batch state, events and persistence | 12 / L |
 | R-ACT-1 | Unchanged creation, declarations, context/factory selection and lifetime | 13 / M |
 | R-PAR-1 | Serial semantic frontier, bounded worker ownership and measured benefit | 11 / M |
-| R-WASM-1 | Portable blocking caller, dynamic storage and honest persistence outcomes | 14 / M |
+| R-WASM-1 | Actual portable domain, dynamic storage, readers and fault ownership | 14 / M |
 | R-ERR-1 | Owned error channels, dispatch binding and publication under reentry | 12 / M |
 | I-FOUNDATION-1 | Exact target ABI and actual portable Automation service closure | 13 / S |
 | I-HOST-1 | Explicit host bootstrap, actual runtime/caller capability and residual ownership | 13 / M |
-| R-ENC-1 | Native encryption families and interrupted changes | 14 / L |
-| R-LINK-1 | Linked-source capabilities and transaction limits | 14 / L |
-| R-COMPLEX-1 | Kind-specific complex-field storage and behavior | 14 / L |
-| R-REBUILD-1 | Safe native rebuilding and conservative repair | 14 / L |
-| R-OLEDB-1 | External provider negotiation and lifecycle | 14 / L |
-| R-ODBC-1 | Driver handle, binding and diagnostic behavior | 14 / L |
+| R-ENC-1 | Native codec profiles, password/SID changes and stored-byte outcomes | 14 / L |
+| R-LINK-1 | Native link identity, demand-safe pushdown and source outcomes | 14 / L |
+| R-COMPLEX-1 | Parent/child identity, attachment grammar and calculated/history policy | 14 / L |
+| R-REBUILD-1 | Typed relocation, destination publication and conservative salvage | 14 / L |
+| R-OLEDB-1 | Actual provider properties, accessor buffers and retained rows/errors | 14 / L |
+| R-ODBC-1 | Driver Manager states, descriptor buffers and staged execution | 14 / L |
 
 ## Development tasks
 
@@ -175,22 +175,22 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | W-01 | Oracle service, corpus and capture/reduction schema | L |
 | W-02 | Shared target declarations, values and consumed Automation services | M |
 | W-PROBE | Native I/O/exclusion basics and external ACE crash observation | M |
-| W-03 | Blocking VFS/pager, exclusion and browser adapter | L |
+| W-03 | Blocking VFS/pager, native exclusion and qualified browser storage | L |
 | W-04 | One format and native read ISAM/catalog path | XL |
 | W-05 | Exclusive mutator, Workspace frames, owned resolution and compatible persistence | XL |
 | W-06 | Read-only SELECT and shared expression service | L |
 | W-07 | Actions, DDL and native QueryDefs | XL |
-| W-08 | DAO declaration/activation, actual host/runtime and read/edit/coverage slices | XL |
+| W-08 | DAO activation/host, native read/edit and actual portable-client slices | XL |
 | W-09 | CalcDb ADO construction, read/query and edit/coverage slices | L |
 | W-10 | Reader-only admission, then in-process visibility slice | L |
 | W-11 | Reading beside ACE writer | L |
 | W-12 | Full shared writing with ACE | XL |
-| W-L1 | Encryption | L |
-| W-L2 | Linked tables | XL |
-| W-L3 | Complex fields | XL |
-| W-L4 | CalcDb compact and repair | XL |
-| W-L5 | OLE DB provider | XL |
-| W-L6 | ODBC driver | L |
+| W-L1 | Native encryption and credential/conversion operations | L |
+| W-L2 | Native links and source-specific execution | XL |
+| W-L3 | Multivalue, attachment, calculated and history preservation | XL |
+| W-L4 | Native compaction, publication and conservative repair | XL |
+| W-L5 | Genuine OLE DB provider and real consumers | XL |
+| W-L6 | ODBC driver and actual Driver Manager clients | L |
 
 ## Terminology
 
@@ -259,711 +259,42 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Activation profile | Owned requested-class mappings and route/scope selection, independent of genuine interface identity. |
 | HostBinding | Immutable retained host/runtime/service capabilities captured by issued factories and objects; admission and residual lifetime separate. |
 
-## Source ledger — compact current index
+## Sources
 
-Exact material/version/read extent/contribution and citation locations: **A-01**. Use: R requirement, F fact, C concept, S state; licence: P user-supplied/cleared, H exact file header checked, D document licence/notice inspected (exact extent A-01), U exact material not separately checked. No code/adaptation reuse.
-
-| Source | Version pointer | Use | Licence |
-| --- | --- | --- | --- |
-| N | Draft 2 | R | P |
-| C | Attached/undated | R | P |
-| V | 8115aa781; user-corrected | F | P |
-| U | 2026-11-14 | R | P |
-| A | Attached assignment | R | P |
-| B | S2-r12 | S | P |
-| S-MS-TXN | Updated 2022-03-18; Applies to Access 2013 / Office 2013 | F | U |
-| S-MS-VARIANT | Updated 2021-04-02 | F | U |
-| S-MS-FACTORY | Updated 2022-01-31 | F | U |
-| S-MS-ACT | Updated 2021-01-07 | F | U |
-| S-MS-NET | Updated 2026-07-12 | F | U |
-| S-SQLITE-LIC | Live@2026-11-12 | F | U |
-| S-WEB-FS | 2026-10-19; snapshot d76d3455d5afe2f85754ed24ffdbf99fe30032d4 | F | D |
-| L-FRANK-1 | Supplied snapshot/hash A-01 | C | P |
-| L-FRANK-2 | Supplied snapshot/hash A-01 | C | P |
-| L-FRANK-3 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-1 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-2 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-3 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-4 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-5 | Supplied snapshot/hash A-01 | C | P |
-| L-ASYNC-6 | Supplied snapshot/hash A-01 | C | P |
-| S-JACK-FMT | be0a2139… | F/C | H |
-| S-JACK-COL | be0a2139…; live separately | F/C | H |
-| S-JACK-LONG | Live@2026-11-12 + pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-MAP | Live@2026-11-12 + pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-INDEX | Live/unpinned@2026-11-12 | F/C | H |
-| S-JACK-LEGACY | Live/unpinned@2026-11-12 | F/C | H |
-| S-JACK-GENERAL | Live/unpinned@2026-11-12 | F/C | H |
-| S-JACK-QUERY | 2026-11-12 | F | U |
-| S-JACK-QUERYROW | 2026-11-12 | F | U |
-| S-MS-QUERY | Live@2026-11-12 | F | U |
-| S-MS-NET10 | Live@2026-11-12 | F | U |
-| S-MS-FILEID | Updated 2021-04-02 | F | U |
-| S-MS-FILTER | Live@2026-11-12 | F | U |
-| S-MS-FILTER-WRITE | Live@2026-11-12 | F | U |
-| S-MS-FILTER-IO | Live@2026-11-12 | F | U |
-| S-MS-RST | 2022-02-08 | F | U |
-| S-MS-NOMATCH | 2022-02-08 | F | U |
-| S-MS-COUNT | 2021-09-21 | F | U |
-| S-MS-BOOKMARK | 2022-02-08 | F | U |
-| S-MS-MARK | 2022-01-22 | F | U |
-| S-MS-CLONE | 2022-03-02 | F | U |
-| S-MS-REQUERY | 2022-03-21 | F | U |
-| S-MS-EDIT | 2021-09-21 | F | U |
-| S-MS-ADD | 2021-09-21 | F | U |
-| S-MS-UPDATE | 2022-03-21 | F | U |
-| S-MS-DELETE | 2021-09-14 | F | U |
-| S-MS-DELETE-GUIDE | 2022-01-22 | F | U |
-| S-MS-ROLLBACK | 2021-09-14 | F | U |
-| S-MS-TXN-GUIDE | 2021-09-13 | F | U |
-| S-MS-DEXEC | 2022-03-18 | F | U |
-| S-MS-QEXEC | 2022-03-18 | F | U |
-| S-MS-RSTOPTIONS | 2022-03-21 | F | U |
-| S-MS-LOCKEDITS | 2022-03-21 | F | U |
-| S-MS-LOCKFILE | 2025-05-26 | F | U |
-| S-MS-LOCKAPI | Updated 2021-10-13 | F | U |
-| S-MS-NZ | 2022-03-30 | F | U |
-| S-MS-AND | 2022-03-30 | F | U |
-| S-MS-OR | 2022-03-30 | F | U |
-| S-MS-DEFAULT | 2022-03-18 | F | U |
-| S-MS-VALIDATION | 2022-03-18 | F | U |
-| S-MS-IIF | 2022-03-30 | F | U |
-| S-MS-IIF-ACCESS | Live@2026-11-12 | F | U |
-| S-MS-SANDBOX | Live@2026-11-12 | F | U |
-| S-MS-EVAL | 2022-03-30 | F | U |
-| S-MS-PARAMETERS | 2022-06-14 | F | U |
-| S-MS-PREDICATES | 2026-04-25 | F | U |
-| S-MS-TRANSFORM | 2022-06-14 | F | U |
-| S-MS-WILDCARD | Live@2026-11-12 | F | U |
-| S-SQLITE-PLAN | 2025-05-31 | C | D |
-| S-MS-DAO-REF | Updated 2021-09-21 | F | U |
-| S-MS-ADO-REF | Updated 2022-06-03 | F | U |
-| S-MS-ADO-OBJECTS | Updated 2022-03-17 | F | U |
-| S-MS-DAO-DB-CLOSE | Updated 2021-09-14 | F | U |
-| S-MS-DAO-WS-CLOSE | Updated 2021-09-14 | F | U |
-| S-MS-DAO-PROPERTIES | Updated 2022-02-08 | F | U |
-| S-MS-DAO-CONTAINER | Updated 2022-03-18 | F | U |
-| S-MS-DAO-DOCUMENT | Updated 2022-03-18 | F | U |
-| S-MS-DAO-UPDATABLE | Updated 2021-09-14 | F | U |
-| S-MS-DAO-PARAMETERS | Updated 2022-02-08 | F | U |
-| S-MS-ADO-PARAMETERS | Updated 2021-09-14 | F | U |
-| S-MS-ADO-CREATEPARAM | Updated 2021-09-14 | F | U |
-| S-MS-ADO-COMMAND | Updated 2022-06-14 | F | U |
-| S-MS-ADO-CONNECTIONSTRING | Updated 2022-03-18 | F | U |
-| S-MS-ADO-CURSORTYPE | Updated 2022-03-18 | F | U |
-| S-MS-ADO-RECORDCOUNT | Updated 2021-09-14 | F | U |
-| S-MS-ADO-ADDNEW | Updated 2021-09-14 | F | U |
-| S-MS-ADO-CLOSE | Updated 2021-09-14 | F | U |
-| S-MS-ADO-SUPPORTS | Updated 2021-09-14 | F | U |
-| S-MS-ADO-TRANSACTIONS | Updated 2021-09-14 | F | U |
-| S-MS-DAO-ERRORS | Updated 2021-09-14 | F | U |
-| S-MS-ADO-ERRORS | Updated 2022-03-02 | F | U |
-| S-MS-ADO-ERROR | Updated 2021-09-14 | F | U |
-| S-MS-DAO-CONNECTION | Updated 2021-09-14 | F | U |
-| S-MS-ITYPEINFO | Updated 2022-07-27 | F | U |
-| S-MS-IDISPATCH | Updated 2021-10-13 | F | U |
-| S-MS-COREGISTER | Updated 2021-10-13 | F | U |
-| S-MS-COCREATE | Updated 2021-10-18 | F | U |
-| S-MS-QUERYINTERFACE | Updated 2022-08-31 | F | U |
-| S-MS-ACTIVATECTX | Updated 2024-02-22 | F | U |
-| S-MS-DEACTIVATECTX | Updated 2021-10-13 | F | U |
-| S-MS-ASSEMBLY-MANIFESTS | Updated 2023-03-10 | F | U |
-| S-MS-COINIT | Updated 2024-11-12 | F | U |
-| S-MS-NET-COM | Updated 2026-07-12 | F | U |
-| S-MS-RCW | Updated 2023-04-19 | F | U |
-| S-MS-PIA | Updated 2025-10-30 | F | U |
-| S-MS-COCLASS | Updated 2021-09-15 | F | U |
-| S-MS-COM-REFERENCES | Updated 2025-11-21 | F | U |
-| S-MS-RESOLVECOM | Updated 2025-07-28 | F | U |
-| S-MS-TABLEDEF-CONNECT | Updated 2022-03-18 | F | U |
-| S-MS-DATABASE-TRANSACTIONS | Updated 2021-09-14 | F | U |
-| S-MS-FIELD2-COMPLEX | Updated 2021-09-14 | F | U |
-| S-MS-COMPACT | Live; read 2026-11-12 | F | U |
-| S-MS-OLEDB-SESSION | Updated 2016-07-05 | F | U |
-| S-MS-ODBC-DIAGNOSTICS | Updated 2026-05-27 | F | U |
-| S-MS-ODBC-CANCEL | Live; read 2026-11-12 | F | U |
-| S-WEB-STORAGE | 2026-10-19; snapshot 115691c5158395b89063dee09278703f10494171 | F | D |
-| S-WEB-WASM-CORE-MEMORY | WebAssembly 3.0; 2026-11-04 | F | U |
-| S-WEB-WASM-JS | CR Draft 2026-11-06 | F | D |
-| S-WEB-HTML-WORKERS | Living; updated 2026-11-12 | F | U |
-| S-WEB-HTML-DATA | Living; updated 2026-11-12 | F | U |
-| S-WEB-HTML-AGENTS | Living; read 2026-11-12 | F | U |
-| S-WEB-ECMA-ATOMICS | ECMAScript 2024 | F | U |
-| S-WEB-JACK-ENCRYPT | Live; 5.0.0 announcement 2026-09-12 | F/C | D |
-| S-MS-OFFICE-AUTOMATION | Live 2026-11-12 | F | U |
-| S-MS-OFFICE-RPA | Live 2026-11-12 | F | U |
-| S-MS-REPAIR-GUIDE | Live 2026-11-12 | F | U |
-| S-SQLITE-TEST | 2026-04-21 §§2–4,9 | F/C | D |
-| S-FDB-SIM | SIGMOD 2021 §4 | C | U |
-| S-MS-X64ABI | Updated 2025-06-25 | F | U |
-| S-MS-DECIMAL | Updated 2024-02-22 | F | U |
-| S-MS-BSTR | Updated 2018-05-31 | F | U |
-| S-MS-SYSALLOCSTRINGLEN | Updated 2024-02-22 | F | U |
-| S-MS-VARIANTCOPY | Updated 2021-10-13 | F | U |
-| S-MS-VARIANTCOPYIND | Updated 2024-02-22 | F | U |
-| S-MS-VARIANTCLEAR | Updated 2024-02-22 | F | U |
-| S-MS-SAFEARRAY | Updated 2026-02-05 | F | U |
-| S-MS-SAFEARRAYCOPY | Updated 2021-10-13 | F | U |
-| S-MS-SAFEARRAYACCESS | Updated 2024-02-22 | F | U |
-| S-MS-IDISPATCH-INTERFACE | Updated 2024-02-22 | F | U |
-| S-MS-GETIDSOFNAMES | Live 2026-11-13 | F | U |
-| S-MS-IERRORINFO | Updated 2021-07-22 | F | U |
-| S-MS-EXCEPINFO | Live 2026-11-13 | F | U |
-| S-MS-GETERRORINFO | Updated 2024-02-22 | F | U |
-| S-MS-IENUMVARIANT | Updated 2024-02-22 | F | U |
-| S-MS-ENUMVARIANTNEXT | Updated 2024-02-22 | F | U |
-| S-MS-ICLASSFACTORY | Updated 2024-02-22 | F | U |
-| S-MS-CLASSCREATE | Updated 2021-10-13 | F | U |
-| S-MS-CONNECTIONCONTAINER | Updated 2024-02-22 | F | U |
-| S-MS-CONNECTIONPOINT | Updated 2024-02-22 | F | U |
-| S-MS-CONNECTIONADVISE | Updated 2021-10-13 | F | U |
-| S-MS-SYSALLOCSTRINGBYTELEN | Updated 2024-02-22 | F | U |
-| S-MS-SYSSTRINGBYTELEN | Updated 2024-02-22 | F | U |
-| S-MS-CREATEFILE | Updated 2023-02-09 | F | U |
-| S-MS-OPEN-SHARE | Updated 2026-07-17 | F | U |
-| S-MS-FLUSH | Updated 2021-10-13 | F | U |
-| S-JACK-TYPES | pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-CHANNEL | pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-TABLE | pin be0a2139b087@2026-11-13 | F/C | H |
-| S-JACK-BYTEUTIL | pin be0a2139b087@2026-11-13 | F/C | H |
-| S-MS-READFILE | Live; read 2026-11-13 | F | U |
-| S-MS-WRITEFILE | Live; read 2026-11-13 | F | U |
-| S-MS-OVERLAPPED-RESULT | Live; read 2026-11-13 | F | U |
-| S-MS-CANCELIOEX | Updated 2021-10-13 | F | U |
-| S-MS-ASYNC-IO | Updated 2025-07-08 | F | U |
-| S-MS-BUFFERING | Updated 2025-05-31 | F | U |
-| S-MS-FILEID128 | Updated 2024-02-22 | F | U |
-| S-MS-SET-FILE-INFO | Live; read 2026-11-13 | F | U |
-| S-MS-EOF-INFO | Updated 2024-02-22 | F | U |
-| S-MS-SET-EOF | Live; read 2026-11-13 | F | U |
-| S-LINUX-PREAD | Linux man-pages 6.19 | F | U |
-| S-LINUX-READ | Linux man-pages 6.19 | F | U |
-| S-LINUX-WRITE | Linux man-pages 6.19 | F | U |
-| S-LINUX-FSYNC | Linux man-pages 6.19 | F | U |
-| S-LINUX-TRUNCATE | Linux man-pages 6.19 | F | U |
-| S-JACK-DATATYPE | be0a2139… | F/C | H |
-| S-MS-FIELD-SIZE | Doc@2026-11-13 | F | U |
-| S-MS-LARGE-NUMBER | Doc@2026-11-13 | F | U |
-| S-MS-DATE-TYPE | Doc@2026-11-13 | F | U |
-| S-MS-EXT-DATETIME | Doc@2026-11-13 | F | U |
-| S-JACK-CALC | be0a2139… | F | H |
-| S-JACK-NULLMASK | be0a2139… | F/C | H |
-| S-MS-AUTONUM | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FIELD-ATTR | Doc@2026-11-13 | F | U |
-| S-JACK-INDEX-PIN | be0a2139… | F | H |
-| S-JACK-IDXCACHE-PIN | be0a2139… | F | H |
-| S-JACK-IDXIMPL-PIN | be0a2139… | F | H |
-| S-JACK-IDXCODES-PIN | be0a2139… | F | H |
-| S-JACK-LEGACY-PIN | be0a2139… | F | H |
-| S-JACK-GENERAL-PIN | be0a2139… | F | H |
-| S-JACK-GENERAL97-PIN | be0a2139… | F | H |
-| S-JACK-RES-GENLEG | be0a2139… | F | H |
-| S-JACK-RES-GENLEG-EXT | be0a2139… | F | H |
-| S-JACK-RES-GEN | be0a2139… | F | H |
-| S-JACK-RES-GEN-EXT | be0a2139… | F | H |
-| S-JACK-RES-GEN97 | be0a2139… | F | H |
-| S-JACK-RES-GEN97-MAP | be0a2139… | F | H |
-| S-JACK-RESOURCE-LICENSE-CONTEXT | be0a2139… | F | D |
-| S-JACK-RESOURCE-NOTICE-CONTEXT | be0a2139… | F | D |
-| S-JACK-RESOURCE-POM-CONTEXT | be0a2139… | F | D |
-| S-MS-DAO-INDEX | 2022-03-02 | F | U |
-| S-MS-DAO-SEEK | 2022-03-21 | F | U |
-| S-MS-DAO-SEEK-GUIDE | 2022-01-22 | F | U |
-| S-MS-INDEX-UNIQUE | 2021-09-14 | F | U |
-| S-MS-INDEX-IGNORENULLS | 2022-03-18 | F | U |
-| S-MS-CREATE-INDEX | 2022-03-18 | F | U |
-| S-MS-INDEX-DISTINCT | 2021-09-14 | F | U |
-| S-MS-FIELD-INDEXED | 2026-05-21 | F | U |
-| S-JACK-CATDB-PIN | be0a2139… | F/C | H |
-| S-JACK-TABLE-CREATE-PIN | be0a2139… | F/C | H |
-| S-JACK-REL-PIN | be0a2139… | F/C | H |
-| S-JACK-REL-CREATE-PIN | be0a2139… | F/C | H |
-| S-MS-RELATION | Doc@2026-11-13 | F | U |
-| S-MS-REL-FLAGS | Doc@2026-11-13 | F | U |
-| S-MS-CREATE-TABLEDEF | Doc@2026-11-13 | F | U |
-| S-MS-NAME-AUTOCORRECT | Doc@2026-11-13 | F | U |
-| S-MS-USER-SECURITY | Doc@2026-11-13 | F | U |
-| S-JACK-PROPMAPS-PIN | be0a2139… | F | H |
-| S-JACK-PROPMAPIMPL-PIN | be0a2139… | F | H |
-| S-JACK-PROPMAP-PIN | be0a2139… | F | H |
-| S-MS-DAO-PROPERTY-OBJECT | Doc@2026-11-13 | F | U |
-| S-MS-DAO-CREATEPROPERTY | Doc@2026-11-13 | F | U |
-| S-MS-DAO-PROPERTY-TYPE | Doc@2026-11-13 | F | U |
-| S-JACK-QUERYIMPL-PIN | be0a2139… | F | H |
-| S-JACK-QUERYFORMAT-PIN | be0a2139… | F | H |
-| S-JACK-BASESELECT-PIN | be0a2139… | F | H |
-| S-JACK-SELECT-PIN | be0a2139… | F | H |
-| S-JACK-APPEND-PIN | be0a2139… | F | H |
-| S-JACK-UPDATE-PIN | be0a2139… | F | H |
-| S-JACK-DELETE-PIN | be0a2139… | F | H |
-| S-JACK-MAKETABLE-PIN | be0a2139… | F | H |
-| S-JACK-CROSSTAB-PIN | be0a2139… | F | H |
-| S-JACK-DDLQUERY-PIN | be0a2139… | F | H |
-| S-JACK-PASSQUERY-PIN | be0a2139… | F | H |
-| S-JACK-UNIONQUERY-PIN | be0a2139… | F | H |
-| S-JACK-QUERYTYPE-PIN | be0a2139… | F | H |
-| S-JACK-QUERYTEST-PIN | be0a2139… | F | H |
-| S-MS-QUERYDEFS | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-SQL | Doc@2026-11-13 | F | U |
-| S-MS-DAO-PARAMETER | Doc@2026-11-13 | F | U |
-| S-MS-PARAM-REFRESH | Doc@2026-11-13 | F | U |
-| S-MS-QUERYDEFS-REFRESH | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-CONNECT | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-RETURNS | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-TIMEOUT | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-PREPARE | Doc@2026-11-13 | F | U |
-| S-MS-PARAM-DIRECTION | Doc@2026-11-13 | F | U |
-| S-MS-TABLEDEFS-REFRESH | Doc@2026-11-13 | F | U |
-| S-JACK-CURSOR-PIN | be0a2139… | F/C | U |
-| S-JACK-TABLESCAN-PIN | be0a2139… | F/C | U |
-| S-JACK-INDEXCURSOR-PIN | be0a2139… | F/C | U |
-| S-JACK-ROWID-PIN | be0a2139… | F/C | U |
-| S-MS-DAO-RST-TYPES | Doc@2026-11-13 | F | U |
-| S-MS-DAO-OPEN-RST | Doc@2026-11-13 | F | U |
-| S-MS-DAO-ABS-POS | Doc@2026-11-13 | F | U |
-| S-MS-DAO-PCT-POS | Doc@2026-11-13 | F | U |
-| S-MS-DAO-BOF | Doc@2026-11-13 | F | U |
-| S-MS-DAO-MOVENEXT | Doc@2026-11-13 | F | U |
-| S-MS-DAO-MOVE | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FINDFIRST | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FINDNEXT | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FINDPREV | Doc@2026-11-13 | F | U |
-| S-MS-DAO-RESTARTABLE | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FILTER | Doc@2026-11-13 | F | U |
-| S-MS-DAO-SORT | Doc@2026-11-13 | F | U |
-| S-MS-DAO-DERIVED-OPEN | Doc@2026-11-13 | F | U |
-| S-JACK-FKENFORCER-PIN | be0a2139… | F/C | U |
-| S-MS-EDITMODE | Doc@2026-11-13 | F | U |
-| S-MS-CANCELUPDATE | Doc@2026-11-13 | F | U |
-| S-MS-LASTMODIFIED | Doc@2026-11-13 | F | U |
-| S-MS-FIELD-REQUIRED | Doc@2026-11-13 | F | U |
-| S-MS-FIELD-ZEROLEN | Doc@2026-11-13 | F | U |
-| S-MS-VALIDATEONSET | Doc@2026-11-13 | F | U |
-| S-MS-TABLE-VALIDATION | Doc@2026-11-13 | F | U |
-| S-MS-MODIFY-GUIDE | Doc@2026-11-13 | F | U |
-| S-MS-FIELD-DATAUPDATABLE | Doc@2026-11-13 | F | U |
-| S-MS-FIELD-SOURCEFIELD | Doc@2026-11-13 | F | U |
-| S-MS-FIELD-SOURCETABLE | Doc@2026-11-13 | F | U |
-| S-MS-DAO-INCONSISTENT | Doc@2026-11-13 | F | U |
-| S-MS-QUERY-EDITABILITY | Doc@2026-11-13 | F | U |
-| S-MS-DAO-GETROWS | Doc@2026-11-13 | F | U |
-| S-MS-DAO-CACHESIZE | Doc@2026-11-13 | F | U |
-| S-MS-DAO-CACHESTART | Doc@2026-11-13 | F | U |
-| S-MS-DAO-FILLCACHE | Doc@2026-11-13 | F | U |
-| S-MS-DAO-BEGINTRANS | Doc@2026-11-13 | F/C | U |
-| S-MS-DAO-RST-TRANSACTIONS | Doc@2026-11-13 | F/C | U |
-| S-MS-DAO-SETOPTION | Doc@2026-11-13 | F/C | U |
-| S-MS-DAO-IDLE | Doc@2026-11-13 | F/C | U |
-| S-MS-FILE-CACHING | Doc@2026-11-13 | F | U |
-| S-MS-BUFFERED-CLOSE | Doc@2026-11-13 | F | U |
-| S-SQLITE-ATOMIC | Doc@2026-11-13 | F | D |
-| S-MS-FILTER-FASTIO | Doc@2026-11-13 | F/C | U |
-| S-MS-FILTER-PEND | Doc@2026-11-13 | F/C | U |
-| S-MS-FILTER-GENERATED | Doc@2026-11-13 | F/C | U |
-| S-MS-TERMINATE | Doc@2026-11-13 | F/C | U |
-| S-MS-GETFILEINFOEX | Doc@2026-11-13 | F | U |
-| S-MS-DAO-OPENDB | Doc@2026-11-13 | F | U |
-| S-MS-DAO-DATABASE | Doc@2026-11-13 | F | U |
-| S-MS-DUPHANDLE | Doc@2026-11-13 | F | U |
-| S-MS-UNLOCKAPI | Doc@2026-11-13 | F | U |
-| S-MS-MAPPING-CLOSE | Doc@2026-11-13 | F | U |
-| S-MS-JET-PROVIDER | Doc@2026-11-13 | F | U |
-| S-MS-JET-SESSION-PROPS | Doc@2026-11-13 | F | U |
-| S-MS-FORM-RECORDLOCKS | Doc@2026-11-13 | F | U |
-| S-MS-MAXLOCKS | Doc@2026-11-13 | F | U |
-| S-MS-COWAIT | Doc@2026-11-13 | F | U |
-| S-MS-COWAIT-FLAGS | Doc@2026-11-13 | F | U |
-| S-MS-SMB2-LOCK | Doc@2026-11-13 | F | U |
-| S-MS-SMB2-LOCKELEMENT | Doc@2026-11-13 | F | U |
-| S-MS-SMB2-DISCONNECT | Doc@2026-11-13 | F | U |
-| S-MS-VBA-COMPARE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-PLUS | Doc@2026-11-13 | F | U |
-| S-MS-VBA-MULTIPLY | Doc@2026-11-13 | F | U |
-| S-MS-VBA-VARIANT-TYPE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-CVERR | Doc@2026-11-13 | F | U |
-| S-MS-OAUT-OPTIONAL | Doc@2026-11-13 | F | U |
-| S-MS-VBA-ISMISSING | Doc@2026-11-13 | F | U |
-| S-MS-VBA-AMPERSAND | Doc@2026-11-13 | F | U |
-| S-MS-VBA-DIVIDE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-INTDIVIDE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-MOD | Doc@2026-11-13 | F | U |
-| S-MS-VBA-CONVERSIONS | Doc@2026-11-13 | F | U |
-| S-MS-VBA-CURRENCY | Doc@2026-11-13 | F | U |
-| S-MS-OAUT-DECIMAL | Doc@2026-11-13 | F | U |
-| S-MS-VARENUM | Doc@2026-11-13 | F | U |
-| S-MS-VBA-BOOLEAN | Doc@2026-11-13 | F | U |
-| S-MS-VBA-CHOOSE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-SWITCH | Doc@2026-11-13 | F | U |
-| S-MS-CALC-FUNCTION-SCOPE | Doc@2026-11-13 | F | U |
-| S-MS-OPTION-COMPARE | Doc@2026-11-13 | F | U |
-| S-MS-STRCOMP | Doc@2026-11-13 | F | U |
-| S-MS-NLS-SORT-HANDLING | Doc@2026-11-13 | F | U |
-| S-MS-ACCESS-ANSI-COMPARE | Doc@2026-11-13 | F | U |
-| S-MS-VBA-LIKE | Doc@2026-11-13 | F | U |
-| S-MS-ACCESS-SQL-LIKE | Doc@2026-11-13 | F | U |
-| S-MS-VBAL-LIKE | Doc@2026-11-13 | F | U |
-| S-MS-PATTERN-ERROR93 | Doc@2026-11-13 | F | U |
-| S-MS-FUNCDESC | Doc@2026-11-13 | F | U |
-| S-MS-PARAMDESC | Doc@2026-11-13 | F | U |
-| S-MS-PARAMDESCEX | Doc@2026-11-13 | F | U |
-| S-MS-PARAMFLAGS | Doc@2026-11-13 | F | U |
-| S-MS-DLOOKUP | Doc@2026-11-13 | F | U |
-| S-MS-DSUM | Doc@2026-11-13 | F | U |
-| S-MS-RND | Doc@2026-11-13 | F | U |
-| S-MS-NOW | Doc@2026-11-13 | F | U |
-| S-MS-ACCESS-VALIDATION | Doc@2026-11-13 | F | U |
-| S-MS-ACCESS-FUNCTION-CATEGORIES | Doc@2026-11-13 | F | U |
-| S-MS-VBA-STRING-FORMS | Doc@2026-11-13 | F | U |
-| S-MS-VBA-MID | Doc@2026-11-13 | F | U |
-| S-MS-VBAL-RELATIONAL | Doc@2026-11-13 | F | U |
-| S-MS-SQL-SELECT | Doc@2026-11-13 | F | U |
-| S-MS-SQL-INNERJOIN | Doc@2026-11-13 | F | U |
-| S-MS-SQL-OUTERJOIN | Doc@2026-11-13 | F | U |
-| S-MS-SQL-ORDERBY | Doc@2026-11-13 | F | U |
-| S-MS-SQL-WHERE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-IN | Doc@2026-11-13 | F | U |
-| S-MS-SQL-OWNERACCESS | Doc@2026-11-13 | F | U |
-| S-MS-SQL-RESERVED | Doc@2026-11-13 | F | U |
-| S-MS-ACCESS-SPECS | Doc@2026-11-13 | F | U |
-| S-MS-UNIQUE-RECORDS | Doc@2026-11-13 | F | U |
-| S-MS-SQL-GROUPBY | Doc@2026-11-13 | F | U |
-| S-MS-SQL-HAVING | Doc@2026-11-13 | F | U |
-| S-MS-SQL-AGGREGATES | Doc@2026-11-13 | F | U |
-| S-MS-SQL-COUNT | Doc@2026-11-13 | F | U |
-| S-MS-SQL-SUM | Doc@2026-11-13 | F | U |
-| S-MS-SQL-AVG | Doc@2026-11-13 | F | U |
-| S-MS-SQL-FIRST-LAST | Doc@2026-11-13 | F | U |
-| S-MS-SQL-MIN-MAX | Doc@2026-11-13 | F | U |
-| S-MS-SQL-STDEV | Doc@2026-11-13 | F | U |
-| S-MS-SQL-VAR | Doc@2026-11-13 | F | U |
-| S-MS-SQL-UNION | Doc@2026-11-13 | F | U |
-| S-MS-SQL-SUBQUERIES | Doc@2026-11-13 | F | U |
-| S-PAPER-X100 | Doc@2026-11-13 | C | D |
-| S-SQLITE-TEMP | Doc@2026-11-13 | C | D |
-| S-SQLITE-SCANSTATUS | Doc@2026-11-13 | C | D |
-| S-SQLITE-STMTSTATUS | Doc@2026-11-13 | C | D |
-| S-MS-SQL-INSERT | Doc@2026-11-13 | F | U |
-| S-MS-SQL-UPDATE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-DELETE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-SELECTINTO | Doc@2026-11-13 | F | U |
-| S-MS-DATABASE-RECORDSAFFECTED | Doc@2026-11-13 | F | U |
-| S-MS-QUERYDEF-RECORDSAFFECTED | Doc@2026-11-13 | F | U |
-| S-MS-SQL-DDL | Doc@2026-11-13 | F | U |
-| S-MS-SQL-ALTER-PASSWORD | Doc@2026-11-13 | F | U |
-| S-MS-SQL-CREATE-TABLE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-ALTER-TABLE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-CONSTRAINT | Doc@2026-11-13 | F | U |
-| S-MS-SQL-CREATE-VIEW | Doc@2026-11-13 | F | U |
-| S-MS-SQL-CREATE-PROCEDURE | Doc@2026-11-13 | F | U |
-| S-MS-SQL-DROP | Doc@2026-11-13 | F | U |
-| S-MS-SQL-MODIFY-DESIGN | Doc@2026-11-13 | F | U |
-| S-MS-ITYPELIB | Doc@2026-11-14 | F | U |
-| S-MS-LOADTYPELIBEX | Doc@2026-11-14 | F | U |
-| S-MS-GETFUNCDESC | Doc@2026-11-14 | F | U |
-| S-MS-TYPEATTR | Doc@2026-11-14 | F | U |
-| S-MS-FUNCFLAGS | Doc@2026-11-14 | F | U |
-| S-MS-TYPEINFO-GETNAMES | Doc@2026-11-14 | F | U |
-| S-MS-DAO-ENGINE | Doc@2026-11-14 | F | U |
-| S-MS-DAO-ENGINE-MEMBERS | Doc@2026-11-14 | F | U |
-| S-MS-DAO-WORKSPACE | Doc@2026-11-14 | F | U |
-| S-MS-DAO-WORKSPACE-MEMBERS | Doc@2026-11-14 | F | U |
-| S-MS-DAO-DATABASES | Doc@2026-11-14 | F | U |
-| S-MS-DAO-DATABASE-MEMBERS | Doc@2026-11-14 | F | U |
-| S-MS-ACCESS-CURRENTDB | Doc@2026-11-14 | F | U |
-| S-MS-DAO-FIELD-OBJECT | Doc@2026-11-14 | F | U |
-| S-MS-DAO-INDEX-OBJECT | Doc@2026-11-14 | F | U |
-| S-MS-DAO-CREATEQUERYDEF | Doc@2026-11-14 | F | U |
-| S-MS-DAO-QUERY-CLOSE | Doc@2026-11-14 | F | U |
-| S-MS-DAO-SECURITY-INTERFACES | Doc@2026-11-14 | F | U |
-| S-MS-DAO-SECURITY-FORMATS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CURSORSERVICE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-PROPERTY | Doc@2026-11-14 | F | U |
-| S-MS-ADO-PROPERTIES | Doc@2026-11-14 | F | U |
-| S-MS-ADO-ACTIVECONNECTION | Doc@2026-11-14 | F | U |
-| S-MS-ADO-REFRESH | Doc@2026-11-14 | F | U |
-| S-MS-ADO-COMMANDEXECUTE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-PREPARED | Doc@2026-11-14 | F | U |
-| S-MS-ADO-NEXTRECORDSET | Doc@2026-11-14 | F | U |
-| S-MS-ADO-LOCKTYPE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-DISCONNECT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-UPDATE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-ORIGINALVALUE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-UNDERLYINGVALUE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RECORDSET | Doc@2026-11-14 | F | U |
-| S-MS-ADO-UPDATEBATCH | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CANCELBATCH | Doc@2026-11-14 | F | U |
-| S-MS-ADO-FILTER | Doc@2026-11-14 | F | U |
-| S-MS-ADO-FILTERGROUPS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RECORDSTATUS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-SORT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-FIND | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CLONE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RESYNC | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RESYNCENUM | Doc@2026-11-14 | F | U |
-| S-MS-ADO-GETROWS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-GETSTRING | Doc@2026-11-14 | F | U |
-| S-MS-ADO-EVENTSUMMARY | Doc@2026-11-14 | F | U |
-| S-MS-ADO-WILLCONNECT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-WILLEXECUTE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-EVENTPARAMETERS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-EXECUTECOMPLETE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-EXECUTEOPTIONS | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CANCEL | Doc@2026-11-14 | F | U |
-| S-MS-ADO-OPENSCHEMA | Doc@2026-11-14 | F | U |
-| S-MS-ADO-FIELD | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RECORDOPEN | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RECORD | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAM | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMOPEN | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMTYPE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CHARSET | Doc@2026-11-14 | F | U |
-| S-MS-ADO-POSITION | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMWRITE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMREAD | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMCOPY | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMLOAD | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMSAVE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-STREAMREADTEXT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-PERSIST | Doc@2026-11-14 | F | U |
-| S-MS-ADO-PERSISTPROVIDER | Doc@2026-11-14 | F | U |
-| S-MS-ADO-XMLFORMAT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-RECORDSETSAVE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-COMMANDTIMEOUT | Doc@2026-11-14 | F | U |
-| S-MS-ADO-CACHESIZE | Doc@2026-11-14 | F | U |
-| S-MS-ADO-FIELDS | Doc@2026-11-14 | F | U |
-| S-MS-DAO-ERROR | Doc@2026-11-14 | F | U |
-| S-MS-ERR-PASSING | Doc@2026-11-14 | F | U |
-| S-MS-ERR-COMCODES | Doc@2026-11-14 | F | U |
-| S-MS-ERR-SUPPORT | Doc@2026-11-14 | F | U |
-| S-MS-ERR-SETERRORINFO | Doc@2026-11-14 | F | U |
-| S-MS-ERR-RUNTIME | Doc@2026-11-14 | F | U |
-| S-MS-ERR-ADO-CLEAR | Doc@2026-11-14 | F | U |
-| S-MS-ERR-VBA | Doc@2026-11-14 | F | U |
-| S-MS-ERR-PRESERVESIG | Doc@2026-11-14 | F | U |
-| S-MS-ERR-NET-MAP | Doc@2026-11-14 | F | U |
-| S-MS-ERR-NET-GETEXCEPTION | Doc@2026-11-14 | F | U |
-| S-MS-ERR-NET-GETHR48 | Doc@2026-11-14 | F | U |
-| S-MS-ERR-NET-GETHR10 | Doc@2026-11-14 | F | U |
-| S-MS-ITYPEINFO-DUALVIEW | Doc@2026-11-14 | F | U |
-| S-MS-LOADREGTYPELIB | Doc@2026-11-14 | F | U |
-| S-MS-X64-CALLING | Doc@2026-11-14 | F | U |
-| S-MS-QI-RULES | Doc@2026-11-14 | F | U |
-| S-MS-COGETCLASSOBJECT | Doc@2026-11-14 | F | U |
-| S-MS-ITYPEINFO-CREATE | Doc@2026-11-14 | F | U |
-| S-MS-CLSIDFROMPROGID | Doc@2026-11-14 | F | U |
-| S-MS-CLSIDFROMPROGIDEX | Doc@2026-11-14 | F | U |
-| S-MS-CREATEACTCTX | Doc@2026-11-14 | F | U |
-| S-MS-RELEASEACTCTX | Doc@2026-11-14 | F | U |
-| S-MS-ACTCTX-THREADS | Doc@2026-11-14 | F | U |
-| S-MS-DLLGETCLASSOBJECT | Doc@2026-11-14 | F | U |
-| S-MS-COREVOKECLASSOBJECT | Doc@2026-11-14 | F | U |
-| S-MS-LOCKSERVER | Doc@2026-11-14 | F | U |
-| S-MS-COM-THREADING-CHOICE | Doc@2026-11-14 | F | U |
-| S-MS-COM-INPROC-THREADING | Doc@2026-11-14 | F | U |
-| S-MS-COM-STA | Doc@2026-11-14 | F | U |
-| S-MS-COM-MTA | Doc@2026-11-14 | F | U |
-| S-MS-COM-FTM | Doc@2026-11-14 | F | U |
-| S-MS-DLLCANUNLOADNOW | Doc@2026-11-14 | F | U |
-| S-MS-DLL-BEST-PRACTICES | Doc@2026-11-14 | F | U |
-| S-MS-XLL-AUTOOPEN | Doc@2026-11-14 | F | U |
-| S-MS-XLL-AUTOCLOSE | Doc@2026-11-14 | F | U |
-| S-MS-XLL-MTR | Doc@2026-11-14 | F | U |
-| S-MS-WINDOWS-DATA-TYPES | Doc@2026-11-14 | F | U |
-| S-MS-COTASKMEMALLOC | Doc@2026-11-14 | F | U |
-| S-MS-SAFEARRAYGETVARTYPE | Doc@2026-11-14 | F | U |
-| S-MS-SAFEARRAYGETELEMENT | Doc@2026-11-14 | F | U |
-| S-MS-SAFEARRAYPUTELEMENT | Doc@2026-11-14 | F | U |
-| S-MS-ARRAY-MANIPULATION | Doc@2026-11-14 | F | U |
-| S-MS-OAUT-SAFEARRAY | Doc@2026-11-14 | F | U |
-| S-MS-SAFEARRAYUNACCESS | Doc@2026-11-14 | F | U |
-| S-MS-SAFEARRAYDESTROY | Doc@2026-11-14 | F | U |
-| S-MS-RELEASEFUNCDESC | Doc@2026-11-14 | F | U |
-| S-MS-GETREFTYPEINFO | Doc@2026-11-14 | F | U |
-| S-MS-GETCONTAININGTYPELIB | Doc@2026-11-14 | F | U |
-| S-MS-DISPATCH-GETTYPEINFO | Doc@2026-11-14 | F | U |
-| S-MS-IENUMCONNECTIONPOINTS | Doc@2026-11-14 | F | U |
-| S-MS-CONNECTIONUNADVISE | Doc@2026-11-14 | F | U |
-| S-MS-CONNECTION-ENUMCONNECTIONS | Doc@2026-11-14 | F | U |
-| S-MS-ENUMCONNECTIONS-NEXT | Doc@2026-11-14 | F | U |
-| S-MS-COM-SOURCEGEN | Doc@2026-11-14 | F | U |
-| S-MS-TYPE-EQUIVALENCE | Doc@2026-11-14 | F | U |
-| S-MS-COM-INTEROP-TYPES | Doc@2026-11-14 | F | U |
-| S-MS-OBJECT-MARSHAL | Doc@2026-11-14 | F | U |
-| S-MS-ARRAY-MARSHAL | Doc@2026-11-14 | F | U |
-| S-MS-RELEASECOM48 | Doc@2026-11-14 | F | U |
-| S-MS-RELEASECOM10 | Doc@2026-11-14 | F | U |
-| S-EXCELDNA-RUNTIME | Doc@2026-11-14 | F | U |
-| S-MS-NATIVE-NET-HOST | Doc@2026-11-14 | F | U |
-| S-MS-FRAMEWORK-SXS | Doc@2026-11-14 | F | U |
-| S-MS-ASSEMBLYLOADCONTEXT | Doc@2026-11-14 | F | U |
-| S-MS-NET-UNLOAD | Doc@2026-11-14 | F | U |
-| S-MS-XLL-TYPES | Doc@2026-11-14 | F | U |
-| S-MS-XLL-MEMORY | Doc@2026-11-14 | F | U |
-| S-MS-XLL-AUTOFREE | Doc@2026-11-14 | F | U |
+**593 active cited sources**; complete exact material/version/read extent/licence and citation locations: [A-01-sources.md](A-01-sources.md). Supplied concept-report filenames and reading inventory: [planning reference](00-stage0-plan.md). No source/sample code port is claimed.
 
 ## Figures
 
-All **157 IDs / 159 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
+**182 IDs / 184 captions emitted**; none render-verified. Full individual purposes and forms: [planning reference](00-stage0-plan.md#figure-inventory). This current-state table groups the actual emitted captions by chapter.
 
-| Figure | Location | Actual form/status |
-| --- | --- | --- |
-| F-01 | I-01 | Mermaid source; emitted |
-| F-02 | I-02 | Mermaid source; emitted |
-| F-03 | I-02 | Markdown table; emitted |
-| F-04 | I-03 | Mermaid source; emitted |
-| F-05 | I-04 | Hypothesis tables; emitted |
-| F-06 | I-04 | Mermaid source; emitted |
-| F-07 | I-05 | Tree source + key hypothesis table; emitted |
-| F-08 | I-06 | Mermaid source; emitted |
-| F-09 | I-07 | Mermaid source; emitted |
-| F-10 | I-08 | Markdown table; emitted |
-| F-11 | I-09 | Markdown table; emitted |
-| F-12 | I-11 | Mermaid source; emitted |
-| F-13 | I-11 | Mermaid source; emitted |
-| F-14 | I-13 | Mermaid source; emitted |
-| F-15 | I-14 | Mermaid source; emitted |
-| F-16 | I-15 | Mermaid source; emitted |
-| F-17 | I-16 | Mermaid source; emitted |
-| F-18 | I-16 | Mermaid source; emitted |
-| F-19 | II-03 | Markdown hypothesis table; emitted |
-| F-20 | II-03 | Mermaid source; emitted |
-| F-21 | II-03 | Mermaid source; emitted |
-| F-22 | II-03 | Markdown hypothesis table; emitted |
-| F-23 | II-04 | Markdown hypothesis table; emitted |
-| F-24 | II-04 | Markdown hypothesis table; emitted |
-| F-25 | II-04 | Markdown hypothesis table; emitted |
-| F-26 | II-04 | Markdown hypothesis table; emitted |
-| F-27 | II-04 | Mermaid source; emitted |
-| F-28 | II-04 | Markdown hypothesis table; emitted |
-| F-29 | II-05 | Markdown hypothesis table; emitted |
-| F-30 | II-05 | Markdown hypothesis table; emitted |
-| F-31 | II-05 | Markdown hypothesis table; emitted |
-| F-32 | II-05 | Markdown hypothesis table; emitted |
-| F-33 | II-05 | Markdown hypothesis table; emitted |
-| F-34 | II-05 | Markdown hypothesis table; emitted |
-| F-35 | II-05 | Markdown hypothesis table; emitted |
-| F-36 | II-05 | Markdown hypothesis table; emitted |
-| F-37 | II-06 | Mermaid source; emitted |
-| F-38 | II-06 | Markdown hypothesis table; emitted |
-| F-39 | II-06 | Markdown hypothesis tables; emitted |
-| F-40 | II-06 | Markdown hypothesis table; emitted |
-| F-41 | II-06 | Markdown hypothesis table; emitted |
-| F-42 | II-06 | Markdown hypothesis table; emitted |
-| F-43 | II-06 | Mermaid source; emitted |
-| F-44 | II-06 | Markdown constructed table; emitted |
-| F-45 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-46 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-47 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-48 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-49 | II-07 | Mermaid source; emitted |
-| F-50 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-51 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-52 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-53 | II-07 | Markdown constructed/hypothesis table; emitted |
-| F-54 | II-08 | Markdown constructed/design table; emitted |
-| F-55 | II-08 | Markdown constructed/design table; emitted |
-| F-56 | II-08 | Markdown constructed/design table; emitted |
-| F-57 | II-08 | Mermaid source; emitted |
-| F-58 | II-08 | Markdown constructed/design table; emitted |
-| F-59 | II-08 | Markdown constructed/design table; emitted |
-| F-60 | II-08 | Markdown constructed/design table; emitted |
-| F-61 | II-08 | Mermaid source; emitted |
-| F-62 | II-08 | Mermaid source; emitted |
-| F-63 | II-08 | Markdown constructed/design table; emitted |
-| F-64 | II-08 | Markdown constructed/design table; emitted |
-| F-65 | II-08 | Mermaid source; emitted |
-| F-66 | II-08 | Markdown constructed/design table; emitted |
-| F-67 | II-09 | Markdown constructed/design table; emitted |
-| F-68 | II-09 | Mermaid source; emitted |
-| F-69 | II-09 | Markdown constructed/design table; emitted |
-| F-70 | II-09 | Markdown constructed/design table; emitted |
-| F-71 | II-09 | Markdown constructed/design table; emitted |
-| F-72 | II-09 | Markdown constructed/design table; emitted |
-| F-73 | II-09 | Markdown constructed/design table; emitted |
-| F-74 | II-09 | Markdown constructed/design table; emitted |
-| F-75 | II-09 | Mermaid source; emitted |
-| F-76 | II-09 | Markdown constructed/design table; emitted |
-| F-77 | II-09 | Markdown constructed/design table; emitted |
-| F-78 | II-09 | Mermaid source; emitted |
-| F-79 | II-09 | Markdown constructed/design table; emitted |
-| F-80 | II-10 | Markdown constructed/design table; emitted |
-| F-81 | II-10 | Markdown constructed/design table; emitted |
-| F-82 | II-10 | Mermaid source; emitted |
-| F-83 | II-10 | Markdown constructed/design table; emitted |
-| F-84 | II-10 | Markdown constructed/design table; emitted |
-| F-85 | II-10 | Markdown constructed/design table; emitted |
-| F-86 | II-10 | Markdown constructed/design table; emitted |
-| F-87 | II-10 | Markdown constructed/design table; emitted |
-| F-88 | II-10 | Markdown constructed/design table; emitted |
-| F-89 | II-10 | Markdown constructed/design table; emitted |
-| F-90 | II-10 | Markdown constructed/design table; emitted |
-| F-91 | II-10 | Mermaid source; emitted |
-| F-92 | II-10 | Mermaid source; emitted |
-| F-93 | II-10 | Markdown constructed/design table; emitted |
-| F-94 | II-10 | Mermaid source; emitted |
-| F-95 | II-10 | Markdown constructed/design table; emitted |
-| F-96 | II-10 | Markdown constructed/design table; emitted |
-| F-97 | II-11 | Mermaid source; emitted |
-| F-98 | II-11 | Markdown constructed/design table; emitted |
-| F-99 | II-11 | Markdown constructed/design table; emitted |
-| F-100 | II-11 | Markdown constructed/design table; emitted |
-| F-101 | II-11 | Markdown constructed/design table; emitted |
-| F-102 | II-11 | Markdown constructed/design table; emitted |
-| F-103 | II-11 | Markdown constructed/design table; emitted |
-| F-104 | II-11 | Markdown constructed/design table; emitted |
-| F-105 | II-11 | Markdown constructed/design table; emitted |
-| F-106 | II-11 | Markdown constructed/design table; emitted |
-| F-107 | II-11 | Markdown constructed/design table; emitted |
-| F-108 | II-11 | Mermaid source; emitted |
-| F-109 | II-11 | Markdown constructed/design table; emitted |
-| F-110 | II-11 | Markdown constructed/design table; emitted |
-| F-111 | II-11 | Markdown constructed/design table; emitted |
-| F-112 | II-11 | Markdown constructed/design table; emitted |
-| F-113 | II-11 | Markdown constructed/design table; emitted |
-| F-114 | II-11 | Markdown constructed/design table; emitted |
-| F-115 | II-11 | Markdown constructed/design table; emitted |
-| F-116 | II-11 | Markdown constructed/design table; emitted |
-| F-117 | II-12 | Mermaid source; emitted |
-| F-118 | II-12 | Markdown constructed/design table; emitted |
-| F-119 | II-12 | Mermaid source; emitted |
-| F-120 | II-12 | Markdown constructed/design table; emitted |
-| F-121 | II-12 | Markdown constructed/design table; emitted |
-| F-122 | II-12 | Markdown constructed/design table; emitted |
-| F-123 | II-12 | Markdown constructed/design table; emitted |
-| F-124 | II-12 | Markdown constructed/design table; emitted |
-| F-125 | II-12 | Mermaid source; emitted |
-| F-126 | II-12 | Mermaid source; emitted |
-| F-127 | II-12 | Markdown constructed/design table; emitted |
-| F-128 | II-12 | Mermaid source; emitted |
-| F-129 | II-12 | Mermaid source; emitted |
-| F-130 | II-12 | Markdown constructed/design table; emitted |
-| F-131 | II-12 | Markdown constructed/design table; emitted |
-| F-132 | II-12 | Markdown constructed/design table; emitted |
-| F-133 | II-12 | Mermaid source; emitted |
-| F-134 | II-12 | Markdown constructed/design table; emitted |
-| F-135 | II-12 | Markdown constructed/design table; emitted |
-| F-136 | II-12 | Markdown constructed/design table; emitted |
-| F-137 | II-13 | Markdown constructed/design table; emitted |
-| F-138 | II-13 | Markdown constructed/design table; emitted |
-| F-139 | II-13 | Markdown constructed/design table; emitted |
-| F-140 | II-13 | Markdown constructed/design table; emitted |
-| F-141 | II-13 | Mermaid source; emitted |
-| F-142 | II-13 | Markdown constructed/design table; emitted |
-| F-143 | II-13 | Markdown constructed/design table; emitted |
-| F-144 | II-13 | Markdown constructed/design table; emitted |
-| F-145 | II-13 | Markdown constructed/design table; emitted |
-| F-146 | II-13 | Mermaid source; emitted |
-| F-147 | II-13 | Markdown constructed/design table; emitted |
-| F-148 | II-13 | Mermaid source; emitted |
-| F-149 | II-13 | Markdown constructed/design table; emitted |
-| F-150 | II-13 | Markdown constructed/design table; emitted |
-| F-151 | II-13 | Markdown constructed/design table; emitted |
-| F-152 | II-13 | Markdown constructed/design table; emitted |
-| F-153 | II-13 | Markdown constructed/design table; emitted |
-| F-154 | II-13 | Markdown constructed/design table; emitted |
-| F-155 | II-13 | Mermaid source; emitted |
-| F-156 | II-13 | Mermaid source; emitted |
-| F-157 | II-13 | Markdown constructed/design table; emitted |
+| Chapter | Figure IDs | IDs / captions | Status |
+| --- | --- | --- | --- |
+| I-01 | F-1 | 1 / 1 | Emitted; not render-verified |
+| I-02 | F-2–F-3 | 2 / 2 | Emitted; not render-verified |
+| I-03 | F-4 | 1 / 1 | Emitted; not render-verified |
+| I-04 | F-5–F-6 | 2 / 3 | Emitted; not render-verified |
+| I-05 | F-7 | 1 / 2 | Emitted; not render-verified |
+| I-06 | F-8 | 1 / 1 | Emitted; not render-verified |
+| I-07 | F-9 | 1 / 1 | Emitted; not render-verified |
+| I-08 | F-10 | 1 / 1 | Emitted; not render-verified |
+| I-09 | F-11 | 1 / 1 | Emitted; not render-verified |
+| I-11 | F-12–F-13 | 2 / 2 | Emitted; not render-verified |
+| I-13 | F-14 | 1 / 1 | Emitted; not render-verified |
+| I-14 | F-15 | 1 / 1 | Emitted; not render-verified |
+| I-15 | F-16 | 1 / 1 | Emitted; not render-verified |
+| I-16 | F-17–F-18 | 2 / 2 | Emitted; not render-verified |
+| II-03 | F-19–F-22 | 4 / 4 | Emitted; not render-verified |
+| II-04 | F-23–F-28 | 6 / 6 | Emitted; not render-verified |
+| II-05 | F-29–F-36 | 8 / 8 | Emitted; not render-verified |
+| II-06 | F-37–F-44 | 8 / 8 | Emitted; not render-verified |
+| II-07 | F-45–F-53 | 9 / 9 | Emitted; not render-verified |
+| II-08 | F-54–F-66 | 13 / 13 | Emitted; not render-verified |
+| II-09 | F-67–F-79 | 13 / 13 | Emitted; not render-verified |
+| II-10 | F-80–F-96 | 17 / 17 | Emitted; not render-verified |
+| II-11 | F-97–F-116 | 20 / 20 | Emitted; not render-verified |
+| II-12 | F-117–F-136 | 20 / 20 | Emitted; not render-verified |
+| II-13 | F-137–F-157 | 21 / 21 | Emitted; not render-verified |
+| II-14 | F-158–F-182 | 25 / 25 | Emitted; not render-verified |
 
 ## Open issues / next actions
 
@@ -983,8 +314,8 @@ All **157 IDs / 159 captions emitted**; none render-verified. Tables are identif
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
 | O-POLICY | R-DAO/ADO/ERR and CUR/TXN/SQL: capture family identity/collection, batch/event and diagnostic transitions, including documentation conflicts. | 07–12 |
 | O-LOCK | Run R-LOCK-1/2 actual access/authority/lifetime first; then discriminate native read/edit/publication roles, fresh rebase and scoped rollback locally before SMB. | 09 |
-| O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
-| O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
+| O-WASM | R-WASM-1: actual shared runtime domain, direct/broker failure cohort, qualified readers, partial-write evidence and fault-specific durability. | 03,13,14 |
+| O-LATER | Six II-14 cards: native codec/complex/rebuild profiles, link/source semantics and genuine provider/driver consumers; dependencies stay feature-specific. | 14 |
 | O-VIEW | Qualify view-admission waits, external input retention and caller/Close ownership through CUR/TXN/UDF/HOST cases. | 03,07,08,09,13 |
 | O-EXPR | R-EXPR-1: qualify declaration/type and demand/error rules, field/table acceptance, function manifest and finite text profiles; range proof joins R-SORT-3. | 10,11 |
 | O-SQL | R-SQL-1/2/3: qualify full-row DISTINCTROW, aggregate/type/frontier policies, TOP/crosstab timing and protected action enumeration/DDL counts. | 11,12 |
@@ -995,5 +326,5 @@ All **157 IDs / 159 captions emitted**; none render-verified. Tables are identif
 ## Short changelog
 
 - 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-14: II-13 adds genuine ABI/activation, portable Automation, unchanged managed/XLL lanes and explicit host/bootstrap/lifetime; 21 figures; Part I/cards reconciled.
-- 2026-11-14: II-01–13 drafted; 157 figure IDs emitted; next II-14. No ACE execution or rendered-figure result claimed.
+- 2026-11-14: II-14 adds concrete browser/storage and six later mechanisms; 25 figures, 64 planned T-PLAT families and seven expanded cards; Part I/dependencies reconciled.
+- 2026-11-14: II-01–14 drafted; 182 figure IDs emitted; next II-15; record source/figure duplication removed. No actual acceptance or rendered-figure execution claimed.

@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r12 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
+Revision S2-r13 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-13, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-14, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -44,7 +44,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | --- | --- | --- | --- | --- |
 | 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
 | 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.6 | I revised; II drafted |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I revised; II drafted |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
 | 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
 | 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
@@ -55,9 +55,9 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
-| 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
+| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 11.6 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 12.0 / 0.0 | I revised; II pending |
 
 | File family | Current contents |
 | --- | --- |
@@ -74,7 +74,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | I-11-sql.md / II-11-sql.md | Parser/binder/planner/operators; crosstabs; actions/DDL; bounded memory; serial equivalence. |
 | I-12-object-models.md / II-12-object-models.md | Complete member inventory; object and collection states; surface policies; errors and provider strings. |
 | I-13-interop.md / II-13-interop.md | Genuine native/portable declarations, activation/factory ownership, exact Automation ABI, unchanged .xll/.NET lanes and explicit host bootstrap/callback/shutdown. |
-| I-14-platforms.md / II-14-platforms.md | Worker-based browser execution/storage; hooks for encryption, links, complex fields and providers. |
+| I-14-platforms.md / II-14-platforms.md | Actual wasm32 caller domains, direct/broker/readers and fault receipts; native encryption, links, complex fields, graph rebuild and genuine OLE DB/ODBC mechanisms. |
 | I-15-evidence.md / II-15-evidence.md | Capture/replay/reduction; deterministic production logic; fault models; compatibility and cost ledgers. |
 | I-16-development.md / II-16-development.md | Experiment dependencies; work packages; relative sizes; acceptance conditions and reconciliation. |
 
@@ -199,11 +199,11 @@ These are current choices, not a history. “Decided” marks fixed scope/user c
 | D-OBJECT-1 — Recommended | 07,12,13 | DAO priority with ADO alongside as dependencies permit; generated genuine-interface entries and family-specific object/collection/diagnostic policies over one engine. | Captured member recipes preserve construction/publication, public/native incarnations and accepted execution values. CalcDb ADO owns native-file routing, client/batch state, events and persistence; its later OLE DB provider is separate. Cheap typed scalar paths remain the first performance priority. | R-DAO-1/R-ADO-1/R-ERR-1 select identity, enumeration, binding, cache and diagnostic policies; R-ACT-1 proves actual activation. Native-accepted early-return async behavior would expose a material blocking-call scope conflict requiring decision; no hidden synchronous substitute counts as parity. |
 | D-ACT-1 — Provisional | 13 | Private native DLL and scoped host activation; own class identities plus evidenced compatibility mappings, with host-EXE factories where needed. Prefer Both only with synchronized MTA support. | One captured declaration graph drives typed entries, dispatch and type information. Retain selected factories/metadata/code, qualify propagation and callback thread provenance, and attach an Active host binding through explicit bootstrap; no registry changes or silent ACE/standalone fallback. | R-ACT-1 selects route-specific scope/factory precedence, threading and lifetime across unchanged CalcVBA/.xll and both .NET lanes. Native discovery and minimal prototypes precede full DAO/SQL; unavailable routes remain initial gaps. |
 | D-HOST-1 — Provisional | 13 | Explicit bootstrap publishes an immutable retained HostBinding and versioned capabilities; genuine COM remains the database API, with explicit own-class standalone mode. | Load/pin then bootstrap outside DllMain before compatibility admission. Retain factory/object/runtime/allocator generations; origin may be Unknown. Prefer Framework plus one modern runtime, caller-owned callbacks/waits and residual teardown; no forced client RCW release or ancestor self-wait. | I-HOST-1 qualifies actual runtime loading, scope recovery, ABI/capabilities, callback entry, wait and shutdown. Add spreadsheet bulk service only for demonstrated need over the same query state; required incompatible routes remain visible. |
-| D-WASM-1 — Provisional | 03,13,14 | Co-locate CalcVBA, CalcDb and portable COM in a dedicated caller worker; use direct preopened handles plus a tested VFS-only broker for dynamic asynchronous acquisition. | Keep blocking object calls, local COM ownership and bounded memory. A dedicated broker in a permitted shared-memory agent cluster retains its nontransferable handles; request generations, buffer ownership and uncertainty survive timeout. Runtime open/create/spill acquisition is not limited to startup. | R-WASM-1 tests real portable callers, same-cluster SAB/Atomics rendezvous, storage/exclusion/failure/durability and memory. A prestaged fallback is explicitly incomplete initial coverage; missing durability never becomes success. |
+| D-WASM-1 — Provisional | 03,13,14 | Prefer one qualified wasm32 program/address/call/allocator domain in a dedicated caller worker; prepared direct handles plus an owned VFS broker for dynamic acquisition; reader modes qualified separately. | Real local Automation and blocking callers. Fixed generation-qualified mailbox, retained failure cohort and physical-byte receipts; raw count is not unproved prefix. Native read-only mode or cooperating retained File/Web Lock profile needs actual evidence. Optional undo stays disabled without identity/disarm durability. | R-WASM-1 qualifies actual CalcVBA ABI/bootstrap, direct/broker ownership, readers, memory and distinct fault/durability classes. JSPI may reopen the mechanism only with equivalent calling/reentry/Close behavior; prestaged-only and unsupported required behavior remain gaps. |
 | D-EVIDENCE-1 — Recommended | 04,09,11,15 | Use input-addressed captures and the real production state machines under deterministic effects; compare behavior, structure and mandated byte regions separately. | Keep immutable inputs, raw observations, provenance and reduction links. T-COMPACT-1 uses independent branches, clean/damaged controls, repair indicators and before/after content/structure; successful repair return or byte identity is not the test. | R-ORACLE-1 validates capture encodings and ordering rules. Version evidence schemas; never regenerate an expectation merely because CalcDb differs. |
 | D-ORACLE-1 — Decided | 15,16 | Use one batched long-lived service; initial user-reported ACE target 16.0.20527.20016 from ACEDAO.DLL in Office16, with an explicit comparison matrix. | Capture actual loaded DLL identities, Access host build, x64 process, file format, locale/sort/options and runtime patch separately. Interop targets are installed .NET Framework 4.8-family and .NET 10 LTS. No local execution or installed patch is claimed. | R-ORACLE-1 records the initial environment and other available builds. Conflicting behavior may require an explicit baseline decision; never select an expected answer opportunistically or switch on hidden oracle provenance. |
 | D-PERF-1 — Recommended | 02,03,07,11,15 | Optimise DAO/VBA row loops first, then bulk SQL, then WASM when choices conflict; budget from measurements. | Use per-operation counters for allocations, copies, conversions, working set, branches, page access patterns, synchronization and crossings. Pair timing runs with A/A noise controls and confirm the measured path. | R-STRING-1 and benchmark traces set numerical budgets. Record negative outcomes; do not import other projects’ benchmark ratios or declare this design optimal. |
-| D-LATER-1 — Recommended | 03–14,16 | Reserve explicit codec, source, complex-field, rebuild and provider seams; implement later capabilities when their own evidence and service dependencies are available. | The user makes the one-pager implementation order nonprescriptive. Remove blanket W-12 prerequisites while retaining initial/later labels; encryption/rebuild depend on exclusive storage, linked/complex fields on catalog/ISAM semantics, providers on shared services and external ABI evidence. | R-ENC-1/R-LINK-1/R-COMPLEX-1/R-REBUILD-1/R-OLEDB-1/R-ODBC-1 settle later mechanisms. Revise routine scheduling from evidence; a material scope change still requires user direction. |
+| D-LATER-1 — Recommended | 03–14,16 | Reserve explicit codec, source, complex-field, relocation and surface seams; each later implementation follows its own evidenced services, not blanket W-12. | Prepare encoded phase images with password/SID/key ownership; native link identity and demand-safe pushdown; kind-specific child/attachment/calculated storage; typed rebuild closure and separate publication; genuine compiled OLE DB/ODBC buffer and lifetime policies over shared services. | Six later cards select native profiles, exact source/update/transaction behavior, relocation/salvage and real provider/driver consumer outcomes. Shared-writing combinations add W-12; initial/later scope and DAO priority remain unchanged. |
 
 ## Current conflict resolutions
 
@@ -395,6 +395,31 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-155 | II-13-interop.md | proposed shutdown ownership | Mermaid source; emitted; not render-verified |
 | F-156 | II-13-interop.md | host detach separates new-entry permission from retained executable ownership | Mermaid source; emitted; not render-verified |
 | F-157 | II-13-interop.md | integration cost ledger for the page-17 scalar path | Markdown constructed/design table; emitted; not render-verified |
+| F-158 | II-14-platforms.md | the browser deployment joins declarations to live owners | Markdown constructed/design table; emitted; not render-verified |
+| F-159 | II-14-platforms.md | later features extend existing owners | Markdown constructed/design table; emitted; not render-verified |
+| F-160 | II-14-platforms.md | proposed browser ownership topology | Mermaid source; emitted; not render-verified |
+| F-161 | II-14-platforms.md | proposed 128-byte mailbox header | Markdown constructed/design table; emitted; not render-verified |
+| F-162 | II-14-platforms.md | constructed page-transfer outcomes | Markdown constructed/design table; emitted; not render-verified |
+| F-163 | II-14-platforms.md | request ownership through cancellation or lost delivery | Mermaid source; emitted; not render-verified |
+| F-164 | II-14-platforms.md | proposed browser admission profiles | Markdown constructed/design table; emitted; not render-verified |
+| F-165 | II-14-platforms.md | constructed page-memory budget | Markdown constructed/design table; emitted; not render-verified |
+| F-166 | II-14-platforms.md | three separate receipts around an exported database | Markdown constructed/design table; emitted; not render-verified |
+| F-167 | II-14-platforms.md | native encryption profile and owned operation state | Markdown constructed/design table; emitted; not render-verified |
+| F-168 | II-14-platforms.md | constructed page parameter and transfer witnesses | Markdown constructed/design table; emitted; not render-verified |
+| F-169 | II-14-platforms.md | proposed linked-source records and their owners | Markdown constructed/design table; emitted; not render-verified |
+| F-170 | II-14-platforms.md | constructed pushdown discriminators | Markdown constructed/design table; emitted; not render-verified |
+| F-171 | II-14-platforms.md | complex-field identities and their different meanings | Markdown constructed/design table; emitted; not render-verified |
+| F-172 | II-14-platforms.md | constructed 32-byte raw attachment representation | Markdown constructed/design table; emitted; not render-verified |
+| F-173 | II-14-platforms.md | proposed relocation classifications | Markdown constructed/design table; emitted; not render-verified |
+| F-174 | II-14-platforms.md | constructed relocation closure | Markdown constructed/design table; emitted; not render-verified |
+| F-175 | II-14-platforms.md | repair classification and permitted action | Markdown constructed/design table; emitted; not render-verified |
+| F-176 | II-14-platforms.md | proposed provider objects over shared services | Mermaid source; emitted; not render-verified |
+| F-177 | II-14-platforms.md | constructed 48-byte x64 consumer row | Markdown constructed/design table; emitted; not render-verified |
+| F-178 | II-14-platforms.md | Windows x64 external buffer types | Markdown constructed/design table; emitted; not render-verified |
+| F-179 | II-14-platforms.md | constructed two-row x64 ODBC binding | Markdown constructed/design table; emitted; not render-verified |
+| F-180 | II-14-platforms.md | simplified proposed data-at-execution ownership | Mermaid source; emitted; not render-verified |
+| F-181 | II-14-platforms.md | outcomes that a cancellation fixture must distinguish | Markdown constructed/design table; emitted; not render-verified |
+| F-182 | II-14-platforms.md | implementation slices expose expensive uncertainty early | Markdown constructed/design table; emitted; not render-verified |
 
 ## Research and development references
 
@@ -426,16 +451,16 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-ADO-1 | ADO native routing, parameters, client/batch state, events and persistence | Native probes: ACE/ADO, fixtures/capture and relevant host/fault setup; CalcDb comparisons add R-ACT-1 and only the services exercised, no full DAO/later-provider prerequisite | L |
 | R-ACT-1 | Unchanged creation, declarations, context/factory selection and lifetime | Native discovery: R-ORACLE-1 and existing callers/environment; CalcDb comparison: minimal I-FOUNDATION/W-02/W-08 host/factory slices; real data adds only W-04/05 branches | M |
 | R-PAR-1 | Serial semantic frontier, bounded worker ownership and measured benefit | Submission/drain schedules start with VFS/cursors; operator eligibility needs its accepted serial R-SQL-1/2/3 and relevant host policy, never full host coverage first | M |
-| R-WASM-1 | Portable blocking caller, dynamic storage and honest persistence outcomes | VFS and actual CalcVBA portable-client prototypes; production browser delivery under W-03/W-08 | M |
+| R-WASM-1 | Actual portable domain, dynamic storage, readers and fault ownership | Actual I-FOUNDATION/I-HOST portable and minimal VFS slices; later branches add native writes/crash, query spill and object callbacks; no full DAO/SQL or W-12 prerequisite | M |
 | R-ERR-1 | Owned error channels, dispatch binding and publication under reentry | R-ORACLE-1 starts pure binding/construction; DAO/ADO/CUR/TXN/host/native faults add only their corresponding phases and callers | M |
 | I-FOUNDATION-1 | Exact target ABI and actual portable Automation service closure | Discovery: supplied/public declarations; execution: corrected shared values and CalcVBA-owned portable services, not full SQL/DAO | S |
 | I-HOST-1 | Explicit host bootstrap, actual runtime/caller capability and residual ownership | Declaration/loading discovery first; minimal actual host/class/value slices; cursor/UDF/event/VFS semantics add only their exercised dependencies | M |
-| R-ENC-1 | Native encryption families and interrupted changes | Exclusive format/writer/persistence contracts; shared combination separately with W-12 | L |
-| R-LINK-1 | Linked-source capabilities and transaction limits | Catalog, binder, ISAM/transaction and host transport | L |
-| R-COMPLEX-1 | Kind-specific complex-field storage and behavior | Catalog, row/LV ownership, evaluator and object policies | L |
-| R-REBUILD-1 | Safe native rebuilding and conservative repair | Exclusive writer, validated traversal and opaque-reference evidence | L |
-| R-OLEDB-1 | External provider negotiation and lifecycle | Shared query/transaction/type/error services and external ABI tests | L |
-| R-ODBC-1 | Driver handle, binding and diagnostic behavior | Shared engine services and actual driver/manager/client tests | L |
+| R-ENC-1 | Native codec profiles, password/SID changes and stored-byte outcomes | Native discovery first; minimal format/exclusive storage for reads, writer/crash branches for mutations; W-12 only for sharing combinations | L |
+| R-LINK-1 | Native link identity, demand-safe pushdown and source outcomes | Native metadata/source discovery first; catalog, binder, cursor, transaction and explicit host transport for exercised comparison branches | L |
+| R-COMPLEX-1 | Parent/child identity, attachment grammar and calculated/history policy | Native fixtures first; catalog/row/LV and read cursors, then mutation/index/coordinator/evaluator/object services only for their branches | L |
+| R-REBUILD-1 | Typed relocation, destination publication and conservative salvage | Exclusive admitted source and checked traversal; allocator/codec/index/writer for destination; crash/host publication only when exercised | L |
+| R-OLEDB-1 | Actual provider properties, accessor buffers and retained rows/errors | Actual factory/ABI first; minimal shared read/query values, then edits/transaction branches; initial CalcDb ADO independent | L |
+| R-ODBC-1 | Driver Manager states, descriptor buffers and staged execution | Real manager/driver and target declarations first; minimal query/cursor, then mutation/transaction/stream services; no OLE DB prerequisite | L |
 
 ## Shared contracts
 
@@ -456,13 +481,13 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | K-ERROR | 12,13 | Owned call/effect receipts outlive cleanup and reentry; project HRESULT, IErrorInfo/EXCEPINFO, language errors and ordered collections independently. Capture transient foreign evidence first; bounded rich-error failure cannot replay effects or erase unresolved owners. |
 | K-COM | 13 | Real captured interfaces and exact target ABI; one owned type graph and complete consumed Automation/portable services. Prove activation separately, retain Active host selection and code/allocator owners, and preserve declared aliases with mutation-stable owned-copy traversal. |
 | K-EVIDENCE | 15 | Captures are keyed by semantic input and environment provenance, preserving raw evidence. Refused, mismatching and missing cases remain in counts. Simulation, document evidence and actual ACE observations have distinct labels. |
-| K-IO | 03 | I/O reports completed progress and uncertain persistent effects. Cancellation/destruction is not rollback; no automatic replay of an uncertain whole mutation. |
+| K-IO | 03 | Separate raw backend count, proved contiguous progress and possible persistent effects. An unqualified short browser write stops with its whole attempted range uncertain; cancellation/destruction is not rollback or replay/suffix authority. |
 | K-ADMISSION | 02,03 | Validate lengths before allocation; reserve capacity before construction. Account separately for owned capacity, pinned/historical frames, dirty images, long values and spill. |
 | K-CRASH | 03,08 | ACE-first crash/survival parity needs no sidecar. Optional undo validates identity/integrity/eligibility and the full database: uncovered unchanged; covered exactly before or intended new image; permitted extent/presence states only; otherwise discard. Known mismatch is irreversible within an audit; optional cleanup or recovery failure retains its obligation and never supplies ACE-first safety. |
 | K-PREFLIGHT | 04 | Prepare the physical write/reference/allocation set before publishing it, then revalidate dependencies. Preflight may not speculatively invoke/repeat user code or change observable effect/error order. |
 | K-EXPR | 10 | One semantic foundation with declared operand origin, runtime values, explicit Access context and resumable demand/coercion/error/cleanup policy. Separate value/failure, predicate/validation acceptance, function admission and logical occurrences; patterns retain required diagnostic/character state. |
 | K-PLAN | 11 | Inspection reports installed graph and actual continuation events. Bound equality/order/provenance/demand precede cost; spills retain exact accepted values/state and global semantic frontier. Action enumeration/value views remain separate; no accepted effect replays. |
-| K-BROWSER | 03,14 | Blocking local COM with bounded direct/broker VFS effects; dynamic acquisition has an owner and terminal outcome. Timeout never permits buffer reuse, lost-write denial or automatic mutation replay. |
+| K-BROWSER | 03,14 | One qualified caller memory/call/allocator domain and blocking local COM; owned direct/broker effects with retained failure cohort, qualified reader/source leases and bounded memory. Timeout/worker loss never proves settlement, releases a live payload or authorizes replay. |
 
 ## Remaining facts and continuation
 
@@ -482,8 +507,8 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
 | O-POLICY | R-DAO/ADO/ERR and CUR/TXN/SQL: capture family identity/collection, batch/event and diagnostic transitions, including documentation conflicts. | 07–12 |
 | O-LOCK | Run R-LOCK-1/2 actual access/authority/lifetime first; then discriminate native read/edit/publication roles, fresh rebase and scoped rollback locally before SMB. | 09 |
-| O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
-| O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
+| O-WASM | R-WASM-1: actual shared runtime domain, direct/broker failure cohort, qualified readers, partial-write evidence and fault-specific durability. | 03,13,14 |
+| O-LATER | Six II-14 cards: native codec/complex/rebuild profiles, link/source semantics and genuine provider/driver consumers; dependencies stay feature-specific. | 14 |
 | O-VIEW | Qualify view-admission waits, external input retention and caller/Close ownership through CUR/TXN/UDF/HOST cases. | 03,07,08,09,13 |
 | O-EXPR | R-EXPR-1: qualify declaration/type and demand/error rules, field/table acceptance, function manifest and finite text profiles; range proof joins R-SORT-3. | 10,11 |
 | O-SQL | R-SQL-1/2/3: qualify full-row DISTINCTROW, aggregate/type/frontier policies, TOP/crosstab timing and protected action enumeration/DDL counts. | 11,12 |
@@ -491,4 +516,4 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-ADO | Qualify client/batch/events and native-admitted Record/Stream/ADTG/XML, including partial submission and restored provenance. | 12,13 |
 | O-ADO-ASYNC | R-ADO-1: delayed-work captures decide matched blocking option handling versus a material native early-return scope conflict. | 12,13 |
 
-Next task: **Stage 2, response 13 — II-14 WASM and later capabilities**: browser execution and storage, then the early hooks and phased designs for encryption, linked tables, complex fields, CalcDb compact and repair, OLE DB and ODBC.
+Next task: **Stage 2, response 14 — II-15 Oracle, corpus, tests and performance**: oracle execution/provenance, native corpus construction, differential and fault schedules, and representative performance measurement.
