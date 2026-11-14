@@ -1,6 +1,6 @@
 # II-09. Locking, snapshots and owned work
 
-Revision 1 · Stage 2, response 8 · 2026-11-13
+Revision 2 · Stage 2, response 15 reference reconciliation · 2026-11-14
 
 **Requirement trace:** Primary RQ-LOCK-01, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-CONC-01, RQ-CONC-02 and RQ-CALL-04. Supporting RQ-STORE-02, RQ-ISAM-01, RQ-DAO-01, RQ-DAO-04, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-ORACLE-02, RQ-ORACLE-05, RQ-SIM-02, RQ-PERF-01 and RQ-PERF-02. I-16 owns the full scope map. II-03 supplies exact image/request ownership, II-04/05/06 native row/map/tree/catalog grammar, II-07 cursor/edit/identity policy, and II-08 native resolution/crash programs. This chapter supplies the admission, source protection, version retention and work lifetimes that connect them, refining K-LOCK/K-WORK without changing public scope.
 
@@ -1099,7 +1099,7 @@ These are designed acceptance cases for the actual admission, version, lock, wor
 | T-LOCK-57 | Unlock/handle/spill/interface cleanup fails or remains uncertain | Public closed state separated from retained backend obligations; no fabricated clean teardown. |
 | T-LOCK-58 | STA wait dispatch reenters Close/Requery; wake occurs without target completion | Predicate/deadline rechecked; stale publication stops, exact pending request still drains; I-HOST-1. |
 | T-LOCK-59 | SMB channel loss, preserved open, confirmed close and application reopen | Classify actual handle/request evidence; new handle never inherits old grants; R-LOCK-4/WRITE-NET. |
-| T-LOCK-60 | Exclusive pinned-row loop versus long readers and contended shared mutation | Count acquisitions/views/tasks/retained bytes separately; no obligatory per-field coordination; R-PERF-1/R-PAR-1. |
+| T-LOCK-60 | Exclusive pinned-row loop versus long readers and contended shared mutation | Count acquisitions/views/tasks/retained bytes separately; no obligatory per-field coordination; R-STRING-1/R-PAR-1 and II-15 §25–§30. |
 
 Start native qualification with three small independent runs: both-order share admission, a read during retained pessimistic Edit versus during Update, and a same-page unrelated update between physical preparation and protected publication. In parallel, implement the internal registration-before-overwrite and submit-before-Close schedules in the actual state machines. Those runs settle the most consequential provisional mechanisms without waiting for full SQL, ADO or network sharing.
 

@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r14** · 2026-11-14 · Current state only.
+Revision **S2-r15** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-15 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-16 drafted**; Part II drafting complete; Stage 3 reconciliation pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 15 — II-16 Research and development sequence**: consolidate experiment dependencies, implementation slices, relative sizes and observable acceptance across the completed design.
+- Next: **Stage 3, response 1 — whole-book reconciliation**: check scope, shared mechanisms, evidence and dependencies; correct affected chapters and update the compact record.
 
 ## Contents and estimates
 
@@ -34,9 +34,9 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
 | 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 44.9 | I revised; II drafted |
-| 16 | Research and development sequence | 1 / 4 | 12.4 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 12.5 / 39.9 | I revised; II drafted |
 
-Part I ≈ **67.6 pages**; current Part II ≈ **515.9**. Appendices separate: A-01 sources ≈ **118.6**, A-02 experiments ≈ **98.3**.
+Part I ≈ **67.7 pages**; current Part II ≈ **555.8**. Appendices separate: A-01 sources ≈ **118.9**, A-02 experiments ≈ **98.5**.
 
 ## Scope owner index
 
@@ -168,7 +168,7 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 
 ## Development tasks
 
-All planned; branch-specific prerequisites and observable acceptance: I-16. W-PROBE basics precede W-03; full crash tracing is not a blanket construction dependency.
+All planned; package summary: I-16; concrete slice prerequisites and observable acceptance: II-16. W-PROBE basics precede W-03; full crash tracing is not a blanket construction dependency.
 
 | Work | Result | Size |
 | --- | --- | --- |
@@ -267,7 +267,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 
 ## Figures
 
-**206 IDs / 208 captions emitted**; none render-verified. Full individual purposes and forms: [planning reference](00-stage0-plan.md#figure-inventory). This current-state table groups the actual emitted captions by chapter.
+**227 IDs / 229 captions emitted**; none render-verified. Full individual purposes and forms: [planning reference](00-stage0-plan.md#figure-inventory). This current-state table groups the actual emitted captions by chapter.
 
 | Chapter | Figure IDs | IDs / captions | Status |
 | --- | --- | --- | --- |
@@ -298,6 +298,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | II-13 | F-137–F-157 | 21 / 21 | Emitted; not render-verified |
 | II-14 | F-158–F-182 | 25 / 25 | Emitted; not render-verified |
 | II-15 | F-183–F-206 | 24 / 24 | Emitted; not render-verified |
+| II-16 | F-207–F-227 | 21 / 21 | Emitted; not render-verified |
 
 ## Open issues / next actions
 
@@ -312,7 +313,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | O-ORACLES | R-ORACLE-1: actual loaded identities, owned desktop/UI, stateful reset, active-value capture and silent-repair controls; all native lanes still unexecuted. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
 | O-CATALOG | R-CAT-1: capture native MR2/query roles, CHECK/security closure and held object/parameter/schema invalidation. | 06,11,12 |
-| O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
+| O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and 510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
 | O-POLICY | R-DAO/ADO/ERR and CUR/TXN/SQL: capture family identity/collection, batch/event and diagnostic transitions, including documentation conflicts. | 07–12 |
@@ -329,5 +330,5 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 ## Short changelog
 
 - 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-14: II-15 adds concrete oracle/corpus/comparison/fault/performance design; 24 figures, 45 planned T-EVID families and five expanded cards; I-15/I-16 reconciled.
-- 2026-11-14: II-01–15 drafted; 206 figure IDs emitted; next II-16; compact current-state record retained. No actual acceptance or rendered-figure execution claimed.
+- 2026-11-14: II-16 completes Part II drafting with branch dependencies, concrete work slices and acceptance; two references corrected and native-UDF/browser-prototype dependencies clarified.
+- 2026-11-14: Next Stage 3 whole-book reconciliation; native/runtime acceptance remains unexecuted and figures remain not render-verified.

@@ -1,6 +1,6 @@
 # I-10. Expressions, sandbox and CalcVBA functions
 
-Revision 4 · Part I review and Stage 2, response 9 · 2026-11-13
+Revision 5 · Part I review and Stage 2, response 15 · 2026-11-14
 
 **Requirement trace:** Primary: RQ-SQL-07, RQ-SEM-01, RQ-VAL-02, RQ-EXPR-01, RQ-EXPR-02, RQ-EXPR-03, RQ-CALL-03. Shared obligations: RQ-SQL-01, RQ-SEM-02, RQ-SEM-03, RQ-SIM-01, RQ-CALL-02, RQ-TYPE-01. Full requirement text and Part II ownership are in I-16.
 
@@ -46,7 +46,7 @@ The full fixtures, captures, branch choices and effort estimates are in [A-02](A
 
 **R-EXPR-1 (L)** starts with the R-ORACLE-1 scalar/context baseline, then uses R-UDF-1's routing instrumentation for the host-effect extension. Differences select context adapters or prohibit rewrites; early mutation defaults/validation and later W-06 SELECT work use this same service under the [full card](A-02-experiments.md#r-expr-1--shared-values-with-access-context).
 
-**R-UDF-1 (M)** follows that scalar baseline and I-HOST-1 to decide function resolution, ownership, caller-thread delivery and continuation after reentry. The preferred explicit host callback changes only if the [full card](A-02-experiments.md#r-udf-1--resolver-ownership-and-reentry) shows a required discovery route or different continuation policy; unsupported host routes remain visible.
+**R-UDF-1 (M)** observes the native route after the scalar baseline through an owned admitted Access/VBA or other native host fixture; CalcDb/CalcVBA comparison adds the minimal I-HOST-1 route. It decides function resolution, ownership, caller-thread delivery and continuation after reentry. The preferred explicit host callback changes only if the [full card](A-02-experiments.md#r-udf-1--resolver-ownership-and-reentry) shows a required discovery route or different continuation policy; unsupported host routes remain visible.
 
 II-10 supplies the node/row/value examples, resumable algorithms, compiled pattern states, function manifest, invocation ownership and designed acceptance matrix; this chapter retains the governing choices.
 

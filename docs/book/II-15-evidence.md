@@ -1,6 +1,6 @@
 # II-15. Oracle, corpus, tests and performance
 
-Revision 1 · Stage 2, response 14 · 2026-11-14
+Revision 2 · Stage 2, response 15 continuation reconciliation · 2026-11-14
 
 **Requirement trace.** Primary: RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-04, RQ-ORACLE-05, RQ-SIM-01, RQ-SIM-02, RQ-PERF-01, RQ-PERF-02, RQ-LEDGER-01, RQ-TEST-01. Supporting: RQ-PROD-04, RQ-SEM-01, RQ-SEM-03, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-01, RQ-SRC-02, RQ-FMT-02, RQ-CONC-01, RQ-CALL-02, RQ-PLAN-01, RQ-ARCH-01, RQ-PROCESS-01, RQ-DEV-02, RQ-STORE-04 and RQ-STORE-05. The section-to-requirement map near the end identifies the mechanisms that satisfy them; the full requirement text remains in I-16.
 
@@ -1079,7 +1079,7 @@ As W-03/04 arrive, attach the real effect adapters, format-driven corpus and che
 
 W-06/07 add full query/action/DDL demand, actual plans, spill and reduction vocabularies. W-09 attaches ADO through the same artifacts and comparison framework alongside DAO as its services become available. W-10/11/12 add their exact reader, visibility and cross-process contexts. Native, portable and browser clients have independently qualified execution lanes. Later encryption, links, complex fields, rebuild, OLE DB and ODBC add cases and profile-specific sources to the same corpus; they do not require another definition of evidence or a blanket dependency on shared writing.
 
-Keep the full research cards in A-02. This chapter refines **R-ORACLE-1**, **R-CRASH-1/2**, **R-STRING-1** and **R-PAR-1** without adding new research or work IDs. The large set of tests is a case inventory, not a reason to delay the first useful native observation until every case exists. II-16 will turn the book's accumulated branch dependencies and acceptance into the final implementation sequence.
+Keep the full research cards in A-02. This chapter refines **R-ORACLE-1**, **R-CRASH-1/2**, **R-STRING-1** and **R-PAR-1** without adding new research or work IDs. The large set of tests is a case inventory, not a reason to delay the first useful native observation until every case exists. [II-16](II-16-development.md) consolidates the book's branch dependencies, concrete implementation slices and acceptance; Stage 3 whole-book reconciliation follows Part II drafting.
 
 **Requirement closure within II-15.** The following map locates the concrete treatment in this chapter.
 

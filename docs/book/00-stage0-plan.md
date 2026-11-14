@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r14 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
+Revision S2-r15 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-15, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-16, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -57,7 +57,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
 | 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 44.9 | I revised; II drafted |
-| 16 | Research and development sequence | 1 / 4 | 12.4 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 12.5 / 39.9 | I revised; II drafted |
 
 | File family | Current contents |
 | --- | --- |
@@ -76,7 +76,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | I-13-interop.md / II-13-interop.md | Genuine native/portable declarations, activation/factory ownership, exact Automation ABI, unchanged .xll/.NET lanes and explicit host bootstrap/callback/shutdown. |
 | I-14-platforms.md / II-14-platforms.md | Actual wasm32 caller domains, direct/broker/readers and fault receipts; native encryption, links, complex fields, graph rebuild and genuine OLE DB/ODBC mechanisms. |
 | I-15-evidence.md / II-15-evidence.md | Exact oracle/job/capture identities, native history corpus, byte/graph comparators, calibrated repair controls, context-preserving fault/reduction and actual DAO-first cost measurement. |
-| I-16-development.md / II-16-development.md | Experiment dependencies; work packages; relative sizes; acceptance conditions and reconciliation. |
+| I-16-development.md / II-16-development.md | Branch-specific research and construction inputs; concrete implementation slices, sizes and observable completion; scope/impact closure and Stage 3 reconciliation. |
 
 Appendices: **A-01-sources.md** (full active source ledger) and **A-02-experiments.md** (34 full cards plus T-COMPACT-1). I-15 retains evidence design and short summaries, not those full reference collections.
 
@@ -444,10 +444,31 @@ All planned IDs are emitted in the forms below; none has been render-verified.
 | F-204 | II-15-evidence.md | distinguish preparation states before comparing elapsed samples | Markdown constructed/design table; emitted; not render-verified |
 | F-205 | II-15-evidence.md | a proposed optimization ledger row | Markdown constructed/design table; emitted; not render-verified |
 | F-206 | II-15-evidence.md | evidence dispositions and their accounting effect | Markdown constructed/design table; emitted; not render-verified |
+| F-207 | II-16-development.md | independently useful foundations and their first joins | Mermaid source; emitted; not render-verified |
+| F-208 | II-16-development.md | dependency types and the failure caused by conflating them | Markdown design table; emitted; not render-verified |
+| F-209 | II-16-development.md | first results from the boundary investigations | Markdown design table; emitted; not render-verified |
+| F-210 | II-16-development.md | storage, identity and persistence investigations | Markdown design table; emitted; not render-verified |
+| F-211 | II-16-development.md | native sharing sequence and its first discriminators | Markdown design table; emitted; not render-verified |
+| F-212 | II-16-development.md | the catalog/SQL dependency is a convergence, not a completion cycle | Mermaid source; emitted; not render-verified |
+| F-213 | II-16-development.md | semantic and object-policy investigations | Markdown design table; emitted; not render-verified |
+| F-214 | II-16-development.md | later capability discovery and implementation joins | Markdown design table; emitted; not render-verified |
+| F-215 | II-16-development.md | retained work inventory | Markdown design table; emitted; not render-verified |
+| F-216 | II-16-development.md | first-read convergence and independent extensions | Mermaid source; emitted; not render-verified |
+| F-217 | II-16-development.md | one fixture, several independent completion claims | Markdown design table; emitted; not render-verified |
+| F-218 | II-16-development.md | construction inputs for foundations and external effects | Markdown design table; emitted; not render-verified |
+| F-219 | II-16-development.md | construction inputs for native formats and exclusive mutation | Markdown design table; emitted; not render-verified |
+| F-220 | II-16-development.md | construction inputs for expressions, SQL and native catalog writes | Markdown design table; emitted; not render-verified |
+| F-221 | II-16-development.md | construction inputs for actual callers and visibility | Markdown design table; emitted; not render-verified |
+| F-222 | II-16-development.md | construction inputs for later native features and external consumers | Markdown design table; emitted; not render-verified |
+| F-223 | II-16-development.md | selected native observation dependencies | Markdown design table; emitted; not render-verified |
+| F-224 | II-16-development.md | completion evidence follows the behavior being claimed | Markdown design table; emitted; not render-verified |
+| F-225 | II-16-development.md | scope-to-delivery closure | Markdown design table; emitted; not render-verified |
+| F-226 | II-16-development.md | effect-based regression closure | Original pseudocode; emitted; not render-verified |
+| F-227 | II-16-development.md | the assignment's nine completion criteria become review obligations | Markdown design table; emitted; not render-verified |
 
 ## Research and development references
 
-A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16 contains implementation results, branch-specific prerequisites and acceptance. All experiments remain planned/unexecuted.
+A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16 contains the package summary and full scope map; II-16 specifies concrete slices, dependency types and observable acceptance. All experiments remain planned/unexecuted.
 
 | Task | Design question | Current dependency boundary | Size |
 | --- | --- | --- | --- |
@@ -467,7 +488,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-LOCK-3 | Protected input graphs and refresh beside ACE | R-LOCK-1/2; cursor/TXN-VIEW; format/sort/catalog/host evidence by branch | L |
 | R-LOCK-4 | Shared rebase, rollback and local/SMB ownership | R-LOCK-3; relevant semantic/format/transaction evidence; shared R-CRASH-1/2; local then SMB | XL |
 | R-EXPR-1 | Declared/value types, staged evaluation, patterns, mutation and context capabilities | R-ORACLE-1; I-FOUNDATION-1 declarations for exact captures; scalar/mutation/pattern branches first; host effects add R-UDF-1/I-HOST-1 | L |
-| R-UDF-1 | Host resolution, signature ownership, current admission and reentrant continuation | R-EXPR-1 scalar baseline; I-HOST-1; then feeds R-EXPR-1 host-effect extension | M |
+| R-UDF-1 | Host resolution, signature ownership, current admission and reentrant continuation | Native discovery: capture/scalar baseline plus admitted native host fixture; CalcDb comparison adds corrected shared declarations and minimal I-HOST-1; then feeds expression host-effect cases | M |
 | R-SQL-1 | Parser/binder, ranges/joins, relational domains, aggregates and owned execution | R-ORACLE-1 and R-EXPR-1 scalar/context baseline; R-SORT-3 for key/order claims; relevant R-CAT/CURSOR branches; host effects add R-UDF-1/I-HOST-1 only | L |
 | R-SQL-2 | Protected action enumeration, value visibility, counts/failures and native DDL | R-TXN-1/R-FMT-2 plus relevant expression evidence for row actions; R-CAT-1 for catalog/DDL/security/QueryDef; host/sharing/crash only to affected branches | L |
 | R-SQL-3 | DISTINCTROW classes/provenance, TOP and independent schema/population timing | R-SQL-1 relevant descriptors; R-CAT-1 structure research and R-CURSOR-1 public lifetimes only for affected cases; no W-07 prerequisite | L |
@@ -475,7 +496,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | R-ADO-1 | ADO native routing, parameters, client/batch state, events and persistence | Native probes: ACE/ADO, fixtures/capture and relevant host/fault setup; CalcDb comparisons add R-ACT-1 and only the services exercised, no full DAO/later-provider prerequisite | L |
 | R-ACT-1 | Unchanged creation, declarations, context/factory selection and lifetime | Native discovery: R-ORACLE-1 and existing callers/environment; CalcDb comparison: minimal I-FOUNDATION/W-02/W-08 host/factory slices; real data adds only W-04/05 branches | M |
 | R-PAR-1 | Serial semantic frontier, bounded worker ownership and measured benefit | Submission/drain schedules start with VFS/cursors; operator eligibility needs its accepted serial R-SQL-1/2/3 and relevant host policy, never full host coverage first | M |
-| R-WASM-1 | Actual portable domain, dynamic storage, readers and fault ownership | Actual I-FOUNDATION/I-HOST portable and minimal VFS slices; later branches add native writes/crash, query spill and object callbacks; no full DAO/SQL or W-12 prerequisite | M |
+| R-WASM-1 | Actual portable domain, dynamic storage, readers and fault ownership | Actual portable domain and minimum W-03 I/O/W-04 decoder prototypes; completed browser adapter is a result, not a prerequisite; write/query/callback branches attach independently | M |
 | R-ERR-1 | Owned error channels, dispatch binding and publication under reentry | R-ORACLE-1 starts pure binding/construction; DAO/ADO/CUR/TXN/host/native faults add only their corresponding phases and callers | M |
 | I-FOUNDATION-1 | Exact target ABI and actual portable Automation service closure | Discovery: supplied/public declarations; execution: corrected shared values and CalcVBA-owned portable services, not full SQL/DAO | S |
 | I-HOST-1 | Explicit host bootstrap, actual runtime/caller capability and residual ownership | Declaration/loading discovery first; minimal actual host/class/value slices; cursor/UDF/event/VFS semantics add only their exercised dependencies | M |
@@ -526,7 +547,7 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-ORACLES | R-ORACLE-1: actual loaded identities, owned desktop/UI, stateful reset, active-value capture and silent-repair controls; all native lanes still unexecuted. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
 | O-CATALOG | R-CAT-1: capture native MR2/query roles, CHECK/security closure and held object/parameter/schema invalidation. | 06,11,12 |
-| O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
+| O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and 510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
 | O-POLICY | R-DAO/ADO/ERR and CUR/TXN/SQL: capture family identity/collection, batch/event and diagnostic transitions, including documentation conflicts. | 07–12 |
@@ -540,4 +561,4 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-ADO | Qualify client/batch/events and native-admitted Record/Stream/ADTG/XML, including partial submission and restored provenance. | 12,13 |
 | O-ADO-ASYNC | R-ADO-1: delayed-work captures decide matched blocking option handling versus a material native early-return scope conflict. | 12,13 |
 
-Next task: **Stage 2, response 15 — II-16 Research and development sequence**: consolidate the experiment/development dependency graph, implementation slices, S/M/L/XL sizes and observable acceptance, then prepare Stage 3 reconciliation.
+Next task: **Stage 3, response 1 — whole-book reconciliation**: check scope, shared mechanisms, evidence and dependencies; correct affected chapters and update the compact record.
