@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r10** · 2026-11-13 · Current state only.
+Revision **S2-r11** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-11 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-12 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 11 — II-12 DAO, ADO and observable object behavior**, with complete member inventories, object/collection state, errors and shared-engine integration.
+- Next: **Stage 2, response 12 — II-13 COM, activation and DNA Calc integration**, with genuine interfaces, activation, native and portable COM services, both managed-runtime lanes and host integration.
 
 ## Contents and estimates
 
@@ -30,13 +30,13 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I revised; II drafted |
 | 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I revised; II drafted |
 | 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
-| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 3.7 / 0.0 | I revised; II pending |
+| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 5.3 / 0.0 | I revised; II pending |
 | 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 10.7 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 11.2 / 0.0 | I revised; II pending |
 
-Part I ≈ **62.8 pages**; current Part II ≈ **337.1**. Appendices separate: A-01 sources ≈ **66.7**, A-02 experiments ≈ **66.2**.
+Part I ≈ **64.3 pages**; current Part II ≈ **383.5**. Appendices separate: A-01 sources ≈ **84.2**, A-02 experiments ≈ **76.3**.
 
 ## Scope owner index
 
@@ -89,7 +89,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-SQL-1 | Recommended | Scalar-demand graph; full-row DISTINCTROW, exact state/frontier spill and separate crosstab schema; R-SQL-1/3. | 10,11 |
 | D-ACTION-1 | Provisional | Qualified identity spool or protected lazy enumeration cut; separate value/coalescing/failure policies; R-SQL-2. | 07,08,11 |
 | D-PAR-1 | Decided | Workers must preserve accepted serial rows, Double folds, effects and errors. | 09,10,11 |
-| D-OBJECT-1 | Recommended | DAO priority; ADO may start alongside DAO as dependencies permit. | 07,12,13 |
+| D-OBJECT-1 | Recommended | Typed member recipes and family policies; DAO priority, ADO alongside; DAO/ADO/ERR probes. | 07,12,13 |
 | D-ACT-1 | Provisional | Own identities plus scoped host mappings/factories; unchanged-client R-ACT-1. | 13 |
 | D-HOST-1 | Provisional | Small versioned host service boundary; CalcVBA owns portable COM. | 13 |
 | D-WASM-1 | Provisional | Local caller-worker COM; tested direct/broker storage and dynamic acquisition, R-WASM-1. | 03,13,14 |
@@ -114,7 +114,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-WORK | Register ownership before submission; one CloseAttempt; cancellation retains exact work/grants through settlement. | 09 |
 | K-THREAD | Caller-thread foreign work outside latches; own demanded inputs, revalidate each boundary; no replay/ancestor wait. | 10,13 |
 | K-PAR | Workers preserve serial semantic steps, exact state, demand and bounded completion owners; ordered partial sums insufficient. | 11 |
-| K-ERROR | Typed context/progress/uncertainty; evidenced per-surface HRESULT/error collections and lifetime. | 12,13 |
+| K-ERROR | Owned effects and independent channels; capture first, bounded diagnostic retirement, no replay through failure. | 12,13 |
 | K-COM | Real ABI/identity; portable type info, dispatch/errors/enumeration/factories/ADO events and Automation allocation. | 13 |
 | K-EVIDENCE | Raw input-addressed captures/provenance; refused/missing remain failures; observation classes stay distinct. | 15 |
 | K-IO | Report actual progress and persistent uncertainty; cancellation is not rollback or mutation retry authority. | 03 |
@@ -151,12 +151,12 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 | R-SQL-1 | Parser/binder, ranges/joins, relational domains, aggregates and owned execution | 11 / L |
 | R-SQL-2 | Protected action enumeration, value visibility, counts/failures and native DDL | 11 / L |
 | R-SQL-3 | DISTINCTROW classes/provenance, TOP and independent schema/population timing | 11 / L |
-| R-DAO-1 | Complete DAO member/lifecycle/error inventory | 12 / XL |
-| R-ADO-1 | ADO cursor/command/provider-string surface | 12 / L |
+| R-DAO-1 | DAO declarations, publication, collection/child identity and lifecycle | 12 / XL |
+| R-ADO-1 | ADO native routing, parameters, client/batch state, events and persistence | 12 / L |
 | R-ACT-1 | Unchanged VBA/.xll/.NET activation routes | 13 / M |
 | R-PAR-1 | Serial semantic frontier, bounded worker ownership and measured benefit | 11 / M |
 | R-WASM-1 | Portable blocking caller, dynamic storage and honest persistence outcomes | 14 / M |
-| R-ERR-1 | Error identity, ordering and lifetime | 12 / M |
+| R-ERR-1 | Owned error channels, dispatch binding and publication under reentry | 12 / M |
 | I-FOUNDATION-1 | Shared types package and published integration contract | 13 / S |
 | I-HOST-1 | Host services, UDF delivery and lifetime | 13 / M |
 | R-ENC-1 | Native encryption families and interrupted changes | 14 / L |
@@ -252,6 +252,9 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Relational equality domain | Bound types/conversions/Null/text equality with separately proved congruent hash and compatible order. |
 | Enumeration cut | Protected structural membership/order for a lazy action walk, independent of predicate/assignment value visibility. |
 | Accepted contribution frontier | Exact input and within-row aggregate progress; spilling cannot move later demand before an earlier required failure. |
+| Member recipe | Captured interface/member/invocation declaration plus typed implementation and observable state/diagnostic cases. |
+| Collection image | Owned ordered membership and lookup state, separate from native catalog freshness and held-child identity. |
+| Diagnostic snapshot | Owned ordered entries and original numeric/text evidence, separate from live collection and thread-slot publication. |
 
 ## Source ledger — compact current index
 
@@ -262,9 +265,9 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | N | Draft 2 | R | P |
 | C | Attached/undated | R | P |
 | V | 8115aa781; user-corrected | F | P |
-| U | 2026-11-13 | R | P |
+| U | 2026-11-14 | R | P |
 | A | Attached assignment | R | P |
-| B | S2-r10 | S | P |
+| B | S2-r11 | S | P |
 | S-MS-TXN | Updated 2022-03-18; Applies to Access 2013 / Office 2013 | F | U |
 | S-MS-VARIANT | Updated 2021-04-02 | F | U |
 | S-MS-FACTORY | Updated 2022-01-31 | F | U |
@@ -651,10 +654,97 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | S-MS-SQL-CREATE-PROCEDURE | Doc@2026-11-13 | F | U |
 | S-MS-SQL-DROP | Doc@2026-11-13 | F | U |
 | S-MS-SQL-MODIFY-DESIGN | Doc@2026-11-13 | F | U |
+| S-MS-ITYPELIB | Doc@2026-11-14 | F | U |
+| S-MS-LOADTYPELIBEX | Doc@2026-11-14 | F | U |
+| S-MS-GETFUNCDESC | Doc@2026-11-14 | F | U |
+| S-MS-TYPEATTR | Doc@2026-11-14 | F | U |
+| S-MS-FUNCFLAGS | Doc@2026-11-14 | F | U |
+| S-MS-TYPEINFO-GETNAMES | Doc@2026-11-14 | F | U |
+| S-MS-DAO-ENGINE | Doc@2026-11-14 | F | U |
+| S-MS-DAO-ENGINE-MEMBERS | Doc@2026-11-14 | F | U |
+| S-MS-DAO-WORKSPACE | Doc@2026-11-14 | F | U |
+| S-MS-DAO-WORKSPACE-MEMBERS | Doc@2026-11-14 | F | U |
+| S-MS-DAO-DATABASES | Doc@2026-11-14 | F | U |
+| S-MS-DAO-DATABASE-MEMBERS | Doc@2026-11-14 | F | U |
+| S-MS-ACCESS-CURRENTDB | Doc@2026-11-14 | F | U |
+| S-MS-DAO-FIELD-OBJECT | Doc@2026-11-14 | F | U |
+| S-MS-DAO-INDEX-OBJECT | Doc@2026-11-14 | F | U |
+| S-MS-DAO-CREATEQUERYDEF | Doc@2026-11-14 | F | U |
+| S-MS-DAO-QUERY-CLOSE | Doc@2026-11-14 | F | U |
+| S-MS-DAO-SECURITY-INTERFACES | Doc@2026-11-14 | F | U |
+| S-MS-DAO-SECURITY-FORMATS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CURSORSERVICE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-PROPERTY | Doc@2026-11-14 | F | U |
+| S-MS-ADO-PROPERTIES | Doc@2026-11-14 | F | U |
+| S-MS-ADO-ACTIVECONNECTION | Doc@2026-11-14 | F | U |
+| S-MS-ADO-REFRESH | Doc@2026-11-14 | F | U |
+| S-MS-ADO-COMMANDEXECUTE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-PREPARED | Doc@2026-11-14 | F | U |
+| S-MS-ADO-NEXTRECORDSET | Doc@2026-11-14 | F | U |
+| S-MS-ADO-LOCKTYPE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-DISCONNECT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-UPDATE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-ORIGINALVALUE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-UNDERLYINGVALUE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RECORDSET | Doc@2026-11-14 | F | U |
+| S-MS-ADO-UPDATEBATCH | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CANCELBATCH | Doc@2026-11-14 | F | U |
+| S-MS-ADO-FILTER | Doc@2026-11-14 | F | U |
+| S-MS-ADO-FILTERGROUPS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RECORDSTATUS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-SORT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-FIND | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CLONE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RESYNC | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RESYNCENUM | Doc@2026-11-14 | F | U |
+| S-MS-ADO-GETROWS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-GETSTRING | Doc@2026-11-14 | F | U |
+| S-MS-ADO-EVENTSUMMARY | Doc@2026-11-14 | F | U |
+| S-MS-ADO-WILLCONNECT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-WILLEXECUTE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-EVENTPARAMETERS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-EXECUTECOMPLETE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-EXECUTEOPTIONS | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CANCEL | Doc@2026-11-14 | F | U |
+| S-MS-ADO-OPENSCHEMA | Doc@2026-11-14 | F | U |
+| S-MS-ADO-FIELD | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RECORDOPEN | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RECORD | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAM | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMOPEN | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMTYPE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CHARSET | Doc@2026-11-14 | F | U |
+| S-MS-ADO-POSITION | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMWRITE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMREAD | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMCOPY | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMLOAD | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMSAVE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-STREAMREADTEXT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-PERSIST | Doc@2026-11-14 | F | U |
+| S-MS-ADO-PERSISTPROVIDER | Doc@2026-11-14 | F | U |
+| S-MS-ADO-XMLFORMAT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-RECORDSETSAVE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-COMMANDTIMEOUT | Doc@2026-11-14 | F | U |
+| S-MS-ADO-CACHESIZE | Doc@2026-11-14 | F | U |
+| S-MS-ADO-FIELDS | Doc@2026-11-14 | F | U |
+| S-MS-DAO-ERROR | Doc@2026-11-14 | F | U |
+| S-MS-ERR-PASSING | Doc@2026-11-14 | F | U |
+| S-MS-ERR-COMCODES | Doc@2026-11-14 | F | U |
+| S-MS-ERR-SUPPORT | Doc@2026-11-14 | F | U |
+| S-MS-ERR-SETERRORINFO | Doc@2026-11-14 | F | U |
+| S-MS-ERR-RUNTIME | Doc@2026-11-14 | F | U |
+| S-MS-ERR-ADO-CLEAR | Doc@2026-11-14 | F | U |
+| S-MS-ERR-VBA | Doc@2026-11-14 | F | U |
+| S-MS-ERR-PRESERVESIG | Doc@2026-11-14 | F | U |
+| S-MS-ERR-NET-MAP | Doc@2026-11-14 | F | U |
+| S-MS-ERR-NET-GETEXCEPTION | Doc@2026-11-14 | F | U |
+| S-MS-ERR-NET-GETHR48 | Doc@2026-11-14 | F | U |
+| S-MS-ERR-NET-GETHR10 | Doc@2026-11-14 | F | U |
 
 ## Figures
 
-All **116 IDs / 118 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
+All **136 IDs / 138 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
 
 | Figure | Location | Actual form/status |
 | --- | --- | --- |
@@ -774,6 +864,26 @@ All **116 IDs / 118 captions emitted**; none render-verified. Tables are identif
 | F-114 | II-11 | Markdown constructed/design table; emitted |
 | F-115 | II-11 | Markdown constructed/design table; emitted |
 | F-116 | II-11 | Markdown constructed/design table; emitted |
+| F-117 | II-12 | Mermaid source; emitted |
+| F-118 | II-12 | Markdown constructed/design table; emitted |
+| F-119 | II-12 | Mermaid source; emitted |
+| F-120 | II-12 | Markdown constructed/design table; emitted |
+| F-121 | II-12 | Markdown constructed/design table; emitted |
+| F-122 | II-12 | Markdown constructed/design table; emitted |
+| F-123 | II-12 | Markdown constructed/design table; emitted |
+| F-124 | II-12 | Markdown constructed/design table; emitted |
+| F-125 | II-12 | Mermaid source; emitted |
+| F-126 | II-12 | Mermaid source; emitted |
+| F-127 | II-12 | Markdown constructed/design table; emitted |
+| F-128 | II-12 | Mermaid source; emitted |
+| F-129 | II-12 | Mermaid source; emitted |
+| F-130 | II-12 | Markdown constructed/design table; emitted |
+| F-131 | II-12 | Markdown constructed/design table; emitted |
+| F-132 | II-12 | Markdown constructed/design table; emitted |
+| F-133 | II-12 | Mermaid source; emitted |
+| F-134 | II-12 | Markdown constructed/design table; emitted |
+| F-135 | II-12 | Markdown constructed/design table; emitted |
+| F-136 | II-12 | Markdown constructed/design table; emitted |
 
 ## Open issues / next actions
 
@@ -791,16 +901,19 @@ All **116 IDs / 118 captions emitted**; none render-verified. Tables are identif
 | O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
-| O-POLICY | R-CURSOR/TXN/SQL/DAO/ADO/ERR: settle undocumented or contradictory target transitions. | 07–12 |
+| O-POLICY | R-DAO/ADO/ERR and CUR/TXN/SQL: capture family identity/collection, batch/event and diagnostic transitions, including documentation conflicts. | 07–12 |
 | O-LOCK | Run R-LOCK-1/2 actual access/authority/lifetime first; then discriminate native read/edit/publication roles, fresh rebase and scoped rollback locally before SMB. | 09 |
 | O-WASM | R-WASM-1: prove dynamic acquisition, actual portable caller, reader semantics and durability. | 03,13,14 |
 | O-LATER | Six I-14 research cards settle later capability mechanisms and feature-specific dependencies. | 14 |
 | O-VIEW | Qualify view-admission waits, external input retention and caller/Close ownership through CUR/TXN/UDF/HOST cases. | 03,07,08,09,13 |
 | O-EXPR | R-EXPR-1: qualify declaration/type and demand/error rules, field/table acceptance, function manifest and finite text profiles; range proof joins R-SORT-3. | 10,11 |
 | O-SQL | R-SQL-1/2/3: qualify full-row DISTINCTROW, aggregate/type/frontier policies, TOP/crosstab timing and protected action enumeration/DDL counts. | 11,12 |
+| O-OBJECT | Capture complete target declarations, hidden-session/draft publication, held-child/Refresh policies and secured-MDB applicability. | 12,13 |
+| O-ADO | Qualify client/batch/events and native-admitted Record/Stream/ADTG/XML, including partial submission and restored provenance. | 12,13 |
+| O-ADO-ASYNC | R-ADO-1: delayed-work captures decide matched blocking option handling versus a material native early-return scope conflict. | 12,13 |
 
 ## Short changelog
 
-- 2026-11-13: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-13: II-11 adds native SQL paths, relational/state-spill operators, protected actions and DDL; 20 figures/84 designed families; summaries reconciled.
-- 2026-11-13: II-01–11 drafted; 116 figure IDs emitted; next II-12. No ACE execution or rendered-figure result claimed.
+- 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
+- 2026-11-14: II-12 adds member/collection lifetimes, native DAO paths, ADO caches/events/persistence and owned diagnostics; 20 figures; Part I/cards reconciled.
+- 2026-11-14: II-01–12 drafted; 136 figure IDs emitted; next II-13. No ACE execution or rendered-figure result claimed.
