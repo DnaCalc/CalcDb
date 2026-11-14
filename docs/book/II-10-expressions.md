@@ -1,6 +1,6 @@
 # II-10. Expressions, sandbox and CalcVBA functions
 
-Revision 1 · Stage 2, response 9 · 2026-11-13
+Revision 2 · Reconciled with Stage 2, response 10 · 2026-11-13
 
 **Requirement trace:** Primary RQ-SQL-07, RQ-SEM-01, RQ-VAL-02, RQ-EXPR-01, RQ-EXPR-02, RQ-EXPR-03 and RQ-CALL-03. Supporting RQ-SQL-01, RQ-SEM-02, RQ-SEM-03, RQ-VAL-01, RQ-VAL-03, RQ-TYPE-01, RQ-SIM-01, RQ-CALL-02, RQ-HOST-01, RQ-ORACLE-02, RQ-ORACLE-05, RQ-PERF-01 and RQ-PERF-02. I-16 owns the full scope map. II-02 supplies canonical values/ownership; II-04/05 native field/key mechanics; II-06 parameter/catalog identity; II-07/08 accepted edits and native persistence; II-09 protected inputs and work/reentry ownership. This chapter connects them through K-EXPR, K-VALUE, K-STRING, K-THREAD, K-ERROR, K-ADMISSION and K-PLAN.
 
@@ -554,6 +554,8 @@ The default and validation admission restrictions follow the DAO references: def
 Prefer applying a new field's default once at the observable AddNew/default stage established in II-07, storing its result in the edit buffer with an occurrence receipt. An explicit later Null assignment replaces that result; Update does not confuse Null with an omitted input and regenerate it. SQL INSERT carries a supplied-column bitmap and its own observed per-row default point. Clock/random/default generators belong to the accepted semantic attempt; native-page rebase, row resizing or index-split planning uses their accepted values. A failed explicit public retry may have a different native policy, and is not conflated with invisible internal replanning.
 
 **Preferred provisional validation adapter:** coerce/evaluate the rule under the appropriate shared predicate-value policy, then require True for field validation. False rejects; a rule result of Null rejects under the initial field policy, motivated by Access's instruction to include an explicit Null alternative when permitted. For table validation, use the same initial acceptance choice as an implementation hypothesis, with a separately selectable table policy; the field documentation alone does not establish its result. R-EXPR-1's Null/Empty/error matrix confirms or changes each adapter independently. Required and AllowZeroLength remain independent checks; `Required=False` does not answer what a rule itself does with Null. Do not import another database's CHECK-accepts-unknown convention.[^r-validation-access]
+
+These adapters describe DAO field/table validation properties. II-11 separately binds SQL CHECK, whose admitted expression scope, truth/error policy and native persistence are R-SQL-2/R-CAT-1 questions. Reusing the scalar service does not make CHECK text interchangeable with TableDef.ValidationRule or impose this property's initial Null policy on it.
 
 This does not assert that all predicate-like uses are interchangeable. SQL selection normally retains only a true predicate; a validation rejection additionally selects ValidationText/errors and a mutation continuation, and its handling of a non-Boolean scalar, Null or evaluation failure is separately captured. A missing rule has no rule evaluation at all; it is not equivalent to a present rule that yields Null. Rule syntax/admission errors also have their own property-set/open/assignment/Update timing.
 
