@@ -1,6 +1,6 @@
 # II-03. VFS, pager and page cache
 
-Revision 5 · Stage 2, response 13 · 2026-11-14
+Revision 6 · Stage 3, response 1 reconciliation · 2026-11-14
 
 The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
@@ -439,7 +439,7 @@ BeginPageEdit(transaction, page_object, scope) -> MutablePageLease | Failure
     if input is private, unsealed and has no external read borrows or other owners
        and the required scope-before image is already distinct immutable backing
            (or this scope requires no before-image):
-        transfer input ownership to exclusive mutable lease
+        return exclusive mutable lease by transferring input ownership
     output = copy complete logical native image into owned private backing
     assign fresh image revision and transaction/scope ownership
     install overlay binding only after construction succeeds
@@ -594,7 +594,7 @@ Let P be the selected page size; R the number of resident clean/current frames; 
 
 with shared frames counted once, plus directory/token/overlay/locator metadata and allocator overhead. A retained pin is not an extra P-byte allocation, but it can prevent reclamation of P bytes. Report both owned capacity and unreclaimable residency.
 
-For a row insertion that touches k distinct existing physical pages, first-write copies can approach `k×P`, plus preserved revisions for statement rollback, old readers or repeated native phases. Editing two map rows on the same physical page contributes one current private page, not two independent copies. A new page needs initialized output but no native before-image; a deleted page can still need historical bytes. Complete images may spill, but the index and all simultaneously required workspace must fit the admitted bound.
+For a row insertion that touches k distinct existing physical pages, first-write copies can approach `k×P`, plus preserved revisions for statement rollback, old readers or repeated native phases. Editing two map rows on the same physical page contributes one current private page, not two independent copies. An appended page has an ABSENT physical before-state rather than native before bytes; a page newly allocated from existing free space has real stored before bytes, retained wherever preservation, rollback or optional-undo obligations require them. A deleted page can still need historical bytes. Complete images may spill, but the index and all simultaneously required workspace must fit the admitted bound.
 
 Expected directory lookup is O(1) with the chosen hash map; a page read/copy is O(P); a checked slot is O(1); full slot validation is O(slot count); CLOCK can take O(R) probes; and a native-reference walk is proportional to its actual checked hops and payload. A sequential scan's I/O count depends on ownership-map fragmentation and cache residency, not merely total file length. None of these expressions is a benchmark result.
 

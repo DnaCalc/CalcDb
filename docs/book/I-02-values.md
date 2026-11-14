@@ -1,6 +1,6 @@
 # I-02. Values, strings and ownership
 
-Revision 3 · Part I review and Stage 2, response 1 · 2026-11-13
+Revision 4 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace:** Primary: RQ-VAL-01, RQ-VAL-03, RQ-TYPE-01. Shared obligations: RQ-SEM-01, RQ-COM-01, RQ-LATE-03, RQ-FMT-03, RQ-VAL-02, RQ-CONC-01, RQ-PORT-03, RQ-PERF-01, RQ-PERF-02. Full requirement text and Part II ownership are in I-16.
 
@@ -71,7 +71,7 @@ For a text value needed once as a BSTR, prefer sizing and decoding directly into
 
 Under **K-ADMISSION**, reserve the output budget before allocating a large value. Charge an allocation once to its owner and separately account for page bytes retained by borrowed slices. A Memo can be consumed in bounded chunks by an interface permitting streaming; a property requiring one BSTR still requires a complete owned result. Never pretend a streaming internal reader removes that obligation.[^memory]
 
-Before calling VBA or another external callback, release internal locks and provide stable owned or immutable arguments. On return, validate generations before continuing a retained cursor operation. R-STRING-1, R-EXPR-1 and R-DAO-1 test values, ownership, error behavior and allocation traces; ABI tests cover both Windows .NET families and the portable stand-in. Passing a scalar round trip alone does not establish BSTR, Decimal, SAFEARRAY or object lifetime correctness.
+Register preparation and cleanup ownership before any potentially reentrant retention or copy. Before calling VBA or another external callback, release internal locks and provide stable owned or immutable by-value inputs. Legal ByRef arguments instead retain their referent lifetime, alias groups and actual writeback rules; a snapshot must not replace those observable aliases. Owned copying requires a source graph stable throughout its traversal. After foreign preparation, invocation or cleanup, validate the enclosing continuation before publishing or using the result; a valid copied value can outlive an invalidated cursor operation. R-STRING-1, R-EXPR-1 and R-DAO-1 test values, ownership, error behavior and allocation traces; ABI tests cover both Windows .NET families and the portable stand-in. Passing a scalar round trip alone does not establish BSTR, Decimal, SAFEARRAY or object lifetime correctness.
 
 ## Experiment summary
 

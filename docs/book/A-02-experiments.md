@@ -1,6 +1,6 @@
 # A-02. Complete experiment specifications
 
-Revision 15 · Stage 2, response 15 · 2026-11-14
+Revision 16 · Stage 3, response 1 · 2026-11-14
 
 This appendix holds all 34 research/integration cards formerly expanded in Part I, plus acceptance protocol T-COMPACT-1 within R-ORACLE-1. Part I retains short deciding summaries and complete architecture. These are planned experiments, not executed ACE results. Full source/version/use metadata is in A-01-sources.md; source identifiers in cards resolve there.
 
@@ -314,6 +314,8 @@ Execute a saved query, alter one relevant input, and execute the same held objec
 
 Where host functions are supported, change schema during a caller-thread callback, then reenter or continue the original operation. Capture effects and the exact error/result frontier; no retry may duplicate an already-executed callback. Drop/recreate with ID reuse and rollback-to-earlier-bytes cases exercise incarnation/epoch handling. Cache-on and cache-off runs must agree in typed output, errors, metadata and visible effects. Invalidation cost is measured with unrelated catalog changes as well as actual dependency changes.
 
+Extend cache-on/off cases to native-admitted parameter capture and controlled foreign AddRef/Release fixtures: change declarations/Close state during copy or cache retirement; separately replace live values after immutable capture. Require stable source traversal and revalidation before the next dependent operation, with accepted effects retained without recapture. Synthetic reference fixtures establish ownership behavior only; native parameter admission and visible policy need their own captures. These cases refine the existing T-CAT-29 family.
+
 **Selects.** Positive and negative namespace observations select dependency records; held-object and visibility results select when validation/rebinding occurs. Prefer per-object/namespace epochs with an owner-and-view-specific entry certificate. Inconclusive fine-grained invalidation uses a conservative relevant-catalog rebind for new calls, while preserving already-effectful continuation rules. It does not introduce native generation bytes or a separate persistent catalog.
 
 ### CAT-X — Independent reopeners, preservation and interrupted writes
@@ -482,7 +484,7 @@ Keep three fault models distinct: process termination with the OS/cache still ru
 
 ## R-CRASH-2 — Exhaustion, uncertain completion and guarded optional undo
 
-**Question and decision.** What does ACE expose when TEMP space, database growth, transaction bookkeeping or I/O fails, and can CalcDb preserve that behavior while offering optional CalcDb-first undo? This decides D-TXN-1 resource/error handling and D-UNDO-1 eligibility, disarming and disposal. **Dependencies / size:** R-TXN-1, R-CRASH-1's harness/fault taxonomy, R-LOCK-1 exclusion and native identity evidence; **M** as additional cases reusing the harness. Complete ACE tracing is preferred; incomplete coverage follows R-CRASH-1's explicitly bounded evidence path.
+**Question and decision.** What does ACE expose when TEMP space, database growth, transaction bookkeeping or I/O fails, and can CalcDb preserve that behavior while offering optional CalcDb-first undo? This constrains D-TXN-1 resource/error handling and selects D-UNDO-2's optional seal/disarm/recovery/disposal mechanism within the Decided D-UNDO-1 baseline and exact external-change predicate. It does not reopen those user requirements. **Dependencies / size:** R-TXN-1, R-CRASH-1's harness/fault taxonomy, R-LOCK-1 exclusion and native identity evidence; **M** as additional cases reusing the harness. Complete ACE tracing is preferred; incomplete coverage follows R-CRASH-1's explicitly bounded evidence path.
 
 **Cases and measurements.** At each applicable reservation, spill, extension, overwrite and commit/rollback milestone, inject exhaustion, short/failed writes and flush failures; separately interrupt before and after the failure/error acknowledgement. Include nested and multi-database Workspace operations and both commit-flush modes. Record the primary error and subsequent usable/rollback/commit state rather than choosing a generic error-precedence rule. Capture database, lock and TEMP state before reopening; use R-CRASH-1's independent ACE, Access, Compact & Repair and CalcDb branches. An interrupted or failed request can have persistent effects: classify uncertain outcomes instead of assuming cancellation/error means no write. Reopen the same fixture without any optional undo to establish native behavior independently.
 

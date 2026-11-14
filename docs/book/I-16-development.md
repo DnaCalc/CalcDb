@@ -1,6 +1,6 @@
 # I-16. Research and development sequence
 
-Revision 14 · Part I review and Stage 2, response 15 · 2026-11-14
+Revision 15 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace:** Primary: RQ-PROCESS-01, RQ-DEV-01, RQ-DEV-02. Shared obligations: RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-03, RQ-ORACLE-04, RQ-LEDGER-01, RQ-ORACLE-05, RQ-TEST-01, RQ-STORE-04. Full requirement text and Part II ownership are in I-16.
 
@@ -170,7 +170,7 @@ The Part I review adds provisional D-WRITE-1, makes D-LOCK-1's first two native 
 
 The most consequential remaining facts are the actual crash/flush sequence, complete native lock protocol, identity/visibility/error policies, exact format/key/catalog variants, unchanged-client activation coverage, CalcVBA's shared/portable declarations, and browser dynamic-storage/durability feasibility. Each has a named card and next experiment. Documentary differences and unavailable builds stay unresolved rather than being hidden by a compatibility mode. A result requiring a material scope change returns to the user; routine mechanism changes within these contracts update the affected chapters directly.
 
-Part I now contains designs for every mapped requirement, with unresolved behavior expressed as a preferred mechanism and a deciding experiment. Part II deepens those same sections into structures, algorithms, invariants and acceptance cases. Part II now contains II-01 through II-16. Stage 3 next reconciles scope, shared mechanisms, evidence and dependencies across the complete draft and corrects the affected chapters themselves. The content determines response boundaries. Page guidance remains descriptive and never justifies dropping a required design or experiment.
+Part I contains designs for every mapped requirement, with unresolved behavior expressed as a preferred mechanism and a deciding experiment. Part II deepens those same sections into structures, algorithms, invariants and acceptance cases across II-01 through II-16. Whole-book reconciliation has corrected the affected value/copy, parameter-capture, mutation/pager, evidence-search and dependency mechanisms in their owning chapters. The current next result is W-01/R-ORACLE-1's first identified native capture, alongside I-FOUNDATION-1/I-HOST-1 discovery. Native acceptance remains unexecuted. Page guidance remains descriptive and never justifies dropping a required design or experiment.
 
 ## Complete scope map
 

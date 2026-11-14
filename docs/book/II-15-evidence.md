@@ -1,6 +1,6 @@
 # II-15. Oracle, corpus, tests and performance
 
-Revision 2 · Stage 2, response 15 continuation reconciliation · 2026-11-14
+Revision 3 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace.** Primary: RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-04, RQ-ORACLE-05, RQ-SIM-01, RQ-SIM-02, RQ-PERF-01, RQ-PERF-02, RQ-LEDGER-01, RQ-TEST-01. Supporting: RQ-PROD-04, RQ-SEM-01, RQ-SEM-03, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-01, RQ-SRC-02, RQ-FMT-02, RQ-CONC-01, RQ-CALL-02, RQ-PLAN-01, RQ-ARCH-01, RQ-PROCESS-01, RQ-DEV-02, RQ-STORE-04 and RQ-STORE-05. The section-to-requirement map near the end identifies the mechanisms that satisfy them; the full requirement text remains in I-16.
 
@@ -409,20 +409,31 @@ Under the qualified unordered relation A matches and B does not. Under an ordere
 CompareMultiset(left_rows, right_rows, schema, memory_budget, temp_owner):
     require equal qualified semantic schema and no unobserved demanded channels
     require pure-value row grammar or an independently qualified whole-graph mapping
-    L = MakeRuns(left_rows, EncodeExactRow, memory_budget, temp_owner)
-    R = MakeRuns(right_rows, EncodeExactRow, memory_budget, temp_owner)
-    // Ordering is (digest, complete encoded bytes), never digest alone.
-    // End is a distinct sentinel greater than every real group; it is never a row.
+    key(bytes) = (digest_under_this_comparison_rule(bytes), complete bytes)
+    L = MakeRuns(left_rows, EncodeExactRow, key, memory_budget, temp_owner)
+    R = MakeRuns(right_rows, EncodeExactRow, key, memory_budget, temp_owner)
+    // Run sorting, grouping and merge use this same tuple comparator.
+    // END is a distinct sentinel greater than every real key; never a row.
     differences = owned bounded diagnostic set; first = none
     while L or R has a next group:
-        (bytesL, countL) = PeekEqualByteGroupOrEnd(L)
-        (bytesR, countR) = PeekEqualByteGroupOrEnd(R)
-        if bytesL != bytesR or countL != countR:
-            retain first difference and bounded further diagnostics with raw links
-        advance the lesser encoded key, or both when keys are equal
+        groupL = PeekEqualKeyGroupOrEnd(L)  // key, count, immutable raw links
+        groupR = PeekEqualKeyGroupOrEnd(R)
+        order = CompareGroupKeys(groupL.key, groupR.key)  // digest, then full bytes
+        if order == equal:
+            if groupL.count != groupR.count:
+                retain count difference for this key and its raw links
+            advance both groups
+        else if order == less:
+            retain missing-right difference (groupL.count, 0) and raw links
+            advance L only
+        else:
+            retain missing-left difference (0, groupR.count) and raw links
+            advance R only
     if first exists: return Mismatch(first, differences, complete_counts, report_limits)
     return MatchedUnder(rule_id, revision)
 ```
+
+The retention operations set `first` once and charge any further diagnostics to the bounded set while continuing complete count accounting. Use a constructed case whose digest order differs from byte order and whose two inputs share a row but each also has a different row. The common row must still pair with itself; a bytes-only merge over digest-sorted runs can instead mispair the discrepancy groups. Forced digest collisions exercise the second component of the same key. END participates only in ordering, so an exhausted side produces the exact missing-row count without inventing a sentinel row.
 
 **Ownership and failure.** The comparator owns only copies/references into immutable captures and its temporary runs; it calls no database object. Every run is owned by the comparison attempt and settled before finalization. A truncated capture, unknown tag, malformed length, spill failure or missing schema returns `EvidenceIncomplete` with a bounded diagnostic; it never silently drops the affected row. Hashing accelerates grouping and artifact lookup; full encoded bytes resolve collisions. For very large values, stream exact bytes through the run representation or retain content-addressed spans and compare their contents on equality; do not require all LV data in memory.
 
@@ -628,7 +639,7 @@ Begin with a single reproducible schedule and branch only at explicitly enabled 
 
 ```text
 ExploreSchedules(case, model, limits):
-    frontier = [empty choice prefix]; seen_prefixes = empty set
+    frontier = [empty choice prefix]; seen_prefixes = {empty choice prefix}
     while frontier nonempty and limits permit:
         prefix = remove next prefix in stable search order
         result = run_fresh_with_prefix_then_default_choices(case, model, prefix)
@@ -636,10 +647,16 @@ ExploreSchedules(case, model, limits):
         for branch in result.recorded_enabled_choices:
             for alternative in branch.enabled_set except branch.chosen:
                 next_prefix = choices_through(branch.parent) + alternative
-                if next_prefix new and admitted by explicit depth/preemption bounds:
-                    frontier.add(next_prefix)
+                if next_prefix outside explicit depth/preemption bounds:
+                    retain its excluded disposition; continue
+                AdmitPrefixOnce(next_prefix, seen_prefixes, frontier, limits)
+                // Check full canonical prefix identity, reserve both records,
+                // then insert into seen and enqueue as one bookkeeping step.
+                // Duplicate: no enqueue. Budget failure: retain exclusion/uncertainty.
     return explored prefixes, outcomes, excluded combinations and remaining frontier
 ```
+
+`seen_prefixes` belongs to this frozen case/model/build campaign. Its key is the complete sequence of logical choice identities, including the relevant kind, generation and arguments, not the final alternative or a branch ordinal. Insert on admission, so another trial cannot enqueue the same still-pending prefix. Keep queued, executed, divergent and excluded dispositions distinct: membership in `seen` does not mean that a trial completed. If admission cannot atomically retain both the set entry and queue item, retain the failure without claiming the prefix was explored. Store shared prefix nodes if needed, with full-sequence equality and a charged memory bound.
 
 The run owns every simulated resource and a new initial file world. A prefix mismatch stops that trial with divergence; it never attaches an old choice ordinal to a newly different request. Straight replay from the beginning costs O(explored trials × average case work) and is preferable initially to an incomplete snapshot facility. A search bound limits transitions, preemptions, outstanding effects or trial count explicitly; seed-guided random search supplements the stable enumeration and records its draws. No bounded result is called exhaustive over native instruction interleavings. Commutativity reduction needs a proved independence relation for the relevant future bytes, owners and public observations; disjoint logical rows that share an allocator/map page cannot be pruned as independent merely from their row IDs.
 
@@ -1040,14 +1057,14 @@ The following families are **planned and unexecuted**. Each expands over its app
 | T-EVID-15 | LV payload length excludes locators; valid alternate chunk partitions are separately qualified; deleting a shared tail row cannot free unrelated live content on its page. | R-FMT-2; R-PRESERVE-1. |
 | T-EVID-16 | TableDef continuations, catalog/query/property bytes and opaque reference closure survive the admitted edit; unknown relocation is refused before any mutation and remains unmatched. | R-CAT-1; R-PRESERVE-1. |
 | T-EVID-17 | Targeted bad count/offset/kind/cycle/extent cases remain bounded and preserve original bytes; valid adjacent controls prevent an always-reject parser from passing. | W-04; R-FMT-1/2. |
-| T-EVID-18 | Ordered and unordered rules differ as declared; typed multiplicity, embedded zeros and deliberately colliding digests still detect missing/excess rows. | W-01; R-ORACLE-1. |
+| T-EVID-18 | Ordered and unordered rules differ as declared; typed multiplicity, embedded zeros and deliberately colliding digests still detect missing/excess rows. Run sort/group/merge use the same (digest, full bytes) key; digest order opposite to byte order still pairs common rows and reports exact missing/excess counts, including END. | W-01; R-ORACLE-1. |
 | T-EVID-19 | Independent capture-local schema/object labels do not cause false differences; a qualified graph comparison detects aliases shared across rows instead of flattening them. | W-01; I-FOUNDATION-1/R-DAO-1/R-ADO-1. |
 | T-EVID-20 | Time/random/path-dependent cases retain raw outcomes and justified relations; uncontrolled nondeterminism stays unresolved and cannot weaken serial/parallel exactness. | R-EXPR-1; R-PAR-1; OR-OBS. |
 | T-EVID-21 | Index validation checks both existing entries and every required row, exact native key evidence and locator policy; a correct table scan cannot conceal missing index coverage. | R-SORT-3; R-FMT-2. |
 | T-EVID-22 | Protected payload equality and preserved reference/placement obligations are checked independently; copied opaque bytes with a dangling address fail. | R-PRESERVE-1; relevant W-05/07 or later W-L4. |
 | T-EVID-23 | Format/API limits, source-writer choices and harness budgets remain distinguishable; test exhaustion cannot define a new accepted database limit. | R-FMT-1/2; W-01/04. |
 | T-EVID-24 | Every source/fixture has exact provenance and permitted use; a hypothesis, document or model result cannot be promoted to an actual ACE capture. | RQ-SRC-03; W-01; A-01 ledger. |
-| T-EVID-25 | Exact replay checks logical IDs, arguments, generations, ready choices and complete trace; missing events or an incompatible model/build stop with explicit divergence. | R-CRASH-1 CRASH-TRACE; deterministic W-03/05 slices. |
+| T-EVID-25 | Exact replay checks logical IDs, arguments, generations, ready choices and complete trace; missing events or an incompatible model/build stop with explicit divergence. Schedule search admits each complete prefix once, retains queued/executed/divergent/excluded dispositions and does not spend its trial budget on duplicate enqueues or claim failed admission as coverage. | R-CRASH-1 CRASH-TRACE; deterministic W-03/05 slices. |
 | T-EVID-26 | Once-only/continuing fault plans retain prerequisite failures and controlling schedules, reach cleanup-only sites and report unvisited contexts separately. | R-CRASH-2 FAIL-FRONTIER. |
 | T-EVID-27 | Page-17 short-write models distinguish count, proved prefix and possible range; actual mixed mask/entry/page bytes are inspected without inventing atomic pages. | CRASH-PARTIAL; W-03/05. |
 | T-EVID-28 | Native cut coverage reports observed/control classes, loss, actual post-trigger effects and independent reopeners; equal write ordinals cannot establish alignment. | W-PROBE; CRASH-MILESTONE/TRACE. |
@@ -1079,7 +1096,7 @@ As W-03/04 arrive, attach the real effect adapters, format-driven corpus and che
 
 W-06/07 add full query/action/DDL demand, actual plans, spill and reduction vocabularies. W-09 attaches ADO through the same artifacts and comparison framework alongside DAO as its services become available. W-10/11/12 add their exact reader, visibility and cross-process contexts. Native, portable and browser clients have independently qualified execution lanes. Later encryption, links, complex fields, rebuild, OLE DB and ODBC add cases and profile-specific sources to the same corpus; they do not require another definition of evidence or a blanket dependency on shared writing.
 
-Keep the full research cards in A-02. This chapter refines **R-ORACLE-1**, **R-CRASH-1/2**, **R-STRING-1** and **R-PAR-1** without adding new research or work IDs. The large set of tests is a case inventory, not a reason to delay the first useful native observation until every case exists. [II-16](II-16-development.md) consolidates the book's branch dependencies, concrete implementation slices and acceptance; Stage 3 whole-book reconciliation follows Part II drafting.
+Keep the full research cards in A-02. This chapter refines **R-ORACLE-1**, **R-CRASH-1/2**, **R-STRING-1** and **R-PAR-1** without adding new research or work IDs. The large set of tests is a case inventory, not a reason to delay the first useful native observation until every case exists. [II-16](II-16-development.md) consolidates the book's branch dependencies, concrete implementation slices and acceptance; the compact record identifies the current next task.
 
 **Requirement closure within II-15.** The following map locates the concrete treatment in this chapter.
 

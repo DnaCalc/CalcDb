@@ -1,6 +1,6 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S2-r15 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
+Revision S3-r1 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
 
 ## Authority and capabilities
 
@@ -8,7 +8,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Part I has been revised to the review; Stage 2 now contains II-01 through II-16, with concrete native mechanics emphasized from II-03 onward. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Both parts are complete as a reconciled design: I-01–16 and II-01 through II-16, with concrete native mechanics emphasized from II-03 onward. Stage 3 corrected the affected chapters and aligned the reference and dependency records. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -42,22 +42,22 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
-| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I revised; II drafted |
-| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
-| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
-| 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
-| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.9 | I revised; II drafted |
-| 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I revised; II drafted |
-| 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I revised; II drafted |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I revised; II drafted |
-| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
-| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
-| 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
-| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
-| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 44.9 | I revised; II drafted |
-| 16 | Research and development sequence | 1 / 4 | 12.5 / 39.9 | I revised; II drafted |
+| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.8 | I and II reconciled |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.7 / 10.5 | I and II reconciled |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I and II reconciled |
+| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.5 | I and II reconciled |
+| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I and II reconciled |
+| 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.9 / 29.7 | I and II reconciled |
+| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 34.2 | I and II reconciled |
+| 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I and II reconciled |
+| 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I and II reconciled |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I and II reconciled |
+| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I and II reconciled |
+| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I and II reconciled |
+| 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I and II reconciled |
+| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I and II reconciled |
+| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 45.6 | I and II reconciled |
+| 16 | Research and development sequence | 1 / 4 | 12.6 / 40.3 | I and II reconciled |
 
 | File family | Current contents |
 | --- | --- |
@@ -539,14 +539,14 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | Issue | Next action | Owners |
 | --- | --- | --- |
 | O-STRING | R-STRING-1: measure direct BSTR/decode reuse on the first real DAO read loop. | 02 |
-| O-FOUNDATION | I-FOUNDATION-1: actual target declarations, mutation-stable copy/alias services and real portable type-info/enumeration/error/event clients. | 02,13 |
+| O-FOUNDATION | I-FOUNDATION-1: actual target declarations, mutation-stable copy/alias services and real portable clients; expand each native non-Windows storage/reader realization. | 02,13 |
 | O-UDF | R-UDF-1/I-HOST-1: demonstrate real resolver/signature/interval/alias, policy-entry, caller-thread cleanup and ancestor-safe continuation. | 10,13 |
 | O-ACTIVATION | R-ACT-1: capture unchanged routes, type/factory retention, actual propagation, synchronized Both and implementation provenance. | 13 |
 | O-HOST | I-HOST-1: qualify explicit Active bootstrap, standalone selection, both runtime families, known/Unknown origin, waits and residual code/allocator lifetime. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
 | O-ORACLES | R-ORACLE-1: actual loaded identities, owned desktop/UI, stateful reset, active-value capture and silent-repair controls; all native lanes still unexecuted. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
-| O-CATALOG | R-CAT-1: capture native MR2/query roles, CHECK/security closure and held object/parameter/schema invalidation. | 06,11,12 |
+| O-CATALOG | R-CAT-1: native MR2/query roles, CHECK/security closure, held-object invalidation and coherent parameter capture/cache-retirement reentry. | 06,11,12 |
 | O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and 510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
@@ -561,4 +561,4 @@ A-02 contains the full experiment cards, common conditions and T-COMPACT-1. I-16
 | O-ADO | Qualify client/batch/events and native-admitted Record/Stream/ADTG/XML, including partial submission and restored provenance. | 12,13 |
 | O-ADO-ASYNC | R-ADO-1: delayed-work captures decide matched blocking option handling versus a material native early-return scope conflict. | 12,13 |
 
-Next task: **Stage 3, response 1 — whole-book reconciliation**: check scope, shared mechanisms, evidence and dependencies; correct affected chapters and update the compact record.
+Next task: **W-01/R-ORACLE-1 — first identified native capture**: freeze one fixture, record actual loaded native/client identities, and seal one genuine table-read capture plus one failed-call capture with exact typed values, diagnostics and file-state evidence. Run I-FOUNDATION-1/I-HOST-1 declaration and host discovery alongside this result.

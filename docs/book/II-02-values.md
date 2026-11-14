@@ -1,6 +1,6 @@
 # II-02. Values, strings and ownership algorithms
 
-Revision 3 · Stage 2, response 9 · 2026-11-13
+Revision 4 · Stage 3, response 1 · 2026-11-14
 
 This is the complete first design of the value and ownership chapter. Its algorithms are proposed CalcDb mechanisms, not descriptions of an unpublished CalcVBA implementation. It develops **RQ-VAL-01**, **RQ-VAL-03** and **RQ-TYPE-01**, and supports **RQ-COM-01**, **RQ-PORT-03** and the shared semantics required by **RQ-VAL-02**. Its binding contracts are **K-VALUE**, **K-STRING**, **K-PAGE**, **K-ADMISSION**, **K-THREAD**, **K-ERROR** and **K-EXPR**. Native layout facts have documentary support; target Windows/ACE/CalcVBA execution is still outstanding.
 
@@ -67,34 +67,41 @@ Use a fresh initialized temporary for construction and copy. The wrapper's publi
 
 An opaque native `VariantCopy`/`VariantCopyInd` call does not expose an incremental allocation-budget callback. For a supported, stable owned graph, preflight a conservative bound on BSTR byte lengths, array descriptors/elements and nested owned payload, then reserve that bound before the native call. Checked products and a bounded traversal are required; source stability must cover both preflight and copying. Alternatively, use an explicitly budget-aware shared-foundation copy that admits each allocation before making it and preserves canonical semantics. That service is a requirement to implement and validate, not an assumed feature of the native API. Opaque record copying and foreign interface calls can allocate beyond CalcDb's control: identify and account for that external work where observable, and admit it only under an explicit supported policy. A path requiring a hard bound must reject an unbounded opaque copy before invoking it; a nominal reservation is not a universal memory guarantee.
 
+Register a `CopyAttempt` under the retaining operation before acquiring source anchors or performing any potentially reentrant preparation. For a public argument it is the owned-snapshot child of II-13 §9's `ArgumentAttempt`; internal retention uses the same owner protocol without creating another argument ABI. The attempt holds the initialized temporary, reservation, source-lifetime and stability anchors, completed resource ownership and foreign-call progress. Source lifetime alone is insufficient: the reachable graph must remain mutation-stable throughout preflight and opaque copying, including nested foreign callbacks, or first become a safely owned immutable/local source. A post-copy generation check cannot protect an opaque copy that has already traversed freed or changed nested storage. It validates whether the completed result may enter the enclosing continuation. Legal alias-preserving ByRef arguments remain outside this snapshot helper.
+
 Microsoft documents native `VariantCopy` as not thread-safe.[^copy] Provisionally perform native Automation copy/cleanup and foreign reference operations on the caller's runtime thread. This default alone does not prove safety when multiple callers run concurrently or reenter. I-FOUNDATION-1 must validate permitted sharing, concurrency and reentry, including any service-level restriction, before those paths are enabled. No internal engine latch or global mutex may be held across foreign `AddRef`, `Release` or record callbacks; introducing a hidden runtime/worker dispatch is not a substitute. Pure local scalar loads remain distinct from these native/foreign operations.
 
 ```text
-clone_for_retention(source, read_contract, operation_budget) -> owned_value | failure
+clone_for_retention(source, read_contract, operation) -> owned_value | failure
   require source is valid for this call and its active form is supported
   require read_contract permits a by-value snapshot rather than retained alias/writeback
   require caller-thread execution and a validated concurrency/reentry policy
   require no internal engine latch is held across foreign reference operations
-  copy_plan := inspect the supported ownership graph while the source remains stable
+  attempt := register CopyAttempt under operation with an initialized empty temporary
+  acquire source-lifetime and mutation-stability anchors into attempt
+  after any foreign preparation: capture outcome and revalidate continuation
+  require the source graph is stable through both preflight and the complete copy
+  copy_plan := inspect the supported ownership graph under those anchors
   if copy_plan has a conservative bound for an opaque native copy:
-      reserve that complete bound before the native call
+      reserve that complete bound from operation.budget into attempt before copying
   else if an explicitly budget-aware shared-foundation copy supports this graph:
       require its per-allocation admission and partial-failure cleanup contract
   else:
-      return an explicit admission/capability failure before copying
-  temporary := initialized empty canonical VARIANT
-  establish cleanup ownership for temporary
+      fail through attempt with an explicit admission/capability failure before copying
   if copy_plan selects the native route and source is a supported ByRef form:
-      invoke canonical indirect copy into temporary within the reservation
+      invoke canonical indirect copy once into attempt.temporary within its reservation
   else if copy_plan selects the native route:
-      invoke canonical copy into temporary within the reservation
+      invoke canonical copy once into attempt.temporary within its reservation
   else:
       invoke the shared-foundation copy with explicit budget admission
-  on failure:
-      settle temporary through its valid cleanup state
-      release unused reservation
-      return the typed failure without publishing temporary
-  transfer temporary and its accounting obligation to the returned owner
+  capture copy outcome and exact completed/residual owners before foreign cleanup
+  revalidate source/continuation dependencies before accepting the copied value
+  settle releasable source anchors; revalidate after any foreign cleanup
+  on preparation, copy, continuation or required-cleanup failure:
+      settle or retain attempt through its valid residual cleanup state
+      release only unused reservation; retain every still-owned resource and obligation
+      return the selected typed failure without publishing or repeating the copy
+  transfer attempt.temporary and its accounting obligation to the returned owner
 ```
 
 This algorithm has no right to chase arbitrary cycles or unsupported ByRef combinations. Canonical permitted forms and argument directions bound dereferencing. In-process native callers are responsible for valid pointers; tag/count checks cannot make an arbitrary forged address safe to read. Test legal edge cases and deliberate contract violations in isolated fixtures without claiming a memory-safe native ABI.
@@ -252,7 +259,7 @@ The following cases instantiate the contracts; their full environment/capture ru
 | Native projection | Exact field descriptors and untouched byte preservation; correct DAO/ADO projection for scalar, binary, GUID, OLE, Hyperlink and extended temporal cases. Missing mappings remain failures. |
 | Reentry and cleanup | Callback moves/closes the cursor, changes retained dependencies, unsubscribes an event sink or raises an error; stable arguments survive and effects are not repeated. |
 | Allocation/length failure | Conservative native-copy preflight bounds versus explicit budget-aware copying; opaque-record/foreign allocation restrictions; failure before reservation, at output allocation and during array/nested construction; overflow and malformed chain rejection. No partial value is published and no resource becomes unowned. |
-| Copy concurrency/reentry | Native Automation copy/cleanup and foreign reference operations run on the caller thread by default; exercise simultaneous callers and nested foreign callbacks under the proposed service policy. A thread-affinity default alone is not proof of multi-caller safety, and no latch/mutex spans a foreign callback. |
+| Copy concurrency/reentry | Native Automation copy/cleanup and foreign reference operations run on the caller thread by default; exercise simultaneous callers and nested foreign callbacks under the proposed service policy. Register the attempt before retention, prove source-graph stability through preflight/copy, and invalidate the enclosing owner during a foreign AddRef/record callback or source-anchor release: the completed temporary stays owned and is not published into the invalid continuation. A thread-affinity default alone is not proof of multi-caller safety, and no latch/mutex spans a foreign callback. |
 | Actual runtime paths | CalcVBA early/late binding, native x64/.xll, installed Framework 4.8-family and .NET 10 separately, plus CalcVBA using each portable prototype. Record actual loaded implementation and allocator. |
 
 No target execution occurred in this session. The first executable slice is a real canonical value round trip through a minimal factory, then one resident native row with a retained BSTR. It can run before complete DAO, SQL or writer implementation. The source declarations and owner-state instrumentation should be published with the fixture so a failure can be attributed to layout, conversion, ownership, activation or native decoding.

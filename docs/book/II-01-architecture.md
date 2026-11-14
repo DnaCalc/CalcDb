@@ -1,10 +1,10 @@
 # II-01. Architecture and compatibility boundaries
 
-Revision 2 · Stage 2, response 2 · 2026-11-13
+Revision 3 · Stage 3, response 1 · 2026-11-14
 
 This chapter deepens I-01 into library contracts, owned state and executable paths. It fixes no unobserved ACE behavior: the named experiments in A-02 choose the remaining policy details. The initial target remains the user-reported ACEDAO.DLL **16.0.20527.20016**, with actual loaded binaries and host configuration captured independently. No Windows/ACE experiment has run in this session.
 
-**Requirement trace:** RQ-PROD-01, RQ-ARCH-01 and RQ-PORT-01 are owned here; this chapter supports RQ-PROD-02 (owned by I/II-13), and the value, storage, call, object-model and platform requirements are implemented through the contracts assigned to their detailed chapters. The full stable scope map remains I-16. **D-ARCH-1 — Decided.** One format description, ISAM engine, expression service, oracle and harness are fixed scope; the proposed physical library boundaries below are the recommended realization.[^scope]
+**Requirement trace:** RQ-PROD-01, RQ-ARCH-01, RQ-PORT-01, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01 and RQ-SRC-02 are owned here; this chapter supports RQ-PROD-02 (owned by I/II-13), and the value, storage, call, object-model and platform requirements are implemented through the contracts assigned to their detailed chapters. The full stable scope map remains I-16. **D-ARCH-1 — Decided.** One format description, ISAM engine, expression service, oracle and harness are fixed scope; the proposed physical library boundaries below are the recommended realization.[^scope]
 
 ## 1. Separate compatibility policy from implementation freedom
 
@@ -15,6 +15,14 @@ For example, `DAO.Recordset.Update` is not implemented as a generated SQL statem
 The native file determines what a durable representation may be. CalcDb chooses a sparse cache map, frame pool, descriptor cache and operator structures. Those structures may be replaced after measurement while keeping the observable contract. The file's sort descriptor may select a key encoder; the oracle's build label may not secretly select whichever behavior happens to pass a test. If evidence from actual builds conflicts, record the conflict and select a declared target rather than adding an invisible environment switch.
 
 The shared semantic value is the **platform's real Automation VARIANT and real BSTR**, including the 24-byte Windows x64 VARIANT layout. The current 16-byte CalcVBA representation and its COM-boundary conversion are a transitional integration fact; the user directs this design to assume the corrected exact layout. A borrowed record span is not an alternative semantic value. It can postpone decoding and preserve native precision, but any value crossing the shared semantic boundary obeys K-VALUE/K-STRING. II-02 specifies that distinction and its ownership algorithms.[^values]
+
+### Scope and source boundaries
+
+**RQ-OUT-01.** Forms, reports, macros and stored database modules retain their native catalog identities, content and reference closure. The admitted catalog and content-reading paths remain available; opening or changing a database does not make these objects executable. II-04's protected-region/reference descriptors and II-06's native catalog records carry their ownership through ordinary edits. Unknown relocation rules prevent an unsafe move before publication. A host-opted-in UDF instead uses II-10/13's explicit resolver and retained host binding; stored module discovery never becomes an implicit function-registration or execution route. Acceptance compares preserved content and reachability and checks that the operation caused no stored-code invocation.
+
+**RQ-OUT-02.** The supported native format boundary is Jet 4/ACE. Detect a Jet 3 signature before selecting a mutating profile and retain the unsupported-format outcome. The libraries expose the required local caller/host interfaces; a database server role and its network service protocol are outside this product. The SQL grammar and binder implement Access behavior and documented/native-admitted forms. A proposed convenience extension cannot introduce a CalcDb-only SQL dialect. These exclusions do not excuse refusing an operation inside the declared Jet 4/ACE, DAO, ADO or Access SQL scope.[^scope]
+
+**RQ-SRC-01/02.** Each physical rule or behavior policy records its exact documentary/reference material or public native capture and its evidence class. Use the public documentation and identified ACE observations, the permitted exact Jackcess materials with their licence/notice obligations, and mdbtools file-format facts only. No proprietary decompilation/disassembly or direct excluded FrankenSqlite/asupersync source, repository, package, mirror or external extract enters that evidence path; their reviewed attached reports supply concepts only. A-01 records what was inspected and permits factual use separately from any future adaptation. Build inputs and generated resources retain that provenance too. II-15's corpus and II-16's implementation records preserve it when a hypothesis becomes an observed rule.[^source-rules]
 
 ## 2. Libraries and the dependency rule
 
@@ -150,7 +158,7 @@ Complexity is proportional to the field's encoded/decoded length for materializa
 
 ## 6. Mutation preparation and publication
 
-A mutation is a semantic operation plus a prepared native change set. One `PreparedMutation` binds the row identities, checked old values, schema/allocation generations, constraints, encoded new rows/keys, protected regions, page images and transaction obligations needed for publication. It contains no raw borrow whose pin has already been released.
+**RQ-ARCH-01, RQ-CALL-03/04 and RQ-STORE-04.** A mutation is a semantic operation plus a prepared native change set. One `PreparedMutation` binds the row identities, checked old values, schema/allocation generations, constraints, encoded new rows/keys, protected regions, page images and transaction obligations needed for publication. It contains no raw borrow whose pin has already been released.
 
 Preparation may be incremental when expression effects and failure timing require it. “Prepare the entire physical write set” does not mean “evaluate all user expressions early.” After each permitted semantic boundary, prepare the physical changes that can be planned without moving or repeating a callback. An action whose candidates change under its own index updates uses the evidenced stable traversal or ordered identity spool in I-11, rather than an unconditional pre-evaluation pass.
 
@@ -159,11 +167,15 @@ ApplyPreparedMutation(prepared, context) -> OutcomeReceipt
     inputs: owned prepared images; admitted file participant; selected statement policy
     invariant: no engine publication has occurred merely by preparing images
 
-    verify prepared owner, schema, row and allocation dependencies
-    if invalid before external effects:
-        return policy-selected failure or permitted reprepare
-    if invalid after external effects:
-        return explicit invalidation disposition; never repeat those effects
+    dependencies = revalidate prepared owner, admission and semantic/physical inputs
+    if semantic inputs or owner/admission no longer permit this continuation:
+        return policy-selected retained-view continuation or invalidation disposition
+               retaining accepted values, generated tickets and effects; never replay them
+    if only physical images or placement changed:
+        prepared = bounded_effect_free_reprepare(prepared.accepted_semantic_receipts,
+                                                  qualified fresh protected inputs)
+        if no admitted preparation succeeds:
+            return policy-selected failure retaining the original accepted outcomes
 
     reserve remaining transaction and cleanup obligations
     attach prepared change to the owning rollback/statement frame
@@ -173,6 +185,8 @@ ApplyPreparedMutation(prepared, context) -> OutcomeReceipt
     resolve visibility, transaction frame and public outcome by policy
     return receipt
 ```
+
+A changed page generation alone is not a row conflict. Revalidate the stable row identity, accepted values, constraints and exact key-profile/table/index incarnations first. When those semantic dependencies remain valid, a fresh protected page or a relocated row can require new physical images without demanding another UDF, default expression or generated-value allocation. Reprepare only that physical closure, retaining every accepted semantic/effect receipt and a bounded retry budget; II-05 §8.2, II-07 §15–16 and II-09 give the concrete cases. Semantic invalidation instead follows the evidenced continuation/failure policy. Once this mutation's native program has submitted an effect, its registered coordinator owns further advancement or resolution; this prepublication reprepare path is not a generic restart of a partly executed write program.
 
 The write plan is provisional in I-08: initialize unreachable storage, establish allocation ownership before publishing references, order row/index/catalog changes, and free only after references are removed. Any needs-repair marking uses an evidenced native field/protocol; it is not an invented generic header flag. Submitted write order does not by itself imply persistence order. Ordinary commit and `dbForceOSFlush` carry separate acknowledgement/durability obligations, chosen by R-CRASH-1/2.
 
@@ -220,6 +234,8 @@ Acceptance checks the architecture at its observable seams. It does not require 
 | --- | --- |
 | One storage/evaluator path | Equivalent direct DAO and SQL operations reach the same row/key/constraint services while retaining their surface-specific failure policy; traces identify actual calls rather than simulated labels. |
 | Portable core | Build format/ISAM/catalog/expression/SQL without native adapters for wasm32; a dependency/effect audit finds no direct platform I/O or hidden time/randomness. |
+| Preserved front-end scope | Keep forms/reports/macros/module content and native references across admitted reads and edits; no stored-code invocation occurs. Host functions require the separately admitted resolver path. |
+| Format/dialect/source boundaries | A Jet 3 input cannot reach a native mutator; query capability follows the declared Access grammar. Each admitted rule/resource has permitted material or native-capture provenance, and protected unknown content stays preserved. |
 | Exact shared value ABI | Native and managed callers exercise real VARIANT/BSTR ownership; II-02's size/offset/stride, nested-array and ByRef cases pass on the declared target. |
 | Direct row loop | Actual VBA/COM calls iterate narrow/wide, text/LV and indexed fixtures; measurements separate crossings, lookups, decode, allocation and pin work. |
 | Lifetime versus Close | Hold Field, Collection and enumerator references across Close/Release and reentry; results match captured surface policy without leaked leases or stale borrows. |
@@ -239,4 +255,5 @@ The algorithms and contracts in this chapter are proposed CalcDb design. Actual 
 
 [^scope]: Supplied `calcdb-one-pager.md`, Draft 2, principles 1–11; `CHARTER.md` elaboration subject to the one-pager; user's scope, crash and implementation-order corrections through 2026-11-13. Requirement authority, not implementation evidence.
 [^values]: User's 2026-11-13 current/target CalcVBA clarification; supplied `calcvba-integration-note.md` subject to that correction. Microsoft's [VARIANT declaration](https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant) supplies the native union structure; II-02 derives and checks its target ABI. No existing CalcVBA internal ABI is invented here.
+[^source-rules]: Supplied `gpt6pro-book-prompt.md`, “Source rules,” with the user's corrected clearance of the nine canonical first-stage report parts. Source authority and permitted-use constraints; exact cited materials and reuse classifications remain in A-01.
 [^notes]: Supplied `asupersync-report.stage1-part1.md` §§1, 3, 6, 8; `asupersync-report.stage1-part2.md` §§2–4; `asupersync-report.stage1-part4.md` §§3–4; `frankensqlite-report.stage1-part3.md` §§8, 10. Cleared concept input only; no direct excluded repositories, packages or external extracts used.

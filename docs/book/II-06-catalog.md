@@ -1,6 +1,6 @@
 # II-06. Catalog, properties and QueryDefs
 
-Revision 1 · Stage 2, response 5 · 2026-11-13
+Revision 2 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace:** Primary RQ-SQL-08. Shared obligations: RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-EXPR-03, RQ-CALL-03, RQ-CALL-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04 and RQ-OUT-01. The full scope text is in I-16. K-CATALOG uses II-04's native row/LV codecs and II-05's index mutation service; binding and object-model adapters consume the resulting descriptors.
 
@@ -628,6 +628,8 @@ An engine descriptor can know a new physical field layout before an existing Rec
 
 An execution instance contains the immutable bound plan, an owned or immutably shared parameter frame captured at the native-qualified boundary, current data/transaction view, cursor/operator state, cancellation owner and accounting. The reusable QueryDef ParameterSet is a different owner: later assignment, reentry or Close cannot mutate or clear an active execution's captured values accidentally. A cached plan contains none of the last caller's parameter values, Recordset position, output buffers, by-reference VARIANT addresses or active locks. Parameter slots use II-02's real Automation values and explicit copy/clear rules; their validity and reset behavior follow the owning DAO/ADO object. A plan's immutable parameter layout can be shared while each public QueryDef/Command instance owns its values separately.
 
+Capturing that frame is a potentially reentrant preparation phase. `VariantCopy` can call a contained object's AddRef, while owned cleanup can call Release; neither is an inert byte copy.[^cat-value-copy] Register preparation under II-12's call attempt before any such retention. Prefer acquiring a locally retainable immutable ParameterSet version at the native-selected capture point. If independent copies are required, use II-13 §9's qualified mutation-stable source interval and owned copy protocol: retaining the top-level ParameterSet or checking its generation after an opaque copy returns does not protect nested payloads while that copy is traversing them. This adds no object-valued DAO parameter capability; only values/forms admitted by the actual member recipe reach this branch. Fixed-width local values and already immutable local frames keep their direct path. Conversion remains at its native-qualified phase, not an automatic side effect of making the frame owned.
+
 Choose a cache key from definition identity and semantic context. For a persistent QueryDef this includes file/catalog incarnation, native object identity and definition epoch, plus the relevant context below. For a temporary QueryDef use its object-owned definition incarnation. Ad-hoc SQL may use owned exact SQL bytes plus a context key; preserve the original SQL and do not invent a text canonicalizer that changes literals, identifier resolution, errors or observable metadata. A cache hit is an optimization of the same binding result, not another query-definition authority.
 
 | Dependency dimension | What requires a fresh binding or execution setup | Scope of the dependency |
@@ -645,39 +647,56 @@ Choose a cache key from definition identity and semantic context. For a persiste
 Use an owner-and-view-specific validity certificate covering definition identity, selected catalog-view identity and publication serial, plus the relevant resolver/function, options, host and sandbox generations. An unchanged catalog serial alone cannot validate a changed host/context. A cheap comparison of that whole certificate precedes, when needed, validation of the plan's actual dependencies. Keep the certificate with the owning binding, not as one mutable “last checked” field shared by callers of an immutable plan. The reviewed concept reports support generation validation, owned metadata and a fused entry check as ideas; neither their transaction semantics nor SQLite's persistent schema representation transfers to Jet/ACE.[^cat-concepts]
 
 ```text
-AcquireExecutable(definition_handle, caller_context, owned_parameter_state):
+AcquireExecutable(definition_handle, caller_context, owned_parameter_state, call_owner):
+    attempt = register execution preparation under call_owner before foreign retention
     inputs are owned handles; no borrowed client VARIANT pointer is retained
     acquire the catalog/data visibility permitted for this public operation
     resolve definition_handle by file + object incarnation, not name alone
-    capture definition and semantic-context tickets
+    captured_tickets = capture definition and semantic-context tickets
 
     candidate = bounded_cache.lookup(definition_identity, context_key)
     if candidate exists:
         if this owner's full view/context certificate is not current:
             validate object, namespace, query, function, option and sandbox dependencies
         if every dependency is valid:
-            reconcile public parameter state under the evidenced declaration-change policy
-            require owner parameter layout/incarnation to match the plan's declaration layout
-            capture an owned parameter frame at the required native boundary
-            make fresh execution state over candidate and that captured frame
-            retain this owner/view/context validity certificate
-            return execution
+            return FinishExecutionPreparation(candidate, captured_tickets,
+                       owned_parameter_state, attempt, cache_admission = NotNeeded)
 
     reserve bounded parse/bind/output capacity before growing owned buffers
-    bind against one coherent catalog view; record positive and negative dependencies
+    bound_plan = bind against one coherent catalog view; record positive and negative dependencies
     do not execute user functions as a side effect of cache lookup or preparation
     validate the definition/context ticket before publishing the reusable result
     if that ticket changed:
         if binding was effect-free and the bounded retry policy permits it:
-            restart binding against the newly admitted view/context
+            admit one coherent replacement definition/view/context
+            refresh captured_tickets from that admitted definition/view/context
+            restart binding against it and validate the refreshed tickets before use
         else:
             obtain a qualified retained-view continuation or fail without replay
         do not fall through without a valid definition/view/context ticket
-    reconcile declarations; require a matching parameter-layout ticket
-    capture the execution-owned parameter frame at the required boundary
-    build fresh execution state and optionally admit the immutable plan to the cache
-    return execution
+    return FinishExecutionPreparation(bound_plan, captured_tickets,
+               owned_parameter_state, attempt, cache_admission = Optional)
+
+FinishExecutionPreparation(plan, tickets, parameter_state, attempt, cache_admission):
+    all steps use guarded preparation: no next dependent work after unvalidated foreign reentry
+    reconcile declarations under the evidenced public declaration-change policy
+    require owner parameter layout/incarnation to match the plan's declaration layout
+    acquire one coherent parameter source at the native-qualified capture point
+    retain its immutable version or qualify stability for the complete copy traversal
+    capture the owned frame through the shared foundation under this attempt
+    after every foreign retention, due conversion or cleanup boundary:
+        preserve completed effects and initialized or residual cleanup owners
+        validate source stability and the next dependent owner/layout/view/context ticket
+        on invalidation, obtain a qualified retained-view continuation or fail without replay
+    build fresh execution state with that accepted frame still owned by the attempt
+    perform optional cache admission only with its reserved ownership and cleanup path
+    settle required temporary/cache-retirement work outside internal latches
+    revalidate the accepted binding and next continuation after that work
+    retain the owner/view/context certificate and transfer execution to the owning call
+    on any failure, settle or transfer exact residual owners; never recapture to replay effects
 ```
+
+The common tail covers both cache paths. Its after-foreign check applies before the next dependent preparation step, not only once after the whole frame is copied. Cache admission or eviction that retires retained host descriptors is another such boundary; it cannot invalidate the owner and then return a supposedly current execution. The final transfer performs no allocation or foreign call; the outer call retains II-12's separate public-result/error publication. A later live ParameterSet value assignment does not by itself invalidate an independently accepted immutable version. Declaration/owner/semantic changes still follow their qualified continuation policy. Neither a changed live value nor a failed continuation authorizes restarting parameter coercion, binding callbacks or earlier accepted effects.
 
 Validation is O(d) in recorded dependencies after a relevant catalog publication, with a constant-size fast check in the unchanged case. Binding cost is the parser/binder's measured work, charged to its owner. Host metadata resolution is effect-free only when its actual contract says so; a callback during binding follows the same no-replay and continuation rules as other foreign calls. Cache allocation failure may skip cache admission if the execution can still proceed within its reserved budget; it must not turn an optional cache into an unexplained public failure. Failure to obtain mandatory parse/execution memory follows the normal error contract. Cache eviction releases owned syntax, descriptors and raw source retention; it cannot invalidate a plan actively retained by a call or Recordset.
 
@@ -798,7 +817,7 @@ These are **32 designed acceptance tests**, not reported native passes. The orig
 | T-CAT-26 | Positive and negative name dependencies, shadowing and SELECT-star metadata changes invalidate precisely enough for correct binding; restoration of old bytes cannot create token ABA. |
 | T-CAT-27 | Held TableDef/Field/Property/QueryDef/Parameter and enumerators follow each collection's actual Refresh/requery/error policy; refreshed membership does not silently retarget an old interface. |
 | T-CAT-28 | Same Database, same Workspace/different Database and different Workspace views remain coherent; later live-ACE mode adds real external freshness qualification. |
-| T-CAT-29 | Cache-on/off and two simultaneous execution owners agree; schema changes during callbacks neither duplicate effects nor use stale coordinates after reentry. |
+| T-CAT-29 | Cache-on/off and two simultaneous execution owners agree. Reenter during parameter retention/conversion and cache retirement, changing values, declarations, schema or Close state: an immutable accepted frame stays coherent, opaque copy uses a qualified stable source, and each next dependent continuation is validated without repeating accepted effects or retargeting stale coordinates. Native policy captures and controlled foreign-reference fixtures remain separate evidence. |
 | T-CAT-30 | Every qualified native catalog write cut, including repeated images of one page and forced flush, stays within its ACE crash class for each independent next opener. |
 | T-CAT-31 | Completed outputs pass independent ACE/Access metadata and query use, protected-byte/reference comparison and calibrated T-COMPACT-1. |
 | T-CAT-32 | Cold/warm bootstrap, property edits, repeated executions, Refresh and eviction expose actual bytes/allocations/I/O; retained descriptors/plans/raw spans obey budgets and settle at their named owner boundary. |
@@ -806,6 +825,8 @@ These are **32 designed acceptance tests**, not reported native passes. The orig
 The next chapter, **II-07 ISAM, cursors and constraints**, takes the admitted TableDef/index/relationship descriptors and the property-bound mutation policy from this chapter. It develops recordset population, position, bookmarks, seeks, edits, generated values and constraint enforcement without creating a second catalog or expression engine.
 
 ## Sources
+
+[^cat-value-copy]: [S-MS-VARIANTCOPY] Microsoft, [VariantCopy](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantcopy), initialization, failure and owning-versus-ByRef reference remarks; and [S-MS-VARIANTCLEAR] Microsoft, [VariantClear](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantclear), owned release, ByRef distinction, initialization and locked-array failure remarks; re-read 2026-11-14. These document possible foreign reference operations. Registration, source stability and continuation checks are CalcDb design derived from II-02/12/13, not observed ACE parameter behavior.
 
 [^S-JACK-CATDB-PIN]: [S-JACK-CATDB-PIN] Exact pinned [DatabaseImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/DatabaseImpl.java); inspected constants, bootstrap, catalog/relationship/ACL writes, lazy property resolution, table-type dispatch and table finders. Exact hashes and read extents are in the A-01 source ledger. Source facts/concepts only; no code port.
 [^S-MS-RELATION]: [S-MS-RELATION] Microsoft, [Relation object (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/relation-object-dao), reference requirements, index side effects and public relationship behavior; native details remain to be measured.

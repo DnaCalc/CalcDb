@@ -1,8 +1,8 @@
 # I-06. Catalog, properties and QueryDefs
 
-Revision 4 · Stage 2, response 5 · 2026-11-13
+Revision 5 · Stage 3, response 1 · 2026-11-14
 
-**Requirement trace:** Primary: RQ-SQL-08. Shared obligations: RQ-PROD-05, RQ-SQL-02, RQ-SQL-03, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04, RQ-OUT-01, RQ-STORE-03, RQ-FMT-01, RQ-EXPR-03. Full requirement text and Part II ownership are in I-16.
+**Requirement trace:** Primary: RQ-SQL-08. Shared obligations: RQ-PROD-05, RQ-SQL-02, RQ-SQL-03, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04, RQ-OUT-01, RQ-STORE-03, RQ-FMT-01, RQ-EXPR-03, RQ-CALL-03 and RQ-CALL-04. Full requirement text and Part II ownership are in I-16.
 
 ## Native catalog with immutable working views
 
@@ -56,6 +56,8 @@ Public collection membership/ordering has its own state above the catalog, so a 
 Prepared plans record dependencies on referenced schema objects, parameter declaration types, SQL options/wildcard mode, collation, function-registry version and relevant sandbox context. A cheap entry check validates the dependencies before execution. Data-only changes do not automatically force full rebinding; statistics and any assumptions based on data have their own invalidation policy. A bounded cache admits prepared entries by measured reuse and retained bytes. Cache misses compile normally and do not change behavior.[^cache]
 
 The entry certificate belongs to the owner and selected catalog view and includes relevant host/options/sandbox generations; one shared mutable “last checked” field on a cached plan is insufficient. Require the parameter-layout ticket to match before capturing execution values. Schema changes during callbacks follow the qualified retained-view continuation or failure policy without replaying effects. Native page publication, in-process catalog visibility and commit acknowledgement remain separate boundaries under the transaction coordinator; II-06 supplies the concrete row/property/index closure.
+
+Parameter capture and cache retirement are owned phases of that same call. Retain a coherent immutable parameter version or qualify source stability for the complete copy; a late generation check cannot make a mutable graph safe while copying it. Revalidate the next dependent continuation after any foreign retention, conversion or cleanup and before transferring the prepared execution. Preserve accepted values and effects on invalidation without recapturing them to replay the call. Later changes to the live ParameterSet do not alter an already accepted immutable frame. II-06 §13 applies this rule to both cache hits and misses; R-CAT-1/CAT-I with I-FOUNDATION-1 supplies its native-policy and constructed ownership cases.
 
 ## Cost and acceptance
 

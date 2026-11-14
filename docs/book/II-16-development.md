@@ -1,6 +1,6 @@
 # II-16. Research and development sequence
 
-Revision 1 · Stage 2, response 15 · 2026-11-14
+Revision 2 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace.** Primary: RQ-PROCESS-01, RQ-DEV-01 and RQ-DEV-02. Supporting: RQ-SRC-03, RQ-ORACLE-01/03/04/05, RQ-LEDGER-01, RQ-TEST-01, RQ-STORE-04/05, RQ-LOCK-03/04, RQ-PERF-01/02, RQ-ARCH-01 and the product requirements mapped to work and acceptance near the end. The full normative scope remains in I-16; this chapter turns the completed design into an executable development sequence. [N, C, A, U]
 
@@ -478,7 +478,7 @@ W-06 completes with the entire applicable read SQL/expression inventory, metadat
 
 **Native metadata slice (M).** Start with W-04's native descriptor/raw-record capture, W-05's admitted row/LV/index closure and relevant R-CAT-1 property/DDL/relationship evidence. Implement a bounded property change first, then the native create/rename/drop and relationship recipes. A structural writer consumes compiled descriptors and preserving edit rules; it does not require every SELECT operator. Completion inspects both public metadata and native catalog/ownership references after independent reopening. Held TableDef, Field, collection and plan bindings use their qualified invalidation policies; changing a property is not permission to replace every retained object.
 
-**Saved definition slice (M).** W-06's parser/binder feeds native QueryDef role/property serialization. W-07's metadata slice publishes it through the same mutation coordinator. Bind declared parameters, preserve source/native role differences, expose the required SQL view and retain unknown raw records. Reading a saved definition and executing it remain separate. A native-created QueryDef can be executed before CalcDb writes QueryDefs; a CalcDb-written supported definition can be round-tripped before every query operator exists. Completion checks ACE/Access reading of CalcDb's native representation and CalcDb reading of native-authored variations. Parameter and result-schema generations remain distinct from definition identity and execution ownership.
+**Saved definition slice (M).** W-06's parser/binder feeds native QueryDef role/property serialization. W-07's metadata slice publishes it through the same mutation coordinator. The explicit `W-07/native-metadata-write` prerequisite consumes the catalog-mutation/namespace-publication mechanism qualified for this saved-definition recipe; it does not require all table, relationship or DDL recipes. Bind declared parameters, preserve source/native role differences, expose the required SQL view and retain unknown raw records. Reading a saved definition and executing it remain separate. A native-created QueryDef can be executed before CalcDb writes QueryDefs; a CalcDb-written supported definition can be round-tripped before every query operator exists. Completion checks ACE/Access reading of CalcDb's native representation and CalcDb reading of native-authored variations. Parameter and result-schema generations remain distinct from definition identity and execution ownership.
 
 **Action execution slice (L).** Compose W-06's admitted producers with W-05's mutation service. Begin with a single-table UPDATE and one INSERT/DELETE, then self-target key movement, joined repeated targets, cascades, generated values and partial failure. D-ACTION-1 remains provisional. An identity spool is used only at a qualified boundary; otherwise preserve the structural enumeration cut without eagerly demanding future values. T-SQL-62/63/65/66 distinguish target enumeration, assignment demand and repeated-target policy. T-SQL-67..71 add default/generator behavior, counts and statement/Workspace failure disposition. Never add a SQL-only page writer or a second transaction coordinator.
 
@@ -521,6 +521,8 @@ The full W-12 package is XL because promotion/reuse, native error/transaction po
 **Requirement trace:** RQ-PROD-06, RQ-PORT-01/02/03, RQ-VAL-01, RQ-CALL-01/03/04 and RQ-LOCK-02. These slices implement the initial browser/core requirement; they are not a new later package. II-13/14 supplies the runtime-domain, broker, storage and lifetime design.
 
 Begin the actual portable ABI/client slice (M) with corrected CalcVBA declarations and one qualified address, call-table and allocator domain. Prove typed and dispatch calls, BSTR/VARIANT ownership, real error/type-info services and a native page read through the intended worker. A helper compiled to wasm32 establishes portable code compilation; it does not establish that the actual CalcVBA runtime can call the actual CalcDb object. Keep the latter as the first concrete completion result. Extend enumeration, arrays, ByRef and event services through the same consumed inventory as their clients arrive.
+
+Instantiate `W-08/portable-caller` separately for each required target. Its common input is `W-02/portable-domain`; the browser instance selects `W-04/browser-reader-cursor`, while a native non-Windows instance selects that target's qualified storage/pager/value/reader realization instead. Browser storage is not a prerequisite for the native instance. The browser-dynamic and browser-readers-only consumers bind the browser instance explicitly. The generic native selector must be expanded into exact target slices and checked before claiming that path; the named graph below proves neither missing native mechanisms nor their qualification.
 
 In parallel, W-03's browser-storage slice (M) qualifies prepared direct handles and dynamic acquisition through the dedicated storage broker. It consumes the minimal actual portable domain and the common K-IO sketch; a completed Windows positioned adapter is not a prerequisite. The browser read-cache realization (M) then instantiates the same image/load-token/pin machinery over that actual backend. W-04's browser reader/cursor realization (M) uses it with the same compiled format, checked catalog/row traversal and cursor algorithms, plus values owned by the actual portable foundation. Those two realizations must exist before the genuine portable field-read claim. They do not consume the completed Windows read-cache or native Automation-value qualification. The shared code is implemented once and built or reused by either target; these slices qualify target compositions rather than introducing another pager or engine. Exercise the fixed mailbox, explicit request/payload ownership, immediate or late settlement, unknown partial writes and Close. The broker carries storage operations, not COM objects or engine semantics. A successful pre-staged read is useful but does not complete dynamic open/create/spill. R-WASM-1 and T-PLAT-01..64 include those boundaries; a worker timeout cannot prove that its buffers and file effects are settled.
 
@@ -627,7 +629,7 @@ Names are exact references within this index. The implementation state of a refe
 | W-06/host-extension | M / initial | W-06/restricted-scalar, W-08/factory-host-core | No additional unconditional implementation input |
 | W-06/measured-specialization | M / initial; optional enhancement | W-06/relational-spill, W-01/production-effects, W-01/dao-cost | No additional unconditional implementation input |
 | W-07/native-metadata-write | M / initial | W-04/rows-catalog-read, W-05/same-width-mutation | W-05/resolution-live-rollback |
-| W-07/saved-definition | M / initial | W-04/rows-catalog-read, W-05/same-width-mutation, W-06/parser-binder-scan | W-05/resolution-live-rollback |
+| W-07/saved-definition | M / initial | W-04/rows-catalog-read, W-05/same-width-mutation, W-06/parser-binder-scan, W-07/native-metadata-write | W-05/resolution-live-rollback |
 | W-07/actions | L / initial | W-06/parser-binder-scan, W-05/same-width-mutation | W-05/resolution-live-rollback |
 | W-07/ddl-full-coverage | L / initial | W-07/native-metadata-write, W-06/parser-binder-scan | W-07/saved-definition, W-07/actions, W-06/relational-spill |
 
@@ -638,7 +640,7 @@ Names are exact references within this index. The implementation state of a refe
 | W-08/factory-host-core | M / initial | W-02/native-declarations-values, W-01/capture-core | No additional unconditional implementation input |
 | W-08/native-read | M / initial | W-08/factory-host-core, W-04/table-cursor | No additional unconditional implementation input |
 | W-08/same-width-edit | M / initial | W-08/native-read, W-05/same-width-mutation | No additional unconditional implementation input |
-| W-08/portable-caller | M / initial | W-02/portable-domain, W-04/browser-reader-cursor | No additional unconditional implementation input |
+| W-08/portable-caller | M / initial | W-02/portable-domain; selected target realization below | No additional unconditional implementation input |
 | W-08/browser-query-write | L / initial | W-08/browser-dynamic-path | W-02/portable-services, W-05/resolution-live-rollback, W-06/relational-spill, W-07/ddl-full-coverage |
 | W-08/dao-inventory | L / initial | W-08/factory-host-core | W-08/activation-route-matrix, W-08/edit-transaction-breadth, W-07/ddl-full-coverage, W-06/host-extension, W-08/portable-caller, W-02/portable-services |
 | W-09/construction-policy | M / initial | W-02/native-declarations-values, W-08/factory-host-core | No additional unconditional implementation input |
@@ -686,7 +688,8 @@ Conditional inputs are resolved for the actual case before its ordering/completi
 | W-05/optional-undo | qualified recovery profile includes growth/LV/index or wider Workspace operation | W-05/resolution-live-rollback |
 | W-06/host-extension | domain functions or dynamic Eval | W-06/parser-binder-scan |
 | W-07/actions | joined/aggregate/richer action sources | W-06/relational-spill |
-| W-08/portable-caller | a non-browser portable target is selected | its actual qualified storage/pager/value/reader instantiation |
+| W-08/portable-caller | browser target selected, including browser-dynamic-path and browser-readers-only consumers | W-04/browser-reader-cursor |
+| W-08/portable-caller | native non-Windows target selected, instead of the browser realization | its actual qualified storage/pager/value/reader instantiation; expand and check this target before claiming the route |
 | W-08/browser-query-write | first browser mutation branch | W-05/same-width-mutation |
 | W-08/browser-query-write | first browser query branch | W-06/parser-binder-scan |
 | W-08/browser-query-write | actual bounded spill branch | W-06/relational-spill |
@@ -731,7 +734,9 @@ The following graph names the early native-discovery and interpretation results 
 | native_key_extraction | native_mutation_shapes | R-SORT-3; Relevant index envelope and exact keys |
 | native_crash_observation | capture_core, native_transaction_core | R-CRASH-1; W-PROBE passive/control coverage independently of writer |
 | native_crash_interpretation | native_crash_observation, native_mutation_shapes, native_catalog_raw | R-CRASH-1, R-CRASH-2; Qualified operation-specific native survival/repair classes |
-| browser_minimum | host_minimum, native_open_probe | R-WASM-1; Actual portable client plus minimum VFS prototype |
+| browser_minimum | host_minimum for the actual portable target | R-WASM-1; Actual portable client plus minimum browser VFS prototype; actual target/runtime and browser-I/O prototype are selected external inputs |
+
+`browser_minimum` tests the actual portable calling/storage composition. It does not consume the Windows native-handle result `native_open_probe`. Instantiate `host_minimum` with the portable runtime/value/factory services and supply the minimal real browser-I/O prototype. Native capture and the relevant native format, error or crash evidence attach when comparing exported files or native behavior; they do not delay this independent feasibility result. The selected graph records this dependency boundary, not successful execution of either target.
 
 ## 26. A completed slice has a bounded claim and a complete evidence bundle
 
@@ -874,7 +879,7 @@ The source audit for a completed chapter or slice therefore has a small concrete
 
 ## 32. Stage 3 reconciles the book against its nine completion criteria
 
-**Requirement trace:** RQ-PROCESS-01, RQ-DEV-01/02, RQ-SRC-03 and RQ-LEDGER-01. Completing II-16 finishes the Part II drafting sequence. It starts the whole-book reconciliation requested in the assignment; it does not report that the future implementation or native research programme has run. Stage 3 corrects the authoritative chapters themselves. A separate discrepancy list is useful while working, but cannot leave a contradiction in the book while declaring the list to be the corrected design.
+**Requirement trace:** RQ-PROCESS-01, RQ-DEV-01/02, RQ-SRC-03 and RQ-LEDGER-01. The whole-book reconciliation checks the complete Part I/II draft against the assignment and corrects the authoritative chapters themselves. It does not report that the future implementation or native research programme has run. A separate discrepancy list is useful while working, but cannot leave a contradiction in the book while declaring the list to be the corrected design.
 
 Use four bounded passes. The first checks the 83 requirement rows against their Part I and Part II owners, phases, actual designs and work acceptance. The second follows the joined mechanisms across chapter boundaries, especially value ownership, storage/crash/lock protocols, expression/query demand and public caller lifetime. The third checks evidence/source references, decision labels, experiment outcomes and slice dependencies. The fourth incorporates the corrections, reruns the affected consistency checks and produces the complete reconciled bundle and compact current record. A large reconciliation can span responses while preserving these concrete outputs; it should not restart a new book plan or reopen accepted scope.
 
@@ -906,13 +911,13 @@ The implementation programme begins with the selected native installation and ac
 
 The highest-consequence remaining native facts are the crash/flush/needs-repair classes in R-CRASH-1/2 and R-TXN-1; access and protected-source protocols in R-LOCK-1..4; exact row/map/LV/key/catalog variants in R-FMT-1/2, R-SORT-3 and R-CAT-1; cursor/object/error policies in R-CURSOR-1, R-DAO-1, R-ADO-1 and R-ERR-1; and actual host/portable/browser mechanisms in R-ACT-1, I-FOUNDATION-1, I-HOST-1, R-UDF-1 and R-WASM-1. Their full cards retain the preferred design, discriminating outcomes and unresolved-result direction. Later capability cards retain feature-specific prerequisites and phase labels.
 
-No native acceptance is claimed by this chapter. Constructed arithmetic, dependency or coverage checks can validate the consistency of examples and the plan, while all actual ACE/Access/CalcDb/COM/managed/browser/crash/performance families retain their execution status. After II-16, the next book task is **Stage 3, response 1 — whole-book reconciliation of scope, shared mechanisms, evidence and dependencies, correcting the affected chapters and updating the compact record**.
+No native acceptance is claimed by this chapter. Constructed arithmetic, dependency or coverage checks can validate the consistency of examples and the plan, while all actual ACE/Access/CalcDb/COM/managed/browser/crash/performance families retain their execution status. The next development result is **W-01/R-ORACLE-1: one immutable fixture, the actual loaded native/client identities, one genuine table-read capture and one failed-call capture sealed with their typed values, diagnostics and file-state evidence**. I-FOUNDATION-1/I-HOST-1 declaration and host discovery can proceed alongside it.
 
 ## Plan checks and execution limits
 
 The document/dependency checks cover the **83 existing requirements**, **34 research/integration cards** and **19 work packages**. The slice index contains **76 named results**. Its start, completion, combined and all-named-conditional construction graphs and the **23-node selected native-observation graph** are checked as planning data. Scope mappings name supporting existing test families and unnumbered architecture checks; they do not claim that one referenced test proves a whole requirement. Unnamed conditional family selectors require exact context expansion and checking before qualification.
 
-These are document and plan checks. No ACE/Access, actual CalcDb, native COM/Automation, VBA/CalcVBA, .NET Framework/.NET 10, browser, crash, Compact & Repair or performance acceptance was executed for this chapter. Existing acceptance families remain planned and unexecuted. Figures are emitted as tables, pseudocode or Mermaid source and remain not render-verified. Part II drafting is complete; Stage 3 whole-book reconciliation remains the next book task.
+These are document and plan checks. No ACE/Access, actual CalcDb, native COM/Automation, VBA/CalcVBA, .NET Framework/.NET 10, browser, crash, Compact & Repair or performance acceptance was executed for this chapter. Existing acceptance families remain planned and unexecuted. Figures are emitted as tables, pseudocode or Mermaid source and remain not render-verified. Part II drafting and the whole-book reconciliation are recorded as complete; the compact record retains the current unresolved experiments and next development result.
 
 ## Sources and evidence notes
 

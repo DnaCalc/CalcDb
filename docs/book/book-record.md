@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r15** · 2026-11-14 · Current state only.
+Revision **S3-r1** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-16 drafted**; Part II drafting complete; Stage 3 reconciliation pending.
+- Stage 0 approved; **I-01–16 and II-01 through II-16 complete as a reconciled design**; Stage 3 whole-book corrections applied; native/runtime acceptance remains planned.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 3, response 1 — whole-book reconciliation**: check scope, shared mechanisms, evidence and dependencies; correct affected chapters and update the compact record.
+- Next: **W-01/R-ORACLE-1 — first identified native capture**: immutable fixture, loaded identities, genuine table read and failed call; I-FOUNDATION-1/I-HOST-1 discovery alongside.
 
 ## Contents and estimates
 
@@ -19,24 +19,24 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
-| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.8 / 8.9 | I revised; II drafted |
-| 02 | Values, strings and ownership | 1.25 / 7 | 2.6 / 10.1 | I revised; II drafted |
-| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I revised; II drafted |
-| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.4 | I revised; II drafted |
-| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I revised; II drafted |
-| 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.8 / 29.0 | I revised; II drafted |
-| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 33.9 | I revised; II drafted |
-| 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I revised; II drafted |
-| 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I revised; II drafted |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I revised; II drafted |
-| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
-| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
-| 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
-| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
-| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 44.9 | I revised; II drafted |
-| 16 | Research and development sequence | 1 / 4 | 12.5 / 39.9 | I revised; II drafted |
+| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.8 | I and II reconciled |
+| 02 | Values, strings and ownership | 1.25 / 7 | 2.7 / 10.5 | I and II reconciled |
+| 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I and II reconciled |
+| 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.5 | I and II reconciled |
+| 05 | Indexes and sort-order keys | 1.25 / 8 | 2.9 / 33.6 | I and II reconciled |
+| 06 | Catalog, properties and QueryDefs | 0.75 / 5 | 2.9 / 29.7 | I and II reconciled |
+| 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 34.2 | I and II reconciled |
+| 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I and II reconciled |
+| 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I and II reconciled |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I and II reconciled |
+| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I and II reconciled |
+| 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I and II reconciled |
+| 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I and II reconciled |
+| 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I and II reconciled |
+| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 45.6 | I and II reconciled |
+| 16 | Research and development sequence | 1 / 4 | 12.6 / 40.3 | I and II reconciled |
 
-Part I ≈ **67.7 pages**; current Part II ≈ **555.8**. Appendices separate: A-01 sources ≈ **118.9**, A-02 experiments ≈ **98.5**.
+Part I ≈ **68.1 pages**; current Part II ≈ **559.3**. Appendices separate: A-01 sources ≈ **118.8**, A-02 experiments ≈ **98.6**.
 
 ## Scope owner index
 
@@ -305,14 +305,14 @@ All planned; package summary: I-16; concrete slice prerequisites and observable 
 | ID | Next action | Owners |
 | --- | --- | --- |
 | O-STRING | R-STRING-1: measure direct BSTR/decode reuse on the first real DAO read loop. | 02 |
-| O-FOUNDATION | I-FOUNDATION-1: actual target declarations, mutation-stable copy/alias services and real portable type-info/enumeration/error/event clients. | 02,13 |
+| O-FOUNDATION | I-FOUNDATION-1: actual target declarations, mutation-stable copy/alias services and real portable clients; expand each native non-Windows storage/reader realization. | 02,13 |
 | O-UDF | R-UDF-1/I-HOST-1: demonstrate real resolver/signature/interval/alias, policy-entry, caller-thread cleanup and ancestor-safe continuation. | 10,13 |
 | O-ACTIVATION | R-ACT-1: capture unchanged routes, type/factory retention, actual propagation, synchronized Both and implementation provenance. | 13 |
 | O-HOST | I-HOST-1: qualify explicit Active bootstrap, standalone selection, both runtime families, known/Unknown origin, waits and residual code/allocator lifetime. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
 | O-ORACLES | R-ORACLE-1: actual loaded identities, owned desktop/UI, stateful reset, active-value capture and silent-repair controls; all native lanes still unexecuted. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
-| O-CATALOG | R-CAT-1: capture native MR2/query roles, CHECK/security closure and held object/parameter/schema invalidation. | 06,11,12 |
+| O-CATALOG | R-CAT-1: native MR2/query roles, CHECK/security closure, held-object invalidation and coherent parameter capture/cache-retirement reentry. | 06,11,12 |
 | O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and 510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
 | O-CURSOR | R-CURSOR-1: qualify membership/Seek/bookmark/edit/provenance/GetRows/lifetime branches and constraint/cascade outcomes. | 07,08,11,12 |
 | O-TXN | Run TXN branches, especially nested force, logical-only failures, Close scope, TEMP exhaustion and participant outcomes. | 08,12 |
@@ -329,6 +329,6 @@ All planned; package summary: I-16; concrete slice prerequisites and observable 
 
 ## Short changelog
 
-- 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-14: II-16 completes Part II drafting with branch dependencies, concrete work slices and acceptance; two references corrected and native-UDF/browser-prototype dependencies clarified.
-- 2026-11-14: Next Stage 3 whole-book reconciliation; native/runtime acceptance remains unexecuted and figures remain not render-verified.
+- 2026-11-14: Reconciled value/copy, parameter capture, pager and mutation algorithms in their owning chapters.
+- 2026-11-14: Corrected evidence merge/search, saved-definition and target-specific dependencies; retained scope and decision statuses.
+- 2026-11-14: Whole-book references/graphs checked; next first native capture; native acceptance and figure rendering remain unexecuted.

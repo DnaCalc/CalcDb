@@ -1,6 +1,6 @@
 # II-04. Format, rows, long values and allocation
 
-Revision 1 · Stage 2, response 3 · 2026-11-13
+Revision 2 · Stage 3, response 1 · 2026-11-14
 
 This chapter specifies the physical layer that turns a checked page image into a row, a field or a long value, and turns an accepted logical change into complete native page images and reference changes. **The preferred design is a compiled format description, raw-preserving row edits and an allocator that plans the complete map/reference change before publishing it.** Concrete Jet 4/ACE structures drive that design below. II-03 supplies page identity, pins, positioned I/O and phase-image execution; it does not decide what a field or allocation bit means.
 
@@ -1067,7 +1067,7 @@ The following are acceptance specifications for implementation, not reported exe
 
 Build the descriptor compiler and byte inspector alongside checked row/scalar readers, then exact private encoders and the raw-preservation model. Add LV traversal, owner-map resolution and allocation closure using the same structures. Connect those prepared edits to the pager's phase-image executor as native mutation evidence arrives. The result of this chapter is a concrete W-04/W-05 storage component with visible coverage: each supported profile/operation has source facts, native fixtures, generated/malformed tests, preservation checks and the relevant crash/repair evidence. It is not certified by a self-generated round trip.
 
-**Next book task: Stage 2, response 4 — II-05 Indexes and sort-order keys.** Expand index-page envelopes, entry masks and prefix compression, row references, composite native keys, comparison descriptors, traversal/split/delete algorithms and their connection to the mutation planner, with worked bytes and the deciding R-SORT-3/R-FMT-2 cases.
+[II-05](II-05-indexes.md) supplies the corresponding index-page envelopes, entry masks and prefix compression, row references, composite native keys, comparison descriptors and traversal/split/delete algorithms. Its prepared index changes join this chapter's row/LV/map closure through the same mutation planner; R-SORT-3 and R-FMT-2 qualify the relevant byte rules.
 
 
 ## Sources

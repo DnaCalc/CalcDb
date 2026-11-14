@@ -1,6 +1,6 @@
 # II-07. ISAM, cursors and constraints
 
-Revision 3 · Reconciled with Stage 2, response 10 · 2026-11-13
+Revision 4 · Stage 3, response 1 reconciliation · 2026-11-14
 
 **Requirement trace:** Primary RQ-DAO-02 and RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-03, RQ-CALL-04, RQ-PERF-01 and RQ-PERF-02. I-16 owns the complete scope text. K-CURSOR is implemented using II-03's page-image ownership, II-04's native row roots and codecs, II-05's full-entry/index mutation service and II-06's schema/relationship descriptors. II-08 owns transaction and persistent failure resolution.
 
@@ -649,8 +649,16 @@ PostEdit(edit, operation_policy, budget) -> MutationOutcome:
         accepted = finish_semantic_steps_once(edit, step_state, scope)
         graph = prepare_ordered_row_and_constraint_work(accepted, scope, budget)
         images = PrepareNativeMutation(graph, schema, scope.view, budget)
-        revalidate dependencies without replaying semantic effects
-        if changed: select a qualified retained-view continuation or fail
+        revalidate owner/admission, semantic dependencies and physical inputs separately
+        while only physical source/placement dependencies are stale
+              and accepted semantic inputs and owner/admission remain valid:
+            charge bounded reprepare work; settle obsolete unpublished physical state
+            images = PrepareNativeMutation(graph, schema,
+                         coordinator.refreshed_admitted_view(scope), budget)
+            revalidate the same dependency classes without replaying semantic effects
+        if dependencies remain invalid:
+            select a qualified retained-view continuation or fail without replay
+        require graph, images and publication admission now validate
         outcome = coordinator.publish(images, graph.public_continuation)
         apply outcome's edit/position/LastModified transitions
         return outcome
@@ -668,6 +676,8 @@ PostEdit(edit, operation_policy, budget) -> MutationOutcome:
         apply the evidenced failed-call state; do not retry semantic steps
         return mapped outcome
 ```
+
+Physical reprepare retains the graph's accepted values, completed-effect receipts and generated tickets. It uses freshly admitted, protected inputs and rechecks the required row originals, identities, key profiles, constraints and table/index incarnations; a changed page image alone is not a semantic conflict. Changed meaning or ownership follows the qualified continuation/failure policy. Once this mutation's native effects have been submitted, continuation belongs to its existing coordinator receipt; it cannot re-enter this prepublication loop.
 
 The algorithm does not imply whole-statement atomicity for every action. The coordinator supplies the statement and Workspace disposition, including the `dbFailOnError` matrix in I-08. Preparing one row or a qualified cascade unit before publication is distinct from preparing an entire action's successful and failing candidates before any effects. If native failure leaves a successful prefix of a cascade, compile that policy into ordered publication units with retained progress, rather than validating the entire graph before the first persistent effect. The displayed single-unit path applies only where its observed failure scope permits it. A memory-budget error cannot be reported as a constraint violation.
 

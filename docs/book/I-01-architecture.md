@@ -1,6 +1,6 @@
 # I-01. Architecture and compatibility boundaries
 
-Revision 2 · Part I review and Stage 2, response 1 · 2026-11-13
+Revision 3 · Stage 3, response 1 · 2026-11-14
 
 **Requirement trace:** Primary: RQ-PROD-01, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01, RQ-SRC-02, RQ-PORT-01, RQ-ARCH-01. Shared obligations: RQ-PROD-03, RQ-PROD-06, RQ-COM-03, RQ-SRC-03, RQ-ISAM-01. Full requirement text and Part II ownership are in I-16.
 
@@ -9,6 +9,8 @@ Revision 2 · Part I review and Stage 2, response 1 · 2026-11-13
 CalcDb is a set of libraries implementing Jet 4 MDB and ACE ACCDB files, Access SQL, DAO and ADO. DAO has implementation and workload priority; ADO may start alongside DAO when its actual dependencies are available (I-16). One ISAM layer owns tables, indexes, cursors and mutations. SQL and the object models use that layer; a DAO table recordset never goes through SQL merely to reach a row. One expression service uses CalcVBA's value, conversion and function libraries without requiring its interpreter. These boundaries are **D-ARCH-1 — Decided** by the one-pager.[^scope]
 
 The file format, native catalog representation, index-key bytes and observable ACE behavior are compatibility constraints. Cache policy, buffer ownership, lookup structures and query operators are CalcDb choices. A refused in-scope operation remains a compatibility failure; safe refusal during development does not remove it from the scope. Jet 3, server roles and a private SQL dialect are excluded; preserved Access front-end objects remain readable and are never executed.
+
+**RQ-SRC-01/02.** Use public documentation, identified public-API ACE observations and the exact licensed Jackcess material classified in A-01; mdbtools contributes file-format facts only. Proprietary decompilation/disassembly and direct FrankenSqlite/asupersync source, repository, package, mirror or external extracts are excluded. Only the reviewed attached reports contribute their permitted concepts. Every format or behavior rule retains its source/capture identity and evidence class; a future code/resource adaptation requires the exact material's licence and notices, while original CalcDb mechanisms remain labelled as design. These rules apply during implementation as well as book research.[^source-rules]
 
 **Figure F-01 — library dependencies.** Arrows mean “depends on”; shared values, descriptors, typed errors and effect-interface contracts are foundational and omitted from the arrows. This is Mermaid source, not render-verified.
 
@@ -49,4 +51,5 @@ Refine the module boundaries only for a demonstrated contract or measured cost c
 
 [^scope]: Supplied `calcdb-one-pager.md`, Draft 2, principles 1–11; `calcvba-integration-note.md`, “Values and strings,” “COM,” and “Calls and threads.” The user's 2026-11-12 scope and 2026-11-13 Part I review corrections take precedence, including current versus intended CalcVBA value layout. Full source/use ledger: A-01; complete experiment cards: A-02.
 [^notes]: Supplied `asupersync-report.stage1-part1.md` §§1, 3, 6, 8; part 2 §§2–4; part 4 §§3–4; `frankensqlite-report.stage1-part3.md` §§8, 10. Concept input only.
+[^source-rules]: Supplied `gpt6pro-book-prompt.md`, “Source rules,” and the user's clarification that the nine canonical first-stage report parts are cleared concept input. These are work/source constraints; A-01 records the permitted materials actually cited.
 [^net]: User-supplied target/build declaration, 2026-11-12. Microsoft, [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy), accessed 2026-11-12, confirms .NET 10's LTS classification; it supplies no observation about the user's installed runtime.
