@@ -1,6 +1,6 @@
 # II-16. Research and development sequence
 
-Revision 2 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace.** Primary: RQ-PROCESS-01, RQ-DEV-01 and RQ-DEV-02. Supporting: RQ-SRC-03, RQ-ORACLE-01/03/04/05, RQ-LEDGER-01, RQ-TEST-01, RQ-STORE-04/05, RQ-LOCK-03/04, RQ-PERF-01/02, RQ-ARCH-01 and the product requirements mapped to work and acceptance near the end. The full normative scope remains in I-16; this chapter turns the completed design into an executable development sequence. [N, C, A, U]
 
@@ -540,7 +540,7 @@ An exported browser file that opens correctly in ACE establishes that file-inter
 
 The native-read slice (M) begins with W-04 format/header inspection, W-03 positioned reads and R-ENC-1's selected credential/profile evidence. Produce independent encrypted/plain fixture twins and distinguish stored bytes, decoded native images and public values. The actual codec owner, key lifetime and failure boundary accompany each page. An unrelated encrypted fixture rejected safely remains unsupported, not evidence for the required native profile.
 
-The phase-codec write slice (M) adds W-05's phase-image and crash program. Encode every required intermediate revision; encoding only the final page loses native persistence states. A separate credential/conversion slice (L) adds protected temporary handling and the relevant native password/SID or rekey operations. A whole-file conversion can consume W-L4's separately available destination/publication slice where that native profile requires rebuilding. W-L4's encrypted rebuild consumes the qualified codec read and phase-image write slices, never completion of W-L1's whole-file credential conversion. This keeps the conversion→destination-publication dependency acyclic. W-L4's initial plaintext rebuild need not await full W-L1, and W-L1's read slice need not await W-L4. Complete the applicable profile through normal reopening, credential failure and interrupted physical output; encrypted shared writing adds W-12 only for that later combination.
+The phase-codec write slice (L) adds W-05's phase-image and crash program. Encode every required intermediate revision; encoding only the final page loses native persistence states. A separate credential/conversion slice (L) adds protected temporary handling and the relevant native password/SID or rekey operations. A whole-file conversion can consume W-L4's separately available destination/publication slice where that native profile requires rebuilding. W-L4's encrypted rebuild consumes the qualified codec read and phase-image write slices, never completion of W-L1's whole-file credential conversion. This keeps the conversion→destination-publication dependency acyclic. W-L4's initial plaintext rebuild need not await full W-L1, and W-L1's read slice need not await W-L4. Complete the applicable profile through normal reopening, credential failure and interrupted physical output; encrypted shared writing adds W-12 only for that later combination.
 
 ### W-L2: links and source execution (XL)
 
@@ -878,6 +878,8 @@ Provenance travels with native fixture histories and reduced failures. Keep the 
 The source audit for a completed chapter or slice therefore has a small concrete output: every factual claim used by the result has an applicable source or observed capture; every referenced external item has its classified ledger row; every row claimed as support has an actual use. Unsupported rows are removed or marked as input inventory rather than left as apparent authority. No adaptation or reuse is claimed merely because material was read. New implementation evidence can confirm a provisional choice only through the recorded experiment and scope, never through a source count.
 
 ## 32. Stage 3 reconciles the book against its nine completion criteria
+
+**Completed release audit:** [A-03-reconciliation-audit.md](A-03-reconciliation-audit.md) records all 83 owner-row results, the nine criteria below, and the corrections applied before **Book v1.0**. The release identity and short version policy are in [00-book-release.md](00-book-release.md). This is document reconciliation; native/runtime acceptance remains planned.
 
 **Requirement trace:** RQ-PROCESS-01, RQ-DEV-01/02, RQ-SRC-03 and RQ-LEDGER-01. The whole-book reconciliation checks the complete Part I/II draft against the assignment and corrects the authoritative chapters themselves. It does not report that the future implementation or native research programme has run. A separate discrepancy list is useful while working, but cannot leave a contradiction in the book while declaring the list to be the corrected design.
 

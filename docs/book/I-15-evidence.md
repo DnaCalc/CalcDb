@@ -1,6 +1,6 @@
 # I-15. Oracle, corpus, tests and performance
 
-Revision 3 · Part I reconciliation · Stage 2, response 14 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-04, RQ-SIM-01, RQ-SIM-02, RQ-PERF-01, RQ-PERF-02, RQ-LEDGER-01, RQ-ORACLE-05, RQ-TEST-01. Shared obligations: RQ-PROD-04, RQ-SEM-01, RQ-SEM-03, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-01, RQ-SRC-02, RQ-FMT-02, RQ-CONC-01, RQ-CALL-02, RQ-PLAN-01, RQ-ARCH-01, RQ-PROCESS-01, RQ-DEV-02, RQ-STORE-04, RQ-STORE-05. Full requirement text and Part II ownership are in I-16.
 
@@ -97,6 +97,8 @@ R-CRASH-1/2 start with external ACE observations independently of a CalcDb write
 | DAO loop | MoveNext and ordinal/name Field.Value; short/long/repeated text; Seek/Find; bookmarks; small edits; sparse/wide rows. | Actual COM crossings, lookup probes, allocations, owned/copy/decode bytes, pin/map transitions and working set. |
 | Bulk SQL | Selective/nonselective scans, joins with skew, groups/distinct, tied TOP, crosstabs, actions and spilling sorts. | Page patterns, probes, comparisons, expression/host calls, retained state, spill volume/passes and write/flush work. |
 | Browser | Same semantics at bounded memory, direct versus broker I/O, import/export, quota and storage failures. | Linear-memory high-water mark, retained handles/pages, bridge copies/crossings, blocking time and actual persistence outcomes. |
+
+**RQ-PERF-02.** Across all three families, retain the complete cost vector: allocations/frees and capacity; copied bytes; conversions by source/target type and outcome; locality/working-set observations; selected format, dispatch and control-branch behavior; page I/O volume and pattern; synchronization; and boundary crossings. Each observation states its unit, scope and exact, sampled or unavailable status. Missing branch or native-internal attribution is unknown, not zero; the vector does not require intrusive counters on every scalar call. II-15 §28 defines the low-overhead collection boundary.
 
 Record compiler/runtime/build, CPU/storage, dataset shape, cache condition, plan and worker count. Compare paired runs with a fixed workload and randomized order; use repeated A/A runs to estimate noise before claiming a change. Separate cold/warm engine state from OS cache and warm-up/JIT/Office startup. Report distributions and outliers relevant to the path rather than one flattering minimum. Internal CalcDb counters are not asserted as measurements of ACE's internals. Separate diagnostic from minimally instrumented timing runs, exact from sampled counters, and engine/session preparation from OS/storage cache state. Retain warmup trajectories and failed/uncertain attempts; choose the finite sampling plan and practical decision criterion from pilot/application evidence.
 

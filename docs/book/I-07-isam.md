@@ -1,6 +1,6 @@
 # I-07. ISAM, cursors and constraints
 
-Revision 5 · Part I review · Stage 2, response 6 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-DAO-02 and RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-03, RQ-CALL-04, RQ-PERF-01 and RQ-PERF-02. Full scope text is in I-16; II-07 supplies the native byte witnesses and algorithms.
 

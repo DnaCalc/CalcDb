@@ -1,6 +1,6 @@
 # I-12. DAO, ADO and observable object behavior
 
-Revision 3 · Reconciled with Stage 2, response 11 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-SEM-03, RQ-DAO-01, RQ-DAO-03, RQ-DAO-04, RQ-ADO-01, RQ-ADO-02. Shared obligations: RQ-PROD-02, RQ-SQL-03, RQ-SQL-08, RQ-DAO-02, RQ-COM-01, RQ-COM-02, RQ-LATE-05, RQ-LATE-06, RQ-ORACLE-02, RQ-ISAM-01, RQ-VAL-03, RQ-EXPR-01, RQ-CALL-01, RQ-CALL-04, RQ-PORT-02, RQ-LEDGER-01, RQ-HOST-01. Full requirement text and Part II ownership are in I-16.
 

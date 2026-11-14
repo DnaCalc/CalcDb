@@ -1,6 +1,6 @@
 # II-06. Catalog, properties and QueryDefs
 
-Revision 2 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-SQL-08. Shared obligations: RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-EXPR-03, RQ-CALL-03, RQ-CALL-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04 and RQ-OUT-01. The full scope text is in I-16. K-CATALOG uses II-04's native row/LV codecs and II-05's index mutation service; binding and object-model adapters consume the resulting descriptors.
 

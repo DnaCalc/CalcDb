@@ -1,6 +1,6 @@
 # I-02. Values, strings and ownership
 
-Revision 4 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-VAL-01, RQ-VAL-03, RQ-TYPE-01. Shared obligations: RQ-SEM-01, RQ-COM-01, RQ-LATE-03, RQ-FMT-03, RQ-VAL-02, RQ-CONC-01, RQ-PORT-03, RQ-PERF-01, RQ-PERF-02. Full requirement text and Part II ownership are in I-16.
 

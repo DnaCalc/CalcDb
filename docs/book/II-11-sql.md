@@ -1,6 +1,6 @@
 # II-11. Access SQL and execution
 
-Revision 1 · Stage 2, response 10 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-SQL-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-05, RQ-SQL-06 and RQ-PLAN-01. Supporting RQ-SQL-07, RQ-SQL-08, RQ-SEM-01, RQ-SEM-02, RQ-SEM-03, RQ-ISAM-01, RQ-VAL-02, RQ-CALL-02, RQ-CALL-03, RQ-EXPR-03, RQ-OUT-02, RQ-PORT-01, RQ-ORACLE-02, RQ-PERF-01 and RQ-PERF-02. I-16 retains the complete scope/phase map. II-04/05 supply native record/key mechanics, II-06 native catalog and parameter identities, II-07 the common cursor/mutation service, II-08 native persistence and failure disposition, II-09 protected inputs and owned work, and II-10 the shared scalar evaluator. This chapter composes those mechanisms through K-PLAN, K-PAR, K-CURSOR, K-EXPR, K-ADMISSION and K-WORK.
 
@@ -85,6 +85,7 @@ A bound relational node carries more than a list of result types. Prefer contigu
 | Equality | Operation-specific comparison/coercion/Null policy. | A comparator, grouping key or hash relation proved consistent with that policy. |
 | Ordering | SQL sort keys/directions and any qualified serial occurrence obligations. | Native order with a proof, or explicit ordering work; physical tie tokens remain separate. |
 | Demand | Required expression occurrences, phases, errors and foreign effects. | The operator's actual schedule preserves them through blocking, batching and spill. |
+| Portability | Required host identities, nonportable status, dependency provenance and unresolved dynamic requirements from II-10 §22 (**RQ-EXPR-03**). | Preserve the accepted summary through physical rewrites, cache reuse and spill; expose it without extra function demand, changed policy-entry timing or invented native metadata. |
 | Visibility | Accepted source cuts/current-own-write rules and correlation bindings. | Source tickets that survive every permitted read and continuation. |
 | Population | What Open, movement, metadata access and value access may force. | Incremental or blocking state with the correct public exposure and failure point. |
 | Mutation capability | Field/source targets and admissible key-preserving behavior. | A target mapping into the shared edit/mutation path, not a query-wide Boolean guess. |
@@ -954,7 +955,7 @@ Use the R-ORACLE-1 identity/capture envelope and R-SQL-1/2/3/R-PAR-1 branches in
 | T-SQL-07 | D | Nested saved QueryDefs reuse or shadow parameter names; independently opened inner QueryDef has different values. | Exposed order/coalescing and declaration types match captures; independent object values do not become an unqualified global parameter store. |
 | T-SQL-08 | D+C | Change a referenced definition/index, previously missing name, function registry, semantic option or permission context. | Validate the actual dependency certificate; stale binding is rejected/reconciled before dependent work, while an unrelated property or stale cost estimate need not invalidate semantics. |
 | T-SQL-09 | D+C | Bind native external IN sources/destinations with distinct file identities and authority; contrast unavailable provider routes. | Native files use explicit admission/view/participant ownership; no unrelated default connection, stronger permission or fictitious empty source hides an unavailable route. |
-| T-SQL-10 | D+C | SQL setter/getter, parameter assignment, metadata access, prepare, execute and cache hit are observed separately. | The recorded public phase performs exactly its admitted work; metadata/cache lookup does not execute a function speculatively or rewrite native query rows just to supply values. |
+| T-SQL-10 | D+C | SQL setter/getter, parameter assignment, metadata access, prepare, execute and cache hit are observed separately. Add constructed direct/nested saved-query/domain/Eval host-dependency cases through eligible node elimination, spill, cache reuse, rebind and policy revocation. | The recorded public phase performs exactly its admitted work; metadata/cache lookup does not execute a function speculatively or rewrite native query rows just to supply values. The CalcDb-owned portability summary preserves dependency origin and unresolved dynamic state; dynamic binding adds requirements before invocation, while permission follows the existing qualified demand/entry phase without replaying accepted effects or rejecting an undemanded native-admitted branch. |
 
 ### Native access paths, bounds and population
 

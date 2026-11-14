@@ -1,6 +1,8 @@
 # The Book of CalcDb — scope and planning reference
 
-Revision S3-r1 · 2026-11-14 · Stage 0 approval retained; current reconciliation.
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+
+**Release companion:** [A-03-reconciliation-audit.md](A-03-reconciliation-audit.md) records all 83 owner-row and nine completion-criterion results. `book-manifest.v1.0.json` identifies the exact released source set; PDF and independent review instructions use v1.0.
 
 ## Authority and capabilities
 
@@ -8,7 +10,7 @@ User corrections govern the current scope and interpretation. The one-pager is a
 
 Web research and downloadable Markdown are available. No Windows machine/ACE experiment is available in this session. Initial native oracle: user-reported ACEDAO.DLL 16.0.20527.20016 in `C:\Program Files\Microsoft Office\root\Office16\`; capture actual loaded DLL/Access/provider/runtime identities. Windows is x64; installed .NET Framework 4.8-family and .NET 10 LTS are separate lanes. Mermaid source and tables are emitted; none is render-verified.
 
-Stage 0 is approved. Both parts are complete as a reconciled design: I-01–16 and II-01 through II-16, with concrete native mechanics emphasized from II-03 onward. Stage 3 corrected the affected chapters and aligned the reference and dependency records. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
+Stage 0 is approved. Both parts are complete as a reconciled design: I-01–16 and II-01 through II-16, with concrete native mechanics emphasized from II-03 onward. The whole-book reconciliation corrected the affected chapters and aligned the reference and dependency records. Page guidance and the one-pager's implementation sequence are nonprescriptive. DAO row loops retain priority over bulk SQL and WASM; ADO may start alongside DAO as its real dependencies permit. Initial and later capability labels remain unchanged.
 
 The corrected target shared value is the platform's actual Automation VARIANT/BSTR (24-byte VARIANT on Windows x64). Current CalcVBA uses a private 16-byte form and COM conversion; it is being corrected, and CalcDb assumes the exact future platform layout. Native ACE crash parity remains the baseline. Optional undo uses the user's full-file image predicate and valid rollback eligibility, never a mandatory history witness or sidecar for ACE-first safety.
 
@@ -42,7 +44,7 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
-| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.8 | I and II reconciled |
+| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.9 | I and II reconciled |
 | 02 | Values, strings and ownership | 1.25 / 7 | 2.7 / 10.5 | I and II reconciled |
 | 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I and II reconciled |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.5 | I and II reconciled |
@@ -51,12 +53,12 @@ Estimates are unrendered space estimates: approximately 600 prose words/page, ta
 | 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 34.2 | I and II reconciled |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I and II reconciled |
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I and II reconciled |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I and II reconciled |
-| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I and II reconciled |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 41.4 | I and II reconciled |
+| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.9 | I and II reconciled |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I and II reconciled |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I and II reconciled |
 | 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I and II reconciled |
-| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 45.6 | I and II reconciled |
+| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.8 / 45.8 | I and II reconciled |
 | 16 | Research and development sequence | 1 / 4 | 12.6 / 40.3 | I and II reconciled |
 
 | File family | Current contents |

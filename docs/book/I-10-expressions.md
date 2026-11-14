@@ -1,6 +1,6 @@
 # I-10. Expressions, sandbox and CalcVBA functions
 
-Revision 5 · Part I review and Stage 2, response 15 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-SQL-07, RQ-SEM-01, RQ-VAL-02, RQ-EXPR-01, RQ-EXPR-02, RQ-EXPR-03, RQ-CALL-03. Shared obligations: RQ-SQL-01, RQ-SEM-02, RQ-SEM-03, RQ-SIM-01, RQ-CALL-02, RQ-TYPE-01. Full requirement text and Part II ownership are in I-16.
 

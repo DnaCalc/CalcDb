@@ -1,6 +1,6 @@
 # II-13. COM, activation and DNA Calc integration
 
-Revision 1 · Stage 2, response 12 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-PROD-02, RQ-COM-01, RQ-COM-02, RQ-COM-03, RQ-CALL-01, RQ-PORT-02, RQ-PORT-03 and RQ-HOST-01. Supporting RQ-PROD-01, RQ-PROD-06, RQ-SEM-03, RQ-DAO-01, RQ-DAO-04, RQ-ADO-01, RQ-ADO-02, RQ-LATE-05, RQ-VAL-01, RQ-VAL-03, RQ-EXPR-01, RQ-EXPR-02, RQ-CALL-03, RQ-CALL-04, RQ-ORACLE-02, RQ-LEDGER-01, RQ-PERF-01 and RQ-PERF-02. I-16 retains the full scope/phase map. II-02 supplies the shared values, II-09 owned work and waits, II-10 accepted host invocation, and II-12 member recipes and final outcome publication. This chapter realizes K-COM, K-VALUE, K-STRING, K-ERROR, K-THREAD, K-WORK, K-ADMISSION and K-BROWSER at the native and portable boundaries; it introduces no rival object model or database API.
 

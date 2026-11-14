@@ -1,6 +1,6 @@
 # II-04. Format, rows, long values and allocation
 
-Revision 2 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 This chapter specifies the physical layer that turns a checked page image into a row, a field or a long value, and turns an accepted logical change into complete native page images and reference changes. **The preferred design is a compiled format description, raw-preserving row edits and an allocator that plans the complete map/reference change before publishing it.** Concrete Jet 4/ACE structures drive that design below. II-03 supplies page identity, pins, positioned I/O and phase-image execution; it does not decide what a field or allocation bit means.
 

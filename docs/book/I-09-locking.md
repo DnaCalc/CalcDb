@@ -1,6 +1,6 @@
 # I-09. Locking, snapshots and owned work
 
-Revision 4 · Stage 2, response 8 reconciliation · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-LOCK-01, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-CONC-01, RQ-CONC-02, RQ-CALL-04. Shared obligations: RQ-STORE-02, RQ-SIM-01, RQ-SIM-02, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-DEV-01, RQ-STORE-04, RQ-STORE-05. Full requirement text and Part II ownership are in I-16. [II-09-locking.md](II-09-locking.md) develops the mechanisms, byte witnesses and ownership pseudocode; full experiment cards are in [A-02-experiments.md](A-02-experiments.md).
 

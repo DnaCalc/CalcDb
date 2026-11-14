@@ -1,6 +1,6 @@
 # I-05. Indexes and sort-order keys
 
-Revision 4 · Part I review · Stage 2, response 4 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-SEM-02. Shared obligations: RQ-LATE-04, RQ-FMT-03, RQ-TYPE-01, RQ-ISAM-01, RQ-DAO-02, RQ-PROD-04 and RQ-STORE-04. Full requirement text and Part II ownership are in I-16.
 

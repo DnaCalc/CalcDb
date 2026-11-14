@@ -1,6 +1,6 @@
 # I-08. Transactions, write ordering and crash recovery
 
-Revision 6 · Stage 2, response 8 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05. Shared obligations: RQ-PROD-04, RQ-SQL-05, RQ-SQL-06, RQ-SEM-03, RQ-DAO-01, RQ-DAO-04, RQ-LOCK-01, RQ-LOCK-03, RQ-LOCK-04, RQ-LATE-04, RQ-ISAM-01, RQ-CONC-02, RQ-SIM-02, RQ-CALL-04. Full requirement text and Part II ownership are in I-16.
 

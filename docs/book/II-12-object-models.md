@@ -1,6 +1,6 @@
 # II-12. DAO, ADO and observable object behavior
 
-Revision 1 · Stage 2, response 11 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-SEM-03, RQ-DAO-01, RQ-DAO-03, RQ-DAO-04, RQ-ADO-01 and RQ-ADO-02. Supporting RQ-PROD-02, RQ-PROD-05, RQ-SQL-03, RQ-SQL-08, RQ-DAO-02, RQ-COM-01, RQ-COM-02, RQ-COM-03, RQ-LATE-05, RQ-LATE-06, RQ-ORACLE-02, RQ-ISAM-01, RQ-VAL-03, RQ-EXPR-01, RQ-CALL-01, RQ-CALL-03, RQ-CALL-04, RQ-PORT-02, RQ-PORT-03, RQ-LEDGER-01, RQ-HOST-01, RQ-PERF-01 and RQ-PERF-02. I-16 retains the full phase/scope map. II-04/05 supply native row/index mechanics, II-06 catalog identities, II-07 cursor/edit state, II-08 mutation/resolution receipts, II-09 owned work and Close, and II-10/11 accepted expression/query execution. This chapter joins those mechanisms through concrete public objects using K-COM, K-ERROR, K-CURSOR, K-CATALOG, K-TXN, K-WORK, K-THREAD, K-VALUE and K-STRING. II-13 develops the exact declarations, activation and host integration.
 

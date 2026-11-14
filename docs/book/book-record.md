@@ -1,10 +1,10 @@
 # The Book of CalcDb — working record
 
-Revision **S3-r1** · 2026-11-14 · Current state only.
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md). Current state only.
 
 ## Status
 
-- Stage 0 approved; **I-01–16 and II-01 through II-16 complete as a reconciled design**; Stage 3 whole-book corrections applied; native/runtime acceptance remains planned.
+- Stage 0 approved; **I-01–16 and II-01 through II-16 complete as a reconciled design**; v1.0 reconciliation audit complete; native/runtime acceptance remains planned.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
@@ -12,14 +12,16 @@ Revision **S3-r1** · 2026-11-14 · Current state only.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
 - Next: **W-01/R-ORACLE-1 — first identified native capture**: immutable fixture, loaded identities, genuine table read and failed call; I-FOUNDATION-1/I-HOST-1 discovery alongside.
+- Next document work: render `The-Book-of-CalcDb.v1.0.pdf` and obtain separate `A-04-review.claude-fable-5.2.v1.0.md`; [instructions](calcdb-render-and-review-prompts.md).
+- Version policy: v1.0 first tracked design; patch for meaning-preserving edits, minor for substantive refinement, major for incompatible approved scope/contracts; short release entries and stable IDs ([policy](00-book-release.md)).
 
 ## Contents and estimates
 
-Original page guidance is descriptive. Written estimates use 600 prose words/page plus explicit table/code/diagram allowance; unrendered, not a length target. Full filenames and scope text: plan/I-16.
+Original page guidance is descriptive. Written estimates use 600 prose words/page plus explicit table/code/diagram allowance; unrendered, not a length target. Full filenames and scope text: plan/I-16; exact released sources: book-manifest.v1.0.json.
 
 | No. | Section / matching II chapter | Original I / II pages | Estimated written I / II | State |
 | --- | --- | --- | --- | --- |
-| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.8 | I and II reconciled |
+| 01 | Architecture and compatibility boundaries | 0.75 / 3 | 1.9 / 9.9 | I and II reconciled |
 | 02 | Values, strings and ownership | 1.25 / 7 | 2.7 / 10.5 | I and II reconciled |
 | 03 | VFS, pager and page cache | 1.25 / 7 | 3.4 / 20.8 | I and II reconciled |
 | 04 | Format, rows, long values and allocation | 1.75 / 10 | 3.5 / 30.5 | I and II reconciled |
@@ -28,19 +30,19 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 07 | ISAM, cursors and constraints | 1.5 / 9 | 3.3 / 34.2 | I and II reconciled |
 | 08 | Transactions, write ordering and crash recovery | 1.5 / 9 | 4.7 / 42.9 | I and II reconciled |
 | 09 | Locking, snapshots and owned work | 1.25 / 7 | 3.5 / 41.1 | I and II reconciled |
-| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I and II reconciled |
-| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I and II reconciled |
+| 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 41.4 | I and II reconciled |
+| 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.9 | I and II reconciled |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I and II reconciled |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I and II reconciled |
 | 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I and II reconciled |
-| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 45.6 | I and II reconciled |
+| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.8 / 45.8 | I and II reconciled |
 | 16 | Research and development sequence | 1 / 4 | 12.6 / 40.3 | I and II reconciled |
 
-Part I ≈ **68.1 pages**; current Part II ≈ **559.3**. Appendices separate: A-01 sources ≈ **118.8**, A-02 experiments ≈ **98.6**.
+Part I ≈ **68.3 pages**; Part II ≈ **560.3**. Appendices separate: A-01 sources ≈ **118.8**, A-02 experiments ≈ **98.6**, A-03 audit ≈ **18.5**; all unrendered estimates.
 
 ## Scope owner index
 
-All **83** stable IDs retained; owner applies to I and II. Full behavior/phase/support map: I-16.
+All **83** stable IDs retained; owner applies to I and II. Full behavior/phase/support map: I-16. Exact owning sections and check results: [A-03](A-03-reconciliation-audit.md), 83/83 PASS-D; all nine completion checks closed as document checks.
 
 | Owner | Requirement IDs |
 | --- | --- |
@@ -329,6 +331,4 @@ All planned; package summary: I-16; concrete slice prerequisites and observable 
 
 ## Short changelog
 
-- 2026-11-14: Reconciled value/copy, parameter capture, pager and mutation algorithms in their owning chapters.
-- 2026-11-14: Corrected evidence merge/search, saved-definition and target-specific dependencies; retained scope and decision statuses.
-- 2026-11-14: Whole-book references/graphs checked; next first native capture; native acceptance and figure rendering remain unexecuted.
+- v1.0 · 2026-11-14: First tracked release; published 83-row/nine-criterion audit, closed RC-11–14, and aligned manifest/PDF/A-04 review names; native acceptance and rendering remain unexecuted.

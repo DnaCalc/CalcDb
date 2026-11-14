@@ -1,6 +1,6 @@
 # II-05. Indexes and sort-order keys
 
-Revision 1 · Stage 2, response 4 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 The index implementation consists of a native key encoder, a checked page codec and a tree editor that prepares page/reference changes for II-03's phase-image executor. **Use inclusive child-maximum fences, retain logical row-root locators, and plan splits from recomputed compressed byte occupancy. Provisionally retain nonempty underfull pages and the physical root page; unlink empty children without introducing eager merging.** These choices fit the concrete reference mechanics developed here and limit the pages involved in the priority DAO update loop.[^authority] Native acceptance, cursor effects and crash classes decide where they change.
 

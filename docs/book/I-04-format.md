@@ -1,6 +1,6 @@
 # I-04. Format, rows, long values and allocation
 
-Revision 4 · Part I reconciliation · Stage 2, response 3 · 2026-11-13
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-PROD-03, RQ-PROD-04, RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-FMT-02, RQ-FMT-03. Shared obligations: RQ-LATE-01, RQ-LATE-03, RQ-LATE-04, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01, RQ-ORACLE-02, RQ-STORE-01, RQ-STORE-02, RQ-TYPE-01. Full requirement text and Part II ownership are in I-16.
 

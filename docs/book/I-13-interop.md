@@ -1,6 +1,6 @@
 # I-13. COM, activation and DNA Calc integration
 
-Revision 3 · Part I review and Stage 2, response 12 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-PROD-02, RQ-COM-01, RQ-COM-02, RQ-COM-03, RQ-CALL-01, RQ-PORT-02, RQ-PORT-03, RQ-HOST-01. Shared obligations: RQ-PROD-01, RQ-PROD-06, RQ-SEM-03, RQ-ADO-01, RQ-ADO-02, RQ-LATE-05, RQ-VAL-01, RQ-EXPR-01, RQ-EXPR-02, RQ-CALL-03. Full requirement text and Part II ownership are in I-16.
 

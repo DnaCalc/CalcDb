@@ -1,12 +1,12 @@
 # I-01. Architecture and compatibility boundaries
 
-Revision 3 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary: RQ-PROD-01, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01, RQ-SRC-02, RQ-PORT-01, RQ-ARCH-01. Shared obligations: RQ-PROD-03, RQ-PROD-06, RQ-COM-03, RQ-SRC-03, RQ-ISAM-01. Full requirement text and Part II ownership are in I-16.
 
 ## One engine, explicit boundaries
 
-CalcDb is a set of libraries implementing Jet 4 MDB and ACE ACCDB files, Access SQL, DAO and ADO. DAO has implementation and workload priority; ADO may start alongside DAO when its actual dependencies are available (I-16). One ISAM layer owns tables, indexes, cursors and mutations. SQL and the object models use that layer; a DAO table recordset never goes through SQL merely to reach a row. One expression service uses CalcVBA's value, conversion and function libraries without requiring its interpreter. These boundaries are **D-ARCH-1 — Decided** by the one-pager.[^scope]
+CalcDb is a set of Rust libraries implementing Jet 4 MDB and ACE ACCDB files, Access SQL, DAO and ADO. Rust is the implementation target in **RQ-PROD-01**; the systems-level contracts and pseudocode remain readable independently of that language. DAO has implementation and workload priority; ADO may start alongside DAO when its actual dependencies are available (I-16). One ISAM layer owns tables, indexes, cursors and mutations. SQL and the object models use that layer; a DAO table recordset never goes through SQL merely to reach a row. One expression service uses CalcVBA's value, conversion and function libraries without requiring its interpreter. These boundaries are **D-ARCH-1 — Decided** by the one-pager.[^scope]
 
 The file format, native catalog representation, index-key bytes and observable ACE behavior are compatibility constraints. Cache policy, buffer ownership, lookup structures and query operators are CalcDb choices. A refused in-scope operation remains a compatibility failure; safe refusal during development does not remove it from the scope. Jet 3, server roles and a private SQL dialect are excluded; preserved Access front-end objects remain readable and are never executed.
 

@@ -1,12 +1,14 @@
 # II-01. Architecture and compatibility boundaries
 
-Revision 3 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 This chapter deepens I-01 into library contracts, owned state and executable paths. It fixes no unobserved ACE behavior: the named experiments in A-02 choose the remaining policy details. The initial target remains the user-reported ACEDAO.DLL **16.0.20527.20016**, with actual loaded binaries and host configuration captured independently. No Windows/ACE experiment has run in this session.
 
 **Requirement trace:** RQ-PROD-01, RQ-ARCH-01, RQ-PORT-01, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01 and RQ-SRC-02 are owned here; this chapter supports RQ-PROD-02 (owned by I/II-13), and the value, storage, call, object-model and platform requirements are implemented through the contracts assigned to their detailed chapters. The full stable scope map remains I-16. **D-ARCH-1 — Decided.** One format description, ISAM engine, expression service, oracle and harness are fixed scope; the proposed physical library boundaries below are the recommended realization.[^scope]
 
 ## 1. Separate compatibility policy from implementation freedom
+
+**RQ-PROD-01.** Rust is the implementation target. The library boundaries, ownership rules and pseudocode use language-neutral systems notation, so the design can also be understood in C with limited C++, C# or OCaml without assuming Rust-specific runtime behavior. This does not add a second implementation or change the one-core requirement.
 
 A public call has three kinds of obligation. Its **surface policy** determines parameter handling, optional arguments, object state, result ownership and errors. Its **semantic operation** determines rows, expressions, constraints, transactions and observable effects. Its **physical operation** determines pages, encodings, references, native locks and persistent outcomes. These obligations are separate enough to test, but none may be omitted because another layer produced the right final rows.
 

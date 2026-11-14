@@ -1,6 +1,6 @@
 # II-14. WASM and later capabilities
 
-Revision 1 · Stage 2, response 13 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-PROD-06 and RQ-LATE-01 through RQ-LATE-06; supporting RQ-PROD-02, RQ-PROD-04, RQ-PROD-05, RQ-PORT-01, RQ-PORT-02, RQ-PORT-03, RQ-VAL-01, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-CALL-04, RQ-STORE-01, RQ-STORE-02, RQ-STORE-03, RQ-STORE-04, RQ-STORE-05, RQ-LOCK-01 through RQ-LOCK-04, RQ-OUT-01, RQ-OUT-02, RQ-PERF-01, RQ-PERF-02, RQ-DEV-01 and RQ-DEV-02. I-16 retains the complete scope and phase map. II-03 supplies owned positioned I/O, II-04/05/06 the native format/index/catalog rules, II-08/09 persistence and protection, II-11 the common query engine, and II-12/13 object and interop behavior. This chapter realizes K-BROWSER and extends the existing storage, source and external-surface seams; it creates no second evaluator, object model or authoritative database format.
 

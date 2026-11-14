@@ -1,6 +1,8 @@
 # I-16. Research and development sequence
 
-Revision 15 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+
+**Release trace:** [A-03](A-03-reconciliation-audit.md) gives the completed 83-row Part I/II owner audit and nine completion checks; the stable scope below is unchanged.
 
 **Requirement trace:** Primary: RQ-PROCESS-01, RQ-DEV-01, RQ-DEV-02. Shared obligations: RQ-LOCK-03, RQ-LOCK-04, RQ-SRC-03, RQ-ORACLE-01, RQ-ORACLE-03, RQ-ORACLE-04, RQ-LEDGER-01, RQ-ORACLE-05, RQ-TEST-01, RQ-STORE-04. Full requirement text and Part II ownership are in I-16.
 

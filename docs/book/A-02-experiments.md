@@ -1,6 +1,6 @@
 # A-02. Complete experiment specifications
 
-Revision 16 · Stage 3, response 1 · 2026-11-14
+Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
 
 This appendix holds all 34 research/integration cards formerly expanded in Part I, plus acceptance protocol T-COMPACT-1 within R-ORACLE-1. Part I retains short deciding summaries and complete architecture. These are planned experiments, not executed ACE results. Full source/version/use metadata is in A-01-sources.md; source identifiers in cards resolve there.
 
