@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r11** · 2026-11-14 · Current state only.
+Revision **S2-r12** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-12 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-13 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 12 — II-13 COM, activation and DNA Calc integration**, with genuine interfaces, activation, native and portable COM services, both managed-runtime lanes and host integration.
+- Next: **Stage 2, response 13 — II-14 WASM and later capabilities**, with browser execution/storage and the early hooks and phased designs for encryption, linked tables, complex fields, compact and repair, OLE DB and ODBC.
 
 ## Contents and estimates
 
@@ -31,12 +31,12 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 10 | Expressions, sandbox and CalcVBA functions | 1.25 / 7 | 2.0 / 40.9 | I revised; II drafted |
 | 11 | Access SQL and execution | 2 / 12 | 3.8 / 45.7 | I revised; II drafted |
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
-| 13 | COM, activation and DNA Calc integration | 1 / 5 | 5.3 / 0.0 | I revised; II pending |
+| 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
 | 14 | WASM and later capabilities | 0.75 / 4 | 3.8 / 0.0 | I revised; II pending |
 | 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 11.2 / 0.0 | I revised; II pending |
+| 16 | Research and development sequence | 1 / 4 | 11.6 / 0.0 | I revised; II pending |
 
-Part I ≈ **64.3 pages**; current Part II ≈ **383.5**. Appendices separate: A-01 sources ≈ **84.2**, A-02 experiments ≈ **76.3**.
+Part I ≈ **65.5 pages**; current Part II ≈ **426.4**. Appendices separate: A-01 sources ≈ **98.5**, A-02 experiments ≈ **82.4**.
 
 ## Scope owner index
 
@@ -90,8 +90,8 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-ACTION-1 | Provisional | Qualified identity spool or protected lazy enumeration cut; separate value/coalescing/failure policies; R-SQL-2. | 07,08,11 |
 | D-PAR-1 | Decided | Workers must preserve accepted serial rows, Double folds, effects and errors. | 09,10,11 |
 | D-OBJECT-1 | Recommended | Typed member recipes and family policies; DAO priority, ADO alongside; DAO/ADO/ERR probes. | 07,12,13 |
-| D-ACT-1 | Provisional | Own identities plus scoped host mappings/factories; unchanged-client R-ACT-1. | 13 |
-| D-HOST-1 | Provisional | Small versioned host service boundary; CalcVBA owns portable COM. | 13 |
+| D-ACT-1 | Provisional | Private native mappings/factories; synchronized Both provisional; unchanged routes and lifetime, R-ACT-1. | 13 |
+| D-HOST-1 | Provisional | Explicit Active bootstrap and retained capabilities; standalone choice, runtime/caller and residual owners, I-HOST-1. | 13 |
 | D-WASM-1 | Provisional | Local caller-worker COM; tested direct/broker storage and dynamic acquisition, R-WASM-1. | 03,13,14 |
 | D-EVIDENCE-1 | Recommended | Immutable captures; calibrated T-COMPACT-1; raw evidence and production-logic simulation. | 04,09,11,15 |
 | D-ORACLE-1 | Decided | Batched owned-process service; selected ACE target; independently identified native/.NET lanes. | 15,16 |
@@ -115,7 +115,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-THREAD | Caller-thread foreign work outside latches; own demanded inputs, revalidate each boundary; no replay/ancestor wait. | 10,13 |
 | K-PAR | Workers preserve serial semantic steps, exact state, demand and bounded completion owners; ordered partial sums insufficient. | 11 |
 | K-ERROR | Owned effects and independent channels; capture first, bounded diagnostic retirement, no replay through failure. | 12,13 |
-| K-COM | Real ABI/identity; portable type info, dispatch/errors/enumeration/factories/ADO events and Automation allocation. | 13 |
+| K-COM | Real target ABI/type graph; proven activation, retained host/code/allocator owners and complete portable services. | 13 |
 | K-EVIDENCE | Raw input-addressed captures/provenance; refused/missing remain failures; observation classes stay distinct. | 15 |
 | K-IO | Report actual progress and persistent uncertainty; cancellation is not rollback or mutation retry authority. | 03 |
 | K-ADMISSION | Checked bounds then reservation; separately account owned capacity, pins/history, dirty images and spill. | 02,03 |
@@ -153,12 +153,12 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 | R-SQL-3 | DISTINCTROW classes/provenance, TOP and independent schema/population timing | 11 / L |
 | R-DAO-1 | DAO declarations, publication, collection/child identity and lifecycle | 12 / XL |
 | R-ADO-1 | ADO native routing, parameters, client/batch state, events and persistence | 12 / L |
-| R-ACT-1 | Unchanged VBA/.xll/.NET activation routes | 13 / M |
+| R-ACT-1 | Unchanged creation, declarations, context/factory selection and lifetime | 13 / M |
 | R-PAR-1 | Serial semantic frontier, bounded worker ownership and measured benefit | 11 / M |
 | R-WASM-1 | Portable blocking caller, dynamic storage and honest persistence outcomes | 14 / M |
 | R-ERR-1 | Owned error channels, dispatch binding and publication under reentry | 12 / M |
-| I-FOUNDATION-1 | Shared types package and published integration contract | 13 / S |
-| I-HOST-1 | Host services, UDF delivery and lifetime | 13 / M |
+| I-FOUNDATION-1 | Exact target ABI and actual portable Automation service closure | 13 / S |
+| I-HOST-1 | Explicit host bootstrap, actual runtime/caller capability and residual ownership | 13 / M |
 | R-ENC-1 | Native encryption families and interrupted changes | 14 / L |
 | R-LINK-1 | Linked-source capabilities and transaction limits | 14 / L |
 | R-COMPLEX-1 | Kind-specific complex-field storage and behavior | 14 / L |
@@ -173,14 +173,14 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Work | Result | Size |
 | --- | --- | --- |
 | W-01 | Oracle service, corpus and capture/reduction schema | L |
-| W-02 | Shared values/strings and COM boundary contract | M |
+| W-02 | Shared target declarations, values and consumed Automation services | M |
 | W-PROBE | Native I/O/exclusion basics and external ACE crash observation | M |
 | W-03 | Blocking VFS/pager, exclusion and browser adapter | L |
 | W-04 | One format and native read ISAM/catalog path | XL |
 | W-05 | Exclusive mutator, Workspace frames, owned resolution and compatible persistence | XL |
 | W-06 | Read-only SELECT and shared expression service | L |
 | W-07 | Actions, DDL and native QueryDefs | XL |
-| W-08 | DAO host activation, read, edit, full coverage and portable integration slices | XL |
+| W-08 | DAO declaration/activation, actual host/runtime and read/edit/coverage slices | XL |
 | W-09 | CalcDb ADO construction, read/query and edit/coverage slices | L |
 | W-10 | Reader-only admission, then in-process visibility slice | L |
 | W-11 | Reading beside ACE writer | L |
@@ -255,6 +255,9 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Member recipe | Captured interface/member/invocation declaration plus typed implementation and observable state/diagnostic cases. |
 | Collection image | Owned ordered membership and lookup state, separate from native catalog freshness and held-child identity. |
 | Diagnostic snapshot | Owned ordered entries and original numeric/text evidence, separate from live collection and thread-slot publication. |
+| Target ABI description | Published scalar widths, pointer/call convention, offsets/stride and allocation domain for the actual shared target. |
+| Activation profile | Owned requested-class mappings and route/scope selection, independent of genuine interface identity. |
+| HostBinding | Immutable retained host/runtime/service capabilities captured by issued factories and objects; admission and residual lifetime separate. |
 
 ## Source ledger — compact current index
 
@@ -267,7 +270,7 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | V | 8115aa781; user-corrected | F | P |
 | U | 2026-11-14 | R | P |
 | A | Attached assignment | R | P |
-| B | S2-r11 | S | P |
+| B | S2-r12 | S | P |
 | S-MS-TXN | Updated 2022-03-18; Applies to Access 2013 / Office 2013 | F | U |
 | S-MS-VARIANT | Updated 2021-04-02 | F | U |
 | S-MS-FACTORY | Updated 2022-01-31 | F | U |
@@ -741,10 +744,66 @@ Exact material/version/read extent/contribution and citation locations: **A-01**
 | S-MS-ERR-NET-GETEXCEPTION | Doc@2026-11-14 | F | U |
 | S-MS-ERR-NET-GETHR48 | Doc@2026-11-14 | F | U |
 | S-MS-ERR-NET-GETHR10 | Doc@2026-11-14 | F | U |
+| S-MS-ITYPEINFO-DUALVIEW | Doc@2026-11-14 | F | U |
+| S-MS-LOADREGTYPELIB | Doc@2026-11-14 | F | U |
+| S-MS-X64-CALLING | Doc@2026-11-14 | F | U |
+| S-MS-QI-RULES | Doc@2026-11-14 | F | U |
+| S-MS-COGETCLASSOBJECT | Doc@2026-11-14 | F | U |
+| S-MS-ITYPEINFO-CREATE | Doc@2026-11-14 | F | U |
+| S-MS-CLSIDFROMPROGID | Doc@2026-11-14 | F | U |
+| S-MS-CLSIDFROMPROGIDEX | Doc@2026-11-14 | F | U |
+| S-MS-CREATEACTCTX | Doc@2026-11-14 | F | U |
+| S-MS-RELEASEACTCTX | Doc@2026-11-14 | F | U |
+| S-MS-ACTCTX-THREADS | Doc@2026-11-14 | F | U |
+| S-MS-DLLGETCLASSOBJECT | Doc@2026-11-14 | F | U |
+| S-MS-COREVOKECLASSOBJECT | Doc@2026-11-14 | F | U |
+| S-MS-LOCKSERVER | Doc@2026-11-14 | F | U |
+| S-MS-COM-THREADING-CHOICE | Doc@2026-11-14 | F | U |
+| S-MS-COM-INPROC-THREADING | Doc@2026-11-14 | F | U |
+| S-MS-COM-STA | Doc@2026-11-14 | F | U |
+| S-MS-COM-MTA | Doc@2026-11-14 | F | U |
+| S-MS-COM-FTM | Doc@2026-11-14 | F | U |
+| S-MS-DLLCANUNLOADNOW | Doc@2026-11-14 | F | U |
+| S-MS-DLL-BEST-PRACTICES | Doc@2026-11-14 | F | U |
+| S-MS-XLL-AUTOOPEN | Doc@2026-11-14 | F | U |
+| S-MS-XLL-AUTOCLOSE | Doc@2026-11-14 | F | U |
+| S-MS-XLL-MTR | Doc@2026-11-14 | F | U |
+| S-MS-WINDOWS-DATA-TYPES | Doc@2026-11-14 | F | U |
+| S-MS-COTASKMEMALLOC | Doc@2026-11-14 | F | U |
+| S-MS-SAFEARRAYGETVARTYPE | Doc@2026-11-14 | F | U |
+| S-MS-SAFEARRAYGETELEMENT | Doc@2026-11-14 | F | U |
+| S-MS-SAFEARRAYPUTELEMENT | Doc@2026-11-14 | F | U |
+| S-MS-ARRAY-MANIPULATION | Doc@2026-11-14 | F | U |
+| S-MS-OAUT-SAFEARRAY | Doc@2026-11-14 | F | U |
+| S-MS-SAFEARRAYUNACCESS | Doc@2026-11-14 | F | U |
+| S-MS-SAFEARRAYDESTROY | Doc@2026-11-14 | F | U |
+| S-MS-RELEASEFUNCDESC | Doc@2026-11-14 | F | U |
+| S-MS-GETREFTYPEINFO | Doc@2026-11-14 | F | U |
+| S-MS-GETCONTAININGTYPELIB | Doc@2026-11-14 | F | U |
+| S-MS-DISPATCH-GETTYPEINFO | Doc@2026-11-14 | F | U |
+| S-MS-IENUMCONNECTIONPOINTS | Doc@2026-11-14 | F | U |
+| S-MS-CONNECTIONUNADVISE | Doc@2026-11-14 | F | U |
+| S-MS-CONNECTION-ENUMCONNECTIONS | Doc@2026-11-14 | F | U |
+| S-MS-ENUMCONNECTIONS-NEXT | Doc@2026-11-14 | F | U |
+| S-MS-COM-SOURCEGEN | Doc@2026-11-14 | F | U |
+| S-MS-TYPE-EQUIVALENCE | Doc@2026-11-14 | F | U |
+| S-MS-COM-INTEROP-TYPES | Doc@2026-11-14 | F | U |
+| S-MS-OBJECT-MARSHAL | Doc@2026-11-14 | F | U |
+| S-MS-ARRAY-MARSHAL | Doc@2026-11-14 | F | U |
+| S-MS-RELEASECOM48 | Doc@2026-11-14 | F | U |
+| S-MS-RELEASECOM10 | Doc@2026-11-14 | F | U |
+| S-EXCELDNA-RUNTIME | Doc@2026-11-14 | F | U |
+| S-MS-NATIVE-NET-HOST | Doc@2026-11-14 | F | U |
+| S-MS-FRAMEWORK-SXS | Doc@2026-11-14 | F | U |
+| S-MS-ASSEMBLYLOADCONTEXT | Doc@2026-11-14 | F | U |
+| S-MS-NET-UNLOAD | Doc@2026-11-14 | F | U |
+| S-MS-XLL-TYPES | Doc@2026-11-14 | F | U |
+| S-MS-XLL-MEMORY | Doc@2026-11-14 | F | U |
+| S-MS-XLL-AUTOFREE | Doc@2026-11-14 | F | U |
 
 ## Figures
 
-All **136 IDs / 138 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
+All **157 IDs / 159 captions emitted**; none render-verified. Tables are identified as tables, not missing or rendered Mermaid.
 
 | Figure | Location | Actual form/status |
 | --- | --- | --- |
@@ -884,16 +943,37 @@ All **136 IDs / 138 captions emitted**; none render-verified. Tables are identif
 | F-134 | II-12 | Markdown constructed/design table; emitted |
 | F-135 | II-12 | Markdown constructed/design table; emitted |
 | F-136 | II-12 | Markdown constructed/design table; emitted |
+| F-137 | II-13 | Markdown constructed/design table; emitted |
+| F-138 | II-13 | Markdown constructed/design table; emitted |
+| F-139 | II-13 | Markdown constructed/design table; emitted |
+| F-140 | II-13 | Markdown constructed/design table; emitted |
+| F-141 | II-13 | Mermaid source; emitted |
+| F-142 | II-13 | Markdown constructed/design table; emitted |
+| F-143 | II-13 | Markdown constructed/design table; emitted |
+| F-144 | II-13 | Markdown constructed/design table; emitted |
+| F-145 | II-13 | Markdown constructed/design table; emitted |
+| F-146 | II-13 | Mermaid source; emitted |
+| F-147 | II-13 | Markdown constructed/design table; emitted |
+| F-148 | II-13 | Mermaid source; emitted |
+| F-149 | II-13 | Markdown constructed/design table; emitted |
+| F-150 | II-13 | Markdown constructed/design table; emitted |
+| F-151 | II-13 | Markdown constructed/design table; emitted |
+| F-152 | II-13 | Markdown constructed/design table; emitted |
+| F-153 | II-13 | Markdown constructed/design table; emitted |
+| F-154 | II-13 | Markdown constructed/design table; emitted |
+| F-155 | II-13 | Mermaid source; emitted |
+| F-156 | II-13 | Mermaid source; emitted |
+| F-157 | II-13 | Markdown constructed/design table; emitted |
 
 ## Open issues / next actions
 
 | ID | Next action | Owners |
 | --- | --- | --- |
 | O-STRING | R-STRING-1: measure direct BSTR/decode reuse on the first real DAO read loop. | 02 |
-| O-FOUNDATION | I-FOUNDATION-1: publish actual declarations/package ownership and portable client prototype. | 02,13 |
+| O-FOUNDATION | I-FOUNDATION-1: actual target declarations, mutation-stable copy/alias services and real portable type-info/enumeration/error/event clients. | 02,13 |
 | O-UDF | R-UDF-1/I-HOST-1: demonstrate real resolver/signature/interval/alias, policy-entry, caller-thread cleanup and ancestor-safe continuation. | 10,13 |
-| O-ACTIVATION | R-ACT-1: prove unchanged native/PIA routes and loaded implementation identity. | 13 |
-| O-HOST | I-HOST-1: confirm actual add-in/runtime/activation ownership and versioned capabilities. | 13 |
+| O-ACTIVATION | R-ACT-1: capture unchanged routes, type/factory retention, actual propagation, synchronized Both and implementation provenance. | 13 |
+| O-HOST | I-HOST-1: qualify explicit Active bootstrap, standalone selection, both runtime families, known/Unknown origin, waits and residual code/allocator lifetime. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
 | O-ORACLES | R-ORACLE-1: capture remaining environment metadata and validate owned-process/capture behavior; initial targets already selected. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
@@ -915,5 +995,5 @@ All **136 IDs / 138 captions emitted**; none render-verified. Tables are identif
 ## Short changelog
 
 - 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-14: II-12 adds member/collection lifetimes, native DAO paths, ADO caches/events/persistence and owned diagnostics; 20 figures; Part I/cards reconciled.
-- 2026-11-14: II-01–12 drafted; 136 figure IDs emitted; next II-13. No ACE execution or rendered-figure result claimed.
+- 2026-11-14: II-13 adds genuine ABI/activation, portable Automation, unchanged managed/XLL lanes and explicit host/bootstrap/lifetime; 21 figures; Part I/cards reconciled.
+- 2026-11-14: II-01–13 drafted; 157 figure IDs emitted; next II-14. No ACE execution or rendered-figure result claimed.
