@@ -1,17 +1,17 @@
 # The Book of CalcDb — working record
 
-Revision **S2-r13** · 2026-11-14 · Current state only.
+Revision **S2-r14** · 2026-11-14 · Current state only.
 
 ## Status
 
-- Stage 0 approved; Part I review revised; **II-01 through II-14 drafted**; remaining Part II chapters pending.
+- Stage 0 approved; Part I review revised; **II-01 through II-15 drafted**; remaining Part II chapters pending.
 - Initial oracle: user-reported ACEDAO.DLL **16.0.20527.20016**; actual Access/provider/binary/environment identities still require capture.
 - Windows x64; separate installed **.NET Framework 4.8-family** and **.NET 10 LTS** client lanes.
 - Shared target: real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**; current CalcVBA 16-byte form is being corrected.
 - Web research and Markdown available; no Windows/ACE execution; figures emitted as tables/source, not render-verified.
 - Writing emphasis: concrete native page/record mechanics and byte examples; shared contracts referenced.
 - Scope/priority fixed; lengths/order nonprescriptive; **ADO may start alongside DAO**, with DAO priority retained.
-- Next: **Stage 2, response 14 — II-15 Oracle, corpus, tests and performance**: actual oracle/provenance, native fixture corpus, differential and fault tests, and representative performance measurements.
+- Next: **Stage 2, response 15 — II-16 Research and development sequence**: consolidate experiment dependencies, implementation slices, relative sizes and observable acceptance across the completed design.
 
 ## Contents and estimates
 
@@ -33,10 +33,10 @@ Original page guidance is descriptive. Written estimates use 600 prose words/pag
 | 12 | DAO, ADO and observable object behavior | 1.5 / 8 | 4.7 / 46.4 | I revised; II drafted |
 | 13 | COM, activation and DNA Calc integration | 1 / 5 | 6.1 / 42.9 | I revised; II drafted |
 | 14 | WASM and later capabilities | 0.75 / 4 | 4.5 / 44.4 | I revised; II drafted |
-| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.0 / 0.0 | I revised; II pending |
-| 16 | Research and development sequence | 1 / 4 | 12.0 / 0.0 | I revised; II pending |
+| 15 | Oracle, corpus, tests and performance | 1.25 / 5 | 5.6 / 44.9 | I revised; II drafted |
+| 16 | Research and development sequence | 1 / 4 | 12.4 / 0.0 | I revised; II pending |
 
-Part I ≈ **66.6 pages**; current Part II ≈ **471.0**. Appendices separate: A-01 sources ≈ **113.8**, A-02 experiments ≈ **94.4**.
+Part I ≈ **67.6 pages**; current Part II ≈ **515.9**. Appendices separate: A-01 sources ≈ **118.6**, A-02 experiments ≈ **98.3**.
 
 ## Scope owner index
 
@@ -93,9 +93,9 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | D-ACT-1 | Provisional | Private native mappings/factories; synchronized Both provisional; unchanged routes and lifetime, R-ACT-1. | 13 |
 | D-HOST-1 | Provisional | Explicit Active bootstrap and retained capabilities; standalone choice, runtime/caller and residual owners, I-HOST-1. | 13 |
 | D-WASM-1 | Provisional | Actual shared wasm32 domains; direct/broker ownership, qualified readers and fault receipts; R-WASM-1. | 03,13,14 |
-| D-EVIDENCE-1 | Recommended | Immutable captures; calibrated T-COMPACT-1; raw evidence and production-logic simulation. | 04,09,11,15 |
+| D-EVIDENCE-1 | Recommended | Exact questions/history, owned attempts, typed/graph evidence and context-preserving faults; R-ORACLE/CRASH. | 04,09,11,15 |
 | D-ORACLE-1 | Decided | Batched owned-process service; selected ACE target; independently identified native/.NET lanes. | 15,16 |
-| D-PERF-1 | Recommended | DAO loops > bulk SQL > WASM; counters, noise controls and negative results. | 02,03,07,11,15 |
+| D-PERF-1 | Recommended | Actual DAO loops > bulk SQL > WASM; semantic twins, exact/sampled counters, paired costs and negative results. | 02,03,07,11,15 |
 | D-LATER-1 | Recommended | Native codec/source/child/rebuild and genuine provider seams; six cards, feature-specific prerequisites. | 03–14,16 |
 
 ## Shared contracts
@@ -116,7 +116,7 @@ Status labels match chapters; reasons/conditions/reopening rules live there and 
 | K-PAR | Workers preserve serial semantic steps, exact state, demand and bounded completion owners; ordered partial sums insufficient. | 11 |
 | K-ERROR | Owned effects and independent channels; capture first, bounded diagnostic retirement, no replay through failure. | 12,13 |
 | K-COM | Real target ABI/type graph; proven activation, retained host/code/allocator owners and complete portable services. | 13 |
-| K-EVIDENCE | Raw input-addressed captures/provenance; refused/missing remain failures; observation classes stay distinct. | 15 |
+| K-EVIDENCE | Exact input/history and raw attempts; versioned comparisons; refused/missing/unresolved stay visible; evidence classes distinct. | 15 |
 | K-IO | Raw count differs from proved prefix; retain possible effects; no unqualified suffix retry or cancellation rollback. | 03 |
 | K-ADMISSION | Checked bounds then reservation; separately account owned capacity, pins/history, dirty images and spill. | 02,03 |
 | K-CRASH | ACE-first parity independent of undo; optional full-file U unchanged/C before-or-new, identity/eligibility/extent valid. | 03,08 |
@@ -131,7 +131,7 @@ All **34** are planned/unexecuted. Full conditions, captures, ambiguity and outc
 
 | Task | Next result | Owner / size |
 | --- | --- | --- |
-| R-ORACLE-1 | Capture schema, baseline and comparison rules | 15 / M |
+| R-ORACLE-1 | Exact questions, owned attempts, lossless capture and calibrated comparison | 15 / M |
 | R-STRING-1 | DAO value/materialisation cost and ownership | 02 / M |
 | R-FMT-1 | Format families and minimal valid files | 04 / L |
 | R-FMT-2 | Rows, long values, allocation and mutations | 04 / L |
@@ -172,7 +172,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 
 | Work | Result | Size |
 | --- | --- | --- |
-| W-01 | Oracle service, corpus and capture/reduction schema | L |
+| W-01 | Oracle capture core, immutable native histories, comparison/reduction and cost records | L |
 | W-02 | Shared target declarations, values and consumed Automation services | M |
 | W-PROBE | Native I/O/exclusion basics and external ACE crash observation | M |
 | W-03 | Blocking VFS/pager, native exclusion and qualified browser storage | L |
@@ -209,7 +209,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Documented | A public reference states it; target-build verification may still be required. |
 | Recommended / provisional | A design choice supported by reasoning / a choice awaiting a named experiment or product condition. |
 | Opaque preservation | Required unknown payload bytes are retained with safe references; whole-file identity after an edit is not implied. |
-| Pass | Matched the specified oracle comparison. Mismatched, refused or missing cases are failures. |
+| Pass | Matched the named actual oracle comparison; refused, missing, mismatched or unresolved required cases remain non-matches. |
 | S / M / L / XL | Relative complexity definitions in I-16; never elapsed durations. |
 | Persistence cut | A recorded interruption boundary with a defined failure model and persistence frontier; compared by semantic milestones, not equal engine write ordinals. |
 | File incarnation | The identity of the actual file object and its relevant lifetime, not merely a path or matching byte content. |
@@ -258,14 +258,16 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | Target ABI description | Published scalar widths, pointer/call convention, offsets/stride and allocation domain for the actual shared target. |
 | Activation profile | Owned requested-class mappings and route/scope selection, independent of genuine interface identity. |
 | HostBinding | Immutable retained host/runtime/service capabilities captured by issued factories and objects; admission and residual lifetime separate. |
+| Question / attempt / comparison | Exact reproducible input, one owned execution, and one versioned interpretation of immutable captures. |
+| Fault plan | Prerequisite faults and controlling schedule plus the next typed site; coverage is contextual, not just a site count. |
 
 ## Sources
 
-**593 active cited sources**; complete exact material/version/read extent/licence and citation locations: [A-01-sources.md](A-01-sources.md). Supplied concept-report filenames and reading inventory: [planning reference](00-stage0-plan.md). No source/sample code port is claimed.
+**610 active cited sources**; complete exact material/version/read extent/licence and citation locations: [A-01-sources.md](A-01-sources.md). Supplied concept-report filenames and reading inventory: [planning reference](00-stage0-plan.md). No source/sample code port is claimed.
 
 ## Figures
 
-**182 IDs / 184 captions emitted**; none render-verified. Full individual purposes and forms: [planning reference](00-stage0-plan.md#figure-inventory). This current-state table groups the actual emitted captions by chapter.
+**206 IDs / 208 captions emitted**; none render-verified. Full individual purposes and forms: [planning reference](00-stage0-plan.md#figure-inventory). This current-state table groups the actual emitted captions by chapter.
 
 | Chapter | Figure IDs | IDs / captions | Status |
 | --- | --- | --- | --- |
@@ -295,6 +297,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | II-12 | F-117–F-136 | 20 / 20 | Emitted; not render-verified |
 | II-13 | F-137–F-157 | 21 / 21 | Emitted; not render-verified |
 | II-14 | F-158–F-182 | 25 / 25 | Emitted; not render-verified |
+| II-15 | F-183–F-206 | 24 / 24 | Emitted; not render-verified |
 
 ## Open issues / next actions
 
@@ -306,7 +309,7 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 | O-ACTIVATION | R-ACT-1: capture unchanged routes, type/factory retention, actual propagation, synchronized Both and implementation provenance. | 13 |
 | O-HOST | I-HOST-1: qualify explicit Active bootstrap, standalone selection, both runtime families, known/Unknown origin, waits and residual code/allocator lifetime. | 13 |
 | O-UNDO | R-CRASH-1/2: native baseline first; qualify exact full audit, possibly-Armed retirement and one-shot D-UNDO-2 per operation/backend. | 03,08 |
-| O-ORACLES | R-ORACLE-1: capture remaining environment metadata and validate owned-process/capture behavior; initial targets already selected. | 15 |
+| O-ORACLES | R-ORACLE-1: actual loaded identities, owned desktop/UI, stateful reset, active-value capture and silent-repair controls; all native lanes still unexecuted. | 15 |
 | O-FORMAT | R-FMT-1/2: qualify row/LV/map and index mask/prefix/fence/root/peer/count rules; R-PRESERVE-1 covers opaque references. | 04–06 |
 | O-CATALOG | R-CAT-1: capture native MR2/query roles, CHECK/security closure and held object/parameter/schema invalidation. | 06,11,12 |
 | O-KEYS | R-SORT-3: qualify every required descriptor, scalar/text bytes and510-byte collision behavior; resolve exact resource provenance before reuse. | 05,10,11 |
@@ -326,5 +329,5 @@ All planned; branch-specific prerequisites and observable acceptance: I-16. W-PR
 ## Short changelog
 
 - 2026-11-14: Part I review retained; exact undo/ABI/lock/crash requirements remain reconciled.
-- 2026-11-14: II-14 adds concrete browser/storage and six later mechanisms; 25 figures, 64 planned T-PLAT families and seven expanded cards; Part I/dependencies reconciled.
-- 2026-11-14: II-01–14 drafted; 182 figure IDs emitted; next II-15; record source/figure duplication removed. No actual acceptance or rendered-figure execution claimed.
+- 2026-11-14: II-15 adds concrete oracle/corpus/comparison/fault/performance design; 24 figures, 45 planned T-EVID families and five expanded cards; I-15/I-16 reconciled.
+- 2026-11-14: II-01–15 drafted; 206 figure IDs emitted; next II-16; compact current-state record retained. No actual acceptance or rendered-figure execution claimed.
