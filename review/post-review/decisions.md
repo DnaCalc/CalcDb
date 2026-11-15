@@ -21,7 +21,7 @@ Owner decisions taken after the Fable 5.2 review (review/A-04-review.claude-fabl
 - A Workspace or Connection is a separate locker, as in ACE (error 3188, "locked by another session on this machine").
 - Several private change sets may be open at once. Conflicts are detected at ACE's granularity: page, or record where record-level locking applies. A later commit is rebuilt over the newly published base, reusing the II-09 §23 rebase without external lock roles.
 - A conflict never waits indefinitely. It follows ACE's retry behaviour (LockRetry, PageTimeout and related `DBEngine.SetOption` settings) and then raises ACE's error.
-- The target is defined by black-box experiments against ACE in one process (W-01).
+- The target is defined by black-box experiments against ACE in one process (PRW-01).
 - Cross-process stages 3 and 4 (reading and writing beside ACE) stay later scope.
 - The charter's "snapshot isolation" wording for in-process sharing is replaced by "ACE in-process semantics".
 
@@ -36,7 +36,7 @@ Owner decisions taken after the Fable 5.2 review (review/A-04-review.claude-fabl
   - With `Apartment`, COM itself delivers every call from another apartment to the creating STA. CalcDb has no foreign-thread entry of its own.
 - **Host functions** are reached through the provider reference CalcDb was given. COM apartment rules decide where the provider runs. CalcDb adds no thread policy of its own (options A and B both fall away).
 - **Last Release** follows the same rule. With `Apartment`, a release from another thread arrives through the proxy on the owner thread. Rollback and the sink release happen there, as in ACE.
-- **Evidence:** the book specifies .NET COM probes (W-06) that measure the actual behaviour against ACE and later against CalcDb. They are not run at this stage. Where a measurement contradicts this entry, the measurement wins and this entry is revised.
+- **Evidence:** the book specifies .NET COM probes (PRW-06) that measure the actual behaviour against ACE and later against CalcDb. They are not run at this stage. Where a measurement contradicts this entry, the measurement wins and this entry is revised.
 
 ## PRD-03. ADO scope and non-ACE connection strings (REV-F52-007)
 
