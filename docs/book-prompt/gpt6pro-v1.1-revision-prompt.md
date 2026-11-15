@@ -31,7 +31,7 @@ The split keeps disagreements and surprises in a short response you can check, b
 Attach these files from the repository at commit `e3564ac1` or later:
 
 1. The v1.0 pack: `calcdb-book.v1.0.zip`.
-   - Recreate it from the repository with `git archive --format=zip -o calcdb-book.v1.0.zip book-v1.0:docs/book`.
+   - Recreate it from the repository with `git -c core.autocrlf=false archive --format=zip -o calcdb-book.v1.0.zip book-v1.0:docs/book` (without `core.autocrlf=false`, Git on Windows writes CRLF and the manifest hashes no longer match).
    - Or attach the files in `docs/book/`, which are unchanged since the `book-v1.0` tag.
 2. `review/A-04-review.claude-fable-5.2.v1.0.md`: the independent review.
 3. `review/post-review/decisions.md`: the owner decisions PRD-01 to PRD-09.
