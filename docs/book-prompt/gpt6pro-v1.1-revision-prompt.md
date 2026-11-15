@@ -35,7 +35,7 @@ Attach these files from the repository at commit `e3564ac1` or later:
    - Or attach the files in `docs/book/`, which are unchanged since the `book-v1.0` tag.
 2. `review/A-04-review.claude-fable-5.2.v1.0.md`: the independent review.
 3. `review/post-review/decisions.md`: the owner decisions PRD-01 to PRD-09.
-4. `review/post-review/work.md`: the closed work list PRW-01 to PRW-41.
+4. `review/post-review/work.md`: the closed work list PRW-01 to PRW-43.
 5. `docs/calcdb-one-pager.md`: the project one-pager, which is the source for the scope preamble (PRW-41).
 
 ## Message for Response A (paste into the running session)
@@ -51,8 +51,9 @@ closed work list for v1.1. Attached:
   to REV-F52-031).
 - decisions.md: my decisions PRD-01 to PRD-09. These are final. Do not
   reopen them; write the book to match them.
-- work.md: the closed list PRW-01 to PRW-41. It maps every finding to
-  work. PRW-37 is dropped. PRW-41 is my own addition (see below).
+- work.md: the closed list PRW-01 to PRW-43. It maps every finding to
+  work. PRW-37 is dropped. PRW-41 to PRW-43 are my own additions (see
+  below).
 - calcdb-one-pager.md: the project one-pager that set the initial scope.
 
 PRW-41, the scope preamble. Add a short front-matter file, 00-scope.md,
@@ -67,13 +68,24 @@ means. The one-pager stays in A-01 as the original source. The authority
 statements in 00-stage0-plan.md and A-01 name the preamble as the book's
 scope statement.
 
+PRW-42 and PRW-43, two corrections along the way:
+
+- The book is rendered, so the "not render-verified" caveats make no
+  sense. Remove them from the figure captions and notes, and from the
+  status column of the figures table in book-record.md. The release
+  record says the figures are rendered by the PDF build.
+- CalcVBA's move to the platform VARIANT is done. Remove every reference
+  to its old private 16-byte value form, its COM-boundary conversion and
+  "being corrected". State the shared value plainly. Leave unrelated
+  16-byte facts (format payloads, decimal magnitudes and the like) alone.
+
 The goal is v1.1: a coherent book with a stable specification, in the
 same voice as v1.0, that carries out the work list and nothing else.
 
 This response: the author's response and the revision plan. Do not
 change any book file yet.
 
-1. Review the review. For each PRW item (PRW-41 included), give one line: accept, dispute
+1. Review the review. For each PRW item (PRW-41 to PRW-43 included), give one line: accept, dispute
    (with your reason and the text that supports it), or clarify (what you
    need from me). You may dispute an item that does not come from a PRD
    decision if you think the reviewer is wrong. For items that implement
@@ -125,7 +137,8 @@ of files with nothing left out:
 - every Markdown file, with the header updated to v1.1;
 - the new 00-scope.md;
 - 00-book-release.md with a v1.1 entry. The entry names the reasons (the
-  A-04 review, and the new scope preamble), the affected IDs and files, the scope removals (MDB
+  A-04 review, the new scope preamble and the owner corrections), the
+  affected IDs and files, the scope removals (MDB
   user-level security, optional undo D-UNDO-2, and ADO limited to ACE
   strings with refusal of all others), and the verification state;
 - A-03 refreshed for v1.1, including the corrections from REV-F52-029
