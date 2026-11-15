@@ -7,6 +7,7 @@ Book work that follows from [decisions.md](decisions.md) and from the review tri
 - 001: PRW-16. 002: PRW-01 to PRW-04. 003: PRW-11 to PRW-14. 004: PRW-19. 005: PRW-15. 006: PRW-20.
 - 007: PRW-07 to PRW-09. 008: PRW-10. 009: PRW-05 and PRW-06. 010: PRW-17. 011: PRW-18. 012: PRW-21.
 - 013 to 031: PRW-22 to PRW-40. PRW-37 (REV-F52-027a) was dropped by the owner as a nitpick.
+- Added by the owner, not from the review: PRW-41 (scope preamble).
 
 The list is closed. Anything not on it does not change in v1.1.
 
@@ -52,3 +53,4 @@ The list is closed. Anything not on it does not change in v1.1.
 | PRW-38 | Source ledger: fill the use class in every row from the fixed vocabulary; define the licence codes in the preamble; repoint I-05 and I-06 to the pinned Jackcess rows. | REV-F52-028 | A-01, I-05, I-06 | To do |
 | PRW-39 | Citation and ledger slips: footnote dates, the Jackcess Encrypt version, the contradictory read-scope row, missing ADO page dates, drafting residue, which bytes the research-note hashes cover, the "Cited in" omissions, and stale "Stage 2 response" wording. | REV-F52-030 | A-01, footnotes, A-02 cards | To do |
 | PRW-40 | Small text slips: the II-07 F-53 record count; the unused `repeat:` in II-03 `PinPage`; the edit-buffer branch in II-01 `ReadPublicField`. The II-08 §25 undo header items lapse under PRD-09 unless the idea note keeps them. | REV-F52-031 | II-07, II-03, II-01, II-08 §25 | To do |
+| PRW-41 | Add a scope preamble, `00-scope.md` ("Scope and context", one or two pages). It rewords the project one-pager in the book's context and voice, reflects the PRD decisions, and numbers its sections S1, S2, and so on. It is front matter, so it does not renumber any chapter. It goes after the release record in the reading order. Every reference to the one-pager becomes a reference to the preamble. The one-pager stays in A-01 as the original source, and the authority statements in the plan and A-01 name the preamble as the book's scope statement. | Owner request (2026-11-15) | new 00-scope.md; 00-stage0-plan.md, A-01, I-01, I-06, I-10, I-16, II-01, II-04, II-05, II-07, II-14, II-15 (current one-pager references); manifest reading order | To do |
