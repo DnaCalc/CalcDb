@@ -12,6 +12,8 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
+/// <item><c>fixtures [--failed-only]</c>: every named fixture of <c>probes/fixtures.json</c> with the creating attempt
+/// and each creation call that returned an error (member, error code, first text argument).</item>
 /// <item><c>seal --token T</c>: seal an attempt whose runner exited before sealing it. Refused while any worker
 /// process named in its started receipts is still alive. Without a started receipt it seals NotStarted; with one
 /// and no returned receipt it seals Uncertain, and is never re-run automatically.</item>
@@ -48,6 +50,7 @@ internal static class Program
                 "show" => ShowAttempt(store, options),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "seal" => SealAbandoned(store, options),
+                "fixtures" => FixturesReport(store, repo, options),
                 _ => Usage(args[0]),
             };
         }
@@ -163,7 +166,10 @@ internal static class Program
             }
             if (freeze)
             {
-                foreach (ArtifactRef output in manifest.Artifacts.Where(a => a.Role.StartsWith("output:", StringComparison.Ordinal)))
+                // Only fixture files follow the naming convention <card>-<fixture>.<ext>; other outputs (compaction
+                // results, streams, saved recordsets) are kept as artifacts but are not fixtures.
+                string cardPrefix = "output:" + question.Probe.Split('/')[0] + "-";
+                foreach (ArtifactRef output in manifest.Artifacts.Where(a => a.Role.StartsWith(cardPrefix, StringComparison.Ordinal)))
                 {
                     FreezeNamed(store, repo, manifest, output);
                 }
@@ -228,6 +234,35 @@ internal static class Program
         }
         CaptureManifest manifest = store.Seal(store.GetAttempt(attemptId), owners);
         Console.WriteLine(EvidenceJson.Serialize(manifest));
+        return 0;
+    }
+
+    private static int FixturesReport(JobStore store, string repo, Options options)
+    {
+        string registryPath = Path.Combine(repo, "probes", "fixtures.json");
+        var registry = EvidenceJson.Read<Dictionary<string, FixtureInput>>(registryPath);
+        foreach ((string name, FixtureInput fixture) in registry.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            string attemptId = fixture.Provenance?.Split(' ')[0] ?? "";
+            string capturePath = Path.Combine(store.AttemptDirectory(attemptId), "capture.json");
+            if (!File.Exists(capturePath))
+            {
+                Console.WriteLine($"{name}: creating capture not in this store ({attemptId})");
+                continue;
+            }
+            Capture capture = EvidenceJson.Read<Capture>(capturePath);
+            var failures = capture.Events.OfType<InvokeEvent>().Where(i => i.InvokeHresult is null || i.InvokeHresult.StartsWith("0x8", StringComparison.Ordinal)).ToList();
+            if (failures.Count == 0 && options.Has("failed-only"))
+            {
+                continue;
+            }
+            Console.WriteLine($"{name}: {fixture.Length} bytes, {failures.Count} failed creation call(s), by {attemptId}");
+            foreach (InvokeEvent f in failures)
+            {
+                string text = f.Args.FirstOrDefault(a => a.Text is not null)?.Text ?? "";
+                Console.WriteLine($"    {f.Target}.{f.Member} {f.ExcepInfo?.Scode ?? f.InvokeHresult} {(text.Length > 140 ? text[..140] + "…" : text)}");
+            }
+        }
         return 0;
     }
 
