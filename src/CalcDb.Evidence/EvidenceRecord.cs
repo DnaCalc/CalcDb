@@ -35,6 +35,9 @@ public sealed record EvidenceRecord
 
     public Capture? Capture { get; init; }
 
+    /// <summary>Captures of further participants of a multi-process question, by participant name.</summary>
+    public IReadOnlyDictionary<string, Capture>? ParticipantCaptures { get; init; }
+
     public required IReadOnlyList<RetainedArtifact> Artifacts { get; init; }
 }
 

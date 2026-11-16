@@ -13,6 +13,13 @@ public sealed record Probe(string Card, string Name, string[] Refs, string Descr
 
     /// <summary>Runs before probes of the same card that use its output (fixture creation).</summary>
     public bool CreatesFixture { get; init; }
+
+    /// <summary>
+    /// Further participants (b, c, ...), each run at the same time in its own owned worker process on the same
+    /// attempt files; order them with Signal/Await only. Participant a (Program) keeps the final files, so it
+    /// should await the others' last signal before it ends.
+    /// </summary>
+    public (string Name, Action<P> Program)[] Participants { get; init; } = [];
 }
 
 /// <summary>Typed arguments. Every argument carries its VARIANT tag (T-EVID-01).</summary>
@@ -26,9 +33,16 @@ public static class A
 
     public static Arg Bool(bool v) => new BoolArg(v);
 
-    public static Arg Str(string v) => new BstrArg(v);
+    /// <summary>A BSTR of exactly these code units; text with lone surrogates travels as exact bytes (bstrBytes).</summary>
+    public static Arg Str(string v) => Hashing.IsWellFormedUtf16(v) ? new BstrArg(v) : BstrUnits(v);
 
     public static Arg Missing => new MissingArg();
+
+    /// <summary>A BSTR with exactly these payload bytes (odd counts, embedded nulls, lone surrogates).</summary>
+    public static Arg BstrBytes(params byte[] bytes) => new BstrBytesArg(Convert.ToHexStringLower(bytes));
+
+    /// <summary>A BSTR with exactly these UTF-16 code units, including lone surrogates.</summary>
+    public static Arg BstrUnits(string units) => BstrBytes([.. units.SelectMany(c => new[] { (byte)c, (byte)(c >> 8) })]);
 
     public static Arg Null => new NullArg();
 
@@ -37,6 +51,9 @@ public static class A
     public static Arg Obj(string name) => new ObjectArg(name);
 
     public static Arg In(string role = "main") => new InputPathArg(role);
+
+    /// <summary>The same input path in another spelling: upper, extended, slashes or dot (EX-ALIAS).</summary>
+    public static Arg InAs(string spelling, string role = "main") => new InputPathArg(role) { Spelling = spelling };
 
     public static Arg Out(string fileName) => new OutputPathArg(fileName);
 
@@ -108,6 +125,23 @@ public sealed class P
 
     public P Describe(string target, bool wholeLibrary = false) => Add(new DescribeType(target) { WholeLibrary = wholeLibrary });
 
+    /// <summary>Mark a barrier point as reached for the other participants.</summary>
+    public P Signal(string name) => Add(new Signal(name));
+
+    /// <summary>Wait for another participant's signal (the wait and any timeout are recorded).</summary>
+    public P Await(string name, int timeoutMs = 30000) => Add(new Await(name, timeoutMs));
+
+    /// <summary>
+    /// W-PROBE: CreateFileW with exact access/share/disposition on <c>input:&lt;role&gt;</c>, <c>lock:&lt;role&gt;</c> or
+    /// <c>work:&lt;name&gt;</c>; see <see cref="Win"/> for the constants.
+    /// </summary>
+    public P NativeOpen(string bind, string file, uint access, uint share, uint disposition = Win.OpenExisting) =>
+        Add(new NativeOpen(bind, file, access, share, disposition));
+
+    public P NativeRead(string handle, long offset, int count) => Add(new NativeRead(handle, offset, count));
+
+    public P NativeClose(string handle) => Add(new NativeClose(handle));
+
     /// <summary>For each item of a collection (Count then Item(i), i from 0), bound to <paramref name="bind"/>.</summary>
     public P Each(string collection, string bind, int max, Action<P> body)
     {
@@ -173,6 +207,14 @@ public sealed class P
         Ops.Add(op);
         return this;
     }
+}
+
+/// <summary>Win32 CreateFile constants for the W-PROBE native driver.</summary>
+public static class Win
+{
+    public const uint GenericRead = 0x80000000, GenericWrite = 0x40000000, Delete = 0x00010000, ReadAttributes = 0x80;
+    public const uint ShareNone = 0, ShareRead = 1, ShareWrite = 2, ShareDelete = 4, ShareAll = 7;
+    public const uint OpenExisting = 3;
 }
 
 /// <summary>DAO constants used by probes (values from the DAO type library, also captured by R-DAO-1).</summary>

@@ -7,80 +7,101 @@ using CalcDb.Evidence;
 namespace CalcDb.Oracle.Runner;
 
 /// <summary>
-/// Launches and owns one worker process for one attempt (OR-OWN). Ownership is the retained process
-/// handle plus a Windows Job Object with kill-on-close, assigned before the worker is admitted: the
-/// worker blocks on its admission line until then, so no native call runs outside ownership.
-/// Only processes this runner started are waited on or terminated.
+/// Launches and owns the worker processes of one attempt, one per participant (OR-OWN). Ownership is the
+/// retained process handle plus a Windows Job Object with kill-on-close, assigned before any worker is
+/// admitted: each worker blocks on its admission line until then, so no native call runs outside ownership.
+/// All participants are owned before the first is admitted. Only processes this runner started are waited on
+/// or terminated; at the deadline the remaining ones are killed and waited for.
 /// </summary>
 internal static partial class OwnedWorker
 {
-    public static OwnerReport Run(string workerPath, string attemptDir, AttemptRecord attempt, TimeSpan timeout, Action onAdmitted)
+    public static IReadOnlyList<OwnerReport> Run(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
     {
         if (!OperatingSystem.IsWindows())
         {
-            return new OwnerReport { Ownership = "none", LaunchError = "The ACE worker runs only on a Windows oracle host; submit this job to one." };
+            return [.. participants.Select(p => new OwnerReport { Participant = p, Ownership = "none", LaunchError = "The ACE worker runs only on a Windows oracle host; submit this job to one." })];
         }
-        return RunWindows(workerPath, attemptDir, attempt, timeout, onAdmitted);
+        return RunWindows(workerPath, attemptDir, attempt, participants, timeout, onAdmitted);
     }
 
     [SupportedOSPlatform("windows")]
-    private static OwnerReport RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, TimeSpan timeout, Action onAdmitted)
+    private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
     {
         using var job = JobObject.CreateKillOnClose();
-        var start = new ProcessStartInfo(workerPath)
+        var started = new List<(string Participant, Process? Process, string Ownership, string? Error)>();
+        foreach (string participant in participants)
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            WorkingDirectory = attemptDir,
-        };
-        start.ArgumentList.Add(attemptDir);
-        Process process;
-        try
-        {
-            process = Process.Start(start) ?? throw new Win32Exception("Process.Start returned null.");
-        }
-        catch (Win32Exception ex)
-        {
-            return new OwnerReport { Ownership = "none", LaunchError = ex.Message };
-        }
-
-        using (process)
-        {
-            string ownership = "retained process handle";
-            if (job.TryAssign(process.Handle, out int error))
+            var start = new ProcessStartInfo(workerPath)
             {
-                ownership += " + job object (kill on close)";
-            }
-            else
-            {
-                ownership += $" (job assignment failed: {error})";
-            }
-
-            onAdmitted();
-            process.StandardInput.WriteLine($"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration}");
-            process.StandardInput.Close();
-
-            bool exited = process.WaitForExit(timeout);
-            bool killed = false;
-            if (!exited)
-            {
-                process.Kill(entireProcessTree: true);
-                killed = true;
-                // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
-                process.WaitForExit();
-            }
-            return new OwnerReport
-            {
-                Launched = true,
-                ProcessId = process.Id,
-                Ownership = ownership,
-                ExitCode = process.ExitCode,
-                TimedOut = !exited,
-                Killed = killed,
-                ExitObserved = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                WorkingDirectory = attemptDir,
             };
+            start.ArgumentList.Add(attemptDir);
+            if (participant != "a")
+            {
+                start.ArgumentList.Add(participant);
+            }
+            try
+            {
+                Process process = Process.Start(start) ?? throw new Win32Exception("Process.Start returned null.");
+                string ownership = job.TryAssign(process.Handle, out int error)
+                    ? "retained process handle + job object (kill on close)"
+                    : $"retained process handle (job assignment failed: {error})";
+                started.Add((participant, process, ownership, null));
+            }
+            catch (Win32Exception ex)
+            {
+                started.Add((participant, null, "none", ex.Message));
+            }
         }
+
+        onAdmitted();
+        foreach ((string participant, Process? process, _, _) in started)
+        {
+            if (process is not null)
+            {
+                process.StandardInput.WriteLine($"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration} {participant}");
+                process.StandardInput.Close();
+            }
+        }
+
+        var deadline = Stopwatch.StartNew();
+        var reports = new List<OwnerReport>();
+        foreach ((string participant, Process? process, string ownership, string? error) in started)
+        {
+            if (process is null)
+            {
+                reports.Add(new OwnerReport { Participant = participant, Ownership = ownership, LaunchError = error });
+                continue;
+            }
+            using (process)
+            {
+                TimeSpan left = timeout - deadline.Elapsed;
+                bool exited = process.WaitForExit(left > TimeSpan.Zero ? left : TimeSpan.Zero);
+                bool killed = false;
+                if (!exited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    killed = true;
+                    // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
+                    process.WaitForExit();
+                }
+                reports.Add(new OwnerReport
+                {
+                    Participant = participant,
+                    Launched = true,
+                    ProcessId = process.Id,
+                    Ownership = ownership,
+                    ExitCode = process.ExitCode,
+                    TimedOut = !exited,
+                    Killed = killed,
+                    ExitObserved = true,
+                });
+            }
+        }
+        return reports;
     }
 
     [SupportedOSPlatform("windows")]

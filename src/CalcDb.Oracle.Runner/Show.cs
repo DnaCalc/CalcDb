@@ -45,6 +45,12 @@ internal static class Show
                             : $"{"",22}IErrorInfo absent (GetErrorInfo {ei.GetErrorInfoHresult})");
                     }
                     break;
+                case SyncEvent s:
+                    sb.AppendLine($"{s.Kind} {s.Name}{(s.WaitedMs is { } w ? $" waited {w} ms" : "")}{(s.TimedOut ? " TIMED OUT" : "")} at {s.AtUtc:HH:mm:ss.fff}");
+                    break;
+                case HandleEvent h:
+                    sb.AppendLine($"native {h.Op} {h.Handle} {h.RelativePath} access=0x{h.Access:X} share={h.Share} -> {(h.Success ? "ok" : "Win32 error " + h.Win32Error)}{(h.FileId is null ? "" : " fileId " + h.FileId[^8..])}{(h.BytesRead is { } n ? $" read {n} bytes" : "")} at {h.AtUtc:HH:mm:ss.fff}");
+                    break;
                 case ReleaseEvent r:
                     sb.AppendLine($"release {r.Target}{(r.Implicit ? " (implicit)" : "")} -> {r.ReturnedCount}");
                     break;

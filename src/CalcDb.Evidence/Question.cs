@@ -44,6 +44,17 @@ public sealed record Question
 
     public required IReadOnlyList<Operation> Program { get; init; }
 
+    /// <summary>
+    /// Further participants: programs run at the same time as <see cref="Program"/> (participant <c>a</c>), each
+    /// in its own owned worker process, on the same attempt files, ordered only by explicit signal/await
+    /// barriers (R-LOCK-1/2 two-process cases). Empty for ordinary single-process questions.
+    /// </summary>
+    public IReadOnlyList<Participant>? Participants { get; init; }
+
+    /// <summary>The further participants, empty when there are none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<Participant> Peers => Participants ?? [];
+
     public string Key()
     {
         var w = new CanonicalWriter(KeyEncoding);
@@ -55,6 +66,11 @@ public sealed record Question
             .Text("pathBinding", PathBinding)
             .List("inputs", Inputs, (cw, i) => i.Write(cw))
             .List("program", Program, (cw, op) => op.Write(cw));
+        if (Peers.Count > 0)
+        {
+            // Written only when present, so the keys of single-process questions are unchanged.
+            w.List("participants", Peers, (cw, pt) => cw.Begin("participant").Text("name", pt.Name).List("program", pt.Program, (c2, op) => op.Write(c2)));
+        }
         return "qk1-" + w.Sha256Hex();
     }
 
@@ -74,12 +90,23 @@ public sealed record Question
             }
             FileNames.RequireSimple(input.FileName);
         }
-        foreach (Operation op in Program)
+        foreach (Operation op in Program.Concat(Peers.SelectMany(pt => pt.Program)))
         {
             op.Validate(roles);
         }
+        var names = new HashSet<string>(StringComparer.Ordinal) { "a" };
+        foreach (Participant pt in Peers)
+        {
+            if (!names.Add(pt.Name) || pt.Name.Length != 1 || pt.Name[0] < 'b' || pt.Name[0] > 'z')
+            {
+                throw new EvidenceFormatException($"Participant names are single letters b..z, unique; '{pt.Name}' is not.");
+            }
+        }
     }
 }
+
+/// <summary>A further participant of a multi-process question; see <see cref="Question.Participants"/>.</summary>
+public sealed record Participant(string Name, IReadOnlyList<Operation> Program);
 
 /// <summary>An immutable starting artifact, identified by content (F-184 starting fixture manifest).</summary>
 public sealed record FixtureInput(string Role, string FileName, string Sha256, long Length)
@@ -114,6 +141,11 @@ public enum DispatchKind
 [JsonDerivedType(typeof(ObserveFiles), "observeFiles")]
 [JsonDerivedType(typeof(ObserveModules), "observeModules")]
 [JsonDerivedType(typeof(DescribeType), "describeType")]
+[JsonDerivedType(typeof(Signal), "signal")]
+[JsonDerivedType(typeof(Await), "await")]
+[JsonDerivedType(typeof(NativeOpen), "nativeOpen")]
+[JsonDerivedType(typeof(NativeRead), "nativeRead")]
+[JsonDerivedType(typeof(NativeClose), "nativeClose")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -231,6 +263,57 @@ public sealed record ObserveModules(string Label) : Operation
     internal override void Write(CanonicalWriter w) => w.Begin("observeModules").Text("label", Label);
 }
 
+/// <summary>Barrier: mark the named point as reached, for other participants of the attempt.</summary>
+public sealed record Signal(string Name) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("signal").Text("name", Name);
+}
+
+/// <summary>Barrier: wait until another participant signals the named point, at most <see cref="TimeoutMs"/>.</summary>
+public sealed record Await(string Name, int TimeoutMs) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("await").Text("name", Name).Int32("timeoutMs", TimeoutMs);
+}
+
+/// <summary>
+/// W-PROBE native driver: <c>CreateFileW</c> on a file of the attempt with exact desired access, share mode and
+/// creation disposition (numeric Win32 values), binding the handle; records the Win32 result and FileIdInfo.
+/// <see cref="File"/> is <c>input:&lt;role&gt;</c>, <c>lock:&lt;role&gt;</c> (the .laccdb/.ldb beside that input) or
+/// <c>work:&lt;name&gt;</c>.
+/// </summary>
+public sealed record NativeOpen(string Bind, string File, uint Access, uint Share, uint Disposition) : Operation
+{
+    internal override void Write(CanonicalWriter w) =>
+        w.Begin("nativeOpen").Text("bind", Bind).Text("file", File).Int64("access", Access).Int64("share", Share).Int64("disposition", Disposition);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        string[] parts = File.Split(':', 2);
+        bool ok = parts.Length == 2 && parts[0] switch
+        {
+            "input" or "lock" => inputRoles.Contains(parts[1]),
+            "work" => parts[1].Length > 0 && parts[1] == Path.GetFileName(parts[1]),
+            _ => false,
+        };
+        if (!ok)
+        {
+            throw new EvidenceFormatException($"Native file reference '{File}' is not input:<role>, lock:<role> or work:<name>.");
+        }
+    }
+}
+
+/// <summary>W-PROBE: <c>ReadFile</c> of <see cref="Count"/> bytes at <see cref="Offset"/> through a native handle.</summary>
+public sealed record NativeRead(string Handle, long Offset, int Count) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("nativeRead").Text("handle", Handle).Int64("offset", Offset).Int32("count", Count);
+}
+
+/// <summary>W-PROBE: <c>CloseHandle</c> of a native handle.</summary>
+public sealed record NativeClose(string Handle) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("nativeClose").Text("handle", Handle);
+}
+
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(I2Arg), "i2")]
@@ -249,6 +332,7 @@ public sealed record ObserveModules(string Label) : Operation
 [JsonDerivedType(typeof(BytesArg), "bytes")]
 [JsonDerivedType(typeof(NullArg), "null")]
 [JsonDerivedType(typeof(EmptyArg), "empty")]
+[JsonDerivedType(typeof(BstrBytesArg), "bstrBytes")]
 public abstract record Arg
 {
     internal abstract void Write(CanonicalWriter w);
@@ -339,6 +423,20 @@ public sealed record BytesArg(string Hex) : Arg
     }
 }
 
+/// <summary>A BSTR holding exactly these payload bytes (lowercase hex; an odd count is allowed), OR-WIRE.</summary>
+public sealed record BstrBytesArg(string Hex) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("bstrBytes").Text("hex", Hex);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        if (Hex.Length % 2 != 0 || Hex.Any(c => !Uri.IsHexDigit(c) || char.IsUpper(c)))
+        {
+            throw new EvidenceFormatException("bstrBytes must be lowercase hex with an even number of digits.");
+        }
+    }
+}
+
 public sealed record NullArg : Arg
 {
     internal override void Write(CanonicalWriter w) => w.Begin("null");
@@ -375,13 +473,30 @@ public sealed record ObjectArg(string Name) : Arg
 /// <summary>The full path of the attempt-local copy of an input fixture, as a BSTR.</summary>
 public sealed record InputPathArg(string Role) : Arg
 {
-    internal override void Write(CanonicalWriter w) => w.Begin("inputPath").Text("role", Role);
+    /// <summary>
+    /// Another spelling of the same path (EX-ALIAS): <c>upper</c> (upper-cased), <c>extended</c> (the <c>\\?\</c>
+    /// prefix), <c>slashes</c> (forward slashes) or <c>dot</c> (a <c>.\</c> segment before the file name).
+    /// </summary>
+    public string? Spelling { get; init; }
+
+    internal override void Write(CanonicalWriter w)
+    {
+        w.Begin("inputPath").Text("role", Role);
+        if (Spelling is not null)
+        {
+            w.Text("spelling", Spelling); // written only when set, so earlier keys are unchanged
+        }
+    }
 
     internal override void Validate(IReadOnlySet<string> inputRoles)
     {
         if (!inputRoles.Contains(Role))
         {
             throw new EvidenceFormatException($"Input path refers to unknown role '{Role}'.");
+        }
+        if (Spelling is not null and not ("upper" or "extended" or "slashes" or "dot"))
+        {
+            throw new EvidenceFormatException($"Unknown path spelling '{Spelling}'.");
         }
     }
 }

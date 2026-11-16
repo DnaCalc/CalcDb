@@ -18,6 +18,9 @@ public sealed record Capture
 
     public required string QuestionKey { get; init; }
 
+    /// <summary>The participant whose program this capture records (<c>a</c> for the main program).</summary>
+    public string Participant { get; init; } = "a";
+
     public required EnvironmentReceipt Environment { get; init; }
 
     public required IReadOnlyList<CaptureEvent> Events { get; init; }
@@ -46,6 +49,8 @@ public sealed record ArtifactRef(string Role, string Kind, string RelativePath, 
 [JsonDerivedType(typeof(ModulesEvent), "modules")]
 [JsonDerivedType(typeof(SkippedEvent), "skipped")]
 [JsonDerivedType(typeof(TypeEvent), "type")]
+[JsonDerivedType(typeof(SyncEvent), "sync")]
+[JsonDerivedType(typeof(HandleEvent), "handle")]
 public abstract record CaptureEvent
 {
     /// <summary>Monotonic sequence number within the attempt.</summary>
@@ -73,7 +78,7 @@ public sealed record CreateEvent : CaptureEvent
 }
 
 /// <summary>Read-only view of the class registration that COM resolved, captured without changing it.</summary>
-public sealed record RegistrationView(string? InprocServer32, string? ThreadingModel, string Source)
+public sealed record RegistrationView(string Source, string? InprocServer32 = null, string? ThreadingModel = null)
 {
     public string? Note { get; init; }
 }
@@ -159,6 +164,54 @@ public sealed record ReleaseEvent : CaptureEvent
     public bool Implicit { get; init; }
 }
 
+/// <summary>A barrier step: <c>signal</c>, or <c>await</c> with how long it waited and whether it timed out.</summary>
+public sealed record SyncEvent : CaptureEvent
+{
+    public required string Kind { get; init; }
+
+    public required string Name { get; init; }
+
+    public long? WaitedMs { get; init; }
+
+    public bool TimedOut { get; init; }
+
+    /// <summary>UTC time the step completed, for ordering participants' events.</summary>
+    public required DateTimeOffset AtUtc { get; init; }
+}
+
+/// <summary>A native file-handle operation (W-PROBE): open, read or close, with its exact Win32 result.</summary>
+public sealed record HandleEvent : CaptureEvent
+{
+    public required string Op { get; init; }
+
+    public required string Handle { get; init; }
+
+    public string? RelativePath { get; init; }
+
+    public uint? Access { get; init; }
+
+    public uint? Share { get; init; }
+
+    public uint? Disposition { get; init; }
+
+    public required bool Success { get; init; }
+
+    /// <summary>GetLastError after a failed call (for example 32 ERROR_SHARING_VIOLATION, 2 not found, 5 access denied).</summary>
+    public int? Win32Error { get; init; }
+
+    public string? VolumeSerial { get; init; }
+
+    public string? FileId { get; init; }
+
+    public long? Offset { get; init; }
+
+    public int? BytesRead { get; init; }
+
+    public string? BytesSha256 { get; init; }
+
+    public required DateTimeOffset AtUtc { get; init; }
+}
+
 /// <summary>Type information of a bound object, from ITypeInfo/ITypeLib (public COM metadata).</summary>
 public sealed record TypeEvent : CaptureEvent
 {
@@ -171,7 +224,7 @@ public sealed record TypeEvent : CaptureEvent
     public IReadOnlyList<string> Errors { get; init; } = [];
 }
 
-public sealed record TypeLibraryInfo(string? Name, string? HelpString, string Guid, int Major, int Minor, int Lcid, int SysKind, int Flags, int TypeCount);
+public sealed record TypeLibraryInfo(string Guid, int Major, int Minor, int Lcid, int SysKind, int Flags, int TypeCount, string? Name = null, string? HelpString = null);
 
 /// <summary>One type: TYPEKIND (0 enum, 3 interface, 4 dispatch, 5 coclass, 6 alias), flags and members.</summary>
 public sealed record TypeView
@@ -203,10 +256,10 @@ public sealed record TypeView
 public sealed record FunctionInfo(int MemberId, string Name, int InvokeKind, int FuncKind, int CallConv, int VtableOffset, int Flags, string ReturnType, int OptionalCount, IReadOnlyList<ParameterInfo> Parameters);
 
 /// <summary>PARAMFLAGS: 1 in, 2 out, 8 retval, 16 optional, 32 has default.</summary>
-public sealed record ParameterInfo(string? Name, string Type, int Flags, CapturedValue? Default);
+public sealed record ParameterInfo(string Type, int Flags, string? Name = null, CapturedValue? Default = null);
 
 /// <summary>VARDESC; for enum constants <see cref="Value"/> holds the constant.</summary>
-public sealed record VariableInfo(int MemberId, string Name, string Type, int VarKind, int Flags, CapturedValue? Value);
+public sealed record VariableInfo(int MemberId, string Name, string Type, int VarKind, int Flags, CapturedValue? Value = null);
 
 public sealed record SkippedEvent : CaptureEvent
 {
@@ -314,6 +367,9 @@ public sealed record EnvironmentReceipt
     public required string WorkerPath { get; init; }
 
     public required string WorkerSha256 { get; init; }
+
+    /// <summary>The worker's informational version, including the source commit it was built from.</summary>
+    public string? WorkerBuild { get; init; }
 
     public required string ToolingRevision { get; init; }
 

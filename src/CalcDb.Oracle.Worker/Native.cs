@@ -83,6 +83,9 @@ internal static unsafe partial class Native
     public static partial void SysFreeString(nint bstr);
 
     [LibraryImport("oleaut32.dll")]
+    public static partial nint SysAllocStringByteLen(byte* bytes, uint length);
+
+    [LibraryImport("oleaut32.dll")]
     public static partial uint SysStringByteLen(nint bstr);
 
     [LibraryImport("oleaut32.dll")]

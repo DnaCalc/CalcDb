@@ -47,7 +47,7 @@ internal static class Program
             return 0;
         }
 
-        int written = 0, unchanged = 0, waiting = 0;
+        int written = 0, unchanged = 0, waiting = 0, refused = 0;
         foreach (Probe p in probes)
         {
             var missing = p.Fixtures.Where(f => !fixtures.ContainsKey(f.Fixture)).Select(f => f.Fixture).ToList();
@@ -69,8 +69,23 @@ internal static class Program
                 ObservationRecipe = Recipe,
                 Inputs = p.Fixtures.Select(f => fixtures[f.Fixture] with { Role = f.Role }).ToList(),
                 Program = builder.Ops,
+                Participants = p.Participants.Length == 0 ? null : p.Participants.Select(pt =>
+                {
+                    var b = new P();
+                    pt.Program(b);
+                    return new Participant(pt.Name, b.Ops);
+                }).ToList(),
             };
-            question.Validate();
+            try
+            {
+                question.Validate();
+            }
+            catch (EvidenceFormatException ex)
+            {
+                Console.WriteLine($"refused {p.Card}/{p.Name}: {ex.Message}");
+                refused++;
+                continue;
+            }
             string dir = Path.Combine(probesDir, p.Card);
             Directory.CreateDirectory(dir);
             string path = Path.Combine(dir, p.Name + ".question.json");
@@ -83,7 +98,7 @@ internal static class Program
             File.WriteAllText(path, json);
             written++;
         }
-        Console.WriteLine($"{written} written, {unchanged} unchanged, {waiting} waiting for fixtures");
+        Console.WriteLine($"{written} written, {unchanged} unchanged, {refused} refused, {waiting} waiting for fixtures");
         return 0;
     }
 

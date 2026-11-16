@@ -12,7 +12,9 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
-/// <item><c>batch --dir DIR [--retain] [--freeze] [--note TEXT]</c>: submit and run every question file under DIR
+/// <item><c>seal --token T</c>: seal an attempt whose runner exited before launching its worker (no started
+/// receipt): it is sealed NotStarted. An attempt that has a started receipt is never sealed this way.</item>
+/// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
 /// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
 /// </list>
@@ -44,6 +46,7 @@ internal static class Program
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
+                "seal" => SealAbandoned(store, options),
                 _ => Usage(args[0]),
             };
         }
@@ -98,8 +101,10 @@ internal static class Program
         AttemptRecord attempt = store.PrepareAttempt(token, ToolingRevision(repo), BookRevision(repo));
         string worker = options.Get("worker") ?? DefaultWorker(repo);
         TimeSpan timeout = TimeSpan.FromSeconds(int.Parse(options.Get("timeout") ?? "300", System.Globalization.CultureInfo.InvariantCulture));
-        OwnerReport owner = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, timeout, () => store.MarkRunning(token));
-        return store.Seal(attempt, owner);
+        Question question = store.GetQuestion(attempt.QuestionKey);
+        string[] participants = ["a", .. question.Peers.Select(p => p.Name)];
+        IReadOnlyList<OwnerReport> owners = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, participants, timeout, () => store.MarkRunning(token));
+        return store.Seal(attempt, owners);
     }
 
     /// <summary>The job token of a question file: its probe name and a key prefix, so a changed question is a new job.</summary>
@@ -117,19 +122,28 @@ internal static class Program
             Question question = EvidenceJson.Read<Question>(file);
             string token = TokenOf(question);
             (JobRecord job, _) = store.SubmitOrQuery(token, question, options.Get("env") ?? "windows-x64-ace-local");
-            CaptureManifest manifest = job.Attempts.Count > 0 && store.GetManifest(job.Attempts[^1]) is { } existing
+            CaptureManifest? existing = job.Attempts.Count > 0 ? store.GetManifest(job.Attempts[^1]) : null;
+            // A capture the sealer could not read because of a tooling defect is not an uncertain native
+            // outcome: with --retry-unreadable it gets a new attempt on fresh input copies; the old attempt stays.
+            // NotStarted means no worker was admitted, so nothing ran.
+            bool unreadable = existing is not null && (existing.Execution == Execution.NotStarted
+                || existing.Problems.Any(x => x.Contains("is not a valid capture", StringComparison.Ordinal)));
+            CaptureManifest manifest = existing is not null && !(unreadable && options.Has("retry-unreadable"))
                 ? existing
                 : RunAttempt(store, token, options, repo);
             string attemptDir = store.AttemptDirectory(manifest.AttemptId);
-            string failed = "";
-            string capturePath = Path.Combine(attemptDir, "capture.json");
-            if (File.Exists(capturePath))
+            var failures = new List<string>();
+            foreach (string capturePath in Directory.EnumerateFiles(attemptDir, "capture*.json").Order(StringComparer.Ordinal))
             {
                 Capture capture = EvidenceJson.Read<Capture>(capturePath);
-                failed = string.Join(" ", capture.Events.OfType<InvokeEvent>()
+                string who = capture.Participant == "a" ? "" : capture.Participant + ":";
+                failures.AddRange(capture.Events.OfType<InvokeEvent>()
                     .Where(i => i.InvokeHresult is null || i.InvokeHresult.StartsWith("0x8", StringComparison.Ordinal))
-                    .Select(i => $"{i.Member}:{(i.ExcepInfo is { } x ? x.Scode : i.InvokeHresult ?? "GetIDsOfNames " + i.GetIdsOfNamesHresult)}"));
+                    .Select(i => $"{who}{i.Member}:{(i.ExcepInfo is { } x ? x.Scode : i.InvokeHresult ?? "GetIDsOfNames " + i.GetIdsOfNamesHresult)}"));
+                failures.AddRange(capture.Events.OfType<HandleEvent>().Where(h => !h.Success).Select(h => $"{who}{h.Op}({h.Handle}):w32={h.Win32Error}"));
+                failures.AddRange(capture.Events.OfType<SyncEvent>().Where(s => s.TimedOut).Select(s => $"{who}await({s.Name}):timeout"));
             }
+            string failed = string.Join(" ", failures);
             Console.WriteLine($"{(manifest.IsComplete ? "OK  " : "INC ")} {question.Probe,-58} {manifest.Execution,-15} {failed}");
             if (!manifest.IsComplete)
             {
@@ -183,6 +197,24 @@ internal static class Program
         Console.WriteLine($"       froze fixture '{name}' = {output.Sha256[..12]}");
     }
 
+    private static int SealAbandoned(JobStore store, Options options)
+    {
+        JobRecord job = store.GetJob(options.Require("token"));
+        string attemptId = job.Attempts.Count > 0 ? job.Attempts[^1] : throw new InvalidOperationException("The job has no attempt.");
+        if (store.GetManifest(attemptId) is not null)
+        {
+            throw new InvalidOperationException($"{attemptId} is already sealed.");
+        }
+        string dir = store.AttemptDirectory(attemptId);
+        if (Directory.EnumerateFiles(Path.Combine(dir, "receipts"), "started*.json").Any())
+        {
+            throw new InvalidOperationException($"{attemptId} has a started receipt; it may have run and is not sealed by this command.");
+        }
+        CaptureManifest manifest = store.Seal(store.GetAttempt(attemptId), new OwnerReport { Ownership = "none", LaunchError = "The runner exited after preparing this attempt and before launching its worker." });
+        Console.WriteLine(EvidenceJson.Serialize(manifest));
+        return 0;
+    }
+
     private static int Status(JobStore store, Options options)
     {
         JobRecord job = store.GetJob(options.Require("token"));
@@ -226,6 +258,9 @@ internal static class Program
         Question question = EvidenceJson.Read<Question>(Path.Combine(attemptDir, "question.json"));
         string capturePath = Path.Combine(attemptDir, "capture.json");
         Capture? capture = manifest.CaptureSha256 is not null && File.Exists(capturePath) ? EvidenceJson.Read<Capture>(capturePath) : null;
+        Dictionary<string, Capture>? peers = manifest.Participants.Count == 0 ? null : manifest.Participants
+            .Where(pr => pr.CaptureSha256 is not null && File.Exists(Path.Combine(attemptDir, $"capture.{pr.Name}.json")))
+            .ToDictionary(pr => pr.Name, pr => EvidenceJson.Read<Capture>(Path.Combine(attemptDir, $"capture.{pr.Name}.json")));
 
         Directory.CreateDirectory(artifactsDir);
         var retained = new List<RetainedArtifact>();
@@ -256,6 +291,7 @@ internal static class Program
             Question = question,
             Manifest = manifest,
             Capture = capture,
+            ParticipantCaptures = peers,
             Artifacts = retained,
         };
         string path = RecordPath(evidenceDir, question, attemptId);
@@ -283,6 +319,11 @@ internal static class Program
             return 3;
         }
         Console.Write(Show.Render(store.GetManifest(attemptId), EvidenceJson.Read<Capture>(capturePath), options.Has("all-modules")));
+        foreach (string peer in Directory.EnumerateFiles(store.AttemptDirectory(attemptId), "capture.*.json").Order(StringComparer.Ordinal))
+        {
+            Console.WriteLine($"===== participant {Path.GetFileNameWithoutExtension(peer)["capture.".Length..]}");
+            Console.Write(Show.Render(null, EvidenceJson.Read<Capture>(peer), options.Has("all-modules")));
+        }
         return 0;
     }
 

@@ -95,7 +95,7 @@ internal sealed unsafe class TypeDescriber(Dispatch dispatch, int lcid)
         }
         (string? name, string? help) = LibDocumentation(lib, -1);
         uint count = ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(lib)[3])(lib);
-        return new TypeLibraryInfo(name, help, guid.ToString("B").ToUpperInvariant(), major, minor, lcidAttr, syskind, flags, (int)count);
+        return new TypeLibraryInfo(guid.ToString("B").ToUpperInvariant(), major, minor, lcidAttr, syskind, flags, (int)count, name, help);
     }
 
     private TypeView DescribeType(nint ti, bool followDual)
@@ -215,7 +215,7 @@ internal sealed unsafe class TypeDescriber(Dispatch dispatch, int lcid)
                 {
                     def = dispatch.CaptureValue((Variant*)(pdex + 8));
                 }
-                parameters.Add(new ParameterInfo(p + 1 < names.Length ? names[p + 1] : null, TypeName(ti, elem), pflags, def));
+                parameters.Add(new ParameterInfo(TypeName(ti, elem), pflags, p + 1 < names.Length ? names[p + 1] : null, def));
             }
             return new FunctionInfo(memid, names.Length > 0 ? names[0] : "?", invkind, funckind, callconv, oVft, funcFlags, ret, cParamsOpt, parameters);
         }

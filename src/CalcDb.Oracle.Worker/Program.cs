@@ -18,42 +18,44 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (args.Length != 1)
+        if (args.Length is < 1 or > 2)
         {
-            Console.Error.WriteLine("usage: CalcDb.Oracle.Worker <attempt-directory>");
+            Console.Error.WriteLine("usage: CalcDb.Oracle.Worker <attempt-directory> [participant]");
             return 2;
         }
         string attemptDir = Path.GetFullPath(args[0]);
+        string participant = args.Length == 2 ? args[1] : "a";
+        string suffix = participant == "a" ? "" : "." + participant;
         AttemptRecord attempt = EvidenceJson.Read<AttemptRecord>(Path.Combine(attemptDir, "attempt.json"));
         Question question = EvidenceJson.Read<Question>(Path.Combine(attemptDir, "question.json"));
-        if (question.Key() != attempt.QuestionKey)
+        if (question.Key() != attempt.QuestionKey || (participant != "a" && question.Peers.All(pt => pt.Name != participant)))
         {
-            Console.Error.WriteLine("question.json does not match the attempt's question key.");
+            Console.Error.WriteLine("question.json does not match the attempt's question key or has no such participant.");
             return 3;
         }
 
         // Admission handshake: the runner has recorded ownership of this process before it sends this line.
         string? admission = Console.In.ReadLine();
-        if (admission != $"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration.ToString(CultureInfo.InvariantCulture)}")
+        if (admission != $"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration.ToString(CultureInfo.InvariantCulture)} {participant}")
         {
             Console.Error.WriteLine("No valid admission line received.");
             return 4;
         }
         var started = new StartedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Environment.ProcessId, DateTimeOffset.UtcNow);
-        if (!EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", "started.json"), started))
+        if (!EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", $"started{suffix}.json"), started))
         {
             Console.Error.WriteLine("Attempt already started; refusing duplicate delivery.");
             return 5;
         }
 
-        var run = new Run(attemptDir, attempt, question);
+        var run = new Run(attemptDir, attempt, question, participant);
         Capture capture = run.Execute();
 
-        string capturePath = Path.Combine(attemptDir, "capture.json");
+        string capturePath = Path.Combine(attemptDir, $"capture{suffix}.json");
         File.WriteAllText(capturePath, EvidenceJson.Serialize(capture));
         byte[] bytes = File.ReadAllBytes(capturePath);
         var returned = new ReturnedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Hashing.Sha256Hex(bytes), bytes.LongLength, DateTimeOffset.UtcNow);
-        EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", "returned.json"), returned);
+        EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", $"returned{suffix}.json"), returned);
         return 0;
     }
 }
@@ -71,18 +73,25 @@ internal sealed unsafe class Run
     private readonly List<string> _captureErrors = [];
     private readonly Dictionary<string, nint> _bound = new(StringComparer.Ordinal);
     private readonly List<string> _bindOrder = [];
+    private readonly string _participant;
+    private readonly NativeFiles _native;
     private bool _anyFailure;
     private int _seq;
 
-    public Run(string attemptDir, AttemptRecord attempt, Question question)
+    public Run(string attemptDir, AttemptRecord attempt, Question question, string participant)
     {
         _attemptDir = attemptDir;
         _attempt = attempt;
         _question = question;
+        _participant = participant;
         _dispatch = new Dispatch(question.InvokeLcid);
-        _artifacts = new ArtifactWriter(attemptDir);
+        _artifacts = new ArtifactWriter(attemptDir, participant == "a" ? "" : participant + "-");
         _files = new FileObserver(attemptDir, _artifacts);
+        _native = new NativeFiles(attemptDir, question);
     }
+
+    private IReadOnlyList<Operation> MyProgram =>
+        _participant == "a" ? _question.Program : _question.Peers.Single(pt => pt.Name == _participant).Program;
 
     public Capture Execute()
     {
@@ -91,7 +100,7 @@ internal sealed unsafe class Run
         string execution;
         try
         {
-            RunProgram(_question.Program, "");
+            RunProgram(MyProgram, "");
             ReleaseAll();
             execution = _anyFailure ? Evidence.Execution.ReturnedFailure : Evidence.Execution.ReturnedSuccess;
         }
@@ -109,14 +118,20 @@ internal sealed unsafe class Run
             }
         }
 
+        _native.CloseAll(_events, ref _seq);
         _events.Add(ModuleObserver.ObserveTruncated(++_seq, "end"));
-        KeepFinalFiles(inputHashes);
+        if (_participant == "a")
+        {
+            // Final files are kept once, by the main participant; its program awaits the others before it ends.
+            KeepFinalFiles(inputHashes);
+        }
 
         return new Capture
         {
             AttemptId = _attempt.AttemptId,
             WorkerGeneration = _attempt.WorkerGeneration,
             QuestionKey = _attempt.QuestionKey,
+            Participant = _participant,
             Environment = environment,
             Events = _events,
             Artifacts = _artifacts.Artifacts,
@@ -162,6 +177,21 @@ internal sealed unsafe class Run
                     break;
                 case ObserveModules modules:
                     _events.Add(ModuleObserver.Observe(++_seq, path, modules.Label));
+                    break;
+                case Signal signal:
+                    _events.Add(Sync.DoSignal(_attemptDir, ++_seq, path, signal.Name));
+                    break;
+                case Await wait:
+                    _events.Add(Sync.DoAwait(_attemptDir, ++_seq, path, wait.Name, wait.TimeoutMs));
+                    break;
+                case NativeOpen open:
+                    _events.Add(_native.Open(++_seq, path, open));
+                    break;
+                case NativeRead read:
+                    _events.Add(_native.Read(++_seq, path, read));
+                    break;
+                case NativeClose close:
+                    _events.Add(_native.Close(++_seq, path, close.Handle));
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown operation {program[i].GetType().Name}.");
@@ -394,9 +424,10 @@ internal sealed unsafe class Run
                 CyArg a => new Variant { Vt = 6, I8 = a.Scaled },
                 BytesArg a => new Variant { Vt = 0x2000 | 17, Ptr = AllocBytes(Convert.FromHexString(a.Hex)) },
                 NullArg => new Variant { Vt = 1 },
+                BstrBytesArg a => new Variant { Vt = 8, Ptr = AllocBstrBytes(Convert.FromHexString(a.Hex)) },
                 EmptyArg => new Variant { Vt = 0 },
                 ObjectArg a => new Variant { Vt = 9, Ptr = _bound[a.Name] },
-                InputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Path.Combine(_attemptDir, "inputs", _question.Inputs.Single(x => x.Role == a.Role).FileName)) },
+                InputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Spell(Path.Combine(_attemptDir, "inputs", _question.Inputs.Single(x => x.Role == a.Role).FileName), a.Spelling)) },
                 OutputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Path.Combine(_attemptDir, "work", a.FileName)) },
                 _ => throw new InvalidOperationException($"Unknown argument {args[i].GetType().Name}."),
             };
@@ -417,6 +448,25 @@ internal sealed unsafe class Run
             {
                 _ = Native.SafeArrayDestroy(v.Ptr);
             }
+        }
+    }
+
+    /// <summary>EX-ALIAS spellings of one full path.</summary>
+    private static string Spell(string full, string? spelling) => spelling switch
+    {
+        null => full,
+        "upper" => full.ToUpperInvariant(),
+        "extended" => @"\\?\" + full,
+        "slashes" => full.Replace('\\', '/'),
+        "dot" => Path.Combine(Path.GetDirectoryName(full)!, ".", Path.GetFileName(full)),
+        _ => throw new InvalidOperationException($"Unknown spelling {spelling}."),
+    };
+
+    private static nint AllocBstrBytes(byte[] bytes)
+    {
+        fixed (byte* p = bytes)
+        {
+            return Native.SysAllocStringByteLen(p, (uint)bytes.Length);
         }
     }
 
@@ -475,18 +525,18 @@ internal sealed unsafe class Run
         {
             if (clsid is null)
             {
-                return new RegistrationView(null, null, "HKCR (read-only)") { Note = "CLSIDFromProgID failed; no class key read." };
+                return new RegistrationView("HKCR (read-only)") { Note = "CLSIDFromProgID failed; no class key read." };
             }
             using Microsoft.Win32.RegistryKey? key = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($@"CLSID\{clsid.Value.ToString("B").ToUpperInvariant()}\InprocServer32", writable: false);
             if (key is null)
             {
-                return new RegistrationView(null, null, "HKCR (read-only)") { Note = $"No InprocServer32 key visible for {progId}; the class may be registered through Office C2R virtualization." };
+                return new RegistrationView("HKCR (read-only)") { Note = $"No InprocServer32 key visible for {progId}; the class may be registered through Office C2R virtualization." };
             }
-            return new RegistrationView(key.GetValue(null) as string, key.GetValue("ThreadingModel") as string, "HKCR (read-only)");
+            return new RegistrationView("HKCR (read-only)", key.GetValue(null) as string, key.GetValue("ThreadingModel") as string);
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            return new RegistrationView(null, null, "HKCR (read-only)") { Note = "Registration read failed: " + ex.Message };
+            return new RegistrationView("HKCR (read-only)") { Note = "Registration read failed: " + ex.Message };
         }
     }
 
@@ -501,6 +551,8 @@ internal sealed unsafe class Run
         {
             WorkerPath = workerAssembly,
             WorkerSha256 = Hashing.Sha256File(workerAssembly),
+            WorkerBuild = typeof(Program).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion,
             ToolingRevision = _attempt.ToolingRevision,
             BookRevision = _attempt.BookRevision,
             Runtime = RuntimeInformation.FrameworkDescription,

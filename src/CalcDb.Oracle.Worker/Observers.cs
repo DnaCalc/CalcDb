@@ -63,7 +63,7 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
 }
 
 /// <summary>Copies bytes into the attempt's artifact directory and records their references.</summary>
-internal sealed class ArtifactWriter(string attemptDir)
+internal sealed class ArtifactWriter(string attemptDir, string prefix = "")
 {
     private readonly List<ArtifactRef> _artifacts = [];
 
@@ -71,7 +71,8 @@ internal sealed class ArtifactWriter(string attemptDir)
 
     public ArtifactRef Add(string sourceFile, string role, string kind)
     {
-        string name = string.Concat(role.Select(c => char.IsLetterOrDigit(c) || c is '.' or '-' or '_' ? c : '_'));
+        string name = prefix + string.Concat(role.Select(c => char.IsLetterOrDigit(c) || c is '.' or '-' or '_' ? c : '_'));
+        role = prefix + role;
         string relative = "artifacts/" + name;
         string target = Path.Combine(attemptDir, "artifacts", name);
         using (var source = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))

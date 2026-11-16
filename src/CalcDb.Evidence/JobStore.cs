@@ -144,7 +144,7 @@ public sealed partial class JobStore
         string attemptId = $"{token}.a{generation}";
         string dir = AttemptDirectory(attemptId);
         Directory.CreateDirectory(dir);
-        foreach (string sub in (string[])["inputs", "work", "artifacts", "receipts"])
+        foreach (string sub in (string[])["inputs", "work", "artifacts", "receipts", "sync"])
         {
             Directory.CreateDirectory(Path.Combine(dir, sub));
         }
@@ -183,9 +183,12 @@ public sealed partial class JobStore
     public void MarkRunning(string token) => UpdateJob(GetJob(token) with { State = JobState.Running });
 
     /// <summary>Seal an attempt after its owned worker has settled, and record the job's resulting state.</summary>
-    public CaptureManifest Seal(AttemptRecord attempt, OwnerReport owner)
+    public CaptureManifest Seal(AttemptRecord attempt, OwnerReport owner) => Seal(attempt, [owner]);
+
+    /// <summary>Seal an attempt whose owners (one per participant, the first being <c>a</c>) have all settled.</summary>
+    public CaptureManifest Seal(AttemptRecord attempt, IReadOnlyList<OwnerReport> owners)
     {
-        CaptureManifest manifest = Sealer.Seal(AttemptDirectory(attempt.AttemptId), attempt, owner);
+        CaptureManifest manifest = Sealer.Seal(AttemptDirectory(attempt.AttemptId), attempt, owners);
         JobState state = manifest.Execution == Execution.Uncertain ? JobState.Uncertain
             : manifest.IsComplete ? JobState.Complete : JobState.Incomplete;
         UpdateJob(GetJob(attempt.Token) with { State = state });

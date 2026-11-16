@@ -9,15 +9,61 @@ namespace CalcDb.Evidence;
 /// </summary>
 public static class Sealer
 {
-    public static CaptureManifest Seal(string attemptDir, AttemptRecord attempt, OwnerReport owner)
+    public static CaptureManifest Seal(string attemptDir, AttemptRecord attempt, OwnerReport owner) => Seal(attemptDir, attempt, [owner]);
+
+    /// <summary>
+    /// Seal every participant of the attempt (the first owner is participant <c>a</c>). The attempt's execution
+    /// is the most uncertain participant's, and its capture is complete only when every participant's is.
+    /// </summary>
+    public static CaptureManifest Seal(string attemptDir, AttemptRecord attempt, IReadOnlyList<OwnerReport> owners)
     {
         var problems = new List<string>();
-        StartedReceipt? started = ReadReceipt<StartedReceipt>(attemptDir, "started.json", attempt, problems, r => (r.AttemptId, r.WorkerGeneration));
-        ReturnedReceipt? returned = ReadReceipt<ReturnedReceipt>(attemptDir, "returned.json", attempt, problems, r => (r.AttemptId, r.WorkerGeneration));
+        var artifacts = new List<ArtifactRef>();
+        (string execution, string? captureSha) = SealParticipant(attemptDir, attempt, owners[0], problems, artifacts);
+        var participants = new List<ParticipantResult>();
+        foreach (OwnerReport peer in owners.Skip(1))
+        {
+            var peerProblems = new List<string>();
+            (string peerExecution, string? peerSha) = SealParticipant(attemptDir, attempt, peer, peerProblems, artifacts);
+            problems.AddRange(peerProblems.Select(x => $"participant {peer.Participant}: {x}"));
+            participants.Add(new ParticipantResult(peer.Participant, peerExecution, peer, peerSha));
+            execution = Worse(execution, peerExecution);
+        }
+        var manifest = new CaptureManifest
+        {
+            AttemptId = attempt.AttemptId,
+            Token = attempt.Token,
+            QuestionKey = attempt.QuestionKey,
+            WorkerGeneration = attempt.WorkerGeneration,
+            Execution = execution,
+            Capture = problems.Count == 0 ? "Complete" : "Incomplete",
+            Problems = problems,
+            CaptureSha256 = captureSha,
+            Artifacts = artifacts,
+            Owner = owners[0],
+            Participants = participants,
+            SealedUtc = DateTimeOffset.UtcNow,
+        };
+        manifest = manifest with { SealSha256 = SealDigest(manifest) };
+        string path = Path.Combine(attemptDir, "manifest.json");
+        if (!EvidenceJson.TryCreateNew(path, manifest))
+        {
+            throw new InvalidOperationException($"Attempt {attempt.AttemptId} is already sealed.");
+        }
+        return manifest;
+    }
 
+    private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];
+
+    private static string Worse(string a, string b) => Array.IndexOf(Severity, b) > Array.IndexOf(Severity, a) ? b : a;
+
+    private static (string Execution, string? CaptureSha) SealParticipant(string attemptDir, AttemptRecord attempt, OwnerReport owner, List<string> problems, List<ArtifactRef> artifacts)
+    {
+        string suffix = owner.Participant == "a" ? "" : "." + owner.Participant;
+        StartedReceipt? started = ReadReceipt<StartedReceipt>(attemptDir, $"started{suffix}.json", attempt, problems, r => (r.AttemptId, r.WorkerGeneration));
+        ReturnedReceipt? returned = ReadReceipt<ReturnedReceipt>(attemptDir, $"returned{suffix}.json", attempt, problems, r => (r.AttemptId, r.WorkerGeneration));
         string execution;
         string? captureSha = null;
-        var artifacts = new List<ArtifactRef>();
         if (started is null)
         {
             execution = Execution.NotStarted;
@@ -30,48 +76,26 @@ public static class Sealer
         }
         else
         {
-            execution = VerifyCapture(attemptDir, attempt, returned, problems, artifacts, out captureSha);
+            execution = VerifyCapture(attemptDir, $"capture{suffix}.json", owner.Participant, attempt, returned, problems, artifacts, out captureSha);
         }
-
         if (owner.TimedOut)
         {
             problems.Add("The owned worker exceeded its timeout and was terminated.");
         }
-
-        var manifest = new CaptureManifest
-        {
-            AttemptId = attempt.AttemptId,
-            Token = attempt.Token,
-            QuestionKey = attempt.QuestionKey,
-            WorkerGeneration = attempt.WorkerGeneration,
-            Execution = execution,
-            Capture = problems.Count == 0 ? "Complete" : "Incomplete",
-            Problems = problems,
-            CaptureSha256 = captureSha,
-            Artifacts = artifacts,
-            Owner = owner,
-            SealedUtc = DateTimeOffset.UtcNow,
-        };
-        manifest = manifest with { SealSha256 = SealDigest(manifest) };
-        string path = Path.Combine(attemptDir, "manifest.json");
-        if (!EvidenceJson.TryCreateNew(path, manifest))
-        {
-            throw new InvalidOperationException($"Attempt {attempt.AttemptId} is already sealed.");
-        }
-        return manifest;
+        return (execution, captureSha);
     }
 
     /// <summary>Digest of the manifest body without its own seal field.</summary>
     public static string SealDigest(CaptureManifest manifest) =>
         Hashing.Sha256Hex(System.Text.Encoding.UTF8.GetBytes(EvidenceJson.Serialize(manifest with { SealSha256 = null })));
 
-    private static string VerifyCapture(string attemptDir, AttemptRecord attempt, ReturnedReceipt returned, List<string> problems, List<ArtifactRef> artifacts, out string? captureSha)
+    private static string VerifyCapture(string attemptDir, string captureName, string participant, AttemptRecord attempt, ReturnedReceipt returned, List<string> problems, List<ArtifactRef> artifacts, out string? captureSha)
     {
         captureSha = null;
-        string capturePath = Path.Combine(attemptDir, "capture.json");
+        string capturePath = Path.Combine(attemptDir, captureName);
         if (!File.Exists(capturePath))
         {
-            problems.Add("Returned receipt present but capture.json is missing.");
+            problems.Add($"Returned receipt present but {captureName} is missing.");
             return Execution.Uncertain;
         }
         byte[] bytes = File.ReadAllBytes(capturePath);
@@ -97,7 +121,7 @@ public static class Sealer
         {
             problems.Add($"Unsupported capture schema '{capture.Schema}'.");
         }
-        if (capture.AttemptId != attempt.AttemptId || capture.WorkerGeneration != attempt.WorkerGeneration || capture.QuestionKey != attempt.QuestionKey)
+        if (capture.AttemptId != attempt.AttemptId || capture.WorkerGeneration != attempt.WorkerGeneration || capture.QuestionKey != attempt.QuestionKey || capture.Participant != participant)
         {
             problems.Add("Capture identity does not match the attempt (stale or foreign capture).");
         }

@@ -75,6 +75,9 @@ public sealed record ReturnedReceipt(string AttemptId, int WorkerGeneration, str
 /// <summary>What the runner observed about the worker process it owned.</summary>
 public sealed record OwnerReport
 {
+    /// <summary>The participant this worker ran (<c>a</c> is the question's main program).</summary>
+    public string Participant { get; init; } = "a";
+
     public bool Launched { get; init; }
 
     public int? ProcessId { get; init; }
@@ -123,6 +126,9 @@ public sealed record CaptureManifest
 
     public required OwnerReport Owner { get; init; }
 
+    /// <summary>For multi-process questions: each further participant's sealed result.</summary>
+    public IReadOnlyList<ParticipantResult> Participants { get; init; } = [];
+
     public required DateTimeOffset SealedUtc { get; init; }
 
     public string? SealSha256 { get; init; }
@@ -130,5 +136,8 @@ public sealed record CaptureManifest
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsComplete => Capture == "Complete";
 }
+
+/// <summary>The sealed result of one further participant of a multi-process attempt.</summary>
+public sealed record ParticipantResult(string Name, string Execution, OwnerReport Owner, string? CaptureSha256 = null);
 
 public sealed class JobConflictException(string message) : Exception(message);
