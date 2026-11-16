@@ -42,7 +42,11 @@ it whole. Sizes below are approximate tokens (bytes / 4), so you can budget cont
 | Tracing a requirement | [A-03](docs/book/A-03-reconciliation-audit.md) (41k): the 83 RQ rows and their owning sections | I-16's scope map |
 
 Book IDs are stable and searchable: requirements `RQ-…`, decisions `D-…`, work packages
-`W-…`, experiment cards `R-…`/`I-…`, tests `T-…`, figures `F-…`. The
+`W-…`, experiment cards `R-…`/`I-…`, tests `T-…`, figures `F-…`. A requirement is
+defined by its row in the "Complete scope map" table of
+[I-16](docs/book/I-16-development.md), which gives its authority, phase, required
+behaviour and owning chapters; its row in [A-03](docs/book/A-03-reconciliation-audit.md)
+gives the owning sections and its state. The
 [one-page summary](docs/calcdb-one-pager.md) gives the whole project at a glance for
 people new to it; agents do not need it. The [PDF](docs/The-Book-of-CalcDb.v1.1.pdf)
 is for people reading the book end to end.
