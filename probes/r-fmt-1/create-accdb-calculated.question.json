@@ -1,0 +1,281 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fmt-1/create-accdb-calculated",
+  "bookRefs": [
+    "R-FMT-1",
+    "D-FMT-1",
+    "II-03",
+    "II-04",
+    "T-FMT-01",
+    "T-FMT-02"
+  ],
+  "description": "R-FMT-1 fixture: a calculated Text field defined by Field.Expression before TableDefs.Append. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-fmt-1-accdb-calculated.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdf"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fid"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fid"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fa"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[A] & \"-calc\""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "tdf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "release",
+      "target": "fid"
+    },
+    {
+      "op": "release",
+      "target": "fa"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "tdf"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, A) VALUES (1, 'x')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

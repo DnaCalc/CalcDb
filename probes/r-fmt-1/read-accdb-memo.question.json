@@ -1,0 +1,447 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fmt-1/read-accdb-memo",
+  "bookRefs": [
+    "R-FMT-1",
+    "D-FMT-1",
+    "II-03",
+    "II-04",
+    "T-FMT-01",
+    "T-FMT-02"
+  ],
+  "description": "Reopen fixture r-fmt-1-accdb-memo read-only through ACE DAO and enumerate its version, collating order, properties, tables, fields, indexes and rows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-1-accdb-memo.accdb",
+      "sha256": "51b4d78550f3cb11b2fb60e6b03b5c73f4e4fce32c28e18255b2b2119dec01ce",
+      "length": 221184,
+      "provenance": "r-fmt-1.create-accdb-memo.34158938b0.a1 qk1-34158938b07ab924793b5470bd35c7ebac8bf741e2cb7be7428c987c81fd3f9d output:r-fmt-1-accdb-memo.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dprops"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dprops",
+      "bind": "dp",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dprops"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "tdfs",
+      "bind": "tdf",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tfl"
+        },
+        {
+          "op": "forEachItem",
+          "target": "tfl",
+          "bind": "fd",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "Required",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fd",
+              "member": "CollatingOrder",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "tfl"
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "idxs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "idxs",
+          "bind": "ix",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "ixf"
+            },
+            {
+              "op": "forEachItem",
+              "target": "ixf",
+              "bind": "xf",
+              "maxItems": 16,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "xf",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "xf",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "ixf"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "idxs"
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "trs"
+        },
+        {
+          "op": "loopUntil",
+          "target": "trs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "trs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 160,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "trs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "trs",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "trs"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qdfs",
+      "bind": "qd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

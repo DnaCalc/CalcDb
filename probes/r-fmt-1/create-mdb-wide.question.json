@@ -1,0 +1,121 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fmt-1/create-mdb-wide",
+  "bookRefs": [
+    "R-FMT-1",
+    "D-FMT-1",
+    "II-03",
+    "II-04",
+    "T-FMT-01",
+    "T-FMT-02"
+  ],
+  "description": "R-FMT-1 fixture: a 120-column table, to force a TableDef continuation (II-04). Created in MDB by DBEngine.CreateDatabase(path, dbLangGeneral, 64); the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-fmt-1-mdb-wide.mdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 64
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, C001_with_a_long_column_name TEXT(10), C002_with_a_long_column_name TEXT(10), C003_with_a_long_column_name TEXT(10), C004_with_a_long_column_name TEXT(10), C005_with_a_long_column_name TEXT(10), C006_with_a_long_column_name TEXT(10), C007_with_a_long_column_name TEXT(10), C008_with_a_long_column_name TEXT(10), C009_with_a_long_column_name TEXT(10), C010_with_a_long_column_name TEXT(10), C011_with_a_long_column_name TEXT(10), C012_with_a_long_column_name TEXT(10), C013_with_a_long_column_name TEXT(10), C014_with_a_long_column_name TEXT(10), C015_with_a_long_column_name TEXT(10), C016_with_a_long_column_name TEXT(10), C017_with_a_long_column_name TEXT(10), C018_with_a_long_column_name TEXT(10), C019_with_a_long_column_name TEXT(10), C020_with_a_long_column_name TEXT(10), C021_with_a_long_column_name TEXT(10), C022_with_a_long_column_name TEXT(10), C023_with_a_long_column_name TEXT(10), C024_with_a_long_column_name TEXT(10), C025_with_a_long_column_name TEXT(10), C026_with_a_long_column_name TEXT(10), C027_with_a_long_column_name TEXT(10), C028_with_a_long_column_name TEXT(10), C029_with_a_long_column_name TEXT(10), C030_with_a_long_column_name TEXT(10), C031_with_a_long_column_name TEXT(10), C032_with_a_long_column_name TEXT(10), C033_with_a_long_column_name TEXT(10), C034_with_a_long_column_name TEXT(10), C035_with_a_long_column_name TEXT(10), C036_with_a_long_column_name TEXT(10), C037_with_a_long_column_name TEXT(10), C038_with_a_long_column_name TEXT(10), C039_with_a_long_column_name TEXT(10), C040_with_a_long_column_name TEXT(10), C041_with_a_long_column_name TEXT(10), C042_with_a_long_column_name TEXT(10), C043_with_a_long_column_name TEXT(10), C044_with_a_long_column_name TEXT(10), C045_with_a_long_column_name TEXT(10), C046_with_a_long_column_name TEXT(10), C047_with_a_long_column_name TEXT(10), C048_with_a_long_column_name TEXT(10), C049_with_a_long_column_name TEXT(10), C050_with_a_long_column_name TEXT(10), C051_with_a_long_column_name TEXT(10), C052_with_a_long_column_name TEXT(10), C053_with_a_long_column_name TEXT(10), C054_with_a_long_column_name TEXT(10), C055_with_a_long_column_name TEXT(10), C056_with_a_long_column_name TEXT(10), C057_with_a_long_column_name TEXT(10), C058_with_a_long_column_name TEXT(10), C059_with_a_long_column_name TEXT(10), C060_with_a_long_column_name TEXT(10), C061_with_a_long_column_name TEXT(10), C062_with_a_long_column_name TEXT(10), C063_with_a_long_column_name TEXT(10), C064_with_a_long_column_name TEXT(10), C065_with_a_long_column_name TEXT(10), C066_with_a_long_column_name TEXT(10), C067_with_a_long_column_name TEXT(10), C068_with_a_long_column_name TEXT(10), C069_with_a_long_column_name TEXT(10), C070_with_a_long_column_name TEXT(10), C071_with_a_long_column_name TEXT(10), C072_with_a_long_column_name TEXT(10), C073_with_a_long_column_name TEXT(10), C074_with_a_long_column_name TEXT(10), C075_with_a_long_column_name TEXT(10), C076_with_a_long_column_name TEXT(10), C077_with_a_long_column_name TEXT(10), C078_with_a_long_column_name TEXT(10), C079_with_a_long_column_name TEXT(10), C080_with_a_long_column_name TEXT(10), C081_with_a_long_column_name TEXT(10), C082_with_a_long_column_name TEXT(10), C083_with_a_long_column_name TEXT(10), C084_with_a_long_column_name TEXT(10), C085_with_a_long_column_name TEXT(10), C086_with_a_long_column_name TEXT(10), C087_with_a_long_column_name TEXT(10), C088_with_a_long_column_name TEXT(10), C089_with_a_long_column_name TEXT(10), C090_with_a_long_column_name TEXT(10), C091_with_a_long_column_name TEXT(10), C092_with_a_long_column_name TEXT(10), C093_with_a_long_column_name TEXT(10), C094_with_a_long_column_name TEXT(10), C095_with_a_long_column_name TEXT(10), C096_with_a_long_column_name TEXT(10), C097_with_a_long_column_name TEXT(10), C098_with_a_long_column_name TEXT(10), C099_with_a_long_column_name TEXT(10), C100_with_a_long_column_name TEXT(10), C101_with_a_long_column_name TEXT(10), C102_with_a_long_column_name TEXT(10), C103_with_a_long_column_name TEXT(10), C104_with_a_long_column_name TEXT(10), C105_with_a_long_column_name TEXT(10), C106_with_a_long_column_name TEXT(10), C107_with_a_long_column_name TEXT(10), C108_with_a_long_column_name TEXT(10), C109_with_a_long_column_name TEXT(10), C110_with_a_long_column_name TEXT(10), C111_with_a_long_column_name TEXT(10), C112_with_a_long_column_name TEXT(10), C113_with_a_long_column_name TEXT(10), C114_with_a_long_column_name TEXT(10), C115_with_a_long_column_name TEXT(10), C116_with_a_long_column_name TEXT(10), C117_with_a_long_column_name TEXT(10), C118_with_a_long_column_name TEXT(10), C119_with_a_long_column_name TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, C001_with_a_long_column_name, C119_with_a_long_column_name) VALUES (1, 'first', 'last')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
