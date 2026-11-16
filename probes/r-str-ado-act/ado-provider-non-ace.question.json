@@ -1,0 +1,389 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/ado-provider-non-ace",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-PROVIDER",
+    "R-ACT-1",
+    "ACT-ADO-SCOPE"
+  ],
+  "description": "ADO-PROVIDER non-ACE and omitted providers, all local (ODBC DSN lookup only): (a) \"Provider=MSDASQL;Data Source=CalcDbNoSuchDsn\"; (b) \"Data Source=CalcDbNoSuchDsn\" with no Provider key (Provider read before and after Open); (c) Open with no connection string at all. Asks the effective Provider, the Open outcome and the Errors collection for each, with loaded modules.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "na"
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Data Source=CalcDbNoSuchDsn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "observeModules",
+      "label": "after-msdasql"
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "naErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "naErrs",
+      "bind": "naErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "naErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "naErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "naErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "naErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "naErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "naErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "na",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "na"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "nb"
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source=CalcDbNoSuchDsn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "observeModules",
+      "label": "after-omitted"
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nbErrs",
+      "bind": "nbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "nb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nb"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "nc"
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-empty"
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ncErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ncErrs",
+      "bind": "ncErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ncErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ncErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ncErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ncErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ncErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ncErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "nc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nc"
+    }
+  ]
+}

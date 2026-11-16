@@ -1,0 +1,3350 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/prop-rowset-requests",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP",
+    "OLE-ERROR"
+  ],
+  "description": "OLE-PROP and the warning channel: on a read/write copy eight Recordsets are opened with requested (location, cursor type, lock type, options) combinations, including conflicting ones (forward-only with batch optimistic or pessimistic, client batch, adCmdTableDirect keyset). For each: State, effective CursorType, LockType and CursorLocation, the Supports options, the whole Recordset.Properties inventory (Name, Type, Value, Attributes), then the Connection Errors, which are cleared. Asks the effective rowset properties for each request and whether a downgrade is reported as an Errors entry.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q1Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q1Props_rs",
+      "bind": "q1Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q1Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q1Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q1Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q1Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q1Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q2Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q2Props_rs",
+      "bind": "q2Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q2Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q2Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q2Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q2Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q2Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q3Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q3Props_rs",
+      "bind": "q3Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q3Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q3Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q3Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q3Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q3Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q4Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q4Props_rs",
+      "bind": "q4Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q4Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q4Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q4Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q4Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q4Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q5Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q5Props_rs",
+      "bind": "q5Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q5Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q5Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q5Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q5Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q5Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q6Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q6Props_rs",
+      "bind": "q6Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q6Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q6Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q6Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q6Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q6Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, Txt FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q7Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q7Props_rs",
+      "bind": "q7Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q7Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q7Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q7Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q7Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q7Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q7"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Items"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q8Props_rs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "q8Props_rs",
+      "bind": "q8Pr_rs",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q8Pr_rs",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q8Pr_rs",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q8Pr_rs",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "q8Pr_rs",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "q8Props_rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

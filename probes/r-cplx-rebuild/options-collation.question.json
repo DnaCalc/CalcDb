@@ -1,0 +1,4587 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/options-collation",
+  "bookRefs": [
+    "R-REBUILD-1",
+    "RB-OPTIONS"
+  ],
+  "description": "CompactDatabase(source, new path, DstLocale) of the rich ACCDB and MDB fixtures with the General (0x0409), Spanish traditional (0x040A) and Swedish (0x041D) sort order locales; each output's CollatingOrder and the orders of Parent.Name and Child.Val (including ch, ll, a-umlaut, o-umlaut and z) are read.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-rb-rich-accdb.accdb",
+      "sha256": "be26b1952dbc0bace03265d53203571b9b39a169d32f575c68563ba8e16ca572",
+      "length": 233472,
+      "provenance": "r-cplx-rebuild.create-rb-rich-accdb.a97d1281df.a1 qk1-a97d1281dff54d5cbf9824c8845b3b9a3f8f09aed25968e2bbdbb378d6cb14d2 output:r-cplx-rebuild-rb-rich-accdb.accdb"
+    },
+    {
+      "role": "mdb",
+      "fileName": "r-cplx-rebuild-rb-rich-mdb.mdb",
+      "sha256": "08fa09985711660d4c8492455bd5cb5ffadc96a062b5bf2ed41a7ca6c54d6fd7",
+      "length": 139264,
+      "provenance": "r-cplx-rebuild.create-rb-rich-mdb.37fd7d81d7.a1 qk1-37fd7d81d784e5d5be632b30a7725364e9687cca6f822d78fccd43f2f0429a51 output:r-cplx-rebuild-rb-rich-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-general.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-maingeneral",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-general.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imaingeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imaingeneraldp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imaingeneraldp",
+      "bind": "imaingeneraldq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imaingeneraldq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraldq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraldq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imaingeneraldp"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imaingeneralts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imaingeneralts",
+      "bind": "imaingeneraltd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imaingeneraltf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imaingeneraltf",
+          "bind": "imaingeneraltx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imaingeneraltx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imaingeneraltf"
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imaingeneralti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imaingeneralti",
+          "bind": "imaingeneraltj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imaingeneraltj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imaingeneraltk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imaingeneraltk",
+              "bind": "imaingeneraltl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imaingeneraltl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imaingeneraltl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imaingeneraltk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imaingeneralti"
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneraltd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imaingeneraltp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imaingeneraltp",
+          "bind": "imaingeneraltq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imaingeneraltq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneraltq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imaingeneraltp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imaingeneralts"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imaingeneralrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imaingeneralrl",
+      "bind": "imaingeneralrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imaingeneralrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imaingeneralrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imaingeneralrf",
+          "bind": "imaingeneralry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imaingeneralry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imaingeneralry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imaingeneralrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imaingeneralrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imaingeneralqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imaingeneralqs",
+      "bind": "imaingeneralqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imaingeneralqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imaingeneralqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imaingeneralqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemaingeneral"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemaingeneral",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemaingeneral",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemaingeneral"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemaingeneral",
+          "bind": "f_mcemaingeneral",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemaingeneral",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemaingeneral",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemaingeneral",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemaingeneral"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemaingeneral",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemaingeneral",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemaingeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmaingeneral0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmaingeneral0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmaingeneral0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmaingeneral0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmaingeneral0",
+          "bind": "f_qmaingeneral0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmaingeneral0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmaingeneral0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmaingeneral0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmaingeneral0"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmaingeneral1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmaingeneral1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmaingeneral1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmaingeneral1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmaingeneral1",
+          "bind": "f_qmaingeneral1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmaingeneral1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmaingeneral1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmaingeneral1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmaingeneral1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmaingeneral1"
+    },
+    {
+      "op": "invoke",
+      "target": "imaingeneral",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imaingeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-spanish.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x040A;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mainspanish",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-spanish.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imainspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainspanishdp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainspanishdp",
+      "bind": "imainspanishdq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainspanishdq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishdq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishdq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainspanishdp"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainspanishts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainspanishts",
+      "bind": "imainspanishtd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainspanishtf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainspanishtf",
+          "bind": "imainspanishtx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainspanishtx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainspanishtf"
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainspanishti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainspanishti",
+          "bind": "imainspanishtj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainspanishtj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imainspanishtk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imainspanishtk",
+              "bind": "imainspanishtl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imainspanishtl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imainspanishtl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imainspanishtk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainspanishti"
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishtd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainspanishtp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainspanishtp",
+          "bind": "imainspanishtq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainspanishtq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishtq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainspanishtp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainspanishts"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainspanishrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainspanishrl",
+      "bind": "imainspanishrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainspanishrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainspanishrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainspanishrf",
+          "bind": "imainspanishry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainspanishry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainspanishry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainspanishrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainspanishrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainspanishqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainspanishqs",
+      "bind": "imainspanishqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainspanishqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainspanishqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainspanishqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemainspanish"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemainspanish",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemainspanish",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemainspanish"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemainspanish",
+          "bind": "f_mcemainspanish",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemainspanish",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemainspanish",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemainspanish",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemainspanish"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemainspanish",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemainspanish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemainspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmainspanish0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmainspanish0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmainspanish0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmainspanish0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmainspanish0",
+          "bind": "f_qmainspanish0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmainspanish0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmainspanish0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmainspanish0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmainspanish0"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmainspanish1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmainspanish1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmainspanish1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmainspanish1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmainspanish1",
+          "bind": "f_qmainspanish1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainspanish1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmainspanish1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmainspanish1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmainspanish1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmainspanish1"
+    },
+    {
+      "op": "invoke",
+      "target": "imainspanish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imainspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-swedish.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x041D;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mainswedish",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-swedish.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imainswedish"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainswedishdp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainswedishdp",
+      "bind": "imainswedishdq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainswedishdq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishdq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishdq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainswedishdp"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainswedishts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainswedishts",
+      "bind": "imainswedishtd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainswedishtf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainswedishtf",
+          "bind": "imainswedishtx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainswedishtx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainswedishtf"
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainswedishti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainswedishti",
+          "bind": "imainswedishtj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainswedishtj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imainswedishtk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imainswedishtk",
+              "bind": "imainswedishtl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imainswedishtl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imainswedishtl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imainswedishtk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainswedishti"
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishtd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainswedishtp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainswedishtp",
+          "bind": "imainswedishtq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainswedishtq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishtq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainswedishtp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainswedishts"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainswedishrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainswedishrl",
+      "bind": "imainswedishrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainswedishrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imainswedishrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imainswedishrf",
+          "bind": "imainswedishry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imainswedishry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imainswedishry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imainswedishrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainswedishrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imainswedishqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imainswedishqs",
+      "bind": "imainswedishqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imainswedishqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imainswedishqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imainswedishqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemainswedish"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemainswedish",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemainswedish",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemainswedish"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemainswedish",
+          "bind": "f_mcemainswedish",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemainswedish",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemainswedish",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemainswedish",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemainswedish"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemainswedish",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemainswedish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemainswedish"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmainswedish0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmainswedish0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmainswedish0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmainswedish0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmainswedish0",
+          "bind": "f_qmainswedish0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmainswedish0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmainswedish0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmainswedish0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmainswedish0"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmainswedish1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmainswedish1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmainswedish1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmainswedish1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmainswedish1",
+          "bind": "f_qmainswedish1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmainswedish1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmainswedish1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmainswedish1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmainswedish1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmainswedish1"
+    },
+    {
+      "op": "invoke",
+      "target": "imainswedish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imainswedish"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-general.mdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbgeneral",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-general.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imdbgeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbgeneraldp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbgeneraldp",
+      "bind": "imdbgeneraldq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbgeneraldq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraldq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraldq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbgeneraldp"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbgeneralts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbgeneralts",
+      "bind": "imdbgeneraltd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbgeneraltf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbgeneraltf",
+          "bind": "imdbgeneraltx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbgeneraltf"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbgeneralti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbgeneralti",
+          "bind": "imdbgeneraltj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imdbgeneraltk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imdbgeneraltk",
+              "bind": "imdbgeneraltl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imdbgeneraltl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imdbgeneraltl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imdbgeneraltk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbgeneralti"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneraltd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbgeneraltp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbgeneraltp",
+          "bind": "imdbgeneraltq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneraltq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbgeneraltp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbgeneralts"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbgeneralrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbgeneralrl",
+      "bind": "imdbgeneralrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbgeneralrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbgeneralrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbgeneralrf",
+          "bind": "imdbgeneralry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbgeneralry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbgeneralry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbgeneralrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbgeneralrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbgeneralqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbgeneralqs",
+      "bind": "imdbgeneralqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbgeneralqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbgeneralqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbgeneralqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemdbgeneral"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemdbgeneral",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemdbgeneral",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemdbgeneral"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemdbgeneral",
+          "bind": "f_mcemdbgeneral",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemdbgeneral",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbgeneral",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbgeneral",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemdbgeneral"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemdbgeneral",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemdbgeneral",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemdbgeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbgeneral0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbgeneral0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbgeneral0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbgeneral0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbgeneral0",
+          "bind": "f_qmdbgeneral0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbgeneral0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbgeneral0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbgeneral0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbgeneral0"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbgeneral1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbgeneral1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbgeneral1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbgeneral1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbgeneral1",
+          "bind": "f_qmdbgeneral1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbgeneral1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbgeneral1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbgeneral1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbgeneral1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbgeneral1"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbgeneral",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imdbgeneral"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-spanish.mdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x040A;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbspanish",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-spanish.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imdbspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbspanishdp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbspanishdp",
+      "bind": "imdbspanishdq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbspanishdq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishdq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishdq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbspanishdp"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbspanishts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbspanishts",
+      "bind": "imdbspanishtd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbspanishtf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbspanishtf",
+          "bind": "imdbspanishtx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbspanishtx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbspanishtf"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbspanishti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbspanishti",
+          "bind": "imdbspanishtj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbspanishtj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imdbspanishtk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imdbspanishtk",
+              "bind": "imdbspanishtl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imdbspanishtl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imdbspanishtl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imdbspanishtk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbspanishti"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishtd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbspanishtp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbspanishtp",
+          "bind": "imdbspanishtq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbspanishtq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishtq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbspanishtp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbspanishts"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbspanishrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbspanishrl",
+      "bind": "imdbspanishrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbspanishrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbspanishrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbspanishrf",
+          "bind": "imdbspanishry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbspanishry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbspanishry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbspanishrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbspanishrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbspanishqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbspanishqs",
+      "bind": "imdbspanishqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbspanishqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbspanishqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbspanishqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemdbspanish"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemdbspanish",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemdbspanish",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemdbspanish"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemdbspanish",
+          "bind": "f_mcemdbspanish",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemdbspanish",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbspanish",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbspanish",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemdbspanish"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemdbspanish",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemdbspanish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemdbspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbspanish0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbspanish0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbspanish0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbspanish0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbspanish0",
+          "bind": "f_qmdbspanish0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbspanish0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbspanish0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbspanish0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbspanish0"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbspanish1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbspanish1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbspanish1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbspanish1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbspanish1",
+          "bind": "f_qmdbspanish1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbspanish1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbspanish1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbspanish1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbspanish1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbspanish1"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbspanish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imdbspanish"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-swedish.mdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x041D;CP=1252;COUNTRY=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbswedish",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-swedish.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "imdbswedish"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbswedishdp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbswedishdp",
+      "bind": "imdbswedishdq",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbswedishdq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishdq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishdq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbswedishdp"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbswedishts"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbswedishts",
+      "bind": "imdbswedishtd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbswedishtf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbswedishtf",
+          "bind": "imdbswedishtx",
+          "maxItems": 160,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbswedishtx",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtx",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtx",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtx",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtx",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbswedishtf"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbswedishti"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbswedishti",
+          "bind": "imdbswedishtj",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbswedishtj",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtj",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtj",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtj",
+              "member": "Foreign",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtj",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "imdbswedishtk"
+            },
+            {
+              "op": "forEachItem",
+              "target": "imdbswedishtk",
+              "bind": "imdbswedishtl",
+              "maxItems": 8,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "imdbswedishtl",
+                  "member": "Name",
+                  "kind": "propertyGet",
+                  "args": []
+                },
+                {
+                  "op": "invoke",
+                  "target": "imdbswedishtl",
+                  "member": "Attributes",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "imdbswedishtk"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbswedishti"
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishtd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbswedishtp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbswedishtp",
+          "bind": "imdbswedishtq",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbswedishtq",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtq",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishtq",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbswedishtp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbswedishts"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbswedishrl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbswedishrl",
+      "bind": "imdbswedishrx",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbswedishrx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishrx",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishrx",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishrx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishrx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "imdbswedishrf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "imdbswedishrf",
+          "bind": "imdbswedishry",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "imdbswedishry",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "imdbswedishry",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "imdbswedishrf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbswedishrl"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "imdbswedishqs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "imdbswedishqs",
+      "bind": "imdbswedishqd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "imdbswedishqd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishqd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "imdbswedishqd",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "imdbswedishqs"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysCompactErrors"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mcemdbswedish"
+    },
+    {
+      "op": "loopUntil",
+      "target": "mcemdbswedish",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mcemdbswedish",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_mcemdbswedish"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_mcemdbswedish",
+          "bind": "f_mcemdbswedish",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_mcemdbswedish",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbswedish",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_mcemdbswedish",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_mcemdbswedish"
+        },
+        {
+          "op": "invoke",
+          "target": "mcemdbswedish",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mcemdbswedish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mcemdbswedish"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name FROM Parent ORDER BY Name, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbswedish0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbswedish0",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbswedish0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbswedish0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbswedish0",
+          "bind": "f_qmdbswedish0",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbswedish0"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbswedish0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbswedish0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbswedish0"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Val FROM Child ORDER BY Val, ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "qmdbswedish1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "qmdbswedish1",
+      "member": "EOF",
+      "maxIterations": 120,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qmdbswedish1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_qmdbswedish1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_qmdbswedish1",
+          "bind": "f_qmdbswedish1",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_qmdbswedish1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_qmdbswedish1"
+        },
+        {
+          "op": "invoke",
+          "target": "qmdbswedish1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qmdbswedish1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qmdbswedish1"
+    },
+    {
+      "op": "invoke",
+      "target": "imdbswedish",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "imdbswedish"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

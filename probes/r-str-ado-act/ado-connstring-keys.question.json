@@ -1,0 +1,737 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/ado-connstring-keys",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-CONN"
+  ],
+  "description": "ADO-CONN key parsing, each on its own Connection with Data Source set through Properties and then Open(omitted): (a) a duplicated Provider key with spaces around \"Mode = Read\"; (b) an unknown key CalcDbUnknownOption=1; (c) double-quoted Provider value and single-quoted Mode value; (d) an empty value Jet OLEDB:Database Password=. Asks the ConnectionString before and after Open, Mode, State and Errors for each.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-str-ado-act-ado3-accdb.accdb",
+      "sha256": "64cd6881b60bf53773e28a4af30ef2063023c078713261ff8a23fc15bf50487a",
+      "length": 217088,
+      "provenance": "r-str-ado-act.create-ado3-accdb.91a76bb18b.a1 qk1-91a76bb18bf0b884b44069f196049232c18669273efaadef0cf2d7d486010bcd output:r-str-ado-act-ado3-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ka"
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Provider=Microsoft.ACE.OLEDB.12.0;  Mode = Read ; Persist Security Info=False;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kaProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kaProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "kaDs"
+    },
+    {
+      "op": "invoke",
+      "target": "kaDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kaDs"
+    },
+    {
+      "op": "release",
+      "target": "kaProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kaErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "kaErrs",
+      "bind": "kaErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "kaErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kaErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kaErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kaErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kaErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kaErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ka",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ka"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "kb"
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Mode=Read;CalcDbUnknownOption=1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kbProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "kbDs"
+    },
+    {
+      "op": "invoke",
+      "target": "kbDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kbDs"
+    },
+    {
+      "op": "release",
+      "target": "kbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "kbErrs",
+      "bind": "kbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "kbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "kb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "kb"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "kc"
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=\"Microsoft.ACE.OLEDB.12.0\";Mode='Read'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kcProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kcProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "kcDs"
+    },
+    {
+      "op": "invoke",
+      "target": "kcDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kcDs"
+    },
+    {
+      "op": "release",
+      "target": "kcProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kcErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "kcErrs",
+      "bind": "kcErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "kcErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kcErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kcErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kcErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kcErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kcErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "kc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "kc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "kd"
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Database Password=;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kdProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kdProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "kdDs"
+    },
+    {
+      "op": "invoke",
+      "target": "kdDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kdDs"
+    },
+    {
+      "op": "release",
+      "target": "kdProps"
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "kdErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "kdErrs",
+      "bind": "kdErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "kdErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kdErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kdErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kdErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "kdErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "kdErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "kd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "kd"
+    }
+  ]
+}

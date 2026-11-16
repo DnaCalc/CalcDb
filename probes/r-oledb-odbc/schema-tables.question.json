@@ -1,0 +1,441 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/schema-tables",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP",
+    "OLE-ACCESS"
+  ],
+  "description": "Schema rowset adSchemaTables (20) with no restrictions, for the ACCDB and the MDB fixture: State, every column's Name and Type, and every row (user, system, linked and view entries). Asks the rowset shape and which table types and properties the provider reports.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    },
+    {
+      "role": "mdb",
+      "fileName": "r-oledb-odbc-mdb.mdb",
+      "sha256": "d6fc05027381d1ce754b7bf67f444a3cd19712b62354cbbe8587924f6835c77f",
+      "length": 184320,
+      "provenance": "r-oledb-odbc.create-mdb.9313b42430.a1 qk1-9313b42430b00d15ddef63563baf4603d602b30e9b159245194c3c5990094d81 output:r-oledb-odbc-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn_main"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cn_mainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mainProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cn_mainDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mainDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cn_mainDs"
+    },
+    {
+      "op": "release",
+      "target": "cn_mainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "t_main"
+    },
+    {
+      "op": "invoke",
+      "target": "t_main",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "t_main",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "t_mainf"
+    },
+    {
+      "op": "invoke",
+      "target": "t_mainf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "t_mainf",
+      "bind": "t_mainc",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t_mainc",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t_mainc",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "t_mainf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "t_main",
+      "member": "EOF",
+      "maxIterations": 60,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t_main",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "t_mainFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "t_mainFlds",
+          "bind": "t_mainF",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "t_mainF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "t_mainFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "t_main",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "t_main"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_main",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn_main"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn_mdb"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cn_mdbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdbProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cn_mdbDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdbDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cn_mdbDs"
+    },
+    {
+      "op": "release",
+      "target": "cn_mdbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "t_mdb"
+    },
+    {
+      "op": "invoke",
+      "target": "t_mdb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "t_mdb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "t_mdbf"
+    },
+    {
+      "op": "invoke",
+      "target": "t_mdbf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "t_mdbf",
+      "bind": "t_mdbc",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t_mdbc",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t_mdbc",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "t_mdbf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "t_mdb",
+      "member": "EOF",
+      "maxIterations": 60,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t_mdb",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "t_mdbFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "t_mdbFlds",
+          "bind": "t_mdbF",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "t_mdbF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "t_mdbFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "t_mdb",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "t_mdb"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_mdb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn_mdb"
+    }
+  ]
+}

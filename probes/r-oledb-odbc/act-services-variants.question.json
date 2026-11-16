@@ -1,0 +1,2130 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/act-services-variants",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-ACT",
+    "OLE-PROP"
+  ],
+  "description": "OLE-ACT: five Connections open the same file with connection strings 'Provider=ACE;OLE DB Services=<v>;Mode=Read' for v = -1, -2, -4, -5 and 0 (Data Source through Properties). For each: State, loaded modules after Open, the properties OLE DB Services, Provider Name and Active Sessions, then a client-cursor static and a server keyset Recordset open on Items (State, RecordCount, loaded modules, Connection Errors), Close and loaded modules. Asks which service components the provider selection loads and whether a client cursor still opens.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sv1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;OLE DB Services=-1;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sv1Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv1Ds"
+    },
+    {
+      "op": "release",
+      "target": "sv1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open-sv1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv1Np_svc"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "sv1Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "sv1Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "sv1Np_svc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1Np_svc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1Np_svc_2"
+    },
+    {
+      "op": "release",
+      "target": "sv1Np_svc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv1c"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1c",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1c",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-client-sv1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv1s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1s",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1s",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv1"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv1s",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1s",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv1s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sv1Errs",
+      "bind": "sv1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sv1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv1"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close-sv1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sv2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;OLE DB Services=-2;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sv2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv2Ds"
+    },
+    {
+      "op": "release",
+      "target": "sv2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open-sv2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv2Np_svc"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "sv2Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "sv2Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "sv2Np_svc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2Np_svc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2Np_svc_2"
+    },
+    {
+      "op": "release",
+      "target": "sv2Np_svc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv2c"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2c",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2c",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv2"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-client-sv2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv2s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2s",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2s",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv2s",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2s",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv2s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sv2Errs",
+      "bind": "sv2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sv2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv2"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close-sv2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sv3"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;OLE DB Services=-4;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sv3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv3Ds"
+    },
+    {
+      "op": "release",
+      "target": "sv3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open-sv3"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv3Np_svc"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "sv3Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "sv3Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "sv3Np_svc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3Np_svc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3Np_svc_2"
+    },
+    {
+      "op": "release",
+      "target": "sv3Np_svc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv3c"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3c",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3c",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv3"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-client-sv3"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv3s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3s",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3s",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv3"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv3s",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3s",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv3s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sv3Errs",
+      "bind": "sv3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sv3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv3"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close-sv3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sv4"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;OLE DB Services=-5;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sv4Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv4Ds"
+    },
+    {
+      "op": "release",
+      "target": "sv4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open-sv4"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv4Np_svc"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "sv4Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "sv4Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "sv4Np_svc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4Np_svc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4Np_svc_2"
+    },
+    {
+      "op": "release",
+      "target": "sv4Np_svc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv4c"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4c",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4c",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv4"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-client-sv4"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv4s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4s",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4s",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv4"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv4s",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4s",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv4s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sv4Errs",
+      "bind": "sv4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv4Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sv4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv4"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close-sv4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sv5"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;OLE DB Services=0;Mode=Read"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sv5Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv5Ds"
+    },
+    {
+      "op": "release",
+      "target": "sv5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open-sv5"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv5Np_svc"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "sv5Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5Np_svc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "sv5Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5Np_svc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "sv5Np_svc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5Np_svc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5Np_svc_2"
+    },
+    {
+      "op": "release",
+      "target": "sv5Np_svc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv5c"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5c",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5c",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv5"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-client-sv5"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sv5s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5s",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5s",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "sv5"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sv5s",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5s",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sv5s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5s"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sv5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sv5Errs",
+      "bind": "sv5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sv5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sv5Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sv5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv5"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close-sv5"
+    }
+  ]
+}

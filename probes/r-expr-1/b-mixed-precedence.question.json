@@ -1,0 +1,278 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-expr-1/b-mixed-precedence",
+  "bookRefs": [
+    "R-EXPR-1",
+    "Branch B"
+  ],
+  "description": "Asks the published result type of mixed-type addition and multiplication in both operand orders (Currency/Double, Single/Long, Single/Double, Currency/Long, Decimal with Double/Currency/Long, Boolean and Date operands) over the stored Vals row, as Field.Type and returned VARIANT tag in one projection. A second projection asks the inner VarType of the same expressions where VarType is admitted. Fixture r-expr-1-main2 is opened read-only through DAO.DBEngine.120; engine version and loaded modules are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1-main2.accdb",
+      "sha256": "7ed546fef3762795c4ed1383d2003850dce1c42fee8be0e38d8072a0e7158df0",
+      "length": 299008,
+      "provenance": "r-expr-1.create-main2.71240a8508.a1 qk1-71240a8508e912f1c7f2e72065607036949aafb211127a6aef53928cc0589e0f output:r-expr-1-main2.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT C + D AS e0, D + C AS e1, C * D AS e2, D * C AS e3, S + L AS e4, L + S AS e5, S * L AS e6, L * S AS e7, S + D AS e8, D + S AS e9, C + L AS e10, L + C AS e11, M + D AS e12, D + M AS e13, M + C AS e14, C + M AS e15, M + L AS e16, M * L AS e17, Y + 1 AS e18, Y * Y AS e19, DT + 1 AS e20, 1 + DT AS e21, DT - DT AS e22, DT + C AS e23, B + B AS e24, I + B AS e25 FROM Vals"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs0",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs0f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs0f",
+          "bind": "rs0x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs0f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT VarType(C + D) AS t0, VarType(D + C) AS t1, VarType(C * D) AS t2, VarType(D * C) AS t3, VarType(S + L) AS t4, VarType(L + S) AS t5, VarType(S * L) AS t6, VarType(L * S) AS t7, VarType(S + D) AS t8, VarType(D + S) AS t9, VarType(C + L) AS t10, VarType(L + C) AS t11, VarType(M + D) AS t12, VarType(D + M) AS t13, VarType(M + C) AS t14, VarType(C + M) AS t15, VarType(M + L) AS t16, VarType(M * L) AS t17, VarType(Y + 1) AS t18, VarType(Y * Y) AS t19, VarType(DT + 1) AS t20, VarType(1 + DT) AS t21, VarType(DT - DT) AS t22, VarType(DT + C) AS t23, VarType(B + B) AS t24, VarType(I + B) AS t25 FROM Vals"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs1f",
+          "bind": "rs1x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs1f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

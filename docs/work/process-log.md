@@ -49,3 +49,35 @@ Zero or one means adopt; more means the guidance is not read or not specific eno
 **Next candidates.** Make the editor diagnostics load the solution, or find why they don't.
 They cost context on every edit. Then try RosCLI on a refactoring-heavy slice, such as moving
 the VARIANT declarations into the W-02 project, against the raw-agent baseline above.
+
+## 2026-11-17 night · evidence run (one CodeAlta session, Opus, plus 14 card-design sub-agents)
+
+**Work observed.** Tooling built during the night (probe generator, batch runs, multi-process participants,
+native file driver, lifecycle trace, build-stamped provenance), 15 probe cards, about 1,000 designed questions
+run against ACE.
+
+**Last entry's change measured.** The three shell/editing pitfalls of the previous entry recurred zero
+times in about 200 tool calls: every edit went through the editing tools and every commit through a message
+file. Adopt.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The `standard` model tier is not configured, so the first 8 "lower cost" design sub-agents ran on Opus | Cost, not time: about 1h20 of Opus sub-agent time | The second wave names `claude-code:sonnet` explicitly. Check `alta model list` before choosing a tier. |
+| `store()` in a CodeAlta script is capped at 64 KB, and the combined design results were 560 KB | The script failed after 14 minutes of sub-agent work; results were recovered from the child sessions | Write large results to files directly in the script. |
+| Rebuilding was blocked while a batch job ran (DLLs in use), and the tree's state labelled binaries wrongly | About 20 minutes of waiting, and records stamped `+dirty` though the binaries were clean | Batch jobs run from a binary snapshot, and binaries embed their source commit (assembly metadata `CalcDbSource`). |
+| First-contact tooling defects (nullable positional records failing JSON, an uncaught access-denied, a fatal generator on one refused probe, a comma list in `pwsh -File`) | Each made a batch Uncertain or stopped it; all found by the first run | Fixed in the shared code with retry rules that never re-run an uncertain native effect. |
+| Sub-agent fixture designs used DAO DDL forms ACE refuses (DECIMAL; REFERENCES in any form) | Several fixtures partly empty, so their dependents asked about missing tables | The refusals were recorded first by R-FMT-1. They are now in the builder (`AddDecimalField`, `AddRelation`) and should go into the design brief. Run fixture creations as a separate round and review them before dependents run. |
+| Records carry three full module snapshots each | About half of every record's bytes; about 80 MB for 388 records | Not changed tonight, to keep records consistent. It supports the service design's "environment once, by envId" rule. |
+
+**What worked.**
+- Card design by sub-agents from one brief plus a template card: 14 cards and about 600 probes, with no
+  expected answers smuggled in (checked by search) and nothing touching the registry or settings.
+- Generated questions plus `batch`: about 2 to 3 seconds per single-process question and about 4 seconds per
+  two-process question, with no human step between definition and retained record.
+- First-contact defects surfaced at once because every outcome is sealed with explicit problems.
+
+**Next candidates.** Add the DAO DDL limits to the design brief. Add a fixture-review step that reads the
+creation capture and fails a fixture whose required tables did not appear. Store the environment once per
+worker, as proposed in oracle-service.md.

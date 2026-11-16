@@ -1,0 +1,935 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/create-cx-calc",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-CALC"
+  ],
+  "description": "Fixture r-cplx-rebuild-cx-calc: table T(ID COUNTER primary key, A LONG, B DOUBLE, S TEXT(30), D DATETIME) and nine calculated fields added through CreateField with Field.Expression set before Fields.Append (C_long, C_double, C_div, C_text, C_date, C_bool, C_cur, C_dec, C_iif); rows (10, 1.5, 'abc', 2024-01-02), a row of Nulls, (-5, 0, '', 1900-01-01) and (7, -2.5, 'x', 2000-02-29). Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128) and DAO/DDL calls; every call is recorded and the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-cplx-rebuild-cx-calc.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, A LONG, B DOUBLE, S TEXT(30), D DATETIME)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_long"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_long",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_long"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_long",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_long"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fnC_long"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_long",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[A]*2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_long",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_long"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_long",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_long"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_long"
+    },
+    {
+      "op": "release",
+      "target": "tfC_long"
+    },
+    {
+      "op": "release",
+      "target": "tdC_long"
+    },
+    {
+      "op": "release",
+      "target": "tsC_long"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_double"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_double",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_double"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_double",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_double"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "fnC_double"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_double",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[B]*2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_double",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_double"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_double",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_double"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_double"
+    },
+    {
+      "op": "release",
+      "target": "tfC_double"
+    },
+    {
+      "op": "release",
+      "target": "tdC_double"
+    },
+    {
+      "op": "release",
+      "target": "tsC_double"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_div"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_div",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_div"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_div",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_div"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "fnC_div"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_div",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[B]/[A]"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_div",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_div"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_div",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_div"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_div"
+    },
+    {
+      "op": "release",
+      "target": "tfC_div"
+    },
+    {
+      "op": "release",
+      "target": "tdC_div"
+    },
+    {
+      "op": "release",
+      "target": "tsC_div"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_text"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_text",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_text"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_text",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_text"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ],
+      "bind": "fnC_text"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_text",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[S] & \"-x\""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_text",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_text"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_text",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_text"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_text"
+    },
+    {
+      "op": "release",
+      "target": "tfC_text"
+    },
+    {
+      "op": "release",
+      "target": "tdC_text"
+    },
+    {
+      "op": "release",
+      "target": "tsC_text"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_date"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_date",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_date"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_date",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_date"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ],
+      "bind": "fnC_date"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_date",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DateAdd(\"d\",1,[D])"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_date",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_date"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_date",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_date"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_date"
+    },
+    {
+      "op": "release",
+      "target": "tfC_date"
+    },
+    {
+      "op": "release",
+      "target": "tdC_date"
+    },
+    {
+      "op": "release",
+      "target": "tsC_date"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_bool"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_bool",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_bool"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_bool",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_bool"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "fnC_bool"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_bool",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[A]>1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_bool",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_bool"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_bool",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_bool"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_bool"
+    },
+    {
+      "op": "release",
+      "target": "tfC_bool"
+    },
+    {
+      "op": "release",
+      "target": "tdC_bool"
+    },
+    {
+      "op": "release",
+      "target": "tsC_bool"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_cur"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_cur",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_cur"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_cur",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_cur"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "fnC_cur"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_cur",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CCur([A])*1.1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_cur",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_cur"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_cur",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_cur"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_cur"
+    },
+    {
+      "op": "release",
+      "target": "tfC_cur"
+    },
+    {
+      "op": "release",
+      "target": "tdC_cur"
+    },
+    {
+      "op": "release",
+      "target": "tsC_cur"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_dec"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_dec",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_dec"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_dec",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_dec"
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "fnC_dec"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_dec",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[A]/7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_dec",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_dec"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_dec",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_dec"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_dec"
+    },
+    {
+      "op": "release",
+      "target": "tfC_dec"
+    },
+    {
+      "op": "release",
+      "target": "tdC_dec"
+    },
+    {
+      "op": "release",
+      "target": "tsC_dec"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsC_iif"
+    },
+    {
+      "op": "invoke",
+      "target": "tsC_iif",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdC_iif"
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_iif",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C_iif"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "fnC_iif"
+    },
+    {
+      "op": "invoke",
+      "target": "fnC_iif",
+      "member": "Expression",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IIf([A] Is Null,\"null\",\"set\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdC_iif",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfC_iif"
+    },
+    {
+      "op": "invoke",
+      "target": "tfC_iif",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnC_iif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fnC_iif"
+    },
+    {
+      "op": "release",
+      "target": "tfC_iif"
+    },
+    {
+      "op": "release",
+      "target": "tdC_iif"
+    },
+    {
+      "op": "release",
+      "target": "tsC_iif"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (A, B, S, D) VALUES (10, 1.5, 'abc', #2024-01-02#)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S) VALUES (Null)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (A, B, S, D) VALUES (-5, 0, '', #1900-01-01#)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (A, B, S, D) VALUES (7, -2.5, 'x', #2000-02-29#)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

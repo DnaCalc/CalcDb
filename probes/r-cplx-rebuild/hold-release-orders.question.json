@@ -1,0 +1,1730 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/hold-release-orders",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-HOLD"
+  ],
+  "description": "Four independent open-hold-release sequences on p1's group in one process, each followed by a fresh Database that reads the group: (a) release child, parent recordset and Database objects with no Close; (b) Close parent and Database, read the held child, Close the child, release; (c) release the Database then the parent recordset, read the held child, release it; (d) Close child, parent, Database in that order.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-cx-mv-text.accdb",
+      "sha256": "2233efae95e2757c5009cbf3df66b9232d3440de6b5176e0ec4ed8ff730d81ba",
+      "length": 225280,
+      "provenance": "r-cplx-rebuild.create-cx-mv-text.1aa415da93.a1 qk1-1aa415da93cb2801fcaf06aa6427ada4dde58df472230c95ea7b74bc18337a95 output:r-cplx-rebuild-cx-mv-text.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "da"
+    },
+    {
+      "op": "invoke",
+      "target": "da",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "ra"
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "la"
+    },
+    {
+      "op": "invoke",
+      "target": "la",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ca"
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_ca"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_ca",
+      "bind": "f_ca",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_ca",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_ca",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_ca",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_ca"
+    },
+    {
+      "op": "release",
+      "target": "ca"
+    },
+    {
+      "op": "release",
+      "target": "fa"
+    },
+    {
+      "op": "release",
+      "target": "la"
+    },
+    {
+      "op": "release",
+      "target": "ra"
+    },
+    {
+      "op": "release",
+      "target": "da"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "za"
+    },
+    {
+      "op": "invoke",
+      "target": "za",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpza"
+    },
+    {
+      "op": "invoke",
+      "target": "gpza",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfza"
+    },
+    {
+      "op": "invoke",
+      "target": "gfza",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "gcza"
+    },
+    {
+      "op": "invoke",
+      "target": "gcza",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghza"
+    },
+    {
+      "op": "invoke",
+      "target": "ghza",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghza",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghza",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghza",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghza",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghza"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghza",
+          "bind": "f_ghza",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghza",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghza",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghza",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghza"
+        },
+        {
+          "op": "invoke",
+          "target": "ghza",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghza",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghza",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghza"
+    },
+    {
+      "op": "release",
+      "target": "gcza"
+    },
+    {
+      "op": "release",
+      "target": "gfza"
+    },
+    {
+      "op": "invoke",
+      "target": "gpza",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpza"
+    },
+    {
+      "op": "invoke",
+      "target": "za",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "za"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-a",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rb"
+    },
+    {
+      "op": "invoke",
+      "target": "rb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "lb"
+    },
+    {
+      "op": "invoke",
+      "target": "lb",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fb"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cb"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_cb"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_cb",
+      "bind": "f_cb",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_cb"
+    },
+    {
+      "op": "invoke",
+      "target": "rb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_cb"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_cb",
+      "bind": "f_cb",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cb",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_cb"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "cb"
+    },
+    {
+      "op": "release",
+      "target": "fb"
+    },
+    {
+      "op": "release",
+      "target": "lb"
+    },
+    {
+      "op": "release",
+      "target": "rb"
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "zb"
+    },
+    {
+      "op": "invoke",
+      "target": "zb",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpzb"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfzb"
+    },
+    {
+      "op": "invoke",
+      "target": "gfzb",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "gczb"
+    },
+    {
+      "op": "invoke",
+      "target": "gczb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghzb"
+    },
+    {
+      "op": "invoke",
+      "target": "ghzb",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzb",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzb",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghzb",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghzb",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghzb"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghzb",
+          "bind": "f_ghzb",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghzb",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzb",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzb",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghzb"
+        },
+        {
+          "op": "invoke",
+          "target": "ghzb",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghzb",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghzb"
+    },
+    {
+      "op": "release",
+      "target": "gczb"
+    },
+    {
+      "op": "release",
+      "target": "gfzb"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpzb"
+    },
+    {
+      "op": "invoke",
+      "target": "zb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "zb"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-b",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "dc"
+    },
+    {
+      "op": "invoke",
+      "target": "dc",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "lc"
+    },
+    {
+      "op": "invoke",
+      "target": "lc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cc"
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_cc"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_cc",
+      "bind": "f_cc",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_cc"
+    },
+    {
+      "op": "release",
+      "target": "dc"
+    },
+    {
+      "op": "release",
+      "target": "rc"
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_cc"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_cc",
+      "bind": "f_cc",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cc",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_cc"
+    },
+    {
+      "op": "release",
+      "target": "cc"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "lc"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "zc"
+    },
+    {
+      "op": "invoke",
+      "target": "zc",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpzc"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfzc"
+    },
+    {
+      "op": "invoke",
+      "target": "gfzc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "gczc"
+    },
+    {
+      "op": "invoke",
+      "target": "gczc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghzc"
+    },
+    {
+      "op": "invoke",
+      "target": "ghzc",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzc",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzc",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghzc",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghzc",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghzc"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghzc",
+          "bind": "f_ghzc",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghzc",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzc",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzc",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghzc"
+        },
+        {
+          "op": "invoke",
+          "target": "ghzc",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghzc",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghzc"
+    },
+    {
+      "op": "release",
+      "target": "gczc"
+    },
+    {
+      "op": "release",
+      "target": "gfzc"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpzc"
+    },
+    {
+      "op": "invoke",
+      "target": "zc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "zc"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-c",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "dd"
+    },
+    {
+      "op": "invoke",
+      "target": "dd",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rd"
+    },
+    {
+      "op": "invoke",
+      "target": "rd",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ld"
+    },
+    {
+      "op": "invoke",
+      "target": "ld",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fd"
+    },
+    {
+      "op": "invoke",
+      "target": "fd",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cd"
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_cd"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl_cd",
+      "bind": "f_cd",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f_cd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "f_cd",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl_cd"
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "cd"
+    },
+    {
+      "op": "release",
+      "target": "fd"
+    },
+    {
+      "op": "release",
+      "target": "ld"
+    },
+    {
+      "op": "release",
+      "target": "rd"
+    },
+    {
+      "op": "release",
+      "target": "dd"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "zd"
+    },
+    {
+      "op": "invoke",
+      "target": "zd",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpzd"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzd",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfzd"
+    },
+    {
+      "op": "invoke",
+      "target": "gfzd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "gczd"
+    },
+    {
+      "op": "invoke",
+      "target": "gczd",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghzd"
+    },
+    {
+      "op": "invoke",
+      "target": "ghzd",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzd",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzd",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghzd",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghzd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghzd"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghzd",
+          "bind": "f_ghzd",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghzd",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzd",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghzd",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghzd"
+        },
+        {
+          "op": "invoke",
+          "target": "ghzd",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghzd",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghzd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghzd"
+    },
+    {
+      "op": "release",
+      "target": "gczd"
+    },
+    {
+      "op": "release",
+      "target": "gfzd"
+    },
+    {
+      "op": "invoke",
+      "target": "gpzd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpzd"
+    },
+    {
+      "op": "invoke",
+      "target": "zd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "zd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-d",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": true
+    }
+  ]
+}

@@ -1,0 +1,1088 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-cat-1.parameter-values.f25d3c296a.a1",
+  "retainedUtc": "2026-11-16T23:42:09.1765188+00:00",
+  "probe": "r-cat-1/parameter-values",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-V"
+  ],
+  "description": "Parameter values and Requery on the query fixture (read-only). QParam pId = 1, pName = 'zzz', dynaset opened and read; pId = 2 then Requery() and read; Requery(QueryDef) and read; pId = 3 then Requery(QueryDef) and read. Two separate QueryDefs.Item(\"QParam\") instances get pId 1 and 4: each instance's pId is read and both are opened and read. A third instance is opened with no values set, QImplicit is opened by name, and a temporary parameter query is opened before and after setting its value; DBEngine.Errors after each failure.",
+  "retentionNote": "Worker process died (no returned receipt); this attempt predates the lifecycle trace, so the call it died in is not observed. Its program calls Recordset.Requery with a QueryDef, which faults inside ACEDAO in evidence/r-crash-requery; that link is an inference. Execution stays Uncertain.",
+  "token": "r-cat-1.parameter-values.f25d3c296a",
+  "questionKey": "qk1-f25d3c296a737cd928ea5238e2896a0c66473f625070a12e998dfc8af5ed86fa",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-cat-1/parameter-values",
+    "bookRefs": [
+      "R-CAT-1",
+      "II-06",
+      "CAT-V"
+    ],
+    "description": "Parameter values and Requery on the query fixture (read-only). QParam pId = 1, pName = 'zzz', dynaset opened and read; pId = 2 then Requery() and read; Requery(QueryDef) and read; pId = 3 then Requery(QueryDef) and read. Two separate QueryDefs.Item(\"QParam\") instances get pId 1 and 4: each instance's pId is read and both are opened and read. A third instance is opened with no values set, QImplicit is opened by name, and a temporary parameter query is opened before and after setting its value; DBEngine.Errors after each failure.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-cat-1-accdb-queries.accdb",
+        "sha256": "d53c7ee6e0f16c69107e0be625e15f985312a22f5c03c74b05cb7f6744550b01",
+        "length": 241664,
+        "provenance": "r-cat-1.create-accdb-queries.775ce375fd.a1 qk1-775ce375fd3d6a4f780bce3c0cf531e4c036f1fac57a98eff28a604859920bd0 output:r-cat-1-accdb-queries.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "observeModules",
+        "label": "before-create"
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "QueryDefs",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qd"
+      },
+      {
+        "op": "invoke",
+        "target": "qd",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "prms"
+      },
+      {
+        "op": "invoke",
+        "target": "prms",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pId"
+          }
+        ],
+        "bind": "pid"
+      },
+      {
+        "op": "invoke",
+        "target": "prms",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pName"
+          }
+        ],
+        "bind": "pn"
+      },
+      {
+        "op": "invoke",
+        "target": "pid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pn",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "zzz"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ],
+        "bind": "rs"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Requery",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Requery",
+        "kind": "method",
+        "args": [
+          {
+            "type": "object",
+            "name": "qd"
+          }
+        ]
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Requery",
+        "kind": "method",
+        "args": [
+          {
+            "type": "object",
+            "name": "qd"
+          }
+        ]
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rs"
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qa"
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qb"
+      },
+      {
+        "op": "invoke",
+        "target": "qa",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "pa"
+      },
+      {
+        "op": "invoke",
+        "target": "pa",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pId"
+          }
+        ],
+        "bind": "paid"
+      },
+      {
+        "op": "invoke",
+        "target": "paid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qb",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "pb"
+      },
+      {
+        "op": "invoke",
+        "target": "pb",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pId"
+          }
+        ],
+        "bind": "pbid"
+      },
+      {
+        "op": "invoke",
+        "target": "pbid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "paid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "pbid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "qa",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rsa"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rsa",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rsa",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rsa",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rsa",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsa"
+      },
+      {
+        "op": "invoke",
+        "target": "qb",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rsb"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rsb",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rsb",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rsb",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rsb",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsb"
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qc"
+      },
+      {
+        "op": "invoke",
+        "target": "qc",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rsc"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rsc",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rsc",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rsc",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QImplicit"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rsi"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "CreateQueryDef",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ""
+          },
+          {
+            "type": "bstr",
+            "text": "SELECT ID FROM T WHERE ID = pX;"
+          }
+        ],
+        "bind": "tq"
+      },
+      {
+        "op": "invoke",
+        "target": "tq",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rst"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "tq",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "tqp"
+      },
+      {
+        "op": "invoke",
+        "target": "tqp",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pX"
+          }
+        ],
+        "bind": "tpx"
+      },
+      {
+        "op": "invoke",
+        "target": "tpx",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "tq",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "rst2"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rst2",
+        "member": "EOF",
+        "maxIterations": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rst2",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rst2",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rst2",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rst2"
+      },
+      {
+        "op": "release",
+        "target": "tpx"
+      },
+      {
+        "op": "release",
+        "target": "tqp"
+      },
+      {
+        "op": "release",
+        "target": "tq"
+      },
+      {
+        "op": "release",
+        "target": "qc"
+      },
+      {
+        "op": "release",
+        "target": "paid"
+      },
+      {
+        "op": "release",
+        "target": "pa"
+      },
+      {
+        "op": "release",
+        "target": "pbid"
+      },
+      {
+        "op": "release",
+        "target": "pb"
+      },
+      {
+        "op": "release",
+        "target": "qa"
+      },
+      {
+        "op": "release",
+        "target": "qb"
+      },
+      {
+        "op": "release",
+        "target": "pid"
+      },
+      {
+        "op": "release",
+        "target": "pn"
+      },
+      {
+        "op": "release",
+        "target": "prms"
+      },
+      {
+        "op": "release",
+        "target": "qd"
+      },
+      {
+        "op": "release",
+        "target": "qdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeModules",
+        "label": "after-close"
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-cat-1.parameter-values.f25d3c296a.a1",
+    "token": "r-cat-1.parameter-values.f25d3c296a",
+    "questionKey": "qk1-f25d3c296a737cd928ea5238e2896a0c66473f625070a12e998dfc8af5ed86fa",
+    "workerGeneration": 1,
+    "execution": "Uncertain",
+    "capture": "Incomplete",
+    "problems": [
+      "Started without a returned receipt: native effects may or may not have happened."
+    ],
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 37224,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": -1073741819,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-16T22:45:39.5134172+00:00",
+    "sealSha256": "124c8b32fc8f9e91727414215fa610b37bbc7283ae109dba82ce811a56b58463"
+  },
+  "artifacts": []
+}

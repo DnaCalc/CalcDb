@@ -1,0 +1,413 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-crash-requery.requery-other-qd.36023be25f.a1",
+  "retainedUtc": "2026-11-16T23:25:36.1950441+00:00",
+  "probe": "r-crash-requery/requery-other-qd",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-REENTRY",
+    "R-CAT-1",
+    "R-CURSOR-1"
+  ],
+  "description": "QParam with pId = 1 opened and read; a second QueryDefs.Item('QParam') instance gets pId = 2; Recordset.Requery(second QueryDef); read again.",
+  "retentionNote": "ACE fault: the worker died with an access violation (0xC0000005) inside Recordset.Requery(QueryDef) via IDispatch; lifecycle trace and exit code in the manifest. A scratch check through the DAO PIA (vtable) got RPC_E_SERVERFAULT from the same call. Execution stays Uncertain.",
+  "token": "r-crash-requery.requery-other-qd.36023be25f",
+  "questionKey": "qk1-36023be25f1ace523aeb6bf8c8aa9a2bd9d32aab630b1f8740d305261d001038",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-crash-requery/requery-other-qd",
+    "bookRefs": [
+      "R-ORACLE-1",
+      "OR-REENTRY",
+      "R-CAT-1",
+      "R-CURSOR-1"
+    ],
+    "description": "QParam with pId = 1 opened and read; a second QueryDefs.Item('QParam') instance gets pId = 2; Recordset.Requery(second QueryDef); read again.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-cat-1-accdb-queries.accdb",
+        "sha256": "d53c7ee6e0f16c69107e0be625e15f985312a22f5c03c74b05cb7f6744550b01",
+        "length": 241664,
+        "provenance": "r-cat-1.create-accdb-queries.775ce375fd.a1 qk1-775ce375fd3d6a4f780bce3c0cf531e4c036f1fac57a98eff28a604859920bd0 output:r-cat-1-accdb-queries.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "observeModules",
+        "label": "before-create"
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "QueryDefs",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qd"
+      },
+      {
+        "op": "invoke",
+        "target": "qd",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "prms"
+      },
+      {
+        "op": "invoke",
+        "target": "prms",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pId"
+          }
+        ],
+        "bind": "pid"
+      },
+      {
+        "op": "invoke",
+        "target": "prms",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pName"
+          }
+        ],
+        "bind": "pn"
+      },
+      {
+        "op": "invoke",
+        "target": "pid",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pn",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "zzz"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ],
+        "bind": "rs"
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 64,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QParam"
+          }
+        ],
+        "bind": "qd2"
+      },
+      {
+        "op": "invoke",
+        "target": "qd2",
+        "member": "Parameters",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "prm2"
+      },
+      {
+        "op": "invoke",
+        "target": "prm2",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pId"
+          }
+        ],
+        "bind": "pid2"
+      },
+      {
+        "op": "invoke",
+        "target": "pid2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Requery",
+        "kind": "method",
+        "args": [
+          {
+            "type": "object",
+            "name": "qd2"
+          }
+        ]
+      },
+      {
+        "op": "loopUntil",
+        "target": "rs",
+        "member": "EOF",
+        "maxIterations": 64,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rs",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeModules",
+        "label": "after-close"
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-crash-requery.requery-other-qd.36023be25f.a1",
+    "token": "r-crash-requery.requery-other-qd.36023be25f",
+    "questionKey": "qk1-36023be25f1ace523aeb6bf8c8aa9a2bd9d32aab630b1f8740d305261d001038",
+    "workerGeneration": 1,
+    "execution": "Uncertain",
+    "capture": "Incomplete",
+    "problems": [
+      "Started without a returned receipt: native effects may or may not have happened.",
+      "Last native call entered (lifecycle trace): {\"seq\":30,\"path\":\"18\",\"call\":\"rs.Requery\",\"utc\":\"2026-11-16T23:24:48.6059412+00:00\"}",
+      "Worker process exit code 0xC0000005."
+    ],
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 24600,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": -1073741819,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-16T23:24:56.5916789+00:00",
+    "sealSha256": "022ea5a9d695b10d93aeee67210f207c9a91159c876fea3023c2b5e9b6de69f7"
+  },
+  "artifacts": []
+}

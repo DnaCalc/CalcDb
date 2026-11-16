@@ -1,0 +1,1709 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/act-provider-identity",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-ACT"
+  ],
+  "description": "OLE-ACT: on an ADODB.Connection record loaded modules before creation, after creation, after Provider = ACE, after Open, after a second Open of the same file, and after Close/Release; read Version, Provider, State and the named identity properties (Provider Name/Version/Friendly Name, OLE DB Version, DBMS Name/Version, Active Sessions, Data Source, Initial Catalog, Jet OLEDB:Engine Type, Locale Identifier, Mode, OLE DB Services, Prompt, Extended Properties, User ID, Window Handle) before and after Open, then the whole Properties inventory. Asks the provider module, version, session count and effective initialization values.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-provider"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnNp_provider"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "cnNp_provider_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Version"
+        }
+      ],
+      "bind": "cnNp_provider_1"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_1"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "cnNp_provider_2"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_2"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Version"
+        }
+      ],
+      "bind": "cnNp_provider_3"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_3"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "cnNp_provider_4"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_4",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_4"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "cnNp_provider_5"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_5",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_5",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_5"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "cnNp_provider_6"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_6",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_6",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_6"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnNp_provider_7"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_7",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_7",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_7"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source Name"
+        }
+      ],
+      "bind": "cnNp_provider_8"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_8",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_8",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_8"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Initial Catalog"
+        }
+      ],
+      "bind": "cnNp_provider_9"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_9",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_9",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_9"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Current Catalog"
+        }
+      ],
+      "bind": "cnNp_provider_10"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_10",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_10",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_10"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Engine Type"
+        }
+      ],
+      "bind": "cnNp_provider_11"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_11",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_11",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_11"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Locale Identifier"
+        }
+      ],
+      "bind": "cnNp_provider_12"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_12",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_12",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_12"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "cnNp_provider_13"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_13",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_13",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_13"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Persist Security Info"
+        }
+      ],
+      "bind": "cnNp_provider_14"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_14",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_14",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_14"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "cnNp_provider_15"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_15",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_15",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_15"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Prompt"
+        }
+      ],
+      "bind": "cnNp_provider_16"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_16",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_16",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_16"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Extended Properties"
+        }
+      ],
+      "bind": "cnNp_provider_17"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_17",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_17",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_17"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "User ID"
+        }
+      ],
+      "bind": "cnNp_provider_18"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_18",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_18",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_18"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Window Handle"
+        }
+      ],
+      "bind": "cnNp_provider_19"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_19",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_provider_19",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider_19"
+    },
+    {
+      "op": "release",
+      "target": "cnNp_provider"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-open"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnNp_open"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "cnNp_open_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Version"
+        }
+      ],
+      "bind": "cnNp_open_1"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_1"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "cnNp_open_2"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_2"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Version"
+        }
+      ],
+      "bind": "cnNp_open_3"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_3"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "cnNp_open_4"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_4",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_4"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "cnNp_open_5"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_5",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_5",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_5"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "cnNp_open_6"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_6",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_6",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_6"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnNp_open_7"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_7",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_7",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_7"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source Name"
+        }
+      ],
+      "bind": "cnNp_open_8"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_8",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_8",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_8"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Initial Catalog"
+        }
+      ],
+      "bind": "cnNp_open_9"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_9",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_9",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_9"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Current Catalog"
+        }
+      ],
+      "bind": "cnNp_open_10"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_10",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_10",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_10"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Engine Type"
+        }
+      ],
+      "bind": "cnNp_open_11"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_11",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_11",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_11"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Locale Identifier"
+        }
+      ],
+      "bind": "cnNp_open_12"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_12",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_12",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_12"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "cnNp_open_13"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_13",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_13",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_13"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Persist Security Info"
+        }
+      ],
+      "bind": "cnNp_open_14"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_14",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_14",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_14"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OLE DB Services"
+        }
+      ],
+      "bind": "cnNp_open_15"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_15",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_15",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_15"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Prompt"
+        }
+      ],
+      "bind": "cnNp_open_16"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_16",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_16",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_16"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Extended Properties"
+        }
+      ],
+      "bind": "cnNp_open_17"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_17",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_17",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_17"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "User ID"
+        }
+      ],
+      "bind": "cnNp_open_18"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_18",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_18",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_18"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Window Handle"
+        }
+      ],
+      "bind": "cnNp_open_19"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_19",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_open_19",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open_19"
+    },
+    {
+      "op": "release",
+      "target": "cnNp_open"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps_open"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnProps_open",
+      "bind": "cnPr_open",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnPr_open",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnPr_open",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnPr_open",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnPr_open",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnProps_open"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2Ds"
+    },
+    {
+      "op": "release",
+      "target": "c2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-second-open"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnNp_two"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_two",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "cnNp_two_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_two_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_two_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_two_0"
+    },
+    {
+      "op": "release",
+      "target": "cnNp_two"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Np_two"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Np_two",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "c2Np_two_0"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Np_two_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2Np_two_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2Np_two_0"
+    },
+    {
+      "op": "release",
+      "target": "c2Np_two"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnNp_after-c2-close"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_after-c2-close",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Active Sessions"
+        }
+      ],
+      "bind": "cnNp_after-c2-close_0"
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_after-c2-close_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnNp_after-c2-close_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnNp_after-c2-close_0"
+    },
+    {
+      "op": "release",
+      "target": "cnNp_after-c2-close"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release"
+    }
+  ]
+}

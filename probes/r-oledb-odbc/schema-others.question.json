@@ -1,0 +1,2308 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/schema-others",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP",
+    "OLE-ACCESS",
+    "OLE-ERROR"
+  ],
+  "description": "Remaining OpenSchema requests on the ACCDB fixture: the rows of adSchemaProviderTypes (22), DBInfoLiterals (31), DBInfoKeywords (30) and SQLLanguages (18); State and field count of every other defined SchemaEnum value (1, 2, 3, 6, 7, 11, 13, 14, 15, 17, 19, 21 and 32-43) and of 9999 and adSchemaProviderSpecific (-1) with and without a Criteria; and adSchemaTables with a restriction argument of Empty, Null, Missing, an Integer 0, the string \"Items\" and a byte array, and adSchemaColumns with the string \"Items\". Errors are read at the end. Asks which schemas are supported and how each restriction form is handled.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 22
+        }
+      ],
+      "bind": "o0"
+    },
+    {
+      "op": "invoke",
+      "target": "o0",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o0f"
+    },
+    {
+      "op": "invoke",
+      "target": "o0f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "o0f",
+      "bind": "o0c",
+      "maxItems": 20,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o0c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o0c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o0f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "o0",
+      "member": "EOF",
+      "maxIterations": 60,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "o0Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "o0Flds",
+          "bind": "o0F",
+          "maxItems": 20,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "o0F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "o0Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "o0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o0"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 31
+        }
+      ],
+      "bind": "o1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o1f"
+    },
+    {
+      "op": "invoke",
+      "target": "o1f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "o1f",
+      "bind": "o1c",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o1c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o1f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "o1",
+      "member": "EOF",
+      "maxIterations": 80,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "o1Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "o1Flds",
+          "bind": "o1F",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "o1F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "o1Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "o1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 30
+        }
+      ],
+      "bind": "o2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o2f"
+    },
+    {
+      "op": "invoke",
+      "target": "o2f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "o2f",
+      "bind": "o2c",
+      "maxItems": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o2c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o2f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "o2",
+      "member": "EOF",
+      "maxIterations": 500,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "o2Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "o2Flds",
+          "bind": "o2F",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "o2F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "o2Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "o2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 18
+        }
+      ],
+      "bind": "o3"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o3f"
+    },
+    {
+      "op": "invoke",
+      "target": "o3f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "o3f",
+      "bind": "o3c",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o3c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o3f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "o3",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "o3Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "o3Flds",
+          "bind": "o3F",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "o3F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "o3Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "o3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o3"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "u1"
+    },
+    {
+      "op": "invoke",
+      "target": "u1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u1f"
+    },
+    {
+      "op": "invoke",
+      "target": "u1f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u1f"
+    },
+    {
+      "op": "invoke",
+      "target": "u1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "u2"
+    },
+    {
+      "op": "invoke",
+      "target": "u2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u2f"
+    },
+    {
+      "op": "invoke",
+      "target": "u2f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u2f"
+    },
+    {
+      "op": "invoke",
+      "target": "u2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "u3"
+    },
+    {
+      "op": "invoke",
+      "target": "u3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u3f"
+    },
+    {
+      "op": "invoke",
+      "target": "u3f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u3f"
+    },
+    {
+      "op": "invoke",
+      "target": "u3",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u3"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ],
+      "bind": "u6"
+    },
+    {
+      "op": "invoke",
+      "target": "u6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u6f"
+    },
+    {
+      "op": "invoke",
+      "target": "u6f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u6f"
+    },
+    {
+      "op": "invoke",
+      "target": "u6",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u6"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "u7"
+    },
+    {
+      "op": "invoke",
+      "target": "u7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u7f"
+    },
+    {
+      "op": "invoke",
+      "target": "u7f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u7f"
+    },
+    {
+      "op": "invoke",
+      "target": "u7",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ],
+      "bind": "u11"
+    },
+    {
+      "op": "invoke",
+      "target": "u11",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u11f"
+    },
+    {
+      "op": "invoke",
+      "target": "u11f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u11f"
+    },
+    {
+      "op": "invoke",
+      "target": "u11",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u11"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 13
+        }
+      ],
+      "bind": "u13"
+    },
+    {
+      "op": "invoke",
+      "target": "u13",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u13f"
+    },
+    {
+      "op": "invoke",
+      "target": "u13f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u13f"
+    },
+    {
+      "op": "invoke",
+      "target": "u13",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u13"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 14
+        }
+      ],
+      "bind": "u14"
+    },
+    {
+      "op": "invoke",
+      "target": "u14",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u14",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u14f"
+    },
+    {
+      "op": "invoke",
+      "target": "u14f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u14f"
+    },
+    {
+      "op": "invoke",
+      "target": "u14",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u14"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ],
+      "bind": "u15"
+    },
+    {
+      "op": "invoke",
+      "target": "u15",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u15",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u15f"
+    },
+    {
+      "op": "invoke",
+      "target": "u15f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u15f"
+    },
+    {
+      "op": "invoke",
+      "target": "u15",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u15"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 17
+        }
+      ],
+      "bind": "u17"
+    },
+    {
+      "op": "invoke",
+      "target": "u17",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u17",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u17f"
+    },
+    {
+      "op": "invoke",
+      "target": "u17f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u17f"
+    },
+    {
+      "op": "invoke",
+      "target": "u17",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u17"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ],
+      "bind": "u19"
+    },
+    {
+      "op": "invoke",
+      "target": "u19",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u19",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u19f"
+    },
+    {
+      "op": "invoke",
+      "target": "u19f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u19f"
+    },
+    {
+      "op": "invoke",
+      "target": "u19",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u19"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 21
+        }
+      ],
+      "bind": "u21"
+    },
+    {
+      "op": "invoke",
+      "target": "u21",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u21",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u21f"
+    },
+    {
+      "op": "invoke",
+      "target": "u21f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u21f"
+    },
+    {
+      "op": "invoke",
+      "target": "u21",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u21"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 32
+        }
+      ],
+      "bind": "u32"
+    },
+    {
+      "op": "invoke",
+      "target": "u32",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u32",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u32f"
+    },
+    {
+      "op": "invoke",
+      "target": "u32f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u32f"
+    },
+    {
+      "op": "invoke",
+      "target": "u32",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u32"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 33
+        }
+      ],
+      "bind": "u33"
+    },
+    {
+      "op": "invoke",
+      "target": "u33",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u33",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u33f"
+    },
+    {
+      "op": "invoke",
+      "target": "u33f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u33f"
+    },
+    {
+      "op": "invoke",
+      "target": "u33",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u33"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 34
+        }
+      ],
+      "bind": "u34"
+    },
+    {
+      "op": "invoke",
+      "target": "u34",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u34",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u34f"
+    },
+    {
+      "op": "invoke",
+      "target": "u34f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u34f"
+    },
+    {
+      "op": "invoke",
+      "target": "u34",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u34"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ],
+      "bind": "u35"
+    },
+    {
+      "op": "invoke",
+      "target": "u35",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u35",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u35f"
+    },
+    {
+      "op": "invoke",
+      "target": "u35f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u35f"
+    },
+    {
+      "op": "invoke",
+      "target": "u35",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u35"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 36
+        }
+      ],
+      "bind": "u36"
+    },
+    {
+      "op": "invoke",
+      "target": "u36",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u36",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u36f"
+    },
+    {
+      "op": "invoke",
+      "target": "u36f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u36f"
+    },
+    {
+      "op": "invoke",
+      "target": "u36",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u36"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 37
+        }
+      ],
+      "bind": "u37"
+    },
+    {
+      "op": "invoke",
+      "target": "u37",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u37",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u37f"
+    },
+    {
+      "op": "invoke",
+      "target": "u37f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u37f"
+    },
+    {
+      "op": "invoke",
+      "target": "u37",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u37"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 38
+        }
+      ],
+      "bind": "u38"
+    },
+    {
+      "op": "invoke",
+      "target": "u38",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u38",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u38f"
+    },
+    {
+      "op": "invoke",
+      "target": "u38f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u38f"
+    },
+    {
+      "op": "invoke",
+      "target": "u38",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u38"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 39
+        }
+      ],
+      "bind": "u39"
+    },
+    {
+      "op": "invoke",
+      "target": "u39",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u39",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u39f"
+    },
+    {
+      "op": "invoke",
+      "target": "u39f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u39f"
+    },
+    {
+      "op": "invoke",
+      "target": "u39",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u39"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ],
+      "bind": "u40"
+    },
+    {
+      "op": "invoke",
+      "target": "u40",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u40",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u40f"
+    },
+    {
+      "op": "invoke",
+      "target": "u40f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u40f"
+    },
+    {
+      "op": "invoke",
+      "target": "u40",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u40"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 41
+        }
+      ],
+      "bind": "u41"
+    },
+    {
+      "op": "invoke",
+      "target": "u41",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u41",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u41f"
+    },
+    {
+      "op": "invoke",
+      "target": "u41f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u41f"
+    },
+    {
+      "op": "invoke",
+      "target": "u41",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u41"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 42
+        }
+      ],
+      "bind": "u42"
+    },
+    {
+      "op": "invoke",
+      "target": "u42",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u42",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u42f"
+    },
+    {
+      "op": "invoke",
+      "target": "u42f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u42f"
+    },
+    {
+      "op": "invoke",
+      "target": "u42",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u42"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 43
+        }
+      ],
+      "bind": "u43"
+    },
+    {
+      "op": "invoke",
+      "target": "u43",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u43",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u43f"
+    },
+    {
+      "op": "invoke",
+      "target": "u43f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u43f"
+    },
+    {
+      "op": "invoke",
+      "target": "u43",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u43"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9999
+        }
+      ],
+      "bind": "u9999"
+    },
+    {
+      "op": "invoke",
+      "target": "u9999",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "u9999",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u9999f"
+    },
+    {
+      "op": "invoke",
+      "target": "u9999f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u9999f"
+    },
+    {
+      "op": "invoke",
+      "target": "u9999",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "u9999"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "sp1"
+    },
+    {
+      "op": "invoke",
+      "target": "sp1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "{00000000-0000-0000-0000-000000000000}"
+        }
+      ],
+      "bind": "sp2"
+    },
+    {
+      "op": "invoke",
+      "target": "sp2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "rx1"
+    },
+    {
+      "op": "invoke",
+      "target": "rx1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx1f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx1f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx1f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "rx2"
+    },
+    {
+      "op": "invoke",
+      "target": "rx2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx2f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx2f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx2f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "rx3"
+    },
+    {
+      "op": "invoke",
+      "target": "rx3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx3f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx3f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx3f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx3",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx3"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rx4"
+    },
+    {
+      "op": "invoke",
+      "target": "rx4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx4f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx4f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx4f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx4",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx4"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "bstr",
+          "text": "Items"
+        }
+      ],
+      "bind": "rx5"
+    },
+    {
+      "op": "invoke",
+      "target": "rx5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx5f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx5f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx5f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx5",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx5"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "bytes",
+          "hex": "010203"
+        }
+      ],
+      "bind": "rx6"
+    },
+    {
+      "op": "invoke",
+      "target": "rx6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx6f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx6f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx6f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx6",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx6"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "bstr",
+          "text": "Items"
+        }
+      ],
+      "bind": "rx7"
+    },
+    {
+      "op": "invoke",
+      "target": "rx7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rx7f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx7f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx7f"
+    },
+    {
+      "op": "invoke",
+      "target": "rx7",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,1038 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/ado-schema",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-SCHEMA"
+  ],
+  "description": "ADO-SCHEMA: Connection.OpenSchema for adSchemaTables, Columns, Indexes, ForeignKeys, Procedures, Views, ProviderTypes and an undefined value 9999, with restrictions omitted; for each, State, column Name/Type and every row; then adSchemaTables with Empty and with Null as the restriction argument. Asks which schemas are supported and their typed rowsets.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-str-ado-act-ado3-accdb.accdb",
+      "sha256": "64cd6881b60bf53773e28a4af30ef2063023c078713261ff8a23fc15bf50487a",
+      "length": 217088,
+      "provenance": "r-str-ado-act.create-ado3-accdb.91a76bb18b.a1 qk1-91a76bb18bf0b884b44069f196049232c18669273efaadef0cf2d7d486010bcd output:r-str-ado-act-ado3-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "s0"
+    },
+    {
+      "op": "invoke",
+      "target": "s0",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s0f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s0f",
+      "bind": "s0c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s0c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s0c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s0f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s0",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s0Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s0Flds",
+          "bind": "s0F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s0F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s0Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s0"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s1"
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s1f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s1f",
+      "bind": "s1c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s1c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s1c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s1f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s1",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s1Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s1Flds",
+          "bind": "s1F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s1F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s1Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ],
+      "bind": "s2"
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s2f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s2f",
+      "bind": "s2c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s2c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s2c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s2f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s2",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s2Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s2Flds",
+          "bind": "s2F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s2F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s2Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 27
+        }
+      ],
+      "bind": "s3"
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s3f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s3f",
+      "bind": "s3c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s3c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s3c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s3f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s3",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s3Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s3Flds",
+          "bind": "s3F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s3F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s3Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s3"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ],
+      "bind": "s4"
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s4f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s4f",
+      "bind": "s4c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s4c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s4c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s4f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s4",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s4Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s4Flds",
+          "bind": "s4F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s4F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s4Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s4"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 23
+        }
+      ],
+      "bind": "s5"
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s5f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s5f",
+      "bind": "s5c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s5c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s5c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s5f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s5",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s5Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s5Flds",
+          "bind": "s5F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s5F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s5Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s5"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 22
+        }
+      ],
+      "bind": "s6"
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s6f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s6f",
+      "bind": "s6c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s6c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s6c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s6f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s6",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s6Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s6Flds",
+          "bind": "s6F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s6F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s6Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s6"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9999
+        }
+      ],
+      "bind": "s7"
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "s7f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "s7f",
+      "bind": "s7c",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s7c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "s7c",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s7f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s7",
+      "member": "EOF",
+      "maxIterations": 400,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "s7Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "s7Flds",
+          "bind": "s7F",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "s7F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "s7Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "s7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "se"
+    },
+    {
+      "op": "invoke",
+      "target": "se",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "se"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "OpenSchema",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "sn"
+    },
+    {
+      "op": "invoke",
+      "target": "sn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

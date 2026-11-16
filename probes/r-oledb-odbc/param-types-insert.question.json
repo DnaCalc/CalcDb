@@ -1,0 +1,4705 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/param-types-insert",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PARAM",
+    "OLE-UPDATE",
+    "OLE-BUFFER"
+  ],
+  "description": "OLE-PARAM types and conversion timing on a read/write copy: one INSERT into Items with fourteen '?' markers (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) executed five times from fresh Commands with typed manual parameters (adVarWChar, adInteger, adDouble, adCurrency, adDecimal with Precision 18/Scale 4, adDate, adLongVarBinary, adVarBinary, adBoolean, adSmallInt, adUnsignedTinyInt, adSingle, adGUID): typical values; Null for all but Code; a string \"abc\" for the Long; a Double 3,000,000,000 for the Long; a 60-character text and a 120-byte binary. After each Execute the Connection Errors are read and cleared, then every inserted row is read with Value and ActualSize. Asks where each conversion or size failure surfaces and what is stored.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "ic0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Items (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ic0p"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q0"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "p1"
+        }
+      ],
+      "bind": "ic0_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "ic0_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q2"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "ic0_2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q3"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "cy",
+          "scaled": 123456
+        }
+      ],
+      "bind": "ic0_3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q4"
+        },
+        {
+          "type": "i4",
+          "value": 14
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "ic0_4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0_4",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0_4",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0_4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1.2345"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q5"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "date",
+          "bits": "40e5f91000000000"
+        }
+      ],
+      "bind": "ic0_5"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q6"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 50
+        },
+        {
+          "type": "bstr",
+          "text": "inserted"
+        }
+      ],
+      "bind": "ic0_6"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q7"
+        },
+        {
+          "type": "i4",
+          "value": 205
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 200
+        },
+        {
+          "type": "bytes",
+          "hex": "010203"
+        }
+      ],
+      "bind": "ic0_7"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q8"
+        },
+        {
+          "type": "i4",
+          "value": 204
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 100
+        },
+        {
+          "type": "bytes",
+          "hex": "0405060708090a"
+        }
+      ],
+      "bind": "ic0_8"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q9"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "ic0_9"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q10"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i2",
+          "value": -3
+        }
+      ],
+      "bind": "ic0_10"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q11"
+        },
+        {
+          "type": "i4",
+          "value": 17
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "ui1",
+          "value": 250
+        }
+      ],
+      "bind": "ic0_11"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r4",
+          "bits": "3f000000"
+        }
+      ],
+      "bind": "ic0_12"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q13"
+        },
+        {
+          "type": "i4",
+          "value": 72
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "{AABBCCDD-0000-1111-2222-334455667788}"
+        }
+      ],
+      "bind": "ic0_13"
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic0_13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ic0p",
+      "bind": "ic0pP",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic0pP",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "release",
+      "target": "ic0_0"
+    },
+    {
+      "op": "release",
+      "target": "ic0_1"
+    },
+    {
+      "op": "release",
+      "target": "ic0_2"
+    },
+    {
+      "op": "release",
+      "target": "ic0_3"
+    },
+    {
+      "op": "release",
+      "target": "ic0_4"
+    },
+    {
+      "op": "release",
+      "target": "ic0_5"
+    },
+    {
+      "op": "release",
+      "target": "ic0_6"
+    },
+    {
+      "op": "release",
+      "target": "ic0_7"
+    },
+    {
+      "op": "release",
+      "target": "ic0_8"
+    },
+    {
+      "op": "release",
+      "target": "ic0_9"
+    },
+    {
+      "op": "release",
+      "target": "ic0_10"
+    },
+    {
+      "op": "release",
+      "target": "ic0_11"
+    },
+    {
+      "op": "release",
+      "target": "ic0_12"
+    },
+    {
+      "op": "release",
+      "target": "ic0_13"
+    },
+    {
+      "op": "release",
+      "target": "ic0p"
+    },
+    {
+      "op": "release",
+      "target": "ic0"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "ic1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Items (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ic1p"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q0"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "p2"
+        }
+      ],
+      "bind": "ic1_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q2"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q3"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q4"
+        },
+        {
+          "type": "i4",
+          "value": 14
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "ic1_4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1_4",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1_4",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1_4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q5"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_5"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q6"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 50
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_6"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q7"
+        },
+        {
+          "type": "i4",
+          "value": 205
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 200
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_7"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q8"
+        },
+        {
+          "type": "i4",
+          "value": 204
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 100
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_8"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q9"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_9"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q10"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_10"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q11"
+        },
+        {
+          "type": "i4",
+          "value": 17
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_11"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_12"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q13"
+        },
+        {
+          "type": "i4",
+          "value": 72
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "ic1_13"
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic1_13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ic1p",
+      "bind": "ic1pP",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic1pP",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "release",
+      "target": "ic1_0"
+    },
+    {
+      "op": "release",
+      "target": "ic1_1"
+    },
+    {
+      "op": "release",
+      "target": "ic1_2"
+    },
+    {
+      "op": "release",
+      "target": "ic1_3"
+    },
+    {
+      "op": "release",
+      "target": "ic1_4"
+    },
+    {
+      "op": "release",
+      "target": "ic1_5"
+    },
+    {
+      "op": "release",
+      "target": "ic1_6"
+    },
+    {
+      "op": "release",
+      "target": "ic1_7"
+    },
+    {
+      "op": "release",
+      "target": "ic1_8"
+    },
+    {
+      "op": "release",
+      "target": "ic1_9"
+    },
+    {
+      "op": "release",
+      "target": "ic1_10"
+    },
+    {
+      "op": "release",
+      "target": "ic1_11"
+    },
+    {
+      "op": "release",
+      "target": "ic1_12"
+    },
+    {
+      "op": "release",
+      "target": "ic1_13"
+    },
+    {
+      "op": "release",
+      "target": "ic1p"
+    },
+    {
+      "op": "release",
+      "target": "ic1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "ic2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Items (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ic2p"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q0"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "p3"
+        }
+      ],
+      "bind": "ic2_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ],
+      "bind": "ic2_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q2"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "ic2_2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q3"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "cy",
+          "scaled": 123456
+        }
+      ],
+      "bind": "ic2_3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q4"
+        },
+        {
+          "type": "i4",
+          "value": 14
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "ic2_4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2_4",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2_4",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2_4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1.2345"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q5"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "date",
+          "bits": "40e5f91000000000"
+        }
+      ],
+      "bind": "ic2_5"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q6"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 50
+        },
+        {
+          "type": "bstr",
+          "text": "inserted"
+        }
+      ],
+      "bind": "ic2_6"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q7"
+        },
+        {
+          "type": "i4",
+          "value": 205
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 200
+        },
+        {
+          "type": "bytes",
+          "hex": "010203"
+        }
+      ],
+      "bind": "ic2_7"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q8"
+        },
+        {
+          "type": "i4",
+          "value": 204
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 100
+        },
+        {
+          "type": "bytes",
+          "hex": "0405060708090a"
+        }
+      ],
+      "bind": "ic2_8"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q9"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "ic2_9"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q10"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i2",
+          "value": -3
+        }
+      ],
+      "bind": "ic2_10"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q11"
+        },
+        {
+          "type": "i4",
+          "value": 17
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "ui1",
+          "value": 250
+        }
+      ],
+      "bind": "ic2_11"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r4",
+          "bits": "3f000000"
+        }
+      ],
+      "bind": "ic2_12"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q13"
+        },
+        {
+          "type": "i4",
+          "value": 72
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "{AABBCCDD-0000-1111-2222-334455667788}"
+        }
+      ],
+      "bind": "ic2_13"
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic2_13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ic2p",
+      "bind": "ic2pP",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic2pP",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "release",
+      "target": "ic2_0"
+    },
+    {
+      "op": "release",
+      "target": "ic2_1"
+    },
+    {
+      "op": "release",
+      "target": "ic2_2"
+    },
+    {
+      "op": "release",
+      "target": "ic2_3"
+    },
+    {
+      "op": "release",
+      "target": "ic2_4"
+    },
+    {
+      "op": "release",
+      "target": "ic2_5"
+    },
+    {
+      "op": "release",
+      "target": "ic2_6"
+    },
+    {
+      "op": "release",
+      "target": "ic2_7"
+    },
+    {
+      "op": "release",
+      "target": "ic2_8"
+    },
+    {
+      "op": "release",
+      "target": "ic2_9"
+    },
+    {
+      "op": "release",
+      "target": "ic2_10"
+    },
+    {
+      "op": "release",
+      "target": "ic2_11"
+    },
+    {
+      "op": "release",
+      "target": "ic2_12"
+    },
+    {
+      "op": "release",
+      "target": "ic2_13"
+    },
+    {
+      "op": "release",
+      "target": "ic2p"
+    },
+    {
+      "op": "release",
+      "target": "ic2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "ic3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Items (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ic3p"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q0"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "p4"
+        }
+      ],
+      "bind": "ic3_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r8",
+          "bits": "41e65a0bc0000000"
+        }
+      ],
+      "bind": "ic3_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q2"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "ic3_2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q3"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "cy",
+          "scaled": 123456
+        }
+      ],
+      "bind": "ic3_3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q4"
+        },
+        {
+          "type": "i4",
+          "value": 14
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "ic3_4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3_4",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3_4",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3_4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1.2345"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q5"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "date",
+          "bits": "40e5f91000000000"
+        }
+      ],
+      "bind": "ic3_5"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q6"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 50
+        },
+        {
+          "type": "bstr",
+          "text": "inserted"
+        }
+      ],
+      "bind": "ic3_6"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q7"
+        },
+        {
+          "type": "i4",
+          "value": 205
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 200
+        },
+        {
+          "type": "bytes",
+          "hex": "010203"
+        }
+      ],
+      "bind": "ic3_7"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q8"
+        },
+        {
+          "type": "i4",
+          "value": 204
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 100
+        },
+        {
+          "type": "bytes",
+          "hex": "0405060708090a"
+        }
+      ],
+      "bind": "ic3_8"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q9"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "ic3_9"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q10"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i2",
+          "value": -3
+        }
+      ],
+      "bind": "ic3_10"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q11"
+        },
+        {
+          "type": "i4",
+          "value": 17
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "ui1",
+          "value": 250
+        }
+      ],
+      "bind": "ic3_11"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r4",
+          "bits": "3f000000"
+        }
+      ],
+      "bind": "ic3_12"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q13"
+        },
+        {
+          "type": "i4",
+          "value": 72
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "{AABBCCDD-0000-1111-2222-334455667788}"
+        }
+      ],
+      "bind": "ic3_13"
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic3_13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ic3p",
+      "bind": "ic3pP",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic3pP",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic3",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "release",
+      "target": "ic3_0"
+    },
+    {
+      "op": "release",
+      "target": "ic3_1"
+    },
+    {
+      "op": "release",
+      "target": "ic3_2"
+    },
+    {
+      "op": "release",
+      "target": "ic3_3"
+    },
+    {
+      "op": "release",
+      "target": "ic3_4"
+    },
+    {
+      "op": "release",
+      "target": "ic3_5"
+    },
+    {
+      "op": "release",
+      "target": "ic3_6"
+    },
+    {
+      "op": "release",
+      "target": "ic3_7"
+    },
+    {
+      "op": "release",
+      "target": "ic3_8"
+    },
+    {
+      "op": "release",
+      "target": "ic3_9"
+    },
+    {
+      "op": "release",
+      "target": "ic3_10"
+    },
+    {
+      "op": "release",
+      "target": "ic3_11"
+    },
+    {
+      "op": "release",
+      "target": "ic3_12"
+    },
+    {
+      "op": "release",
+      "target": "ic3_13"
+    },
+    {
+      "op": "release",
+      "target": "ic3p"
+    },
+    {
+      "op": "release",
+      "target": "ic3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "ic4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Items (Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CommandType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ic4p"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q0"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "p5"
+        }
+      ],
+      "bind": "ic4_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q1"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "ic4_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q2"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "ic4_2"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q3"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "cy",
+          "scaled": 123456
+        }
+      ],
+      "bind": "ic4_3"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q4"
+        },
+        {
+          "type": "i4",
+          "value": 14
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "ic4_4"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4_4",
+      "member": "Precision",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4_4",
+      "member": "NumericScale",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4_4",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1.2345"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q5"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "date",
+          "bits": "40e5f91000000000"
+        }
+      ],
+      "bind": "ic4_5"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q6"
+        },
+        {
+          "type": "i4",
+          "value": 202
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 50
+        },
+        {
+          "type": "bstr",
+          "text": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+        }
+      ],
+      "bind": "ic4_6"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q7"
+        },
+        {
+          "type": "i4",
+          "value": 205
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 200
+        },
+        {
+          "type": "bytes",
+          "hex": "010203"
+        }
+      ],
+      "bind": "ic4_7"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q8"
+        },
+        {
+          "type": "i4",
+          "value": 204
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 100
+        },
+        {
+          "type": "bytes",
+          "hex": "0405060708090a"
+        }
+      ],
+      "bind": "ic4_8"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q9"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "ic4_9"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q10"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i2",
+          "value": -3
+        }
+      ],
+      "bind": "ic4_10"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q11"
+        },
+        {
+          "type": "i4",
+          "value": 17
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "ui1",
+          "value": 250
+        }
+      ],
+      "bind": "ic4_11"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "r4",
+          "bits": "3f000000"
+        }
+      ],
+      "bind": "ic4_12"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "CreateParameter",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q13"
+        },
+        {
+          "type": "i4",
+          "value": 72
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "{AABBCCDD-0000-1111-2222-334455667788}"
+        }
+      ],
+      "bind": "ic4_13"
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ic4_13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ic4p",
+      "bind": "ic4pP",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ic4pP",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ic4",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEcl"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnEcl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEcl"
+    },
+    {
+      "op": "release",
+      "target": "ic4_0"
+    },
+    {
+      "op": "release",
+      "target": "ic4_1"
+    },
+    {
+      "op": "release",
+      "target": "ic4_2"
+    },
+    {
+      "op": "release",
+      "target": "ic4_3"
+    },
+    {
+      "op": "release",
+      "target": "ic4_4"
+    },
+    {
+      "op": "release",
+      "target": "ic4_5"
+    },
+    {
+      "op": "release",
+      "target": "ic4_6"
+    },
+    {
+      "op": "release",
+      "target": "ic4_7"
+    },
+    {
+      "op": "release",
+      "target": "ic4_8"
+    },
+    {
+      "op": "release",
+      "target": "ic4_9"
+    },
+    {
+      "op": "release",
+      "target": "ic4_10"
+    },
+    {
+      "op": "release",
+      "target": "ic4_11"
+    },
+    {
+      "op": "release",
+      "target": "ic4_12"
+    },
+    {
+      "op": "release",
+      "target": "ic4_13"
+    },
+    {
+      "op": "release",
+      "target": "ic4p"
+    },
+    {
+      "op": "release",
+      "target": "ic4"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, L, D, C, N, Dt, Txt, B, Bin, Y, Sh, Bt, Sg, G FROM Items WHERE ID > 5 ORDER BY ID"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rk"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rk",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rk",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rkFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rkFlds",
+          "bind": "rkF",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rkF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rkF",
+              "member": "ActualSize",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rkFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "rk",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

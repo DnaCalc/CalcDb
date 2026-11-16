@@ -1,0 +1,56 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/act-dao120",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-NAME",
+    "ACT-META",
+    "ACT-THREAD/SAME-STA"
+  ],
+  "description": "ACT-NAME/ACT-META: create DAO.DBEngine.120 on the worker STA with loaded modules recorded before creation, after creation and after release; read Version; describe the object's own type through its live GetTypeInfo.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "describeType",
+      "target": "eng",
+      "wholeLibrary": false
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release"
+    }
+  ]
+}

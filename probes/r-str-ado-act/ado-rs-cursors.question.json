@@ -1,0 +1,2552 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/ado-rs-cursors",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-CURSOR"
+  ],
+  "description": "ADO-CURSOR requested versus effective settings on a read-mode ACE connection: for eight (CursorLocation, CursorType, LockType, Options, source) requests — server forward/keyset/dynamic/static, client static batch, client forward, adCmdTable and adCmdTableDirect on K — read effective CursorType, LockType, CursorLocation, State, RecordCount, CacheSize, BOF, EOF, every listed Supports option, then MoveLast, AbsolutePosition and RecordCount, then Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-str-ado-act-ado3-accdb.accdb",
+      "sha256": "64cd6881b60bf53773e28a4af30ef2063023c078713261ff8a23fc15bf50487a",
+      "length": 217088,
+      "provenance": "r-str-ado-act.create-ado3-accdb.91a76bb18b.a1 qk1-91a76bb18bf0b884b44069f196049232c18669273efaadef0cf2d7d486010bcd output:r-str-ado-act-ado3-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c1"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c3"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c4"
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c5"
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c6"
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c7"
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c7"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "c8"
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "CursorType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "LockType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16778240
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16384
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8192
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16779264
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 524288
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1048576
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 512
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 262144
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 131072
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4194304
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16809984
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Supports",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c8"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

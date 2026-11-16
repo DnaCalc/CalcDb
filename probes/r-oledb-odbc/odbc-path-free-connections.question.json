@@ -1,0 +1,1864 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/odbc-path-free-connections",
+  "bookRefs": [
+    "R-ODBC-1",
+    "ODBC-LOAD",
+    "ODBC-DIAG"
+  ],
+  "description": "ODBC-LOAD and ODBC-DIAG through ADODB and the MSDASQL provider, using connection strings that need no database path: (a) the Access driver with no Dbq, (b) the Access driver with a Dbq in a folder that does not exist, (c) the legacy driver name '(*.mdb)' with such a Dbq, (d) a driver name that is not installed, (e) a DSN that does not exist, (f) the Access driver with no Provider key, and (g) the same driver in Extended Properties. For each: Provider after assignment, Open outcome, State, loaded modules after Open, the properties Provider Name, Provider Friendly Name, DBMS Name and DBMS Version and every Errors entry (Number, Description, Source, SQLState, NativeError). Asks the Driver Manager and driver identities reached, the diagnostics returned and any modules loaded; success against a real database is deferred because the probe cannot build a path.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-odbc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Driver={Microsoft Access Driver (*.mdb, *.accdb)};"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o1Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o1Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o1Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o1Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o1Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o1Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o1Errs",
+      "bind": "o1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Driver={Microsoft Access Driver (*.mdb, *.accdb)};Dbq=C:\\CalcDbProbe\\absent\\absent.accdb;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o2Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o2Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o2Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o2Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o2Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o2Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o2Errs",
+      "bind": "o2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o3"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Driver={Microsoft Access Driver (*.mdb)};Dbq=C:\\CalcDbProbe\\absent\\absent.mdb;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o3"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o3Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o3Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o3Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o3Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o3Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o3Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o3Errs",
+      "bind": "o3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o4"
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Driver={CalcDb No Such Driver};"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o4"
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o4Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o4Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o4Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o4Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o4Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o4Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o4Errs",
+      "bind": "o4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o4Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o5"
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;DSN=CalcDbNoSuchDsn;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o5"
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o5Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o5Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o5Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o5Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o5Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o5Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o5Errs",
+      "bind": "o5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o5Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o6"
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Driver={Microsoft Access Driver (*.mdb, *.accdb)};Dbq=C:\\CalcDbProbe\\absent\\absent.accdb;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o6"
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o6Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o6Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o6Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o6Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o6Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o6Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o6Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o6Errs",
+      "bind": "o6Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o6Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o6Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o7"
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=MSDASQL;Extended Properties=\"Driver={Microsoft Access Driver (*.mdb, *.accdb)};Dbq=C:\\CalcDbProbe\\absent\\absent.accdb;\""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-o7"
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o7Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Name"
+        }
+      ],
+      "bind": "o7Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o7Np_odbc_0"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider Friendly Name"
+        }
+      ],
+      "bind": "o7Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o7Np_odbc_1"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Name"
+        }
+      ],
+      "bind": "o7Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o7Np_odbc_2"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DBMS Version"
+        }
+      ],
+      "bind": "o7Np_odbc_3"
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o7Np_odbc_3",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o7Np_odbc_3"
+    },
+    {
+      "op": "release",
+      "target": "o7Np_odbc"
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "o7Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "o7Errs",
+      "bind": "o7Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "o7Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "o7Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "o7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o7"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-odbc"
+    }
+  ]
+}

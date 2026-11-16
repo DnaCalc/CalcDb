@@ -1,0 +1,4993 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-sort-3.create-version-32.7dbc73dd2e.a1",
+  "retainedUtc": "2026-11-16T23:21:26.9573443+00:00",
+  "probe": "r-sort-3/create-version-32",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Descriptor dispatch"
+  ],
+  "description": "DBEngine.CreateDatabase(path, dbLangGeneral, 32) with dbVersion 32 in a MDB-named file: reads Version and CollatingOrder, then, if created, builds T(ID, K TEXT(255), G) with a 40-value sample of the corpus, index IX_K after the rows, reads the SQL ORDER BY K and IX_K traversal, closes and keeps the file image. Asks whether this dbVersion is obtainable, and which identifier/version the file carries.",
+  "retentionNote": "Designed r-sort-3 probe (A-02); complete capture of the ACE answer.",
+  "token": "r-sort-3.create-version-32.7dbc73dd2e",
+  "questionKey": "qk1-7dbc73dd2e330035f65e8224f50e5244485aaaebfc4964c0c95c45bbb18f66dd",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-sort-3/create-version-32",
+    "bookRefs": [
+      "R-SORT-3",
+      "SORT-CHECK",
+      "Descriptor dispatch"
+    ],
+    "description": "DBEngine.CreateDatabase(path, dbLangGeneral, 32) with dbVersion 32 in a MDB-named file: reads Version and CollatingOrder, then, if created, builds T(ID, K TEXT(255), G) with a 40-value sample of the corpus, index IX_K after the rows, reads the SQL ORDER BY K and IX_K traversal, closes and keeps the file image. Asks whether this dbVersion is obtainable, and which identifier/version the file carries.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeModules",
+        "label": "before-create"
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "r-sort-3-version-32.mdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 32
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "CollatingOrder",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(255), G TEXT(16))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "T"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ],
+        "bind": "rs"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "fl"
+      },
+      {
+        "op": "invoke",
+        "target": "fl",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ID"
+          }
+        ],
+        "bind": "f0"
+      },
+      {
+        "op": "invoke",
+        "target": "fl",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "K"
+          }
+        ],
+        "bind": "f1"
+      },
+      {
+        "op": "invoke",
+        "target": "fl",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "G"
+          }
+        ],
+        "bind": "f2"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "null"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ascii"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": ""
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ascii"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "4100"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ascii"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "6100"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ascii"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 5
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "4200"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ascii"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 6
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "e900"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "latin1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 7
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "c900"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "latin1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 8
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "6500"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "latin1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 9
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "4500"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "latin1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "e800"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "latin1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 11
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "65000103"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "combining"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 12
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "45000103"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "combining"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 13
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "650001030103"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "combining"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 14
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "650023030103"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "combining"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 15
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "650001032303"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "combining"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 16
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "01fb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ligature"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 17
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "66006900"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ligature"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 18
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "00fb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ligature"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 19
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "66006600"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ligature"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 20
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "02fb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ligature"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 21
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "004e"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "han"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 22
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "8c4e"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "han"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 23
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "094e"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "han"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 24
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "014e"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "han"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 25
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "2d4e"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "han"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 26
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "410042004300"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "width"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 27
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "610062006300"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "width"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 28
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "410062006300"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "width"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 29
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "610042006300"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "width"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 30
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "21ff22ff23ff"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "width"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 31
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "61002000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "space"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 32
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "610020002000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "space"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 33
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "20006100"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "space"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 34
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "61000900"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "space"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 35
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "6100a000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "space"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 36
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "40d800dc"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pair"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 37
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "40d801dc"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pair"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 38
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "34d81edd"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pair"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 39
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "3dd800de"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pair"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "AddNew",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "f0",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 40
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f1",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstrBytes",
+            "hex": "35d800dc"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "f2",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "pair"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "f0"
+      },
+      {
+        "op": "release",
+        "target": "f1"
+      },
+      {
+        "op": "release",
+        "target": "f2"
+      },
+      {
+        "op": "release",
+        "target": "fl"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE INDEX IX_K ON T (K)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT ID FROM T ORDER BY K"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "s1"
+      },
+      {
+        "op": "loopUntil",
+        "target": "s1",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "s1",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 1,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "s1",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s1",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "s1"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "T"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ],
+        "bind": "w"
+      },
+      {
+        "op": "invoke",
+        "target": "w",
+        "member": "Index",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "IX_K"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "w",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "wfl"
+      },
+      {
+        "op": "invoke",
+        "target": "wfl",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ID"
+          }
+        ],
+        "bind": "wid"
+      },
+      {
+        "op": "invoke",
+        "target": "w",
+        "member": "MoveFirst",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "loopUntil",
+        "target": "w",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "wid",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "w",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "wid"
+      },
+      {
+        "op": "release",
+        "target": "wfl"
+      },
+      {
+        "op": "invoke",
+        "target": "w",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "w"
+      },
+      {
+        "op": "observeFiles",
+        "label": "before-close",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "db"
+      },
+      {
+        "op": "release",
+        "target": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-close"
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": true
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-sort-3.create-version-32.7dbc73dd2e.a1",
+    "token": "r-sort-3.create-version-32.7dbc73dd2e",
+    "questionKey": "qk1-7dbc73dd2e330035f65e8224f50e5244485aaaebfc4964c0c95c45bbb18f66dd",
+    "workerGeneration": 1,
+    "execution": "ReturnedFailure",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "9e81446b50d140d36f8a815c17322bd59e6b9db85f01dad48bd5e2e922c6f440",
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 49540,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-16T23:21:26.9359476+00:00",
+    "sealSha256": "11437ee9367628abe57b27350c61e8ab09e1ff06496f2d72421fba8376ddff59"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-sort-3.create-version-32.7dbc73dd2e.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-7dbc73dd2e330035f65e8224f50e5244485aaaebfc4964c0c95c45bbb18f66dd",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "7dc3b7a1a90f0d614d8dec12644f788ef6cf361615e72a71e0f0a3508e3c62d7",
+      "workerBuild": "1.0.0+ed0b541d428cf02433d7713162763e9c0b2affac",
+      "toolingRevision": "ed0b541d428cf02433d7713162763e9c0b2affac",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 49540,
+      "threadId": 31384,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-sort-3.create-version-32.7dbc73dd2e.a1",
+      "windowStation": "WinSta0",
+      "desktop": "Default",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "modules",
+        "label": "before-create",
+        "complete": true,
+        "bytesNeeded": 472,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll"
+        ],
+        "identities": [],
+        "deliberate": false,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Version",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809344,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "310036002e003000",
+          "byteLength": 8,
+          "text": "16.0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0073006f00720074002d0033002e006300720065006100740065002d00760065007200730069006f006e002d00330032002e0037006400620063003700330064006400320065002e00610031005c0077006f0072006b005c0072002d0073006f00720074002d0033002d00760065007200730069006f006e002d00330032002e006d0064006200",
+            "byteLength": 228,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-sort-3.create-version-32.7dbc73dd2e.a1\\work\\r-sort-3-version-32.mdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "32"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0C62",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+            "byteLength": 26,
+            "text": "DAO.Workspace"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f0074002000660069006e006400200069006e007300740061006c006c00610062006c00650020004900530041004d002e00",
+            "byteLength": 64,
+            "text": "Could not find installable ISAM."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003170,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u2",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "8.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u3",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "8[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3170"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "8[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f0074002000660069006e006400200069006e007300740061006c006c00610062006c00650020004900530041004d002e00",
+          "byteLength": 64,
+          "text": "Could not find installable ISAM."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "8[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+          "byteLength": 26,
+          "text": "DAO.Workspace"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "8[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 14,
+        "programPath": "8[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 15,
+        "programPath": "9"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 16,
+        "programPath": "10"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 17,
+        "programPath": "11"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 18,
+        "programPath": "12"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'fl' is not bound (an earlier call failed or released it).",
+        "seq": 19,
+        "programPath": "13"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'fl' is not bound (an earlier call failed or released it).",
+        "seq": 20,
+        "programPath": "14"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'fl' is not bound (an earlier call failed or released it).",
+        "seq": 21,
+        "programPath": "15"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 22,
+        "programPath": "16"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 23,
+        "programPath": "17"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 24,
+        "programPath": "18"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 25,
+        "programPath": "19"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 26,
+        "programPath": "20"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 27,
+        "programPath": "21"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 28,
+        "programPath": "22"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 29,
+        "programPath": "23"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 30,
+        "programPath": "24"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 31,
+        "programPath": "25"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 32,
+        "programPath": "26"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 33,
+        "programPath": "27"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 34,
+        "programPath": "28"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 35,
+        "programPath": "29"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 36,
+        "programPath": "30"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 37,
+        "programPath": "31"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 38,
+        "programPath": "32"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 39,
+        "programPath": "33"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 40,
+        "programPath": "34"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 41,
+        "programPath": "35"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 42,
+        "programPath": "36"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 43,
+        "programPath": "37"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 44,
+        "programPath": "38"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 45,
+        "programPath": "39"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 46,
+        "programPath": "40"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 47,
+        "programPath": "41"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 48,
+        "programPath": "42"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 49,
+        "programPath": "43"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 50,
+        "programPath": "44"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 51,
+        "programPath": "45"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 52,
+        "programPath": "46"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 53,
+        "programPath": "47"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 54,
+        "programPath": "48"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 55,
+        "programPath": "49"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 56,
+        "programPath": "50"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 57,
+        "programPath": "51"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 58,
+        "programPath": "52"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 59,
+        "programPath": "53"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 60,
+        "programPath": "54"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 61,
+        "programPath": "55"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 62,
+        "programPath": "56"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 63,
+        "programPath": "57"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 64,
+        "programPath": "58"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 65,
+        "programPath": "59"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 66,
+        "programPath": "60"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 67,
+        "programPath": "61"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 68,
+        "programPath": "62"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 69,
+        "programPath": "63"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 70,
+        "programPath": "64"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 71,
+        "programPath": "65"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 72,
+        "programPath": "66"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 73,
+        "programPath": "67"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 74,
+        "programPath": "68"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 75,
+        "programPath": "69"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 76,
+        "programPath": "70"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 77,
+        "programPath": "71"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 78,
+        "programPath": "72"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 79,
+        "programPath": "73"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 80,
+        "programPath": "74"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 81,
+        "programPath": "75"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 82,
+        "programPath": "76"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 83,
+        "programPath": "77"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 84,
+        "programPath": "78"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 85,
+        "programPath": "79"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 86,
+        "programPath": "80"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 87,
+        "programPath": "81"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 88,
+        "programPath": "82"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 89,
+        "programPath": "83"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 90,
+        "programPath": "84"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 91,
+        "programPath": "85"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 92,
+        "programPath": "86"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 93,
+        "programPath": "87"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 94,
+        "programPath": "88"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 95,
+        "programPath": "89"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 96,
+        "programPath": "90"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 97,
+        "programPath": "91"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 98,
+        "programPath": "92"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 99,
+        "programPath": "93"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 100,
+        "programPath": "94"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 101,
+        "programPath": "95"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 102,
+        "programPath": "96"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 103,
+        "programPath": "97"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 104,
+        "programPath": "98"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 105,
+        "programPath": "99"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 106,
+        "programPath": "100"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 107,
+        "programPath": "101"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 108,
+        "programPath": "102"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 109,
+        "programPath": "103"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 110,
+        "programPath": "104"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 111,
+        "programPath": "105"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 112,
+        "programPath": "106"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 113,
+        "programPath": "107"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 114,
+        "programPath": "108"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 115,
+        "programPath": "109"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 116,
+        "programPath": "110"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 117,
+        "programPath": "111"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 118,
+        "programPath": "112"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 119,
+        "programPath": "113"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 120,
+        "programPath": "114"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 121,
+        "programPath": "115"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 122,
+        "programPath": "116"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 123,
+        "programPath": "117"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 124,
+        "programPath": "118"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 125,
+        "programPath": "119"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 126,
+        "programPath": "120"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 127,
+        "programPath": "121"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 128,
+        "programPath": "122"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 129,
+        "programPath": "123"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 130,
+        "programPath": "124"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 131,
+        "programPath": "125"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 132,
+        "programPath": "126"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 133,
+        "programPath": "127"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 134,
+        "programPath": "128"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 135,
+        "programPath": "129"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 136,
+        "programPath": "130"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 137,
+        "programPath": "131"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 138,
+        "programPath": "132"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 139,
+        "programPath": "133"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 140,
+        "programPath": "134"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 141,
+        "programPath": "135"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 142,
+        "programPath": "136"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 143,
+        "programPath": "137"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 144,
+        "programPath": "138"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 145,
+        "programPath": "139"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 146,
+        "programPath": "140"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 147,
+        "programPath": "141"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 148,
+        "programPath": "142"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 149,
+        "programPath": "143"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 150,
+        "programPath": "144"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 151,
+        "programPath": "145"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 152,
+        "programPath": "146"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 153,
+        "programPath": "147"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 154,
+        "programPath": "148"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 155,
+        "programPath": "149"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 156,
+        "programPath": "150"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 157,
+        "programPath": "151"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 158,
+        "programPath": "152"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 159,
+        "programPath": "153"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 160,
+        "programPath": "154"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 161,
+        "programPath": "155"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 162,
+        "programPath": "156"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 163,
+        "programPath": "157"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 164,
+        "programPath": "158"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 165,
+        "programPath": "159"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 166,
+        "programPath": "160"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 167,
+        "programPath": "161"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 168,
+        "programPath": "162"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 169,
+        "programPath": "163"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 170,
+        "programPath": "164"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 171,
+        "programPath": "165"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 172,
+        "programPath": "166"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 173,
+        "programPath": "167"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 174,
+        "programPath": "168"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 175,
+        "programPath": "169"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 176,
+        "programPath": "170"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 177,
+        "programPath": "171"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 178,
+        "programPath": "172"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 179,
+        "programPath": "173"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 180,
+        "programPath": "174"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 181,
+        "programPath": "175"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 182,
+        "programPath": "176"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 183,
+        "programPath": "177"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 184,
+        "programPath": "178"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 185,
+        "programPath": "179"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 186,
+        "programPath": "180"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 187,
+        "programPath": "181"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 188,
+        "programPath": "182"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 189,
+        "programPath": "183"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 190,
+        "programPath": "184"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 191,
+        "programPath": "185"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 192,
+        "programPath": "186"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 193,
+        "programPath": "187"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 194,
+        "programPath": "188"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 195,
+        "programPath": "189"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 196,
+        "programPath": "190"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 197,
+        "programPath": "191"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 198,
+        "programPath": "192"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 199,
+        "programPath": "193"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 200,
+        "programPath": "194"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 201,
+        "programPath": "195"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 202,
+        "programPath": "196"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 203,
+        "programPath": "197"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 204,
+        "programPath": "198"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 205,
+        "programPath": "199"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 206,
+        "programPath": "200"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 207,
+        "programPath": "201"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 208,
+        "programPath": "202"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 209,
+        "programPath": "203"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 210,
+        "programPath": "204"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 211,
+        "programPath": "205"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 212,
+        "programPath": "206"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 213,
+        "programPath": "207"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 214,
+        "programPath": "208"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 215,
+        "programPath": "209"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 216,
+        "programPath": "210"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 217,
+        "programPath": "211"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f0' is not bound (an earlier call failed or released it).",
+        "seq": 218,
+        "programPath": "212"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f1' is not bound (an earlier call failed or released it).",
+        "seq": 219,
+        "programPath": "213"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'f2' is not bound (an earlier call failed or released it).",
+        "seq": 220,
+        "programPath": "214"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 221,
+        "programPath": "215"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'f0'.",
+        "seq": 222,
+        "programPath": "216"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'f1'.",
+        "seq": 223,
+        "programPath": "217"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'f2'.",
+        "seq": 224,
+        "programPath": "218"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'fl'.",
+        "seq": 225,
+        "programPath": "219"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'rs' is not bound (an earlier call failed or released it).",
+        "seq": 226,
+        "programPath": "220"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'rs'.",
+        "seq": 227,
+        "programPath": "221"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 228,
+        "programPath": "222"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 229,
+        "programPath": "223"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 's1' is not bound (an earlier call failed or released it).",
+        "seq": 230,
+        "programPath": "224[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Loop condition s1.EOF did not return VT_BOOL; loop ended.",
+        "seq": 231,
+        "programPath": "224[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 's1' is not bound (an earlier call failed or released it).",
+        "seq": 232,
+        "programPath": "225"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 's1'.",
+        "seq": 233,
+        "programPath": "226"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 234,
+        "programPath": "227"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'w' is not bound (an earlier call failed or released it).",
+        "seq": 235,
+        "programPath": "228"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'w' is not bound (an earlier call failed or released it).",
+        "seq": 236,
+        "programPath": "229"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'wfl' is not bound (an earlier call failed or released it).",
+        "seq": 237,
+        "programPath": "230"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'w' is not bound (an earlier call failed or released it).",
+        "seq": 238,
+        "programPath": "231"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'w' is not bound (an earlier call failed or released it).",
+        "seq": 239,
+        "programPath": "232[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Loop condition w.EOF did not return VT_BOOL; loop ended.",
+        "seq": 240,
+        "programPath": "232[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'wid'.",
+        "seq": 241,
+        "programPath": "233"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'wfl'.",
+        "seq": 242,
+        "programPath": "234"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'w' is not bound (an earlier call failed or released it).",
+        "seq": 243,
+        "programPath": "235"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'w'.",
+        "seq": 244,
+        "programPath": "236"
+      },
+      {
+        "event": "files",
+        "label": "before-close",
+        "files": [],
+        "seq": 245,
+        "programPath": "237"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'db' is not bound (an earlier call failed or released it).",
+        "seq": 246,
+        "programPath": "238"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'db'.",
+        "seq": 247,
+        "programPath": "239"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 248,
+        "programPath": "240"
+      },
+      {
+        "event": "modules",
+        "label": "after-close",
+        "complete": true,
+        "bytesNeeded": 1168,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.9818_none_3e071914e3359bdd\\Comctl32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\d2d1.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WTSAPI32.dll",
+          "C:\\WINDOWS\\System32\\CRYPT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WINSTA.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dxgi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\powrprof.dll",
+          "C:\\WINDOWS\\SYSTEM32\\UMPDC.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dxcore.dll",
+          "C:\\WINDOWS\\SYSTEM32\\directxdatabasehelper.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cfgmgr32.dll",
+          "C:\\Windows\\System32\\twinapi.appcore.dll",
+          "C:\\Windows\\System32\\WinTypes.dll",
+          "C:\\WINDOWS\\System32\\netprofm.dll",
+          "C:\\WINDOWS\\SYSTEM32\\CRYPTBASE.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DPAPI.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WININET.dll",
+          "C:\\WINDOWS\\SYSTEM32\\iertutil.dll",
+          "C:\\WINDOWS\\SYSTEM32\\srvcli.dll",
+          "C:\\WINDOWS\\SYSTEM32\\netutils.dll",
+          "C:\\WINDOWS\\System32\\npmproxy.dll",
+          "C:\\WINDOWS\\SYSTEM32\\webservices.dll",
+          "C:\\WINDOWS\\System32\\Normaliz.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.26100.9974_none_6ef868b23dc24782\\gdiplus.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DWrite.dll",
+          "C:\\WINDOWS\\System32\\WS2_32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\ondemandconnroutehelper.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WINHTTP.dll",
+          "C:\\WINDOWS\\SYSTEM32\\davclnt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\d3d11.dll",
+          "C:\\WINDOWS\\system32\\mswsock.dll",
+          "C:\\WINDOWS\\SYSTEM32\\IPHLPAPI.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\WINNSI.DLL",
+          "C:\\WINDOWS\\System32\\NSI.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msasn1.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptnet.dll",
+          "C:\\WINDOWS\\SYSTEM32\\wldp.dll",
+          "C:\\WINDOWS\\SYSTEM32\\drvstore.dll",
+          "C:\\WINDOWS\\SYSTEM32\\devobj.dll",
+          "C:\\WINDOWS\\System32\\wintrust.dll",
+          "C:\\WINDOWS\\system32\\rsaenh.dll",
+          "C:\\WINDOWS\\System32\\imagehlp.dll",
+          "C:\\WINDOWS\\SYSTEM32\\urlmon.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DNSAPI.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DSPARSE.dll",
+          "C:\\Windows\\System32\\Windows.UI.dll",
+          "C:\\Windows\\System32\\rasadhlp.dll",
+          "C:\\Windows\\System32\\Windows.UI.Immersive.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc6.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc.DLL",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\userenv.dll",
+          "C:\\WINDOWS\\SYSTEM32\\webio.dll",
+          "C:\\WINDOWS\\System32\\fwpuclnt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\srpapi.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+          "C:\\WINDOWS\\system32\\schannel.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\ncrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\NTASN1.dll",
+          "C:\\WINDOWS\\system32\\ncryptsslp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+          "C:\\WINDOWS\\system32\\nvspcap64.dll",
+          "C:\\WINDOWS\\SYSTEM32\\ntmarta.dll",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\nvppex.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 73640,
+            "sha256": "aac52c65d450f0cb0ddf34975c3c67e882c31a46e890a5013c158176b6e04d54",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000008000000467969",
+            "lastWriteUtc": "2026-10-27T07:29:35.6081978Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+            "fileVersion": "16.0.20326.20022",
+            "productVersion": "16.0.20326.20022",
+            "fileVersionNumber": "16.0.20326.20022",
+            "productName": "Microsoft Office",
+            "length": 223184,
+            "sha256": "4df48005324bb37dcc576755200133d5c72b01b0aee096867357c19831b51a96",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000008000000473B8E",
+            "lastWriteUtc": "2026-08-22T22:58:32.2971396Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 893352,
+            "sha256": "79893a8f3b81d6c7170ab6a0cd1945875d8d1882d8c1e668b06833c7a3a6e533",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000007D000000352BA6",
+            "lastWriteUtc": "2026-11-13T09:23:00.4826023Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 249,
+        "programPath": "241"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [],
+        "seq": 250,
+        "programPath": "242"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1168,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-011943\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 251,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [],
+    "execution": "ReturnedFailure",
+    "captureErrors": []
+  },
+  "artifacts": []
+}

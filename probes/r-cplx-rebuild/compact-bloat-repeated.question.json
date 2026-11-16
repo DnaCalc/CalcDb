@@ -1,0 +1,2158 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/compact-bloat-repeated",
+  "bookRefs": [
+    "R-REBUILD-1",
+    "RB-CLEAN",
+    "RB-RELOC"
+  ],
+  "description": "DBEngine.CompactDatabase of the large-free-region ACCDB and MDB fixtures, then compaction of each output again twice (three generations): after each generation the row count, maximum ID, memo length sum and Keep count are read and the file lengths are observed.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-rb-bloat-accdb.accdb",
+      "sha256": "e314691a5f9c8ca68bdfe73c3f1b96f7ff82fa049ab1ea16e28598d4c4481fd3",
+      "length": 4444160,
+      "provenance": "r-cplx-rebuild.create-rb-bloat-accdb.fe8b517aff.a1 qk1-fe8b517affd04767d08a740178c8f42719f35913f13bf6991d42260dd1c673ae output:r-cplx-rebuild-rb-bloat-accdb.accdb"
+    },
+    {
+      "role": "mdb",
+      "fileName": "r-cplx-rebuild-rb-bloat-mdb.mdb",
+      "sha256": "a2a0e4a45275ec61bb66b147c54515867a546bbac9f4c4c4f1a1770091fc44e5",
+      "length": 4349952,
+      "provenance": "r-cplx-rebuild.create-rb-bloat-mdb.26774ada63.a1 qk1-26774ada63e077d6fbd65b8bc4c5bc44cc7ee084eca88a62df920fb626443877 output:r-cplx-rebuild-rb-bloat-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmaing0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing0q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing0q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing0q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing0q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing0q0",
+          "bind": "f_bmaing0q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing0q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing0q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing0q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing0q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing0q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing0q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing0q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing0q1",
+          "bind": "f_bmaing0q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing0q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing0q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing0q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing0q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "main-g0",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-g1.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-maing1",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-g1.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmaing1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing1q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing1q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing1q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing1q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing1q0",
+          "bind": "f_bmaing1q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing1q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing1q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing1q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing1q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing1q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing1q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing1q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing1q1",
+          "bind": "f_bmaing1q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing1q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing1q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing1q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing1q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-g1.accdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-g2.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-maing2",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-g2.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmaing2"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing2q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing2q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing2q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing2q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing2q0",
+          "bind": "f_bmaing2q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing2q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing2q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing2q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing2q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing2q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing2q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing2q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing2q1",
+          "bind": "f_bmaing2q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing2q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing2q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing2q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing2q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-g2.accdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "main-g3.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-maing3",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "main-g3.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmaing3"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing3q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing3q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing3q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing3q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing3q0",
+          "bind": "f_bmaing3q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing3q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing3q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing3q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmaing3q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmaing3q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmaing3q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmaing3q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmaing3q1",
+          "bind": "f_bmaing3q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmaing3q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmaing3q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmaing3q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing3q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmaing3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmaing3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmdbg0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg0q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg0q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg0q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg0q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg0q0",
+          "bind": "f_bmdbg0q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg0q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg0q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg0q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg0q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg0q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg0q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg0q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg0q1",
+          "bind": "f_bmdbg0q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg0q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg0q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg0q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg0q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "mdb-g0",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g1.mdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbg1",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g1.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmdbg1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg1q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg1q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg1q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg1q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg1q0",
+          "bind": "f_bmdbg1q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg1q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg1q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg1q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg1q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg1q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg1q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg1q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg1q1",
+          "bind": "f_bmdbg1q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg1q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg1q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg1q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg1q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g1.mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g2.mdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbg2",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g2.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmdbg2"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg2q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg2q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg2q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg2q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg2q0",
+          "bind": "f_bmdbg2q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg2q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg2q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg2q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg2q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg2q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg2q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg2q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg2q1",
+          "bind": "f_bmdbg2q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg2q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg2q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg2q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg2q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g2.mdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g3.mdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "compact-mdbg3",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mdb-g3.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "bmdbg3"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, MAX(ID) AS MaxId, SUM(LEN(M)) AS L FROM B"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg3q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg3q0",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg3q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg3q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg3q0",
+          "bind": "f_bmdbg3q0",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg3q0"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg3q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg3q0"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS K FROM Keep"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "bmdbg3q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "bmdbg3q1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "bmdbg3q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_bmdbg3q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_bmdbg3q1",
+          "bind": "f_bmdbg3q1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_bmdbg3q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_bmdbg3q1"
+        },
+        {
+          "op": "invoke",
+          "target": "bmdbg3q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg3q1"
+    },
+    {
+      "op": "invoke",
+      "target": "bmdbg3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "bmdbg3"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

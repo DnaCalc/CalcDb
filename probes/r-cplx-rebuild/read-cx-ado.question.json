@@ -1,0 +1,787 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/read-cx-ado",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-READ",
+    "CX-ATT"
+  ],
+  "description": "Through ADODB.Connection (Provider Microsoft.ACE.OLEDB.12.0, Data Source through Properties, Mode adModeRead) on the multi-value and attachment fixtures asks: Connection.Execute of SELECT of the complex column (Field Type, Value, the child recordset bound from Field.Value, its State, Fields, rows to EOF), SELECT <field>.Value, and for attachments the FileName, FileType and FileData values with their ADO VARIANT types.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-cx-mv-text.accdb",
+      "sha256": "2233efae95e2757c5009cbf3df66b9232d3440de6b5176e0ec4ed8ff730d81ba",
+      "length": 225280,
+      "provenance": "r-cplx-rebuild.create-cx-mv-text.1aa415da93.a1 qk1-1aa415da93cb2801fcaf06aa6427ada4dde58df472230c95ea7b74bc18337a95 output:r-cplx-rebuild-cx-mv-text.accdb"
+    },
+    {
+      "role": "att",
+      "fileName": "r-cplx-rebuild-cx-attach.accdb",
+      "sha256": "971cacdd54cbb1bad8f9a18b022f5e0949d442fee63430a3165e9ddef5e61485",
+      "length": 249856,
+      "provenance": "r-cplx-rebuild.create-cx-attach.43d2bea5ba.a1 qk1-43d2bea5ba4b1236fc5fb3152598f711b98273da962a657d25358e1677705a96 output:r-cplx-rebuild-cx-attach.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cm"
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cmProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cmProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cmDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cmDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "att"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cmDs"
+    },
+    {
+      "op": "release",
+      "target": "cmProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Name, Tags FROM T WHERE Name = 'p1'"
+        }
+      ],
+      "bind": "a1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_a1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_a1",
+          "bind": "f_a1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_a1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_a1"
+        },
+        {
+          "op": "invoke",
+          "target": "a1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Name, Tags FROM T WHERE Name = 'p1'"
+        }
+      ],
+      "bind": "a2"
+    },
+    {
+      "op": "invoke",
+      "target": "a2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a2f"
+    },
+    {
+      "op": "invoke",
+      "target": "a2f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "a2t"
+    },
+    {
+      "op": "invoke",
+      "target": "a2t",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "a2t",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "a2t",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a2c"
+    },
+    {
+      "op": "invoke",
+      "target": "a2c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "a2c",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "a2c",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a2c",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_a2c"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_a2c",
+          "bind": "f_a2c",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_a2c",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a2c",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a2c",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_a2c"
+        },
+        {
+          "op": "invoke",
+          "target": "a2c",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a2c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a2c"
+    },
+    {
+      "op": "release",
+      "target": "a2t"
+    },
+    {
+      "op": "release",
+      "target": "a2f"
+    },
+    {
+      "op": "invoke",
+      "target": "a2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Tags.Value FROM T WHERE Name IN ('p1','p2','p3','p4','p6') ORDER BY ID"
+        }
+      ],
+      "bind": "a3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_a3"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_a3",
+          "bind": "f_a3",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_a3",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a3",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a3",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_a3"
+        },
+        {
+          "op": "invoke",
+          "target": "a3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a3"
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Name, Att.FileName, Att.FileType, Att.FileData FROM T WHERE Name IN ('p1','p2') ORDER BY ID"
+        }
+      ],
+      "bind": "a4"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a4",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_a4"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_a4",
+          "bind": "f_a4",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_a4",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a4",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a4",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_a4"
+        },
+        {
+          "op": "invoke",
+          "target": "a4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a4"
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Name, Att FROM T WHERE Name = 'p2'"
+        }
+      ],
+      "bind": "a5"
+    },
+    {
+      "op": "invoke",
+      "target": "a5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a5f"
+    },
+    {
+      "op": "invoke",
+      "target": "a5f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "a5t"
+    },
+    {
+      "op": "invoke",
+      "target": "a5t",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "a5t",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a5c"
+    },
+    {
+      "op": "invoke",
+      "target": "a5c",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "a5c",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a5c",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_a5c"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_a5c",
+          "bind": "f_a5c",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_a5c",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a5c",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_a5c",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_a5c"
+        },
+        {
+          "op": "invoke",
+          "target": "a5c",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a5c",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a5c"
+    },
+    {
+      "op": "release",
+      "target": "a5t"
+    },
+    {
+      "op": "release",
+      "target": "a5f"
+    },
+    {
+      "op": "invoke",
+      "target": "a5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a5"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cm",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "release",
+      "target": "cm"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

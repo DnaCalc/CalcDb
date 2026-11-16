@@ -1,0 +1,655 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/prop-connection-inventory",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP",
+    "OLE-ACT"
+  ],
+  "description": "OLE-PROP: for the ACCDB and the MDB fixture, on a Connection with Provider = ACE read the full Properties inventory (Name, Type, Value, Attributes); set Data Source and Mode = adModeRead and read State, Mode, Attributes, IsolationLevel and timeouts; Open and read the inventory again; Close and read it a third time. Asks which initialization, data-source-information and session properties exist and how each differs between ACCDB and MDB and between states.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    },
+    {
+      "role": "mdb",
+      "fileName": "r-oledb-odbc-mdb.mdb",
+      "sha256": "d6fc05027381d1ce754b7bf67f444a3cd19712b62354cbbe8587924f6835c77f",
+      "length": 184320,
+      "provenance": "r-oledb-odbc.create-mdb.9313b42430.a1 qk1-9313b42430b00d15ddef63563baf4603d602b30e9b159245194c3c5990094d81 output:r-oledb-odbc-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c_main"
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mainProps_provider"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mainProps_provider",
+      "bind": "c_mainPr_provider",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mainPr_provider",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_provider",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_provider",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_provider",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mainProps_provider"
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mainProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c_mainDs"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mainDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mainDs"
+    },
+    {
+      "op": "release",
+      "target": "c_mainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "ConnectionTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "IsolationLevel",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mainProps_open"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mainProps_open",
+      "bind": "c_mainPr_open",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mainPr_open",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_open",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_open",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_open",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mainProps_open"
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_main",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mainProps_closed"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mainProps_closed",
+      "bind": "c_mainPr_closed",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mainPr_closed",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_closed",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_closed",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mainPr_closed",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mainProps_closed"
+    },
+    {
+      "op": "release",
+      "target": "c_main"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c_mdb"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mdbProps_provider"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mdbProps_provider",
+      "bind": "c_mdbPr_provider",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_provider",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_provider",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_provider",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_provider",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mdbProps_provider"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mdbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdbProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c_mdbDs"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdbDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "mdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mdbDs"
+    },
+    {
+      "op": "release",
+      "target": "c_mdbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "CursorLocation",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "ConnectionTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "IsolationLevel",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mdbProps_open"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mdbProps_open",
+      "bind": "c_mdbPr_open",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_open",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_open",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_open",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_open",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mdbProps_open"
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_mdb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_mdbProps_closed"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c_mdbProps_closed",
+      "bind": "c_mdbPr_closed",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_closed",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_closed",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_closed",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c_mdbPr_closed",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c_mdbProps_closed"
+    },
+    {
+      "op": "release",
+      "target": "c_mdb"
+    }
+  ]
+}

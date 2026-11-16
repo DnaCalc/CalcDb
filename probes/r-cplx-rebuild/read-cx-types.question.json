@@ -1,0 +1,5409 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cplx-rebuild/read-cx-types",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-DESC",
+    "CX-READ"
+  ],
+  "description": "Opens the eight single-kind fixtures read-only and asks: metadata of each table and its Field2 properties (Type, IsComplex, Size, Properties), the catalog (MSysComplexColumns, MSysObjects, including shared type tables), and the group of p1 (two values) and p2 (none) read to EOF with each child field's Name, Type and typed Value.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-cx-types.accdb",
+      "sha256": "8c339477e43749d38aab9cac9837171ce904fc5fbeb485e98944154edfa13053",
+      "length": 335872,
+      "provenance": "r-cplx-rebuild.create-cx-types.187b06d254.a1 qk1-187b06d254f1dbafc948375f6eb21a02fa8879f8a3393e3aaafde63757a031ec output:r-cplx-rebuild-cx-types.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dprops"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dprops",
+      "bind": "dp",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dprops"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtds",
+      "bind": "mtd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MByte"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MInteger"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MLong"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSingle"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MDouble"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MGuid"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MDecimal"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "mts",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MText"
+        }
+      ],
+      "bind": "mtt"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfl",
+      "bind": "mfd",
+      "maxItems": 48,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "IsComplex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mfd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mfdpr"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mfdpr",
+          "bind": "mfdpp",
+          "maxItems": 48,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mfdpp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mfdpr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfl"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mxi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mxi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mxf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mxf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "invoke",
+      "target": "mtt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mtp",
+      "bind": "mtq",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mtq",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mtp"
+    },
+    {
+      "op": "release",
+      "target": "mtt"
+    },
+    {
+      "op": "release",
+      "target": "mts"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysComplexColumns"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cat"
+    },
+    {
+      "op": "loopUntil",
+      "target": "cat",
+      "member": "EOF",
+      "maxIterations": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cat",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_cat"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_cat",
+          "bind": "f_cat",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_cat",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_cat",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_cat",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_cat"
+        },
+        {
+          "op": "invoke",
+          "target": "cat",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cat",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cat"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Id, ParentId, Name, Type, Flags, ForeignName FROM MSysObjects ORDER BY Id"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cbt"
+    },
+    {
+      "op": "loopUntil",
+      "target": "cbt",
+      "member": "EOF",
+      "maxIterations": 128,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cbt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_cbt"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_cbt",
+          "bind": "f_cbt",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_cbt",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_cbt",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_cbt",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_cbt"
+        },
+        {
+          "op": "invoke",
+          "target": "cbt",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cbt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cbt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MByte WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfByte1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcByte1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghByte1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghByte1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghByte1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghByte1",
+          "bind": "f_ghByte1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghByte1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghByte1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghByte1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghByte1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghByte1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghByte1"
+    },
+    {
+      "op": "release",
+      "target": "gcByte1"
+    },
+    {
+      "op": "release",
+      "target": "gfByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MByte WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfByte2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcByte2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghByte2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghByte2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghByte2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghByte2",
+          "bind": "f_ghByte2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghByte2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghByte2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghByte2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghByte2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghByte2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghByte2"
+    },
+    {
+      "op": "release",
+      "target": "gcByte2"
+    },
+    {
+      "op": "release",
+      "target": "gfByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MInteger WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfInteger1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcInteger1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghInteger1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghInteger1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghInteger1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghInteger1",
+          "bind": "f_ghInteger1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghInteger1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghInteger1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghInteger1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghInteger1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghInteger1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghInteger1"
+    },
+    {
+      "op": "release",
+      "target": "gcInteger1"
+    },
+    {
+      "op": "release",
+      "target": "gfInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MInteger WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfInteger2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcInteger2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghInteger2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghInteger2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghInteger2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghInteger2",
+          "bind": "f_ghInteger2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghInteger2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghInteger2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghInteger2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghInteger2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghInteger2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghInteger2"
+    },
+    {
+      "op": "release",
+      "target": "gcInteger2"
+    },
+    {
+      "op": "release",
+      "target": "gfInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MLong WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfLong1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcLong1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghLong1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghLong1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghLong1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghLong1",
+          "bind": "f_ghLong1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghLong1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghLong1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghLong1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghLong1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghLong1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghLong1"
+    },
+    {
+      "op": "release",
+      "target": "gcLong1"
+    },
+    {
+      "op": "release",
+      "target": "gfLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MLong WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfLong2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcLong2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghLong2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghLong2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghLong2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghLong2",
+          "bind": "f_ghLong2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghLong2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghLong2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghLong2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghLong2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghLong2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghLong2"
+    },
+    {
+      "op": "release",
+      "target": "gcLong2"
+    },
+    {
+      "op": "release",
+      "target": "gfLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSingle WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfSingle1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcSingle1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghSingle1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghSingle1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghSingle1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghSingle1",
+          "bind": "f_ghSingle1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghSingle1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghSingle1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghSingle1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghSingle1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghSingle1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghSingle1"
+    },
+    {
+      "op": "release",
+      "target": "gcSingle1"
+    },
+    {
+      "op": "release",
+      "target": "gfSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSingle WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfSingle2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcSingle2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghSingle2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghSingle2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghSingle2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghSingle2",
+          "bind": "f_ghSingle2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghSingle2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghSingle2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghSingle2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghSingle2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghSingle2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghSingle2"
+    },
+    {
+      "op": "release",
+      "target": "gcSingle2"
+    },
+    {
+      "op": "release",
+      "target": "gfSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDouble WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDouble1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDouble1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDouble1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDouble1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghDouble1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghDouble1",
+          "bind": "f_ghDouble1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghDouble1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDouble1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDouble1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghDouble1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDouble1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDouble1"
+    },
+    {
+      "op": "release",
+      "target": "gcDouble1"
+    },
+    {
+      "op": "release",
+      "target": "gfDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDouble WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDouble2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDouble2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDouble2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDouble2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghDouble2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghDouble2",
+          "bind": "f_ghDouble2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghDouble2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDouble2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDouble2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghDouble2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDouble2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDouble2"
+    },
+    {
+      "op": "release",
+      "target": "gcDouble2"
+    },
+    {
+      "op": "release",
+      "target": "gfDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MGuid WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfGuid1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcGuid1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghGuid1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghGuid1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghGuid1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghGuid1",
+          "bind": "f_ghGuid1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghGuid1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghGuid1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghGuid1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghGuid1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghGuid1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghGuid1"
+    },
+    {
+      "op": "release",
+      "target": "gcGuid1"
+    },
+    {
+      "op": "release",
+      "target": "gfGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MGuid WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfGuid2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcGuid2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghGuid2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghGuid2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghGuid2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghGuid2",
+          "bind": "f_ghGuid2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghGuid2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghGuid2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghGuid2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghGuid2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghGuid2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghGuid2"
+    },
+    {
+      "op": "release",
+      "target": "gcGuid2"
+    },
+    {
+      "op": "release",
+      "target": "gfGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDecimal WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDecimal1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDecimal1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDecimal1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDecimal1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghDecimal1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghDecimal1",
+          "bind": "f_ghDecimal1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghDecimal1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDecimal1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDecimal1"
+    },
+    {
+      "op": "release",
+      "target": "gcDecimal1"
+    },
+    {
+      "op": "release",
+      "target": "gfDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDecimal WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDecimal2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDecimal2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDecimal2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDecimal2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghDecimal2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghDecimal2",
+          "bind": "f_ghDecimal2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghDecimal2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghDecimal2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDecimal2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDecimal2"
+    },
+    {
+      "op": "release",
+      "target": "gcDecimal2"
+    },
+    {
+      "op": "release",
+      "target": "gfDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MText WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfText1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcText1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghText1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghText1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghText1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghText1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghText1",
+          "bind": "f_ghText1",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghText1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghText1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghText1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghText1"
+        },
+        {
+          "op": "invoke",
+          "target": "ghText1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghText1"
+    },
+    {
+      "op": "release",
+      "target": "gcText1"
+    },
+    {
+      "op": "release",
+      "target": "gfText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpText1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MText WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfText2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcText2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghText2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghText2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghText2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_ghText2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_ghText2",
+          "bind": "f_ghText2",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_ghText2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghText2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_ghText2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_ghText2"
+        },
+        {
+          "op": "invoke",
+          "target": "ghText2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghText2"
+    },
+    {
+      "op": "release",
+      "target": "gcText2"
+    },
+    {
+      "op": "release",
+      "target": "gfText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpText2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

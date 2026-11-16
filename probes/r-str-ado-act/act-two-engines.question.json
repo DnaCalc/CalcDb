@@ -1,0 +1,263 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/act-two-engines",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-THREAD/ENGINE-IDENTITY"
+  ],
+  "description": "ACT-THREAD/ENGINE-IDENTITY on one STA: create DAO.DBEngine.120 twice and keep both; read Version and Workspaces.Count of each; append a workspace created on the first and read both counts; cause an OpenDatabase failure on the first (nonexistent work file) and read both Errors collections; release the first and read the second's Version and Workspaces.Count. Asks whether engine state is shared.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "e1"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "e2"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "w1"
+    },
+    {
+      "op": "invoke",
+      "target": "e2",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "w2"
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "probe"
+        },
+        {
+          "type": "bstr",
+          "text": "admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ws"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "missing.accdb"
+        }
+      ],
+      "bind": "dbx"
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "e1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "e1Errs",
+      "bind": "e1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "e1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "e2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "e2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "e2Errs",
+      "bind": "e2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "e2Errs"
+    },
+    {
+      "op": "release",
+      "target": "ws"
+    },
+    {
+      "op": "release",
+      "target": "w1"
+    },
+    {
+      "op": "release",
+      "target": "e1"
+    },
+    {
+      "op": "invoke",
+      "target": "e2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w2"
+    },
+    {
+      "op": "release",
+      "target": "e2"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release"
+    }
+  ]
+}

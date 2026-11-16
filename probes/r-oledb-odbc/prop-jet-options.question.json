@@ -1,0 +1,2119 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/prop-jet-options",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP"
+  ],
+  "description": "OLE-PROP provider-specific Jet OLEDB properties requested through the connection string (Database Locking Mode 1 and 0, Transaction Commit Mode 1, Global Partial Bulk Ops 2, Encrypt Database True, Database Password wrongpw and empty, Engine Type 5) and through retained Property wrappers set before Open (Database Locking Mode = 1; System database = an absent work file): after Open read the property value, State, Provider and Errors, then Close. Asks which requests are accepted, ignored or refused and what value each reads back.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j1"
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Database Locking Mode=1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j1Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j1Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j1Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j1Ds"
+    },
+    {
+      "op": "release",
+      "target": "j1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j1Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j1Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "j1Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j1Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j1Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j1Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j1Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j1Errs",
+      "bind": "j1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j2"
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Database Locking Mode=0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j2Ds"
+    },
+    {
+      "op": "release",
+      "target": "j2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j2Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j2Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "j2Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j2Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j2Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j2Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j2Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j2Errs",
+      "bind": "j2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j3"
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Transaction Commit Mode=1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j3Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j3Ds"
+    },
+    {
+      "op": "release",
+      "target": "j3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j3Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j3Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Transaction Commit Mode"
+        }
+      ],
+      "bind": "j3Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j3Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j3Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j3Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j3Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j3Errs",
+      "bind": "j3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j4"
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Global Partial Bulk Ops=2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j4Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j4Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j4Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j4Ds"
+    },
+    {
+      "op": "release",
+      "target": "j4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j4Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j4Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Global Partial Bulk Ops"
+        }
+      ],
+      "bind": "j4Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j4Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j4Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j4Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j4Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j4Errs",
+      "bind": "j4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j4Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j5"
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Encrypt Database=True"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j5Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j5Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j5Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j5Ds"
+    },
+    {
+      "op": "release",
+      "target": "j5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j5Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j5Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Encrypt Database"
+        }
+      ],
+      "bind": "j5Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j5Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j5Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j5Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j5Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j5Errs",
+      "bind": "j5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j5Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j6"
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Database Password=wrongpw"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j6Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j6Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j6Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j6Ds"
+    },
+    {
+      "op": "release",
+      "target": "j6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j6Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j6Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Password"
+        }
+      ],
+      "bind": "j6Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j6Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j6Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j6Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j6Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j6Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j6Errs",
+      "bind": "j6Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j6Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j6Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j7"
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Database Password="
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j7Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j7Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j7Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j7Ds"
+    },
+    {
+      "op": "release",
+      "target": "j7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j7Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j7Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Password"
+        }
+      ],
+      "bind": "j7Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j7Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j7Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j7Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j7Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j7Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j7Errs",
+      "bind": "j7Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j7Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j7Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j7"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j8"
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;Jet OLEDB:Engine Type=5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j8Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j8Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j8Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j8Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j8Ds"
+    },
+    {
+      "op": "release",
+      "target": "j8Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j8Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j8Np_after",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Engine Type"
+        }
+      ],
+      "bind": "j8Np_after_0"
+    },
+    {
+      "op": "invoke",
+      "target": "j8Np_after_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j8Np_after_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j8Np_after_0"
+    },
+    {
+      "op": "release",
+      "target": "j8Np_after"
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j8Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j8Errs",
+      "bind": "j8Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j8Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j8Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "j8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j8"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j9"
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j9p"
+    },
+    {
+      "op": "invoke",
+      "target": "j9p",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "j9i"
+    },
+    {
+      "op": "invoke",
+      "target": "j9i",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9i",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j9i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j9Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j9Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j9Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j9Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j9Ds"
+    },
+    {
+      "op": "release",
+      "target": "j9Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j9Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j9Errs",
+      "bind": "j9Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j9Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j9Errs"
+    },
+    {
+      "op": "release",
+      "target": "j9i"
+    },
+    {
+      "op": "release",
+      "target": "j9p"
+    },
+    {
+      "op": "invoke",
+      "target": "j9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j9"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "j10"
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j10p"
+    },
+    {
+      "op": "invoke",
+      "target": "j10p",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:System database"
+        }
+      ],
+      "bind": "j10i"
+    },
+    {
+      "op": "invoke",
+      "target": "j10i",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10i",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "absent.mdw"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j10i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j10Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j10Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "j10Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "j10Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j10Ds"
+    },
+    {
+      "op": "release",
+      "target": "j10Props"
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "j10Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "j10Errs",
+      "bind": "j10Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "j10Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "j10Errs"
+    },
+    {
+      "op": "release",
+      "target": "j10i"
+    },
+    {
+      "op": "release",
+      "target": "j10p"
+    },
+    {
+      "op": "invoke",
+      "target": "j10",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j10"
+    }
+  ]
+}

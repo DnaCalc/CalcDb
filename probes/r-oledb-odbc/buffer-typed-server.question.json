@@ -1,0 +1,675 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/buffer-typed-server",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-BUFFER"
+  ],
+  "description": "OLE-BUFFER typed results through Connection.Execute (default forward-only server cursor): every Field's Name, Type, DefinedSize, Precision, NumericScale and Attributes of 'SELECT * FROM Items'; the column-level Properties of ID, Code, N, Txt, M and B; then Value and ActualSize of every field of each row (Null row, empty text and binary, 12,000-character memo and binary, wide text, ten-byte binary). Asks the VARIANT tag, length and metadata the provider publishes for each column type.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM Items ORDER BY ID"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "r"
+    },
+    {
+      "op": "invoke",
+      "target": "r",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rf"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "rf",
+      "bind": "fd",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fp_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_ID",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_IDProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_IDProps_col",
+      "bind": "fp_IDPr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_IDPr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_IDPr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_IDPr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_IDPr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_IDProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Code"
+        }
+      ],
+      "bind": "fp_Code"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_Code",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_CodeProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_CodeProps_col",
+      "bind": "fp_CodePr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_CodePr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_CodePr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_CodePr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_CodePr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_CodeProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_Code"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "fp_N"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_N",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_NProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_NProps_col",
+      "bind": "fp_NPr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_NPr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_NPr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_NPr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_NPr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_NProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_N"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Txt"
+        }
+      ],
+      "bind": "fp_Txt"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_Txt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_TxtProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_TxtProps_col",
+      "bind": "fp_TxtPr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_TxtPr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_TxtPr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_TxtPr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_TxtPr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_TxtProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_Txt"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fp_M"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_M",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_MProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_MProps_col",
+      "bind": "fp_MPr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_MPr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_MPr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_MPr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_MPr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_MProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_M"
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "fp_B"
+    },
+    {
+      "op": "invoke",
+      "target": "fp_B",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp_BProps_col"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp_BProps_col",
+      "bind": "fp_BPr_col",
+      "maxItems": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp_BPr_col",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_BPr_col",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_BPr_col",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp_BPr_col",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp_BProps_col"
+    },
+    {
+      "op": "release",
+      "target": "fp_B"
+    },
+    {
+      "op": "release",
+      "target": "rf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rFlds",
+          "bind": "rF",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rF",
+              "member": "ActualSize",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

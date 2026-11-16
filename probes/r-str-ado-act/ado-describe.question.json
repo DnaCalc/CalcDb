@@ -1,0 +1,45 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/ado-describe",
+  "bookRefs": [
+    "R-ADO-1",
+    "R-ACT-1",
+    "ACT-META",
+    "ACT-DECL"
+  ],
+  "description": "ADO type library inventory: create ADODB.Connection and describe its whole containing type library through ITypeInfo (every type, interface, dispid, invoke kind, vtable slot and parameter type).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "describeType",
+      "target": "cn",
+      "wholeLibrary": true
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    }
+  ]
+}

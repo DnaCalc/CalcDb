@@ -1,0 +1,70 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/act-describe-companion-libraries",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-ACT",
+    "OLE-MANAGED"
+  ],
+  "description": "Type library inventory of the two OLE DB companion libraries: create ADOX.Catalog and describe its whole containing type library, then create JRO.JetEngine and describe its whole containing type library, recording loaded modules before and after each creation and after release. Asks whether each is creatable on the x64 worker and what it declares (a creation failure is the observation).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-adox"
+    },
+    {
+      "op": "create",
+      "progId": "ADOX.Catalog",
+      "bind": "cat"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-adox"
+    },
+    {
+      "op": "describeType",
+      "target": "cat",
+      "wholeLibrary": true
+    },
+    {
+      "op": "release",
+      "target": "cat"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-adox-release"
+    },
+    {
+      "op": "create",
+      "progId": "JRO.JetEngine",
+      "bind": "jro"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-jro"
+    },
+    {
+      "op": "describeType",
+      "target": "jro",
+      "wholeLibrary": true
+    },
+    {
+      "op": "release",
+      "target": "jro"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-jro-release"
+    }
+  ]
+}

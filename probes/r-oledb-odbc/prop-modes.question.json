@@ -1,0 +1,4146 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/prop-modes",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-PROP",
+    "OLE-UPDATE"
+  ],
+  "description": "OLE-PROP combinations of the Mode connection property (0 unspecified, read, write, read/write, read/write + deny none, read/write + exclusive, read/write + deny write, read + deny read): on a read/write copy a first Connection opens with the mode (State, Mode, properties Mode and Jet OLEDB:Database Locking Mode, a no-op UPDATE of Items, Errors), then a second Connection in the same process opens the same file with read/write + deny none (State, Errors, UPDATE attempt, Errors), then both close. Asks which mode combinations open, what each records and how the second open and the writes are affected.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma0Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma0Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma0Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma0Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma0Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma0Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma0Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma0Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma0Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma0Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma0Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma0Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma0Errs",
+      "bind": "ma0Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma0Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma0Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb0"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb0Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb0Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb0Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb0Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb0Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb0Errs",
+      "bind": "mb0Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb0Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb0Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb0Errs",
+      "bind": "mb0Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb0Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb0Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma0"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma1Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma1Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma1Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma1Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma1Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma1Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma1Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma1Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma1Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma1Errs",
+      "bind": "ma1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma1Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb1"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb1Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb1Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb1Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb1Errs",
+      "bind": "mb1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb1Errs",
+      "bind": "mb1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb1Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma2"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma2Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma2Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma2Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma2Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma2Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma2Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma2Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma2Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma2Errs",
+      "bind": "ma2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma2Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb2"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb2Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb2Errs",
+      "bind": "mb2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb2Errs",
+      "bind": "mb2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb2Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb2"
+    },
+    {
+      "op": "invoke",
+      "target": "ma2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma3"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma3Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma3Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma3Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma3Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma3Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma3Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma3Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma3Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma3Errs",
+      "bind": "ma3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma3Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb3"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb3Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb3Errs",
+      "bind": "mb3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb3Errs",
+      "bind": "mb3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb3Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb3"
+    },
+    {
+      "op": "invoke",
+      "target": "ma3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma4"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma4Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma4Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma4Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma4Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma4Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma4Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma4Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma4Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma4Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma4Errs",
+      "bind": "ma4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma4Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb4"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb4Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb4Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb4Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb4Errs",
+      "bind": "mb4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb4Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb4Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb4Errs",
+      "bind": "mb4Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb4Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb4Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb4"
+    },
+    {
+      "op": "invoke",
+      "target": "ma4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma5"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma5Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma5Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma5Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma5Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma5Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma5Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma5Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma5Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma5Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma5Errs",
+      "bind": "ma5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma5Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb5"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb5Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb5Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb5Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb5Errs",
+      "bind": "mb5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb5Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb5Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb5Errs",
+      "bind": "mb5Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb5Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb5Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb5"
+    },
+    {
+      "op": "invoke",
+      "target": "ma5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma6"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma6Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma6Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma6Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma6Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma6Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma6Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma6Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma6Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma6Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma6Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma6Errs",
+      "bind": "ma6Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma6Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma6Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb6"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb6Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb6Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb6Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb6Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb6Errs",
+      "bind": "mb6Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb6Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb6Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb6Errs",
+      "bind": "mb6Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb6Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb6Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb6"
+    },
+    {
+      "op": "invoke",
+      "target": "ma6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ma7"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ma7Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma7Ds"
+    },
+    {
+      "op": "release",
+      "target": "ma7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma7Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mode"
+        }
+      ],
+      "bind": "ma7Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode_0",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma7Np_mode_0"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Locking Mode"
+        }
+      ],
+      "bind": "ma7Np_mode_1"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ma7Np_mode_1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma7Np_mode_1"
+    },
+    {
+      "op": "release",
+      "target": "ma7Np_mode"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ma7Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ma7Errs",
+      "bind": "ma7Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ma7Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ma7Errs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "mb7"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "mb7Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb7Ds"
+    },
+    {
+      "op": "release",
+      "target": "mb7Props"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb7Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb7Errs",
+      "bind": "mb7Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb7Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Items SET Txt = Txt WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mb7Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mb7Errs",
+      "bind": "mb7Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mb7Err",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mb7Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "mb7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mb7"
+    },
+    {
+      "op": "invoke",
+      "target": "ma7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ma7"
+    }
+  ]
+}

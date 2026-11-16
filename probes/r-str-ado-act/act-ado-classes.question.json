@@ -1,0 +1,163 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-str-ado-act/act-ado-classes",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-NAME",
+    "ACT-META",
+    "ACT-ADO-SCOPE",
+    "R-ADO-1"
+  ],
+  "description": "ACT-NAME for ADO: create ADODB.Connection, ADODB.Recordset, ADODB.Command and ADODB.Stream in turn, recording loaded modules before and after each creation and after each release; read State of each (and Connection.Version), and describe each object's own type through GetTypeInfo.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-cn"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "describeType",
+      "target": "cn",
+      "wholeLibrary": false
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release-cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "before-rs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "describeType",
+      "target": "rs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release-rs"
+    },
+    {
+      "op": "observeModules",
+      "label": "before-cmd"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmd"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-cmd"
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "describeType",
+      "target": "cmd",
+      "wholeLibrary": false
+    },
+    {
+      "op": "release",
+      "target": "cmd"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release-cmd"
+    },
+    {
+      "op": "observeModules",
+      "label": "before-st"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "st"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-st"
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "describeType",
+      "target": "st",
+      "wholeLibrary": false
+    },
+    {
+      "op": "release",
+      "target": "st"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-release-st"
+    }
+  ]
+}

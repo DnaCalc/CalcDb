@@ -1,0 +1,593 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-enc-link/ado-open-pwd-mdb",
+  "bookRefs": [
+    "R-ENC-1",
+    "ENC-PROFILE"
+  ],
+  "description": "Open r-enc-link-enc-mdb-pwd through ADODB.Connection (Provider and Data Source set as properties, then Open with no arguments) with no 'Jet OLEDB:Database Password', a wrong one and the right one. Connection.Errors is read after each open; an open that works runs a count query.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-enc-link-enc-mdb-pwd.mdb",
+      "sha256": "c396c631ea52e500d8de33bb4281f463f89886571eb084ff1510bca217174908",
+      "length": 655360,
+      "provenance": "r-enc-link.create-enc-mdb-pwd.e90ed4427a.a1 qk1-e90ed4427a6e681b68962bacae1d0d1db7146fad1b6f5d1964b40488c052bbdc output:r-enc-link-enc-mdb-pwd.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn_none"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr_none"
+    },
+    {
+      "op": "invoke",
+      "target": "pr_none",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "pd_none"
+    },
+    {
+      "op": "invoke",
+      "target": "pd_none",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "er_none"
+    },
+    {
+      "op": "forEachItem",
+      "target": "er_none",
+      "bind": "ae_none",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae_none",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_none",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_none",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_none",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "er_none"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, SUM(LEN(M)) AS LM FROM T"
+        }
+      ],
+      "bind": "rs_none"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_none",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_none",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_none"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_none",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn_none"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "pr_wrong",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "pd_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "pd_wrong",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr_wrong",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Password"
+        }
+      ],
+      "bind": "pw_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "pw_wrong",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "wrong-pass"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "er_wrong"
+    },
+    {
+      "op": "forEachItem",
+      "target": "er_wrong",
+      "bind": "ae_wrong",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae_wrong",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_wrong",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_wrong",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_wrong",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "er_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, SUM(LEN(M)) AS LM FROM T"
+        }
+      ],
+      "bind": "rs_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_wrong",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_wrong",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_wrong"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_wrong",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn_wrong"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn_right"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr_right"
+    },
+    {
+      "op": "invoke",
+      "target": "pr_right",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "pd_right"
+    },
+    {
+      "op": "invoke",
+      "target": "pd_right",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr_right",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Jet OLEDB:Database Password"
+        }
+      ],
+      "bind": "pw_right"
+    },
+    {
+      "op": "invoke",
+      "target": "pw_right",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "secret1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "er_right"
+    },
+    {
+      "op": "forEachItem",
+      "target": "er_right",
+      "bind": "ae_right",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae_right",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_right",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_right",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae_right",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "er_right"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N, SUM(LEN(M)) AS LM FROM T"
+        }
+      ],
+      "bind": "rs_right"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_right",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_right",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_right"
+    },
+    {
+      "op": "invoke",
+      "target": "cn_right",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn_right"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

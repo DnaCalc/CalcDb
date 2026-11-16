@@ -1,0 +1,1152 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oledb-odbc/stream-getchunk",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-STREAM",
+    "OLE-BUFFER"
+  ],
+  "description": "OLE-STREAM output as projected by ADO, on a server forward-only and a client static read-only Recordset of 'SELECT ID, B, M FROM Items': for row 1 read ActualSize and GetChunk(3) five times of the ten-byte binary then Value; rows 2 and 3 (Null, empty) GetChunk(3); row 4 (12,000-byte binary, 12,000-character memo) GetChunk(4096) and GetChunk(5000) interleaved between the two fields until exhausted, then GetChunk(0), GetChunk(-1), GetChunk(65536) and Value. Asks the piece sizes, the exhausted-call result and whether reading chunks interferes with Value.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-oledb-odbc-accdb.accdb",
+      "sha256": "db670a316a8bb69b6827d8670b76c3881f47a3b61d8399c2a320fddcf3301e40",
+      "length": 294912,
+      "provenance": "r-oledb-odbc.create-accdb.da5b2f3076.a1 qk1-da5b2f3076d051f7d14e635284e13754370f7835a5b86ef8aaa3a08e19062e71 output:r-oledb-odbc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, B, M FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sff"
+    },
+    {
+      "op": "invoke",
+      "target": "sff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "sfb"
+    },
+    {
+      "op": "invoke",
+      "target": "sff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "sfm"
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sfb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "release",
+      "target": "sfb"
+    },
+    {
+      "op": "release",
+      "target": "sfm"
+    },
+    {
+      "op": "release",
+      "target": "sff"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "sc"
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, B, M FROM Items ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "scf"
+    },
+    {
+      "op": "invoke",
+      "target": "scf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "scb"
+    },
+    {
+      "op": "invoke",
+      "target": "scf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "scm"
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 65536
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scb",
+      "member": "ActualSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "release",
+      "target": "scb"
+    },
+    {
+      "op": "release",
+      "target": "scm"
+    },
+    {
+      "op": "release",
+      "target": "scf"
+    },
+    {
+      "op": "invoke",
+      "target": "sc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
