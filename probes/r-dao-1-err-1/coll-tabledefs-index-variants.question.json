@@ -1,0 +1,532 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1-err-1/coll-tabledefs-index-variants",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "ERR-BIND"
+  ],
+  "description": "DAO-COLL: TableDefs.Count, then TableDefs.Item with each index Variant: I4/I2/UI1/R8 zero, R8 0.5/1.5/2.5, Currency 1.5, Date 1, strings '0' and ' 0', True, False, -1, 10000, Null, Empty, the missing marker and an object. Name is read from each result. Errors is read at the end. Each lookup's own HRESULT and error channels are in its call record.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1-err-1-accdb-base.accdb",
+      "sha256": "814d9ec44538034c82755f043907e7bbff8c9bcaf872ad732fdfd5680c97e248",
+      "length": 258048,
+      "provenance": "r-dao-1-err-1.create-accdb-base.1be1af4b12.a1 qk1-1be1af4b12fd038b27ce9a63d97c439261ff2d8c05f421a54a66b1eeb865fe99 output:r-dao-1-err-1-accdb-base.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "t-i4-0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-i4-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i2",
+          "value": 0
+        }
+      ],
+      "bind": "t-i2-0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-i2-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 0
+        }
+      ],
+      "bind": "t-ui1-0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-ui1-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "0000000000000000"
+        }
+      ],
+      "bind": "t-r8-0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-r8-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3fe0000000000000"
+        }
+      ],
+      "bind": "t-r8-0.5"
+    },
+    {
+      "op": "invoke",
+      "target": "t-r8-0.5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff8000000000000"
+        }
+      ],
+      "bind": "t-r8-1.5"
+    },
+    {
+      "op": "invoke",
+      "target": "t-r8-1.5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "t-r8-2.5"
+    },
+    {
+      "op": "invoke",
+      "target": "t-r8-2.5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 15000
+        }
+      ],
+      "bind": "t-cy-1.5"
+    },
+    {
+      "op": "invoke",
+      "target": "t-cy-1.5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "date",
+          "bits": "3ff0000000000000"
+        }
+      ],
+      "bind": "t-date-1"
+    },
+    {
+      "op": "invoke",
+      "target": "t-date-1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "0"
+        }
+      ],
+      "bind": "t-str-0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-str-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " 0"
+        }
+      ],
+      "bind": "t-str-sp0"
+    },
+    {
+      "op": "invoke",
+      "target": "t-str-sp0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "t-bool-true"
+    },
+    {
+      "op": "invoke",
+      "target": "t-bool-true",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "t-bool-false"
+    },
+    {
+      "op": "invoke",
+      "target": "t-bool-false",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "t-i4-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "t-i4-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10000
+        }
+      ],
+      "bind": "t-i4-10000"
+    },
+    {
+      "op": "invoke",
+      "target": "t-i4-10000",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "t-null"
+    },
+    {
+      "op": "invoke",
+      "target": "t-null",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "t-empty"
+    },
+    {
+      "op": "invoke",
+      "target": "t-empty",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "t-missing"
+    },
+    {
+      "op": "invoke",
+      "target": "t-missing",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "object",
+          "name": "db"
+        }
+      ],
+      "bind": "t-obj"
+    },
+    {
+      "op": "invoke",
+      "target": "t-obj",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

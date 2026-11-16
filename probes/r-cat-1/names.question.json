@@ -1,0 +1,1752 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/names",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-B"
+  ],
+  "description": "Name rules on a writable copy of the empty ACCDB. For each of a fixed list of table names (ASCII case pair Tbl/TBL, accented, precomposed and decomposed e-acute, upper-case E-acute, trailing and leading space, '.', '!', brackets, backquote, apostrophe, 64 and 65 characters) CreateTableDef(name) + one Long field + TableDefs.Append is called and the appended TableDef's Name read back. Then TableDefs (after Refresh) is enumerated, a fixed list of differently spelled names is looked up through TableDefs.Item, a column-name case pair (a, A) and an index-name case pair (ix1, IX1) are tried through DDL, QueryDefs named Tbl (same as a table), qcase and QCASE are created, and MSysObjects is read. Each call's outcome and returned spelling are recorded.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tbl"
+        }
+      ],
+      "bind": "nt0"
+    },
+    {
+      "op": "invoke",
+      "target": "nt0",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf0"
+    },
+    {
+      "op": "invoke",
+      "target": "nt0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl0"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl0",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf0"
+    },
+    {
+      "op": "release",
+      "target": "nfl0"
+    },
+    {
+      "op": "release",
+      "target": "nt0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TBL"
+        }
+      ],
+      "bind": "nt1"
+    },
+    {
+      "op": "invoke",
+      "target": "nt1",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf1"
+    },
+    {
+      "op": "invoke",
+      "target": "nt1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl1"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl1",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf1"
+    },
+    {
+      "op": "release",
+      "target": "nfl1"
+    },
+    {
+      "op": "release",
+      "target": "nt1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tä"
+        }
+      ],
+      "bind": "nt2"
+    },
+    {
+      "op": "invoke",
+      "target": "nt2",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf2"
+    },
+    {
+      "op": "invoke",
+      "target": "nt2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl2"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl2",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf2"
+    },
+    {
+      "op": "release",
+      "target": "nfl2"
+    },
+    {
+      "op": "release",
+      "target": "nt2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Té"
+        }
+      ],
+      "bind": "nt3"
+    },
+    {
+      "op": "invoke",
+      "target": "nt3",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf3"
+    },
+    {
+      "op": "invoke",
+      "target": "nt3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl3"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl3",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf3"
+    },
+    {
+      "op": "release",
+      "target": "nfl3"
+    },
+    {
+      "op": "release",
+      "target": "nt3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Té"
+        }
+      ],
+      "bind": "nt4"
+    },
+    {
+      "op": "invoke",
+      "target": "nt4",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf4"
+    },
+    {
+      "op": "invoke",
+      "target": "nt4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl4"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl4",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt4"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf4"
+    },
+    {
+      "op": "release",
+      "target": "nfl4"
+    },
+    {
+      "op": "release",
+      "target": "nt4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TÉ"
+        }
+      ],
+      "bind": "nt5"
+    },
+    {
+      "op": "invoke",
+      "target": "nt5",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf5"
+    },
+    {
+      "op": "invoke",
+      "target": "nt5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl5"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl5",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf5"
+    },
+    {
+      "op": "release",
+      "target": "nfl5"
+    },
+    {
+      "op": "release",
+      "target": "nt5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Trail "
+        }
+      ],
+      "bind": "nt6"
+    },
+    {
+      "op": "invoke",
+      "target": "nt6",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf6"
+    },
+    {
+      "op": "invoke",
+      "target": "nt6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl6"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl6",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt6"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf6"
+    },
+    {
+      "op": "release",
+      "target": "nfl6"
+    },
+    {
+      "op": "release",
+      "target": "nt6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " Lead"
+        }
+      ],
+      "bind": "nt7"
+    },
+    {
+      "op": "invoke",
+      "target": "nt7",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf7"
+    },
+    {
+      "op": "invoke",
+      "target": "nt7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl7"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl7",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt7",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf7"
+    },
+    {
+      "op": "release",
+      "target": "nfl7"
+    },
+    {
+      "op": "release",
+      "target": "nt7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a.b"
+        }
+      ],
+      "bind": "nt8"
+    },
+    {
+      "op": "invoke",
+      "target": "nt8",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf8"
+    },
+    {
+      "op": "invoke",
+      "target": "nt8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl8"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl8",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt8"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf8"
+    },
+    {
+      "op": "release",
+      "target": "nfl8"
+    },
+    {
+      "op": "release",
+      "target": "nt8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a!b"
+        }
+      ],
+      "bind": "nt9"
+    },
+    {
+      "op": "invoke",
+      "target": "nt9",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf9"
+    },
+    {
+      "op": "invoke",
+      "target": "nt9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl9"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl9",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt9",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf9"
+    },
+    {
+      "op": "release",
+      "target": "nfl9"
+    },
+    {
+      "op": "release",
+      "target": "nt9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[br]"
+        }
+      ],
+      "bind": "nt10"
+    },
+    {
+      "op": "invoke",
+      "target": "nt10",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf10"
+    },
+    {
+      "op": "invoke",
+      "target": "nt10",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl10"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl10",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt10",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf10"
+    },
+    {
+      "op": "release",
+      "target": "nfl10"
+    },
+    {
+      "op": "release",
+      "target": "nt10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a`b"
+        }
+      ],
+      "bind": "nt11"
+    },
+    {
+      "op": "invoke",
+      "target": "nt11",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf11"
+    },
+    {
+      "op": "invoke",
+      "target": "nt11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl11"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl11",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt11"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt11",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf11"
+    },
+    {
+      "op": "release",
+      "target": "nfl11"
+    },
+    {
+      "op": "release",
+      "target": "nt11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a'b"
+        }
+      ],
+      "bind": "nt12"
+    },
+    {
+      "op": "invoke",
+      "target": "nt12",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf12"
+    },
+    {
+      "op": "invoke",
+      "target": "nt12",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl12"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl12",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt12",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf12"
+    },
+    {
+      "op": "release",
+      "target": "nfl12"
+    },
+    {
+      "op": "release",
+      "target": "nt12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ],
+      "bind": "nt13"
+    },
+    {
+      "op": "invoke",
+      "target": "nt13",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf13"
+    },
+    {
+      "op": "invoke",
+      "target": "nt13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl13"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl13",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt13"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt13",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf13"
+    },
+    {
+      "op": "release",
+      "target": "nfl13"
+    },
+    {
+      "op": "release",
+      "target": "nt13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+        }
+      ],
+      "bind": "nt14"
+    },
+    {
+      "op": "invoke",
+      "target": "nt14",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nf14"
+    },
+    {
+      "op": "invoke",
+      "target": "nt14",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nfl14"
+    },
+    {
+      "op": "invoke",
+      "target": "nfl14",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nf14"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nt14"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nt14",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nf14"
+    },
+    {
+      "op": "release",
+      "target": "nfl14"
+    },
+    {
+      "op": "release",
+      "target": "nt14"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tdfs",
+      "bind": "tn",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tn",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "tbl"
+        }
+      ],
+      "bind": "lk0"
+    },
+    {
+      "op": "invoke",
+      "target": "lk0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk0"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TÄ"
+        }
+      ],
+      "bind": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "lk1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Té"
+        }
+      ],
+      "bind": "lk2"
+    },
+    {
+      "op": "invoke",
+      "target": "lk2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk2"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "tÉ"
+        }
+      ],
+      "bind": "lk3"
+    },
+    {
+      "op": "invoke",
+      "target": "lk3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk3"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Trail"
+        }
+      ],
+      "bind": "lk4"
+    },
+    {
+      "op": "invoke",
+      "target": "lk4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk4"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TRAIL "
+        }
+      ],
+      "bind": "lk5"
+    },
+    {
+      "op": "invoke",
+      "target": "lk5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk5"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Lead"
+        }
+      ],
+      "bind": "lk6"
+    },
+    {
+      "op": "invoke",
+      "target": "lk6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk6"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE C2 (a LONG, A LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE C3 (ID LONG, Nm TEXT(5))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX ix1 ON C3 (ID)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX1 ON C3 (Nm)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tbl"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Tbl;"
+        }
+      ],
+      "bind": "qt"
+    },
+    {
+      "op": "invoke",
+      "target": "qt",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "qcase"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Tbl;"
+        }
+      ],
+      "bind": "qc1"
+    },
+    {
+      "op": "invoke",
+      "target": "qc1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qc1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QCASE"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Tbl;"
+        }
+      ],
+      "bind": "qc2"
+    },
+    {
+      "op": "invoke",
+      "target": "qc2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qc2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysObjects"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_names"
+    },
+    {
+      "op": "invoke",
+      "target": "s_names",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_names"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_names",
+      "bind": "sf_namesi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_namesi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_namesi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_namesi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_names"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_names",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_names",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_names",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_names",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_names"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

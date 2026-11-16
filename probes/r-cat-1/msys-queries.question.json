@@ -1,0 +1,418 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/msys-queries",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-Q"
+  ],
+  "description": "Open the query fixture read-only and read MSysObjects and MSysQueries through SELECT * (field metadata and every row in returned order), and MSysQueries again through a table-type recordset with no index set (traversal order).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-queries.accdb",
+      "sha256": "d53c7ee6e0f16c69107e0be625e15f985312a22f5c03c74b05cb7f6744550b01",
+      "length": 241664,
+      "provenance": "r-cat-1.create-accdb-queries.775ce375fd.a1 qk1-775ce375fd3d6a4f780bce3c0cf531e4c036f1fac57a98eff28a604859920bd0 output:r-cat-1-accdb-queries.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysObjects"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_obj"
+    },
+    {
+      "op": "invoke",
+      "target": "s_obj",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_obj"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_obj",
+      "bind": "sf_obji",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_obji",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_obji",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_obji",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_obj"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_obj",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_obj",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_obj",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_obj",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_obj"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysQueries"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_qry"
+    },
+    {
+      "op": "invoke",
+      "target": "s_qry",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_qry"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_qry",
+      "bind": "sf_qryi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_qryi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_qryi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_qryi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_qry"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_qry",
+      "member": "EOF",
+      "maxIterations": 512,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_qry",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_qry",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_qry",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_qry"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysQueries"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "s_qrytab"
+    },
+    {
+      "op": "invoke",
+      "target": "s_qrytab",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_qrytab"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_qrytab",
+      "bind": "sf_qrytabi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_qrytabi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_qrytabi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_qrytabi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_qrytab"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_qrytab",
+      "member": "EOF",
+      "maxIterations": 512,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_qrytab",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_qrytab",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_qrytab",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_qrytab"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

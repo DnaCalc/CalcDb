@@ -1,0 +1,437 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/properties",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "Open the property fixture read-only and enumerate Properties (Name, Type, Value, Inherited) of the Database, of TableDef T, of each of its Fields, of each of its Indexes, and of QueryDef QP. This includes built-in properties with no stored record.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-properties.accdb",
+      "sha256": "5c245d5304016b35aba3d8b3bc5e3eb7876668656b2b9e3fba3b769c76e90186",
+      "length": 303104,
+      "provenance": "r-cat-1.create-accdb-properties.42f4607b08.a1 qk1-42f4607b08c4842e1daf537966740764f083cf65386d11019316499f3724cbb5 output:r-cat-1-accdb-properties.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dbp",
+      "bind": "dbpi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dbpi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dbpi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dbpi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dbpi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dbp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdf"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "tdp",
+      "bind": "tdpi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tdpi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdpi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdpi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdpi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tdp"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fl",
+      "bind": "fd",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fdp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fdp",
+          "bind": "fdpi",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "fdpi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fdpi",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fdpi",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "fdpi",
+              "member": "Inherited",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fdp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixs",
+      "bind": "ix",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixp",
+          "bind": "ixpi",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Inherited",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QP"
+        }
+      ],
+      "bind": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qpp"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qpp",
+      "bind": "qppi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qppi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qppi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qppi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qppi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qpp"
+    },
+    {
+      "op": "release",
+      "target": "qp"
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "release",
+      "target": "tdf"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

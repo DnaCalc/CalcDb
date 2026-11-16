@@ -1,0 +1,1291 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/catalog-mdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-B"
+  ],
+  "description": "Open the MDB catalog fixture read-only as the default Admin. Read MSysObjects through SELECT * (field metadata and every row), every TableDef's Name and Attributes, the MSysObjects TableDef's Fields (Name, Type, Size, Attributes, OrdinalPosition) and Indexes (Name, Primary, Unique, Clustered, IgnoreNulls, index fields), and then try SELECT * on each of MSysACEs, MSysQueries, MSysRelationships, MSysAccessStorage, MSysComplexColumns, MSysResources, MSysNavPaneGroups, MSysAccessObjects (each open's outcome, field metadata and rows).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-mdb-catalog.mdb",
+      "sha256": "3bf69bb7d2a529c8be3ca4cc705aec1924489790023b3ec58ee4ebf836c2810e",
+      "length": 151552,
+      "provenance": "r-cat-1.create-mdb-catalog.e85bceca25.a1 qk1-e85bceca25f737f99ed22ac0ec10b98bf3cd07140017c799d0cbe0e5f9b901d4 output:r-cat-1-mdb-catalog.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysObjects"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_mso"
+    },
+    {
+      "op": "invoke",
+      "target": "s_mso",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_mso"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_mso",
+      "bind": "sf_msoi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_msoi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_msoi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_msoi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_mso"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_mso",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_mso",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_mso",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_mso",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_mso"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "tdfs",
+      "bind": "tdf",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysObjects"
+        }
+      ],
+      "bind": "mso"
+    },
+    {
+      "op": "invoke",
+      "target": "mso",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "msf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "msf",
+      "bind": "fd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fd",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "msf"
+    },
+    {
+      "op": "invoke",
+      "target": "mso",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "msi"
+    },
+    {
+      "op": "forEachItem",
+      "target": "msi",
+      "bind": "ix",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixf",
+          "bind": "xf",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "xf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "xf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "msi"
+    },
+    {
+      "op": "release",
+      "target": "mso"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysACEs]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysACEs"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysACEs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysACEs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysACEs",
+      "bind": "sf_MSysACEsi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysACEsi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysACEsi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysACEsi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysACEs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysACEs",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysACEs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysACEs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysACEs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysACEs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysQueries]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysQueries"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysQueries",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysQueries"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysQueries",
+      "bind": "sf_MSysQueriesi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysQueriesi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysQueriesi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysQueriesi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysQueries"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysQueries",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysQueries",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysQueries",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysQueries",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysQueries"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysRelationships]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysRelationships"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysRelationships",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysRelationships"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysRelationships",
+      "bind": "sf_MSysRelationshipsi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysRelationshipsi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysRelationshipsi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysRelationshipsi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysRelationships"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysRelationships",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysRelationships",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysRelationships",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysRelationships",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysRelationships"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysAccessStorage]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysAccessStorage"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysAccessStorage",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysAccessStorage"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysAccessStorage",
+      "bind": "sf_MSysAccessStoragei",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessStoragei",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessStoragei",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessStoragei",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysAccessStorage"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysAccessStorage",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysAccessStorage",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysAccessStorage",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysAccessStorage",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysAccessStorage"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysComplexColumns]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysComplexColumns"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysComplexColumns",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysComplexColumns"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysComplexColumns",
+      "bind": "sf_MSysComplexColumnsi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysComplexColumnsi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysComplexColumnsi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysComplexColumnsi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysComplexColumns"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysComplexColumns",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysComplexColumns",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysComplexColumns",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysComplexColumns",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysComplexColumns"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysResources]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysResources"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysResources",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysResources"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysResources",
+      "bind": "sf_MSysResourcesi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysResourcesi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysResourcesi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysResourcesi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysResources"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysResources",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysResources",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysResources",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysResources",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysResources"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysNavPaneGroups]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysNavPaneGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysNavPaneGroups",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysNavPaneGroups"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysNavPaneGroups",
+      "bind": "sf_MSysNavPaneGroupsi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysNavPaneGroupsi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysNavPaneGroupsi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysNavPaneGroupsi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysNavPaneGroups"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysNavPaneGroups",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysNavPaneGroups",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysNavPaneGroups",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysNavPaneGroups",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysNavPaneGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [MSysAccessObjects]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_MSysAccessObjects"
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysAccessObjects",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_MSysAccessObjects"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_MSysAccessObjects",
+      "bind": "sf_MSysAccessObjectsi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessObjectsi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessObjectsi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_MSysAccessObjectsi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_MSysAccessObjects"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_MSysAccessObjects",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_MSysAccessObjects",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_MSysAccessObjects",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_MSysAccessObjects",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_MSysAccessObjects"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,2747 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sql-1/b-limit-and-nesting",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B"
+  ],
+  "description": "R-SQL-1 SQL-B: Where do two lexical dimensions stop being accepted, each varied alone: the number of ANDs in a WHERE chain of distinct conditions id <> -k (50, 98, 99, 100, 101, 200, 1000), and the parenthesis nesting depth around one predicate id > 0 (16, 32, 50, 63, 64, 65, 100, 128, 256)? Each text is opened directly; phase and errors are captured. Runs on a fresh copy of r-sql-1-accdb-main opened read-only through ACE DAO; each statement is opened with Database.OpenRecordset as a snapshot unless stated, Fields Name/Type/Size/SourceTable/SourceField are read before the first row, then every row's Field values to EOF (each MoveNext captured), then Close and DBEngine.Errors.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sql-1-accdb-main.accdb",
+      "sha256": "994665d7ae99924b0265535182f532d2f9ebfeb67690b4fa241efcc539f28c65",
+      "length": 393216,
+      "provenance": "r-sql-1.create-accdb-main.cffbf13ad4.a1 qk1-cffbf13ad4fb0bc5b0b85efa6bea98be2ca9011c25f9c21dcf5e89f8772b799f output:r-sql-1-accdb-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and50"
+    },
+    {
+      "op": "invoke",
+      "target": "and50",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and50_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and50_mf",
+      "bind": "and50_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and50_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and50_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and50_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and50_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and50_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and50_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and50",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and50",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and50",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and50",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and50"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and98"
+    },
+    {
+      "op": "invoke",
+      "target": "and98",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and98_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and98_mf",
+      "bind": "and98_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and98_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and98_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and98_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and98_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and98_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and98_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and98",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and98",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and98",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and98",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and98"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99 AND id <> -100"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and99"
+    },
+    {
+      "op": "invoke",
+      "target": "and99",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and99_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and99_mf",
+      "bind": "and99_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and99_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and99_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and99_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and99_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and99_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and99_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and99",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and99",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and99",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and99",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and99"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99 AND id <> -100 AND id <> -101"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and100"
+    },
+    {
+      "op": "invoke",
+      "target": "and100",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and100_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and100_mf",
+      "bind": "and100_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and100_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and100_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and100_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and100_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and100_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and100_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and100",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and100",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and100",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and100",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and100"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99 AND id <> -100 AND id <> -101 AND id <> -102"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and101"
+    },
+    {
+      "op": "invoke",
+      "target": "and101",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and101_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and101_mf",
+      "bind": "and101_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and101_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and101_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and101_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and101_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and101_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and101_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and101",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and101",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and101",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and101",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and101"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99 AND id <> -100 AND id <> -101 AND id <> -102 AND id <> -103 AND id <> -104 AND id <> -105 AND id <> -106 AND id <> -107 AND id <> -108 AND id <> -109 AND id <> -110 AND id <> -111 AND id <> -112 AND id <> -113 AND id <> -114 AND id <> -115 AND id <> -116 AND id <> -117 AND id <> -118 AND id <> -119 AND id <> -120 AND id <> -121 AND id <> -122 AND id <> -123 AND id <> -124 AND id <> -125 AND id <> -126 AND id <> -127 AND id <> -128 AND id <> -129 AND id <> -130 AND id <> -131 AND id <> -132 AND id <> -133 AND id <> -134 AND id <> -135 AND id <> -136 AND id <> -137 AND id <> -138 AND id <> -139 AND id <> -140 AND id <> -141 AND id <> -142 AND id <> -143 AND id <> -144 AND id <> -145 AND id <> -146 AND id <> -147 AND id <> -148 AND id <> -149 AND id <> -150 AND id <> -151 AND id <> -152 AND id <> -153 AND id <> -154 AND id <> -155 AND id <> -156 AND id <> -157 AND id <> -158 AND id <> -159 AND id <> -160 AND id <> -161 AND id <> -162 AND id <> -163 AND id <> -164 AND id <> -165 AND id <> -166 AND id <> -167 AND id <> -168 AND id <> -169 AND id <> -170 AND id <> -171 AND id <> -172 AND id <> -173 AND id <> -174 AND id <> -175 AND id <> -176 AND id <> -177 AND id <> -178 AND id <> -179 AND id <> -180 AND id <> -181 AND id <> -182 AND id <> -183 AND id <> -184 AND id <> -185 AND id <> -186 AND id <> -187 AND id <> -188 AND id <> -189 AND id <> -190 AND id <> -191 AND id <> -192 AND id <> -193 AND id <> -194 AND id <> -195 AND id <> -196 AND id <> -197 AND id <> -198 AND id <> -199 AND id <> -200 AND id <> -201"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and200"
+    },
+    {
+      "op": "invoke",
+      "target": "and200",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and200_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and200_mf",
+      "bind": "and200_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and200_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and200_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and200_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and200_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and200_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and200_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and200",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and200",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and200",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and200",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and200"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE id <> -1 AND id <> -2 AND id <> -3 AND id <> -4 AND id <> -5 AND id <> -6 AND id <> -7 AND id <> -8 AND id <> -9 AND id <> -10 AND id <> -11 AND id <> -12 AND id <> -13 AND id <> -14 AND id <> -15 AND id <> -16 AND id <> -17 AND id <> -18 AND id <> -19 AND id <> -20 AND id <> -21 AND id <> -22 AND id <> -23 AND id <> -24 AND id <> -25 AND id <> -26 AND id <> -27 AND id <> -28 AND id <> -29 AND id <> -30 AND id <> -31 AND id <> -32 AND id <> -33 AND id <> -34 AND id <> -35 AND id <> -36 AND id <> -37 AND id <> -38 AND id <> -39 AND id <> -40 AND id <> -41 AND id <> -42 AND id <> -43 AND id <> -44 AND id <> -45 AND id <> -46 AND id <> -47 AND id <> -48 AND id <> -49 AND id <> -50 AND id <> -51 AND id <> -52 AND id <> -53 AND id <> -54 AND id <> -55 AND id <> -56 AND id <> -57 AND id <> -58 AND id <> -59 AND id <> -60 AND id <> -61 AND id <> -62 AND id <> -63 AND id <> -64 AND id <> -65 AND id <> -66 AND id <> -67 AND id <> -68 AND id <> -69 AND id <> -70 AND id <> -71 AND id <> -72 AND id <> -73 AND id <> -74 AND id <> -75 AND id <> -76 AND id <> -77 AND id <> -78 AND id <> -79 AND id <> -80 AND id <> -81 AND id <> -82 AND id <> -83 AND id <> -84 AND id <> -85 AND id <> -86 AND id <> -87 AND id <> -88 AND id <> -89 AND id <> -90 AND id <> -91 AND id <> -92 AND id <> -93 AND id <> -94 AND id <> -95 AND id <> -96 AND id <> -97 AND id <> -98 AND id <> -99 AND id <> -100 AND id <> -101 AND id <> -102 AND id <> -103 AND id <> -104 AND id <> -105 AND id <> -106 AND id <> -107 AND id <> -108 AND id <> -109 AND id <> -110 AND id <> -111 AND id <> -112 AND id <> -113 AND id <> -114 AND id <> -115 AND id <> -116 AND id <> -117 AND id <> -118 AND id <> -119 AND id <> -120 AND id <> -121 AND id <> -122 AND id <> -123 AND id <> -124 AND id <> -125 AND id <> -126 AND id <> -127 AND id <> -128 AND id <> -129 AND id <> -130 AND id <> -131 AND id <> -132 AND id <> -133 AND id <> -134 AND id <> -135 AND id <> -136 AND id <> -137 AND id <> -138 AND id <> -139 AND id <> -140 AND id <> -141 AND id <> -142 AND id <> -143 AND id <> -144 AND id <> -145 AND id <> -146 AND id <> -147 AND id <> -148 AND id <> -149 AND id <> -150 AND id <> -151 AND id <> -152 AND id <> -153 AND id <> -154 AND id <> -155 AND id <> -156 AND id <> -157 AND id <> -158 AND id <> -159 AND id <> -160 AND id <> -161 AND id <> -162 AND id <> -163 AND id <> -164 AND id <> -165 AND id <> -166 AND id <> -167 AND id <> -168 AND id <> -169 AND id <> -170 AND id <> -171 AND id <> -172 AND id <> -173 AND id <> -174 AND id <> -175 AND id <> -176 AND id <> -177 AND id <> -178 AND id <> -179 AND id <> -180 AND id <> -181 AND id <> -182 AND id <> -183 AND id <> -184 AND id <> -185 AND id <> -186 AND id <> -187 AND id <> -188 AND id <> -189 AND id <> -190 AND id <> -191 AND id <> -192 AND id <> -193 AND id <> -194 AND id <> -195 AND id <> -196 AND id <> -197 AND id <> -198 AND id <> -199 AND id <> -200 AND id <> -201 AND id <> -202 AND id <> -203 AND id <> -204 AND id <> -205 AND id <> -206 AND id <> -207 AND id <> -208 AND id <> -209 AND id <> -210 AND id <> -211 AND id <> -212 AND id <> -213 AND id <> -214 AND id <> -215 AND id <> -216 AND id <> -217 AND id <> -218 AND id <> -219 AND id <> -220 AND id <> -221 AND id <> -222 AND id <> -223 AND id <> -224 AND id <> -225 AND id <> -226 AND id <> -227 AND id <> -228 AND id <> -229 AND id <> -230 AND id <> -231 AND id <> -232 AND id <> -233 AND id <> -234 AND id <> -235 AND id <> -236 AND id <> -237 AND id <> -238 AND id <> -239 AND id <> -240 AND id <> -241 AND id <> -242 AND id <> -243 AND id <> -244 AND id <> -245 AND id <> -246 AND id <> -247 AND id <> -248 AND id <> -249 AND id <> -250 AND id <> -251 AND id <> -252 AND id <> -253 AND id <> -254 AND id <> -255 AND id <> -256 AND id <> -257 AND id <> -258 AND id <> -259 AND id <> -260 AND id <> -261 AND id <> -262 AND id <> -263 AND id <> -264 AND id <> -265 AND id <> -266 AND id <> -267 AND id <> -268 AND id <> -269 AND id <> -270 AND id <> -271 AND id <> -272 AND id <> -273 AND id <> -274 AND id <> -275 AND id <> -276 AND id <> -277 AND id <> -278 AND id <> -279 AND id <> -280 AND id <> -281 AND id <> -282 AND id <> -283 AND id <> -284 AND id <> -285 AND id <> -286 AND id <> -287 AND id <> -288 AND id <> -289 AND id <> -290 AND id <> -291 AND id <> -292 AND id <> -293 AND id <> -294 AND id <> -295 AND id <> -296 AND id <> -297 AND id <> -298 AND id <> -299 AND id <> -300 AND id <> -301 AND id <> -302 AND id <> -303 AND id <> -304 AND id <> -305 AND id <> -306 AND id <> -307 AND id <> -308 AND id <> -309 AND id <> -310 AND id <> -311 AND id <> -312 AND id <> -313 AND id <> -314 AND id <> -315 AND id <> -316 AND id <> -317 AND id <> -318 AND id <> -319 AND id <> -320 AND id <> -321 AND id <> -322 AND id <> -323 AND id <> -324 AND id <> -325 AND id <> -326 AND id <> -327 AND id <> -328 AND id <> -329 AND id <> -330 AND id <> -331 AND id <> -332 AND id <> -333 AND id <> -334 AND id <> -335 AND id <> -336 AND id <> -337 AND id <> -338 AND id <> -339 AND id <> -340 AND id <> -341 AND id <> -342 AND id <> -343 AND id <> -344 AND id <> -345 AND id <> -346 AND id <> -347 AND id <> -348 AND id <> -349 AND id <> -350 AND id <> -351 AND id <> -352 AND id <> -353 AND id <> -354 AND id <> -355 AND id <> -356 AND id <> -357 AND id <> -358 AND id <> -359 AND id <> -360 AND id <> -361 AND id <> -362 AND id <> -363 AND id <> -364 AND id <> -365 AND id <> -366 AND id <> -367 AND id <> -368 AND id <> -369 AND id <> -370 AND id <> -371 AND id <> -372 AND id <> -373 AND id <> -374 AND id <> -375 AND id <> -376 AND id <> -377 AND id <> -378 AND id <> -379 AND id <> -380 AND id <> -381 AND id <> -382 AND id <> -383 AND id <> -384 AND id <> -385 AND id <> -386 AND id <> -387 AND id <> -388 AND id <> -389 AND id <> -390 AND id <> -391 AND id <> -392 AND id <> -393 AND id <> -394 AND id <> -395 AND id <> -396 AND id <> -397 AND id <> -398 AND id <> -399 AND id <> -400 AND id <> -401 AND id <> -402 AND id <> -403 AND id <> -404 AND id <> -405 AND id <> -406 AND id <> -407 AND id <> -408 AND id <> -409 AND id <> -410 AND id <> -411 AND id <> -412 AND id <> -413 AND id <> -414 AND id <> -415 AND id <> -416 AND id <> -417 AND id <> -418 AND id <> -419 AND id <> -420 AND id <> -421 AND id <> -422 AND id <> -423 AND id <> -424 AND id <> -425 AND id <> -426 AND id <> -427 AND id <> -428 AND id <> -429 AND id <> -430 AND id <> -431 AND id <> -432 AND id <> -433 AND id <> -434 AND id <> -435 AND id <> -436 AND id <> -437 AND id <> -438 AND id <> -439 AND id <> -440 AND id <> -441 AND id <> -442 AND id <> -443 AND id <> -444 AND id <> -445 AND id <> -446 AND id <> -447 AND id <> -448 AND id <> -449 AND id <> -450 AND id <> -451 AND id <> -452 AND id <> -453 AND id <> -454 AND id <> -455 AND id <> -456 AND id <> -457 AND id <> -458 AND id <> -459 AND id <> -460 AND id <> -461 AND id <> -462 AND id <> -463 AND id <> -464 AND id <> -465 AND id <> -466 AND id <> -467 AND id <> -468 AND id <> -469 AND id <> -470 AND id <> -471 AND id <> -472 AND id <> -473 AND id <> -474 AND id <> -475 AND id <> -476 AND id <> -477 AND id <> -478 AND id <> -479 AND id <> -480 AND id <> -481 AND id <> -482 AND id <> -483 AND id <> -484 AND id <> -485 AND id <> -486 AND id <> -487 AND id <> -488 AND id <> -489 AND id <> -490 AND id <> -491 AND id <> -492 AND id <> -493 AND id <> -494 AND id <> -495 AND id <> -496 AND id <> -497 AND id <> -498 AND id <> -499 AND id <> -500 AND id <> -501 AND id <> -502 AND id <> -503 AND id <> -504 AND id <> -505 AND id <> -506 AND id <> -507 AND id <> -508 AND id <> -509 AND id <> -510 AND id <> -511 AND id <> -512 AND id <> -513 AND id <> -514 AND id <> -515 AND id <> -516 AND id <> -517 AND id <> -518 AND id <> -519 AND id <> -520 AND id <> -521 AND id <> -522 AND id <> -523 AND id <> -524 AND id <> -525 AND id <> -526 AND id <> -527 AND id <> -528 AND id <> -529 AND id <> -530 AND id <> -531 AND id <> -532 AND id <> -533 AND id <> -534 AND id <> -535 AND id <> -536 AND id <> -537 AND id <> -538 AND id <> -539 AND id <> -540 AND id <> -541 AND id <> -542 AND id <> -543 AND id <> -544 AND id <> -545 AND id <> -546 AND id <> -547 AND id <> -548 AND id <> -549 AND id <> -550 AND id <> -551 AND id <> -552 AND id <> -553 AND id <> -554 AND id <> -555 AND id <> -556 AND id <> -557 AND id <> -558 AND id <> -559 AND id <> -560 AND id <> -561 AND id <> -562 AND id <> -563 AND id <> -564 AND id <> -565 AND id <> -566 AND id <> -567 AND id <> -568 AND id <> -569 AND id <> -570 AND id <> -571 AND id <> -572 AND id <> -573 AND id <> -574 AND id <> -575 AND id <> -576 AND id <> -577 AND id <> -578 AND id <> -579 AND id <> -580 AND id <> -581 AND id <> -582 AND id <> -583 AND id <> -584 AND id <> -585 AND id <> -586 AND id <> -587 AND id <> -588 AND id <> -589 AND id <> -590 AND id <> -591 AND id <> -592 AND id <> -593 AND id <> -594 AND id <> -595 AND id <> -596 AND id <> -597 AND id <> -598 AND id <> -599 AND id <> -600 AND id <> -601 AND id <> -602 AND id <> -603 AND id <> -604 AND id <> -605 AND id <> -606 AND id <> -607 AND id <> -608 AND id <> -609 AND id <> -610 AND id <> -611 AND id <> -612 AND id <> -613 AND id <> -614 AND id <> -615 AND id <> -616 AND id <> -617 AND id <> -618 AND id <> -619 AND id <> -620 AND id <> -621 AND id <> -622 AND id <> -623 AND id <> -624 AND id <> -625 AND id <> -626 AND id <> -627 AND id <> -628 AND id <> -629 AND id <> -630 AND id <> -631 AND id <> -632 AND id <> -633 AND id <> -634 AND id <> -635 AND id <> -636 AND id <> -637 AND id <> -638 AND id <> -639 AND id <> -640 AND id <> -641 AND id <> -642 AND id <> -643 AND id <> -644 AND id <> -645 AND id <> -646 AND id <> -647 AND id <> -648 AND id <> -649 AND id <> -650 AND id <> -651 AND id <> -652 AND id <> -653 AND id <> -654 AND id <> -655 AND id <> -656 AND id <> -657 AND id <> -658 AND id <> -659 AND id <> -660 AND id <> -661 AND id <> -662 AND id <> -663 AND id <> -664 AND id <> -665 AND id <> -666 AND id <> -667 AND id <> -668 AND id <> -669 AND id <> -670 AND id <> -671 AND id <> -672 AND id <> -673 AND id <> -674 AND id <> -675 AND id <> -676 AND id <> -677 AND id <> -678 AND id <> -679 AND id <> -680 AND id <> -681 AND id <> -682 AND id <> -683 AND id <> -684 AND id <> -685 AND id <> -686 AND id <> -687 AND id <> -688 AND id <> -689 AND id <> -690 AND id <> -691 AND id <> -692 AND id <> -693 AND id <> -694 AND id <> -695 AND id <> -696 AND id <> -697 AND id <> -698 AND id <> -699 AND id <> -700 AND id <> -701 AND id <> -702 AND id <> -703 AND id <> -704 AND id <> -705 AND id <> -706 AND id <> -707 AND id <> -708 AND id <> -709 AND id <> -710 AND id <> -711 AND id <> -712 AND id <> -713 AND id <> -714 AND id <> -715 AND id <> -716 AND id <> -717 AND id <> -718 AND id <> -719 AND id <> -720 AND id <> -721 AND id <> -722 AND id <> -723 AND id <> -724 AND id <> -725 AND id <> -726 AND id <> -727 AND id <> -728 AND id <> -729 AND id <> -730 AND id <> -731 AND id <> -732 AND id <> -733 AND id <> -734 AND id <> -735 AND id <> -736 AND id <> -737 AND id <> -738 AND id <> -739 AND id <> -740 AND id <> -741 AND id <> -742 AND id <> -743 AND id <> -744 AND id <> -745 AND id <> -746 AND id <> -747 AND id <> -748 AND id <> -749 AND id <> -750 AND id <> -751 AND id <> -752 AND id <> -753 AND id <> -754 AND id <> -755 AND id <> -756 AND id <> -757 AND id <> -758 AND id <> -759 AND id <> -760 AND id <> -761 AND id <> -762 AND id <> -763 AND id <> -764 AND id <> -765 AND id <> -766 AND id <> -767 AND id <> -768 AND id <> -769 AND id <> -770 AND id <> -771 AND id <> -772 AND id <> -773 AND id <> -774 AND id <> -775 AND id <> -776 AND id <> -777 AND id <> -778 AND id <> -779 AND id <> -780 AND id <> -781 AND id <> -782 AND id <> -783 AND id <> -784 AND id <> -785 AND id <> -786 AND id <> -787 AND id <> -788 AND id <> -789 AND id <> -790 AND id <> -791 AND id <> -792 AND id <> -793 AND id <> -794 AND id <> -795 AND id <> -796 AND id <> -797 AND id <> -798 AND id <> -799 AND id <> -800 AND id <> -801 AND id <> -802 AND id <> -803 AND id <> -804 AND id <> -805 AND id <> -806 AND id <> -807 AND id <> -808 AND id <> -809 AND id <> -810 AND id <> -811 AND id <> -812 AND id <> -813 AND id <> -814 AND id <> -815 AND id <> -816 AND id <> -817 AND id <> -818 AND id <> -819 AND id <> -820 AND id <> -821 AND id <> -822 AND id <> -823 AND id <> -824 AND id <> -825 AND id <> -826 AND id <> -827 AND id <> -828 AND id <> -829 AND id <> -830 AND id <> -831 AND id <> -832 AND id <> -833 AND id <> -834 AND id <> -835 AND id <> -836 AND id <> -837 AND id <> -838 AND id <> -839 AND id <> -840 AND id <> -841 AND id <> -842 AND id <> -843 AND id <> -844 AND id <> -845 AND id <> -846 AND id <> -847 AND id <> -848 AND id <> -849 AND id <> -850 AND id <> -851 AND id <> -852 AND id <> -853 AND id <> -854 AND id <> -855 AND id <> -856 AND id <> -857 AND id <> -858 AND id <> -859 AND id <> -860 AND id <> -861 AND id <> -862 AND id <> -863 AND id <> -864 AND id <> -865 AND id <> -866 AND id <> -867 AND id <> -868 AND id <> -869 AND id <> -870 AND id <> -871 AND id <> -872 AND id <> -873 AND id <> -874 AND id <> -875 AND id <> -876 AND id <> -877 AND id <> -878 AND id <> -879 AND id <> -880 AND id <> -881 AND id <> -882 AND id <> -883 AND id <> -884 AND id <> -885 AND id <> -886 AND id <> -887 AND id <> -888 AND id <> -889 AND id <> -890 AND id <> -891 AND id <> -892 AND id <> -893 AND id <> -894 AND id <> -895 AND id <> -896 AND id <> -897 AND id <> -898 AND id <> -899 AND id <> -900 AND id <> -901 AND id <> -902 AND id <> -903 AND id <> -904 AND id <> -905 AND id <> -906 AND id <> -907 AND id <> -908 AND id <> -909 AND id <> -910 AND id <> -911 AND id <> -912 AND id <> -913 AND id <> -914 AND id <> -915 AND id <> -916 AND id <> -917 AND id <> -918 AND id <> -919 AND id <> -920 AND id <> -921 AND id <> -922 AND id <> -923 AND id <> -924 AND id <> -925 AND id <> -926 AND id <> -927 AND id <> -928 AND id <> -929 AND id <> -930 AND id <> -931 AND id <> -932 AND id <> -933 AND id <> -934 AND id <> -935 AND id <> -936 AND id <> -937 AND id <> -938 AND id <> -939 AND id <> -940 AND id <> -941 AND id <> -942 AND id <> -943 AND id <> -944 AND id <> -945 AND id <> -946 AND id <> -947 AND id <> -948 AND id <> -949 AND id <> -950 AND id <> -951 AND id <> -952 AND id <> -953 AND id <> -954 AND id <> -955 AND id <> -956 AND id <> -957 AND id <> -958 AND id <> -959 AND id <> -960 AND id <> -961 AND id <> -962 AND id <> -963 AND id <> -964 AND id <> -965 AND id <> -966 AND id <> -967 AND id <> -968 AND id <> -969 AND id <> -970 AND id <> -971 AND id <> -972 AND id <> -973 AND id <> -974 AND id <> -975 AND id <> -976 AND id <> -977 AND id <> -978 AND id <> -979 AND id <> -980 AND id <> -981 AND id <> -982 AND id <> -983 AND id <> -984 AND id <> -985 AND id <> -986 AND id <> -987 AND id <> -988 AND id <> -989 AND id <> -990 AND id <> -991 AND id <> -992 AND id <> -993 AND id <> -994 AND id <> -995 AND id <> -996 AND id <> -997 AND id <> -998 AND id <> -999 AND id <> -1000 AND id <> -1001"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "and1000"
+    },
+    {
+      "op": "invoke",
+      "target": "and1000",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "and1000_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "and1000_mf",
+      "bind": "and1000_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and1000_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and1000_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and1000_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and1000_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "and1000_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "and1000_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "and1000",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "and1000",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "and1000",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "and1000",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "and1000"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((id > 0))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest16"
+    },
+    {
+      "op": "invoke",
+      "target": "nest16",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest16_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest16_mf",
+      "bind": "nest16_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest16_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest16_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest16_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest16_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest16_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest16_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest16",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest16",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest16",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest16",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest16"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest32"
+    },
+    {
+      "op": "invoke",
+      "target": "nest32",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest32_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest32_mf",
+      "bind": "nest32_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest32_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest32_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest32_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest32_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest32_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest32_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest32",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest32",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest32",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest32",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest32"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest50"
+    },
+    {
+      "op": "invoke",
+      "target": "nest50",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest50_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest50_mf",
+      "bind": "nest50_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest50_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest50_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest50_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest50_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest50_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest50_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest50",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest50",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest50",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest50",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest50"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest63"
+    },
+    {
+      "op": "invoke",
+      "target": "nest63",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest63_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest63_mf",
+      "bind": "nest63_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest63_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest63_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest63_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest63_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest63_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest63_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest63",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest63",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest63",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest63",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest63"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest64"
+    },
+    {
+      "op": "invoke",
+      "target": "nest64",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest64_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest64_mf",
+      "bind": "nest64_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest64_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest64_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest64_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest64_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest64_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest64_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest64",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest64",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest64",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest64",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest64"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest65"
+    },
+    {
+      "op": "invoke",
+      "target": "nest65",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest65_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest65_mf",
+      "bind": "nest65_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest65_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest65_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest65_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest65_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest65_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest65_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest65",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest65",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest65",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest65",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest65"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest100"
+    },
+    {
+      "op": "invoke",
+      "target": "nest100",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest100_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest100_mf",
+      "bind": "nest100_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest100_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest100_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest100_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest100_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest100_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest100_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest100",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest100",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest100",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest100",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest100"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest128"
+    },
+    {
+      "op": "invoke",
+      "target": "nest128",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest128_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest128_mf",
+      "bind": "nest128_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest128_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest128_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest128_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest128_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest128_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest128_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest128",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest128",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest128",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest128",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest128"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id FROM L WHERE ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((id > 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nest256"
+    },
+    {
+      "op": "invoke",
+      "target": "nest256",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nest256_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "nest256_mf",
+      "bind": "nest256_mfi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest256_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest256_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest256_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest256_mfi",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "nest256_mfi",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "nest256_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "nest256",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "nest256",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "nest256",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nest256",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nest256"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

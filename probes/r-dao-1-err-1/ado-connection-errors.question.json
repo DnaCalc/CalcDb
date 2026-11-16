@@ -1,0 +1,748 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1-err-1/ado-connection-errors",
+  "bookRefs": [
+    "R-ERR-1",
+    "ERR-ADO",
+    "ERR-BASE"
+  ],
+  "description": "ERR-ADO: Connection.Errors on a new unopened ADODB.Connection; after Execute on the closed connection (an ADO-only failure); after opening the fixture read-only (Provider ACE OLE DB 12.0, Data Source through Properties, Mode adModeRead); after provider failure 'SELEC'; after a successful Execute that leaves stale entries present; after an ADO-only Fields.Item failure on the result; after Errors.Clear; after a second provider failure on a missing table; after Close and a second Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1-err-1-accdb-base.accdb",
+      "sha256": "814d9ec44538034c82755f043907e7bbff8c9bcaf872ad732fdfd5680c97e248",
+      "length": 258048,
+      "provenance": "r-dao-1-err-1.create-accdb-base.1be1af4b12.a1 qk1-1be1af4b12fd038b27ce9a63d97c439261ff2d8c05f421a54a66b1eeb865fe99 output:r-dao-1-err-1-accdb-base.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "conn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cprops"
+    },
+    {
+      "op": "invoke",
+      "target": "cprops",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cprops"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELEC ID FROM T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V FROM T"
+        }
+      ],
+      "bind": "ars"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "afl"
+    },
+    {
+      "op": "invoke",
+      "target": "afl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ],
+      "bind": "af"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs0"
+    },
+    {
+      "op": "invoke",
+      "target": "aerrs0",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aerrs0"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM NoSuchTable"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "conn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aerrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "aerrs",
+      "bind": "ae",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ae",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aerrs"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

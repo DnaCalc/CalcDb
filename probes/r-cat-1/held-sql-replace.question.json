@@ -1,0 +1,431 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/held-sql-replace",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-V"
+  ],
+  "description": "Held Parameters across an SQL replacement on a writable copy of the query fixture. QParam's Parameters collection and Parameters(0) are held and Parameters(0).Value set to 1; QParam.SQL is then replaced with one that declares different parameter types and order (pB Long, pId Text). Asks for the held Parameter's Name/Type/Value, the held collection's Count, a fresh Parameters enumeration, a fresh QueryDefs lookup's SQL and Parameters, and after Close and reopen the stored SQL and Parameters.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-queries.accdb",
+      "sha256": "d53c7ee6e0f16c69107e0be625e15f985312a22f5c03c74b05cb7f6744550b01",
+      "length": 241664,
+      "provenance": "r-cat-1.create-accdb-queries.775ce375fd.a1 qk1-775ce375fd3d6a4f780bce3c0cf531e4c036f1fac57a98eff28a604859920bd0 output:r-cat-1-accdb-queries.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qd"
+    },
+    {
+      "op": "invoke",
+      "target": "qd",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "prms"
+    },
+    {
+      "op": "invoke",
+      "target": "prms",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "p0"
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd",
+      "member": "SQL",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pB Long, pId Text ( 5 ); SELECT ID FROM T WHERE B = pB OR CStr(ID) = pId;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "prms",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "prms2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "prms2",
+      "bind": "pp",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "prms2"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qf"
+    },
+    {
+      "op": "invoke",
+      "target": "qf",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qf",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qfp"
+    },
+    {
+      "op": "invoke",
+      "target": "qfp",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qfp",
+      "bind": "qfpi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qfpi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qfpi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qfp"
+    },
+    {
+      "op": "release",
+      "target": "qf"
+    },
+    {
+      "op": "release",
+      "target": "p0"
+    },
+    {
+      "op": "release",
+      "target": "prms"
+    },
+    {
+      "op": "release",
+      "target": "qd"
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs2"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qr"
+    },
+    {
+      "op": "invoke",
+      "target": "qr",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qr",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qrp"
+    },
+    {
+      "op": "invoke",
+      "target": "qrp",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qrp",
+      "bind": "qrpi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qrpi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qrpi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qrp"
+    },
+    {
+      "op": "release",
+      "target": "qr"
+    },
+    {
+      "op": "release",
+      "target": "qdfs2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

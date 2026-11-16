@@ -1,0 +1,1010 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/create-accdb-queries",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-Q"
+  ],
+  "description": "R-CAT-1 creation: query fixture: tables T, U, W with rows, one saved QueryDef per shape (select, aliases, explicit and implicit parameters, outer join, GROUP BY/HAVING, ORDER BY both directions, TOP, TOP PERCENT, DISTINCT, DISTINCTROW, crosstab, three-arm UNION, append, update, delete, make-table, DDL, CR/LF and quoting text, Unicode, LIKE patterns, nested), SQL-only and declaration-only variants, a pass-through QueryDef (Connect, ReturnsRecords) and one with only a Description property. Right after creation the returned Database's Version, CollatingOrder, Properties and TableDefs are read; the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-cat-1-accdb-queries.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cprops"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cprops",
+      "bind": "cp",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cprops"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "ctdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ctdfs",
+      "bind": "ctd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ctd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ctd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, A TEXT(20), B LONG, C DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE U (ID LONG CONSTRAINT PK_U PRIMARY KEY, TID LONG, V TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, A TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a', 10, 1.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'ab', 20, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (3, 'it''s', NULL, 3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (4, 'a%x', 40, 4)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (1, 1, 'u1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO U VALUES (2, 9, 'u9')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (1, 'w1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOne"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT A FROM T;"
+        }
+      ],
+      "bind": "q0"
+    },
+    {
+      "op": "release",
+      "target": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOneOrdered"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT A FROM T ORDER BY A;"
+        }
+      ],
+      "bind": "q1"
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QAlias"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT T.ID AS Key1, T.A AS [Label], B * 2 AS Twice FROM T;"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pId Long, pName Text ( 20 ); SELECT ID, A FROM T WHERE ID = pId OR A = pName;"
+        }
+      ],
+      "bind": "q3"
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParamTypes"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pId Short, pName Text ( 10 ); SELECT ID, A FROM T WHERE ID = pId OR A = pName;"
+        }
+      ],
+      "bind": "q4"
+    },
+    {
+      "op": "release",
+      "target": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QImplicit"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T WHERE B > pMin;"
+        }
+      ],
+      "bind": "q5"
+    },
+    {
+      "op": "release",
+      "target": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOuter"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT T.ID, U.V FROM T LEFT JOIN U ON T.ID = U.TID;"
+        }
+      ],
+      "bind": "q6"
+    },
+    {
+      "op": "release",
+      "target": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QGroup"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT A, Count(*) AS N, Sum(B) AS SB FROM T GROUP BY A HAVING Count(*) > 0;"
+        }
+      ],
+      "bind": "q7"
+    },
+    {
+      "op": "release",
+      "target": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOrder"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A FROM T ORDER BY A DESC, ID ASC;"
+        }
+      ],
+      "bind": "q8"
+    },
+    {
+      "op": "release",
+      "target": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QTop"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT TOP 2 ID FROM T ORDER BY ID;"
+        }
+      ],
+      "bind": "q9"
+    },
+    {
+      "op": "release",
+      "target": "q9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QTopPercent"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT TOP 50 PERCENT ID FROM T ORDER BY ID;"
+        }
+      ],
+      "bind": "q10"
+    },
+    {
+      "op": "release",
+      "target": "q10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDistinct"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT DISTINCT A FROM T;"
+        }
+      ],
+      "bind": "q11"
+    },
+    {
+      "op": "release",
+      "target": "q11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDistinctRow"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT DISTINCTROW T.A FROM T INNER JOIN U ON T.ID = U.TID;"
+        }
+      ],
+      "bind": "q12"
+    },
+    {
+      "op": "release",
+      "target": "q12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QCrosstab"
+        },
+        {
+          "type": "bstr",
+          "text": "TRANSFORM Sum(B) AS SB SELECT A FROM T GROUP BY A PIVOT ID;"
+        }
+      ],
+      "bind": "q13"
+    },
+    {
+      "op": "release",
+      "target": "q13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUnion3"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A FROM T UNION SELECT ID, A FROM W UNION ALL SELECT ID, V FROM U;"
+        }
+      ],
+      "bind": "q14"
+    },
+    {
+      "op": "release",
+      "target": "q14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QAppend"
+        },
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W (ID, A) SELECT ID + 100, A FROM T;"
+        }
+      ],
+      "bind": "q15"
+    },
+    {
+      "op": "release",
+      "target": "q15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpdate"
+        },
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET B = B + 1 WHERE ID = 1;"
+        }
+      ],
+      "bind": "q16"
+    },
+    {
+      "op": "release",
+      "target": "q16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDelete"
+        },
+        {
+          "type": "bstr",
+          "text": "DELETE FROM W WHERE ID > 100;"
+        }
+      ],
+      "bind": "q17"
+    },
+    {
+      "op": "release",
+      "target": "q17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QMakeTable"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A INTO TNew FROM T;"
+        }
+      ],
+      "bind": "q18"
+    },
+    {
+      "op": "release",
+      "target": "q18"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDdl"
+        },
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Z (ID LONG);"
+        }
+      ],
+      "bind": "q19"
+    },
+    {
+      "op": "release",
+      "target": "q19"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QText"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT  ID ,A\r\nFROM T\r\nWHERE A = 'it''s' OR A = \"q\"\r\n"
+        }
+      ],
+      "bind": "q20"
+    },
+    {
+      "op": "release",
+      "target": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUnicode"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID AS [Bä€] FROM T WHERE A <> 'Bä€ \uD834\uDD1E';"
+        }
+      ],
+      "bind": "q21"
+    },
+    {
+      "op": "release",
+      "target": "q21"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QLike89"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T WHERE A LIKE 'a*';"
+        }
+      ],
+      "bind": "q22"
+    },
+    {
+      "op": "release",
+      "target": "q22"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QLike92"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T WHERE A LIKE 'a%';"
+        }
+      ],
+      "bind": "q23"
+    },
+    {
+      "op": "release",
+      "target": "q23"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QBase"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, B FROM T;"
+        }
+      ],
+      "bind": "q24"
+    },
+    {
+      "op": "release",
+      "target": "q24"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QNested"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT B FROM QBase;"
+        }
+      ],
+      "bind": "q25"
+    },
+    {
+      "op": "release",
+      "target": "q25"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [],
+      "bind": "qpass"
+    },
+    {
+      "op": "invoke",
+      "target": "qpass",
+      "member": "Name",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QPass"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qpass",
+      "member": "Connect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ODBC;DSN=CalcDbProbeNoSuchDsn;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qpass",
+      "member": "SQL",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT 1 AS One"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qpass",
+      "member": "ReturnsRecords",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "qpass"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qpass",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qpass"
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QProp"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT A FROM T;"
+        }
+      ],
+      "bind": "qprop"
+    },
+    {
+      "op": "invoke",
+      "target": "qprop",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "query description"
+        }
+      ],
+      "bind": "qpd"
+    },
+    {
+      "op": "invoke",
+      "target": "qprop",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qpdc"
+    },
+    {
+      "op": "invoke",
+      "target": "qpdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "qpd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qpd"
+    },
+    {
+      "op": "release",
+      "target": "qpdc"
+    },
+    {
+      "op": "release",
+      "target": "qprop"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,563 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1-err-1/manifest-runtime-types",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST"
+  ],
+  "description": "DAO-MANIFEST: each live object's own runtime type information is described: DBEngine, Workspaces/Workspace, Databases/Database, TableDefs/TableDef, Fields/Field (table and recordset), Indexes/Index, Index.Fields, Relations/Relation, QueryDefs/QueryDef, Parameters/Parameter, Recordset, Properties/Property, Containers/Container, Documents/Document, Users, Groups, and Errors/Error after a failed OpenRecordset. The question is which interface each object reports at run time.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1-err-1-accdb-base.accdb",
+      "sha256": "814d9ec44538034c82755f043907e7bbff8c9bcaf872ad732fdfd5680c97e248",
+      "length": 258048,
+      "provenance": "r-dao-1-err-1.create-accdb-base.1be1af4b12.a1 qk1-1be1af4b12fd038b27ce9a63d97c439261ff2d8c05f421a54a66b1eeb865fe99 output:r-dao-1-err-1-accdb-base.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "describeType",
+      "target": "eng",
+      "wholeLibrary": false
+    },
+    {
+      "op": "describeType",
+      "target": "wss",
+      "wholeLibrary": false
+    },
+    {
+      "op": "describeType",
+      "target": "ws",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs"
+    },
+    {
+      "op": "describeType",
+      "target": "dbs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "describeType",
+      "target": "db",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "describeType",
+      "target": "tdfs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "describeType",
+      "target": "t",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfl"
+    },
+    {
+      "op": "describeType",
+      "target": "tfl",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "tf"
+    },
+    {
+      "op": "describeType",
+      "target": "tf",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "idxs"
+    },
+    {
+      "op": "describeType",
+      "target": "idxs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "idxs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PK_T"
+        }
+      ],
+      "bind": "ix"
+    },
+    {
+      "op": "describeType",
+      "target": "ix",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixf"
+    },
+    {
+      "op": "describeType",
+      "target": "ixf",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "describeType",
+      "target": "rels",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FK_C"
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "describeType",
+      "target": "rel",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "describeType",
+      "target": "qdfs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qd"
+    },
+    {
+      "op": "describeType",
+      "target": "qd",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "qd",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "prms"
+    },
+    {
+      "op": "describeType",
+      "target": "prms",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "prms",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pId"
+        }
+      ],
+      "bind": "prm"
+    },
+    {
+      "op": "describeType",
+      "target": "prm",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "describeType",
+      "target": "rs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rfl"
+    },
+    {
+      "op": "describeType",
+      "target": "rfl",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "rfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "rf"
+    },
+    {
+      "op": "describeType",
+      "target": "rf",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "props"
+    },
+    {
+      "op": "describeType",
+      "target": "props",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbProbe"
+        }
+      ],
+      "bind": "pr"
+    },
+    {
+      "op": "describeType",
+      "target": "pr",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctrs"
+    },
+    {
+      "op": "describeType",
+      "target": "ctrs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tables"
+        }
+      ],
+      "bind": "ctr"
+    },
+    {
+      "op": "describeType",
+      "target": "ctr",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ctr",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "docs"
+    },
+    {
+      "op": "describeType",
+      "target": "docs",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "docs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "doc"
+    },
+    {
+      "op": "describeType",
+      "target": "doc",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "users"
+    },
+    {
+      "op": "describeType",
+      "target": "users",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "groups"
+    },
+    {
+      "op": "describeType",
+      "target": "groups",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchTable"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs1"
+    },
+    {
+      "op": "describeType",
+      "target": "errs1",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "errs1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "err"
+    },
+    {
+      "op": "describeType",
+      "target": "err",
+      "wholeLibrary": false
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

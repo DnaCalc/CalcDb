@@ -1,0 +1,585 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/order-variants",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-Q"
+  ],
+  "description": "Ordering on a writable copy of the query fixture: QOrdA and QOrdB are created with the same expressions but reversed parameter, projected-field and sort-term order. Asks for each QueryDef's Parameters and Fields (Name, Type) and their MSysQueries rows; then QOrdA is deleted and recreated with identical SQL and its rows are read again.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-queries.accdb",
+      "sha256": "d53c7ee6e0f16c69107e0be625e15f985312a22f5c03c74b05cb7f6744550b01",
+      "length": 241664,
+      "provenance": "r-cat-1.create-accdb-queries.775ce375fd.a1 qk1-775ce375fd3d6a4f780bce3c0cf531e4c036f1fac57a98eff28a604859920bd0 output:r-cat-1-accdb-queries.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOrdA"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Text ( 10 ); SELECT A, B FROM T WHERE B = p1 AND A = p2 ORDER BY A, B;"
+        }
+      ],
+      "bind": "qa"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOrdB"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p2 Text ( 10 ), p1 Long; SELECT B, A FROM T WHERE B = p1 AND A = p2 ORDER BY B, A;"
+        }
+      ],
+      "bind": "qb"
+    },
+    {
+      "op": "invoke",
+      "target": "qa",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qap"
+    },
+    {
+      "op": "invoke",
+      "target": "qap",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qap",
+      "bind": "qapi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qapi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qapi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qap"
+    },
+    {
+      "op": "invoke",
+      "target": "qa",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qaf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qaf",
+      "bind": "qafi",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qafi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qafi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qaf"
+    },
+    {
+      "op": "invoke",
+      "target": "qb",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qbp"
+    },
+    {
+      "op": "invoke",
+      "target": "qbp",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qbp",
+      "bind": "qbpi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qbpi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qbpi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qbp"
+    },
+    {
+      "op": "invoke",
+      "target": "qb",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qbf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qbf",
+      "bind": "qbfi",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qbfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qbfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qbf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysQueries WHERE ObjectId IN (SELECT Id FROM MSysObjects WHERE Name IN ('QOrdA', 'QOrdB'))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_o1"
+    },
+    {
+      "op": "invoke",
+      "target": "s_o1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_o1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_o1",
+      "bind": "sf_o1i",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_o1i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_o1i",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_o1i",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_o1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_o1",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_o1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_o1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_o1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_o1"
+    },
+    {
+      "op": "release",
+      "target": "qa"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOrdA"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QOrdA"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Text ( 10 ); SELECT A, B FROM T WHERE B = p1 AND A = p2 ORDER BY A, B;"
+        }
+      ],
+      "bind": "qa2"
+    },
+    {
+      "op": "invoke",
+      "target": "qa2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qa2p"
+    },
+    {
+      "op": "invoke",
+      "target": "qa2p",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qa2p",
+      "bind": "qa2pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qa2pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qa2pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qa2p"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSysQueries WHERE ObjectId IN (SELECT Id FROM MSysObjects WHERE Name IN ('QOrdA', 'QOrdB'))"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "s_o2"
+    },
+    {
+      "op": "invoke",
+      "target": "s_o2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf_o2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sf_o2",
+      "bind": "sf_o2i",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sf_o2i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_o2i",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sf_o2i",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sf_o2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "s_o2",
+      "member": "EOF",
+      "maxIterations": 256,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "s_o2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "s_o2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s_o2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s_o2"
+    },
+    {
+      "op": "release",
+      "target": "qa2"
+    },
+    {
+      "op": "release",
+      "target": "qb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

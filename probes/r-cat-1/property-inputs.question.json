@@ -1,0 +1,1129 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/property-inputs",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "Property inputs on a writable copy of the empty ACCDB. Database.CreateProperty + Properties.Append is called with Null, Empty, empty BSTR, empty byte array, zero, False, noncanonical Boolean inputs (I2 1, I4 -2, text), cross-type values, a Missing and an omitted Value, an empty name, a duplicate name, an undefined type code 99, 64- and 65-character names, and once with only a name. Properties are then enumerated (Name, Type, Value), and enumerated again after Close and reopen.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VNameOnly"
+        }
+      ],
+      "bind": "vonly"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "vonlyc"
+    },
+    {
+      "op": "invoke",
+      "target": "vonlyc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "vonly"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "vonly"
+    },
+    {
+      "op": "release",
+      "target": "vonlyc"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VNullText"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "v0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v0c"
+    },
+    {
+      "op": "invoke",
+      "target": "v0c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v0"
+    },
+    {
+      "op": "release",
+      "target": "v0c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VEmptyText"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "v1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v1c"
+    },
+    {
+      "op": "invoke",
+      "target": "v1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v1"
+    },
+    {
+      "op": "release",
+      "target": "v1c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VEmptyBstr"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "v2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v2c"
+    },
+    {
+      "op": "invoke",
+      "target": "v2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v2"
+    },
+    {
+      "op": "release",
+      "target": "v2c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VEmptyBinary"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "bytes",
+          "hex": ""
+        }
+      ],
+      "bind": "v3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v3c"
+    },
+    {
+      "op": "invoke",
+      "target": "v3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v3"
+    },
+    {
+      "op": "release",
+      "target": "v3c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VZeroLong"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "v4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v4c"
+    },
+    {
+      "op": "invoke",
+      "target": "v4c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v4"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v4"
+    },
+    {
+      "op": "release",
+      "target": "v4c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VFalse"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "v5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v5c"
+    },
+    {
+      "op": "invoke",
+      "target": "v5c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v5"
+    },
+    {
+      "op": "release",
+      "target": "v5c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VBoolOneI2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i2",
+          "value": 1
+        }
+      ],
+      "bind": "v6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v6c"
+    },
+    {
+      "op": "invoke",
+      "target": "v6c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v6"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v6"
+    },
+    {
+      "op": "release",
+      "target": "v6c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VBoolMinusTwo"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": -2
+        }
+      ],
+      "bind": "v7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v7c"
+    },
+    {
+      "op": "invoke",
+      "target": "v7c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v7"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v7"
+    },
+    {
+      "op": "release",
+      "target": "v7c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VBoolText"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "bstr",
+          "text": "yes"
+        }
+      ],
+      "bind": "v8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v8c"
+    },
+    {
+      "op": "invoke",
+      "target": "v8c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v8"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v8"
+    },
+    {
+      "op": "release",
+      "target": "v8c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VLongFromText"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ],
+      "bind": "v9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v9c"
+    },
+    {
+      "op": "invoke",
+      "target": "v9c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v9"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v9"
+    },
+    {
+      "op": "release",
+      "target": "v9c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VTextFromLong"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "v10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v10c"
+    },
+    {
+      "op": "invoke",
+      "target": "v10c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v10"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v10"
+    },
+    {
+      "op": "release",
+      "target": "v10c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VMissingValue"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "v11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v11c"
+    },
+    {
+      "op": "invoke",
+      "target": "v11c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v11"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v11"
+    },
+    {
+      "op": "release",
+      "target": "v11c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VOmittedValue"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ],
+      "bind": "v12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v12c"
+    },
+    {
+      "op": "invoke",
+      "target": "v12c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v12"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v12"
+    },
+    {
+      "op": "release",
+      "target": "v12c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "empty name"
+        }
+      ],
+      "bind": "v13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v13c"
+    },
+    {
+      "op": "invoke",
+      "target": "v13c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v13"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v13"
+    },
+    {
+      "op": "release",
+      "target": "v13c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VZeroLong"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "v14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v14c"
+    },
+    {
+      "op": "invoke",
+      "target": "v14c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v14"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v14"
+    },
+    {
+      "op": "release",
+      "target": "v14c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VBadType"
+        },
+        {
+          "type": "i4",
+          "value": 99
+        },
+        {
+          "type": "bstr",
+          "text": "x"
+        }
+      ],
+      "bind": "v15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v15c"
+    },
+    {
+      "op": "invoke",
+      "target": "v15c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v15"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v15"
+    },
+    {
+      "op": "release",
+      "target": "v15c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "64"
+        }
+      ],
+      "bind": "v16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v16c"
+    },
+    {
+      "op": "invoke",
+      "target": "v16c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v16"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v16"
+    },
+    {
+      "op": "release",
+      "target": "v16c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "65"
+        }
+      ],
+      "bind": "v17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "v17c"
+    },
+    {
+      "op": "invoke",
+      "target": "v17c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "v17"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "v17"
+    },
+    {
+      "op": "release",
+      "target": "v17c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "vp1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "vp1",
+      "bind": "vp1i",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "vp1i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp1i",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp1i",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp1i",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "vp1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "vp2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "vp2",
+      "bind": "vp2i",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "vp2i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp2i",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp2i",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "vp2i",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "vp2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,1569 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1/create-accdb-properties",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "R-CAT-1 creation: property fixture: one user-defined Database property per DAO type with length, Unicode, GUID-named and 16-byte binary cases; Description on table T; Description, Caption and CalcDbProp on field K and CalcDbProp on index K (same name as the column); a Memo-typed property on field M; Description on QueryDef QP. Right after creation the returned Database's Version, CollatingOrder, Properties and TableDefs are read; the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-cat-1-accdb-properties.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cprops"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cprops",
+      "bind": "cp",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cprops"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "ctdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ctdfs",
+      "bind": "ctd",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ctd",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ctd",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10), M MEMO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX K ON T (K)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'k', 'memo')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QP"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, K FROM T;"
+        }
+      ],
+      "bind": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PBoolean"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dp0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp0c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp0c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp0"
+    },
+    {
+      "op": "release",
+      "target": "dp0c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PByte"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "ui1",
+          "value": 200
+        }
+      ],
+      "bind": "dp1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp1c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp1"
+    },
+    {
+      "op": "release",
+      "target": "dp1c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PInteger"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i2",
+          "value": -3
+        }
+      ],
+      "bind": "dp2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp2c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp2"
+    },
+    {
+      "op": "release",
+      "target": "dp2c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PLong"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 123456
+        }
+      ],
+      "bind": "dp3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp3c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp3"
+    },
+    {
+      "op": "release",
+      "target": "dp3c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PCurrency"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "cy",
+          "scaled": 12345
+        }
+      ],
+      "bind": "dp4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp4c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp4c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp4"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp4"
+    },
+    {
+      "op": "release",
+      "target": "dp4c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PSingle"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        },
+        {
+          "type": "r4",
+          "bits": "3fc00000"
+        }
+      ],
+      "bind": "dp5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp5c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp5c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp5"
+    },
+    {
+      "op": "release",
+      "target": "dp5c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDouble"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "r8",
+          "bits": "3fb999999999999a"
+        }
+      ],
+      "bind": "dp6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp6c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp6c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp6"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp6"
+    },
+    {
+      "op": "release",
+      "target": "dp6c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDate"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        },
+        {
+          "type": "date",
+          "bits": "40e5f91000000000"
+        }
+      ],
+      "bind": "dp7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp7c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp7c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp7"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp7"
+    },
+    {
+      "op": "release",
+      "target": "dp7c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PText"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "text"
+        }
+      ],
+      "bind": "dp8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp8c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp8c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp8"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp8"
+    },
+    {
+      "op": "release",
+      "target": "dp8c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTextUnicode"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "Bä€ \uD834\uDD1E"
+        }
+      ],
+      "bind": "dp9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp9c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp9c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp9"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp9"
+    },
+    {
+      "op": "release",
+      "target": "dp9c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PText255"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+        }
+      ],
+      "bind": "dp10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp10c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp10c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp10"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp10"
+    },
+    {
+      "op": "release",
+      "target": "dp10c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PText300"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
+        }
+      ],
+      "bind": "dp11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp11c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp11c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp11"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp11"
+    },
+    {
+      "op": "release",
+      "target": "dp11c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PMemo"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        },
+        {
+          "type": "bstr",
+          "text": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+        }
+      ],
+      "bind": "dp12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp12c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp12c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp12"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp12"
+    },
+    {
+      "op": "release",
+      "target": "dp12c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PMemoUnicode"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        },
+        {
+          "type": "bstr",
+          "text": "Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€Bä€"
+        }
+      ],
+      "bind": "dp13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp13c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp13c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp13"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp13"
+    },
+    {
+      "op": "release",
+      "target": "dp13c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PBinary16"
+        },
+        {
+          "type": "i4",
+          "value": 9
+        },
+        {
+          "type": "bytes",
+          "hex": "000102030405060708090a0b0c0d0e0f"
+        }
+      ],
+      "bind": "dp14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp14c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp14c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp14"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp14"
+    },
+    {
+      "op": "release",
+      "target": "dp14c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "GUID"
+        },
+        {
+          "type": "i4",
+          "value": 9
+        },
+        {
+          "type": "bytes",
+          "hex": "f0efeeedecebeae9e8e7e6e5e4e3e2e1"
+        }
+      ],
+      "bind": "dp15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp15c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp15c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp15"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp15"
+    },
+    {
+      "op": "release",
+      "target": "dp15c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PGuidType"
+        },
+        {
+          "type": "i4",
+          "value": 15
+        },
+        {
+          "type": "bstr",
+          "text": "{00112233-4455-6677-8899-AABBCCDDEEFF}"
+        }
+      ],
+      "bind": "dp16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp16c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp16c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp16"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp16"
+    },
+    {
+      "op": "release",
+      "target": "dp16c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PLongBinary"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        },
+        {
+          "type": "bytes",
+          "hex": "00070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01"
+        }
+      ],
+      "bind": "dp17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp17c"
+    },
+    {
+      "op": "invoke",
+      "target": "dp17c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dp17"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dp17"
+    },
+    {
+      "op": "release",
+      "target": "dp17c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdf"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "table description"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpc"
+    },
+    {
+      "op": "invoke",
+      "target": "tpc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "tp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "release",
+      "target": "tpc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "fk"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "column description"
+        }
+      ],
+      "bind": "fkd"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fkdc"
+    },
+    {
+      "op": "invoke",
+      "target": "fkdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fkd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fkd"
+    },
+    {
+      "op": "release",
+      "target": "fkdc"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "Column K"
+        }
+      ],
+      "bind": "fkc"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fkcc"
+    },
+    {
+      "op": "invoke",
+      "target": "fkcc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fkc"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fkc"
+    },
+    {
+      "op": "release",
+      "target": "fkcc"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbProp"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "fkp"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fkpc"
+    },
+    {
+      "op": "invoke",
+      "target": "fkpc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fkp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fkp"
+    },
+    {
+      "op": "release",
+      "target": "fkpc"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbMemo"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        },
+        {
+          "type": "bstr",
+          "text": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      ],
+      "bind": "fmp"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fmpc"
+    },
+    {
+      "op": "invoke",
+      "target": "fmpc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fmp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fmp"
+    },
+    {
+      "op": "release",
+      "target": "fmpc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixs"
+    },
+    {
+      "op": "invoke",
+      "target": "ixs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "ixk"
+    },
+    {
+      "op": "invoke",
+      "target": "ixk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbProp"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "ixp"
+    },
+    {
+      "op": "invoke",
+      "target": "ixk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixpc"
+    },
+    {
+      "op": "invoke",
+      "target": "ixpc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ixp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixp"
+    },
+    {
+      "op": "release",
+      "target": "ixpc"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "query description"
+        }
+      ],
+      "bind": "qpd"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qpdc"
+    },
+    {
+      "op": "invoke",
+      "target": "qpdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "qpd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qpd"
+    },
+    {
+      "op": "release",
+      "target": "qpdc"
+    },
+    {
+      "op": "release",
+      "target": "ixk"
+    },
+    {
+      "op": "release",
+      "target": "ixs"
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "release",
+      "target": "fk"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "release",
+      "target": "tdf"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "release",
+      "target": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
