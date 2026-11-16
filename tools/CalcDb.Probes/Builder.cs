@@ -170,6 +170,17 @@ public sealed class P
             .CallBind("dfld", "dtdf", "CreateField", A.Str(field), A.I4(20)).GetBind("dfls", "dtdf", "Fields").Call("dfls", "Append", A.Obj("dfld"))
             .Release("dfls").Release("dfld").Release("dtdf").Release("dtdfs");
 
+    /// <summary>
+    /// Create a relationship through DAO (Database.CreateRelation, Relation.CreateField with ForeignName,
+    /// Relations.Append): DAO DDL refuses both column- and table-level REFERENCES clauses (3292).
+    /// </summary>
+    public P AddRelation(string name, string table, string foreignTable, string field, string foreignField, int attributes = 0, string db = "db") =>
+        CallBind("rel", db, "CreateRelation", A.Str(name), A.Str(table), A.Str(foreignTable), A.I4(attributes))
+            .CallBind("relf", "rel", "CreateField", A.Str(field)).Put("relf", "ForeignName", A.Str(foreignField))
+            .GetBind("relfs", "rel", "Fields").Call("relfs", "Append", A.Obj("relf"))
+            .GetBind("rels", db, "Relations").Call("rels", "Append", A.Obj("rel"))
+            .Release("rels").Release("relfs").Release("relf").Release("rel");
+
     /// <summary>The standard opening: file state, module identity, DBEngine, identity after activation.</summary>
     public P Engine()
     {
