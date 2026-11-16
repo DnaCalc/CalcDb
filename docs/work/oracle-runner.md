@@ -4,7 +4,8 @@ How CalcDb asks ACE a question and keeps the answer. This implements the first s
 **W-01/capture-core** for **R-ORACLE-1** ([A-02](../book/A-02-experiments.md#r-oracle-1--capture-isolation-and-service-recovery)),
 following [II-15 §§1–4](../book/II-15-evidence.md) and [The Plan](../the-plan.md) §2. The book
 is the authority; this note records the choices made at the first dependency boundary
-(The Plan §7) and how to use the tools.
+(The Plan §7) and how to use the tools. In the proposed service ([oracle-service.md](oracle-service.md))
+this runner is tier 2, for owned experiments with effects.
 
 ## Pieces
 
@@ -105,18 +106,11 @@ outcomes; do not retain tooling failures or redundant reruns (The Plan §2.4). F
 are found by hash in the store or in `evidence/artifacts/`, so a fresh clone can rerun a
 retained question.
 
-## Linux-controlled operation (design; transport deferred)
+## Linux-controlled operation
 
-Everything except `run` and the index is platform-neutral. A Linux agent authors a question,
-computes its key and inspects records with `CalcDb.Evidence`. The Windows side is the job
-store plus `run`. A remote controller therefore needs only to move three things: a job
-request (token, question JSON, requested environment), status queries by token, and sealed
-attempt directories back (manifest, capture, artifacts, all verifiable by digest). Because
-admission is idempotent per token and sealing verifies content, the transport may retry
-freely: a lost reply is answered by querying the token, never by resubmitting a different
-request or re-running an attempt. The first transport (SSH plus the CLI, a shared folder, or
-a small HTTP service in front of the same store) is chosen when a Linux host first needs it
-(The Plan §7).
+The proposed service design, with Windows-opened ssh relays to Linux hosts, a fast tier of
+long-lived ACE workers, and this runner as its tier for owned experiments, is in
+[oracle-service.md](oracle-service.md).
 
 ## Limits of this slice
 
