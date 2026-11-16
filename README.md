@@ -2,9 +2,8 @@
 
 CalcDb (the DnaCalc/CalcDb repository) is the database engine library of DNA Calc: a
 clean-room implementation of the Jet 4 and ACE database engine, MIT-licensed. The book
-designs it as a Rust engine. Per [The Plan](docs/the-plan.md), the work begins with a
-complete, idiomatic C# (.NET 11) reference implementation of that design; a Rust
-production engine may follow from a revised book. It reads and writes Microsoft Access database files, runs Access SQL, and exposes the DAO
+designs it as a Rust engine; [The Plan](docs/the-plan.md) sets out how it is first
+built and what may follow. It reads and writes Microsoft Access database files, runs Access SQL, and exposes the DAO
 and ADO object models. Code that uses the Access database engine (ACE) inside Excel
 should work unchanged inside DNA Calc.
 
@@ -22,9 +21,8 @@ that hold for all work, then points into the design book, which holds the detail
   values, diagnostics and file state ([II-16 §33](docs/book/II-16-development.md)).
   Declaration and host discovery (I-FOUNDATION-1, I-HOST-1) can proceed alongside it.
 - **Approach:** [The Plan](docs/the-plan.md) (working draft v0.2, about 6k tokens) says
-  how we undertake the work: .NET 11 oracle tooling and a Windows runner, a full C#
-  reference implementation of v1.1, and a measured loop for improving agentic C#
-  development. The book stays the authority for scope and design.
+  how we undertake the work. Everyone working on CalcDb reads it in full. The book
+  stays the authority for scope and design.
 - **External inputs** that CalcDb consumes but does not build are listed in
   [II-16 §24](docs/book/II-16-development.md#24-external-inputs-and-the-construction-index).
 
@@ -34,7 +32,7 @@ The book is about 4.5 MB of Markdown, roughly 1.2 million tokens. No agent shoul
 it whole. Sizes below are approximate tokens (bytes / 4), so you can budget context.
 
 **Everyone, first (about 15k tokens):** this README, [AGENTS.md](AGENTS.md),
-[The Plan](docs/the-plan.md) (6k), and
+[The Plan](docs/the-plan.md) (6k, read in full), and
 [Scope and context](docs/book/00-scope.md) (2k): the current scope in seven sections.
 
 **Then by task:**
@@ -271,11 +269,10 @@ Pager and VFS               page cache, write ordering, native and browser stora
 
 ### Oracles and evidence
 
-- The oracles are 64-bit ACE and Access on Windows. Probes capture their own
-  results; the observations worth keeping are committed as JSON records (with hashed
-  artifacts) keyed by their inputs. The ACE/Access build is provenance, never a
-  condition. A generated `.accdb` evidence database indexes them and is never the
-  source of truth.
+- The oracles are 64-bit ACE and Access on Windows. Retained
+  observations are committed keyed by their inputs; the ACE/Access build is
+  provenance, never a condition. [The Plan](docs/the-plan.md) §2 says how evidence is
+  captured, retained and indexed.
 - One oracle, one corpus and one differential harness compare typed values, errors,
   object transitions and bytes. The file corpus is a product in its own right.
 - Office automation drives only processes our scripts started, never changes Trust
@@ -324,8 +321,7 @@ Anthropic, whose models build much of DNA Calc. So:
 
 ### Order of work and open questions
 
-How the work is undertaken (tooling, the C# reference, agent-process improvement and
-the first milestone) is in [The Plan](docs/the-plan.md). The work packages W-01 to
+How the work is undertaken is in [The Plan](docs/the-plan.md). The work packages W-01 to
 W-12, their slices and dependencies are in
 [I-16](docs/book/I-16-development.md) and [II-16](docs/book/II-16-development.md). In
 priority order: obstacles on the actual DAO/VBA path first, then bulk SQL, then browser
