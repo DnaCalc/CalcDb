@@ -316,6 +316,12 @@ public class CapturedValueTests
     }
 
     [Fact]
+    public void Serialization_is_independent_of_the_host_line_ending()
+    {
+        Assert.DoesNotContain('\r', EvidenceJson.Serialize(CapturedValue.FromBstrBytes([0x41, 0x00])));
+    }
+
+    [Fact]
     public void Large_unsigned_integer_is_not_rounded_through_double()
     {
         CapturedValue v = CapturedValue.FromUnsigned(21, ulong.MaxValue);

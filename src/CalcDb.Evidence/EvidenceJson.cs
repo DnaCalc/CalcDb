@@ -10,6 +10,8 @@ public static class EvidenceJson
     public static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
+        // Fixed line ends: record bytes and seal digests must not depend on the host OS (Linux inspection).
+        NewLine = "\n",
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         // Keep non-ASCII text readable; payload authority is in the hex fields anyway.

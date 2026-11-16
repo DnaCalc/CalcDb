@@ -66,6 +66,10 @@ start inputs becomes `ready`; until then the construction index is their record.
 | `evidence/r-oracle-1/table-read-t1/` | II-16 §33, OR-WIRE, OR-OBS | Table-type recordset read of T1: field metadata and every value as typed VARIANTs. |
 | `evidence/r-oracle-1/failed-call-t1/` | II-16 §33, OR-OBS, R-ERR-1 | `OpenRecordset` on a missing table: HRESULT, EXCEPINFO, empty IErrorInfo slot, DAO `Errors`. |
 
+**Seal note.** These three records were sealed by tooling `67a9af91`, which serialized with
+the host line ending; their `sealSha256` verifies against the CRLF-indented manifest form.
+Later tooling serializes with `\n` on every host.
+
 **Identity note (OR-IDENT, II-16 evidence boundary).** The loaded engine is not one build.
 ACEDAO, ACECORE, ACEES and ACEWSTR load as 16.0.20527.20196, ACEERR as 16.0.20527.20016
 (the build the book's supplied report names), and ACEINTL as 16.0.20326.20022, all under
