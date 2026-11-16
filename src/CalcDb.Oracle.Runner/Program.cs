@@ -12,6 +12,9 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
+/// <item><c>batch --dir DIR [--retain] [--freeze] [--note TEXT]</c>: submit and run every question file under DIR
+/// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
+/// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
@@ -22,7 +25,7 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch [options]");
             return 2;
         }
         var options = Options.Parse(args.Skip(1));
@@ -40,6 +43,7 @@ internal static class Program
                 "freeze" => Freeze(store, options),
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
+                "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 _ => Usage(args[0]),
             };
         }
@@ -84,13 +88,99 @@ internal static class Program
             }
         }
 
+        CaptureManifest manifest = RunAttempt(store, token, options, repo);
+        Console.WriteLine(EvidenceJson.Serialize(manifest));
+        return manifest.IsComplete ? 0 : 3;
+    }
+
+    private static CaptureManifest RunAttempt(JobStore store, string token, Options options, string repo)
+    {
         AttemptRecord attempt = store.PrepareAttempt(token, ToolingRevision(repo), BookRevision(repo));
         string worker = options.Get("worker") ?? DefaultWorker(repo);
         TimeSpan timeout = TimeSpan.FromSeconds(int.Parse(options.Get("timeout") ?? "300", System.Globalization.CultureInfo.InvariantCulture));
         OwnerReport owner = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, timeout, () => store.MarkRunning(token));
-        CaptureManifest manifest = store.Seal(attempt, owner);
-        Console.WriteLine(EvidenceJson.Serialize(manifest));
-        return manifest.IsComplete ? 0 : 3;
+        return store.Seal(attempt, owner);
+    }
+
+    /// <summary>The job token of a question file: its probe name and a key prefix, so a changed question is a new job.</summary>
+    private static string TokenOf(Question question) => question.Probe.Replace('/', '.') + "." + question.Key()[4..14];
+
+    private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
+    {
+        string dir = Path.GetFullPath(options.Require("dir"));
+        bool retain = options.Has("retain");
+        bool freeze = options.Has("freeze");
+        var files = Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList();
+        int complete = 0, incomplete = 0;
+        foreach (string file in files)
+        {
+            Question question = EvidenceJson.Read<Question>(file);
+            string token = TokenOf(question);
+            (JobRecord job, _) = store.SubmitOrQuery(token, question, options.Get("env") ?? "windows-x64-ace-local");
+            CaptureManifest manifest = job.Attempts.Count > 0 && store.GetManifest(job.Attempts[^1]) is { } existing
+                ? existing
+                : RunAttempt(store, token, options, repo);
+            string attemptDir = store.AttemptDirectory(manifest.AttemptId);
+            string failed = "";
+            string capturePath = Path.Combine(attemptDir, "capture.json");
+            if (File.Exists(capturePath))
+            {
+                Capture capture = EvidenceJson.Read<Capture>(capturePath);
+                failed = string.Join(" ", capture.Events.OfType<InvokeEvent>()
+                    .Where(i => i.InvokeHresult is null || i.InvokeHresult.StartsWith("0x8", StringComparison.Ordinal))
+                    .Select(i => $"{i.Member}:{(i.ExcepInfo is { } x ? x.Scode : i.InvokeHresult ?? "GetIDsOfNames " + i.GetIdsOfNamesHresult)}"));
+            }
+            Console.WriteLine($"{(manifest.IsComplete ? "OK  " : "INC ")} {question.Probe,-58} {manifest.Execution,-15} {failed}");
+            if (!manifest.IsComplete)
+            {
+                incomplete++;
+                foreach (string problem in manifest.Problems)
+                {
+                    Console.WriteLine("       problem: " + problem);
+                }
+                continue;
+            }
+            complete++;
+            if (retain && !File.Exists(RecordPath(evidenceDir, question, manifest.AttemptId)))
+            {
+                RetainAttempt(store, manifest.AttemptId, options.Get("note"), evidenceDir, artifactsDir);
+            }
+            if (freeze)
+            {
+                foreach (ArtifactRef output in manifest.Artifacts.Where(a => a.Role.StartsWith("output:", StringComparison.Ordinal)))
+                {
+                    FreezeNamed(store, repo, manifest, output);
+                }
+            }
+        }
+        Console.WriteLine($"{files.Count} questions: {complete} complete, {incomplete} incomplete");
+        return incomplete == 0 ? 0 : 3;
+    }
+
+    /// <summary>
+    /// Register an output file as an immutable named fixture (name = file name without extension). A name is
+    /// bound once: a different later output under the same name is reported, never substituted.
+    /// </summary>
+    private static void FreezeNamed(JobStore store, string repo, CaptureManifest manifest, ArtifactRef output)
+    {
+        string fileName = output.Role["output:".Length..];
+        string name = Path.GetFileNameWithoutExtension(fileName);
+        string registryPath = Path.Combine(repo, "probes", "fixtures.json");
+        var registry = File.Exists(registryPath)
+            ? new SortedDictionary<string, FixtureInput>(EvidenceJson.Read<Dictionary<string, FixtureInput>>(registryPath), StringComparer.Ordinal)
+            : new SortedDictionary<string, FixtureInput>(StringComparer.Ordinal);
+        if (registry.TryGetValue(name, out FixtureInput? bound))
+        {
+            if (bound.Sha256 != output.Sha256)
+            {
+                Console.WriteLine($"       fixture '{name}' is already bound to {bound.Sha256[..12]}; output {output.Sha256[..12]} not substituted");
+            }
+            return;
+        }
+        string source = Path.Combine(store.AttemptDirectory(manifest.AttemptId), output.RelativePath);
+        registry[name] = store.ImportContent(source, "main", fileName, $"{manifest.AttemptId} {manifest.QuestionKey} {output.Role}");
+        EvidenceJson.WriteAtomic(registryPath, registry);
+        Console.WriteLine($"       froze fixture '{name}' = {output.Sha256[..12]}");
     }
 
     private static int Status(JobStore store, Options options)
@@ -122,7 +212,15 @@ internal static class Program
 
     private static int Retain(JobStore store, Options options, string evidenceDir, string artifactsDir)
     {
-        string attemptId = options.Require("attempt");
+        Console.WriteLine(RetainAttempt(store, options.Require("attempt"), options.Get("note"), evidenceDir, artifactsDir));
+        return 0;
+    }
+
+    private static string RecordPath(string evidenceDir, Question question, string attemptId) =>
+        Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
+
+    private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir)
+    {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
         string attemptDir = store.AttemptDirectory(attemptId);
         Question question = EvidenceJson.Read<Question>(Path.Combine(attemptDir, "question.json"));
@@ -152,7 +250,7 @@ internal static class Program
             Probe = question.Probe,
             BookRefs = question.BookRefs,
             Description = question.Description,
-            RetentionNote = options.Get("note"),
+            RetentionNote = note,
             Token = manifest.Token,
             QuestionKey = manifest.QuestionKey,
             Question = question,
@@ -160,15 +258,13 @@ internal static class Program
             Capture = capture,
             Artifacts = retained,
         };
-        string dir = Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(dir);
-        string path = Path.Combine(dir, attemptId + ".json");
+        string path = RecordPath(evidenceDir, question, attemptId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         if (!EvidenceJson.TryCreateNew(path, record))
         {
             throw new InvalidOperationException($"{path} already exists; retained records are not rewritten.");
         }
-        Console.WriteLine(path);
-        return 0;
+        return path;
     }
 
     private static int ShowAttempt(JobStore store, Options options)

@@ -96,6 +96,12 @@ public enum DispatchKind
     Method = 1,
     PropertyGet = 2,
     MethodOrGet = 3,
+
+    /// <summary>DISPATCH_PROPERTYPUT: the last argument is the value, passed with DISPID_PROPERTYPUT.</summary>
+    PropertyPut = 4,
+
+    /// <summary>DISPATCH_PROPERTYPUTREF, for assigning an object.</summary>
+    PropertyPutRef = 8,
 }
 
 /// <summary>One step of an oracle operation program, interpreted by the worker in order.</summary>
@@ -107,6 +113,7 @@ public enum DispatchKind
 [JsonDerivedType(typeof(Release), "release")]
 [JsonDerivedType(typeof(ObserveFiles), "observeFiles")]
 [JsonDerivedType(typeof(ObserveModules), "observeModules")]
+[JsonDerivedType(typeof(DescribeType), "describeType")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -187,10 +194,35 @@ public sealed record Release(string Target) : Operation
     internal override void Write(CanonicalWriter w) => w.Begin("release").Text("target", Target);
 }
 
-/// <summary>Observe the attempt's input and work files: lengths, hashes, lock files.</summary>
+/// <summary>
+/// Observe the attempt's input and work files: lengths, hashes, lock files. With <see cref="Keep"/>, the
+/// bytes of every database file at this point are kept as artifacts (R-FMT-1/2 before/after images).
+/// </summary>
 public sealed record ObserveFiles(string Label) : Operation
 {
-    internal override void Write(CanonicalWriter w) => w.Begin("observeFiles").Text("label", Label);
+    public bool Keep { get; init; }
+
+    internal override void Write(CanonicalWriter w)
+    {
+        w.Begin("observeFiles").Text("label", Label);
+        if (Keep)
+        {
+            w.Bool("keep", true); // written only when set, so earlier question keys are unchanged
+        }
+    }
+}
+
+/// <summary>
+/// Record the type information of a bound object through ITypeInfo: its type library, interface name and
+/// IID, flags, and every function and variable with dispid, invoke kind, vtable offset and parameter types,
+/// for dual interfaces also the vtable view (R-DAO-1 inventory, R-ACT-1 ACT-DECL). Public COM metadata only.
+/// </summary>
+public sealed record DescribeType(string Target) : Operation
+{
+    /// <summary>Describe every type of the object's containing type library, not only the object's own type.</summary>
+    public bool WholeLibrary { get; init; }
+
+    internal override void Write(CanonicalWriter w) => w.Begin("describeType").Text("target", Target).Bool("wholeLibrary", WholeLibrary);
 }
 
 /// <summary>Observe loaded module identities (OR-IDENT).</summary>
@@ -209,6 +241,14 @@ public sealed record ObserveModules(string Label) : Operation
 [JsonDerivedType(typeof(ObjectArg), "object")]
 [JsonDerivedType(typeof(InputPathArg), "inputPath")]
 [JsonDerivedType(typeof(OutputPathArg), "outputPath")]
+[JsonDerivedType(typeof(UI1Arg), "ui1")]
+[JsonDerivedType(typeof(R4Arg), "r4")]
+[JsonDerivedType(typeof(R8Arg), "r8")]
+[JsonDerivedType(typeof(DateArg), "date")]
+[JsonDerivedType(typeof(CyArg), "cy")]
+[JsonDerivedType(typeof(BytesArg), "bytes")]
+[JsonDerivedType(typeof(NullArg), "null")]
+[JsonDerivedType(typeof(EmptyArg), "empty")]
 public abstract record Arg
 {
     internal abstract void Write(CanonicalWriter w);
@@ -246,6 +286,76 @@ public sealed record BstrArg(string Text) : Arg
         if (!Hashing.IsWellFormedUtf16(Text))
         {
             throw new EvidenceFormatException("BSTR argument is not well-formed UTF-16; calcdb.question/1 cannot represent it.");
+        }
+    }
+}
+
+public sealed record UI1Arg(byte Value) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("ui1").Int32("v", Value);
+}
+
+/// <summary>VT_R4 given by its exact IEEE bits as 8 lowercase hex digits (most significant first).</summary>
+public sealed record R4Arg(string Bits) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("r4").Text("bits", Bits);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles) => HexBits.Require(Bits, 8);
+}
+
+/// <summary>VT_R8 given by its exact IEEE bits as 16 lowercase hex digits (most significant first).</summary>
+public sealed record R8Arg(string Bits) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("r8").Text("bits", Bits);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles) => HexBits.Require(Bits, 16);
+}
+
+/// <summary>VT_DATE given by the exact bits of its OLE Automation Double, 16 lowercase hex digits.</summary>
+public sealed record DateArg(string Bits) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("date").Text("bits", Bits);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles) => HexBits.Require(Bits, 16);
+}
+
+/// <summary>VT_CY given by its scaled 64-bit integer (value times 10,000).</summary>
+public sealed record CyArg(long Scaled) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("cy").Int64("v", Scaled);
+}
+
+/// <summary>A one-dimensional zero-based VT_ARRAY|VT_UI1 holding exactly these bytes (lowercase hex).</summary>
+public sealed record BytesArg(string Hex) : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("bytes").Text("hex", Hex);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        if (Hex.Length % 2 != 0 || Hex.Any(c => !Uri.IsHexDigit(c) || char.IsUpper(c)))
+        {
+            throw new EvidenceFormatException("bytes must be lowercase hex with an even number of digits.");
+        }
+    }
+}
+
+public sealed record NullArg : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("null");
+}
+
+public sealed record EmptyArg : Arg
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("empty");
+}
+
+internal static class HexBits
+{
+    public static void Require(string bits, int digits)
+    {
+        if (bits.Length != digits || bits.Any(c => !Uri.IsHexDigit(c) || char.IsUpper(c)))
+        {
+            throw new EvidenceFormatException($"'{bits}' must be exactly {digits} lowercase hex digits.");
         }
     }
 }

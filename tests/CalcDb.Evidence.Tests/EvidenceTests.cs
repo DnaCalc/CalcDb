@@ -64,6 +64,28 @@ public class QuestionKeyTests
         Assert.Equal(q.Key(), back.Key());
     }
 
+    /// <summary>Contract changes must never change the key of a question already retained as evidence.</summary>
+    [Fact]
+    public void Retained_question_keys_are_stable()
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "CalcDb.slnx")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+        Assert.NotNull(dir);
+        string evidence = Path.Combine(dir!, "evidence");
+        var records = Directory.EnumerateFiles(evidence, "*.json", SearchOption.AllDirectories)
+            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            .Select(EvidenceJson.Read<EvidenceRecord>)
+            .ToList();
+        Assert.NotEmpty(records);
+        foreach (EvidenceRecord r in records)
+        {
+            Assert.Equal(r.QuestionKey, r.Question.Key());
+        }
+    }
+
     [Fact]
     public void Ill_formed_utf16_argument_is_refused()
     {

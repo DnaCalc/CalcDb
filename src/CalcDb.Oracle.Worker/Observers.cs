@@ -6,7 +6,7 @@ namespace CalcDb.Oracle.Worker;
 /// <summary>Observes the attempt's input and work files, keeping lock-file bytes as artifacts.</summary>
 internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
 {
-    public FilesEvent Observe(int seq, string path, string label)
+    public FilesEvent Observe(int seq, string path, string label, bool keep = false)
     {
         var files = new List<FileObservation>();
         foreach (string sub in (string[])["inputs", "work"])
@@ -14,13 +14,13 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
             string dir = Path.Combine(attemptDir, sub);
             foreach (string file in Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal))
             {
-                files.Add(ObserveFile(file, label));
+                files.Add(ObserveFile(file, label, keep));
             }
         }
         return new FilesEvent { Seq = seq, ProgramPath = path, Label = label, Files = files };
     }
 
-    private FileObservation ObserveFile(string file, string label)
+    private FileObservation ObserveFile(string file, string label, bool keep)
     {
         string relative = Path.GetRelativePath(attemptDir, file).Replace('\\', '/');
         var info = new FileInfo(file);
@@ -33,6 +33,11 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
             {
                 role = $"lockfile:{label}:{info.Name}";
                 artifacts.Add(file, role, "lock-file");
+            }
+            else if (keep)
+            {
+                role = $"snapshot:{label}:{info.Name}";
+                artifacts.Add(file, role, "file-snapshot");
             }
             return new FileObservation
             {

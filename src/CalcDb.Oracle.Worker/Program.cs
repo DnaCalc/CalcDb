@@ -148,7 +148,17 @@ internal sealed unsafe class Run
                     DoRelease(release.Target, path, isImplicit: false);
                     break;
                 case ObserveFiles files:
-                    _events.Add(_files.Observe(++_seq, path, files.Label));
+                    _events.Add(_files.Observe(++_seq, path, files.Label, files.Keep));
+                    break;
+                case DescribeType describe:
+                    if (_bound.TryGetValue(describe.Target, out nint described))
+                    {
+                        _events.Add(new TypeDescriber(_dispatch, _question.InvokeLcid).Describe(++_seq, path, describe.Target, described, describe.WholeLibrary));
+                    }
+                    else
+                    {
+                        _events.Add(new SkippedEvent { Seq = ++_seq, ProgramPath = path, Reason = $"Target '{describe.Target}' is not bound." });
+                    }
                     break;
                 case ObserveModules modules:
                     _events.Add(ModuleObserver.Observe(++_seq, path, modules.Label));
@@ -377,6 +387,14 @@ internal sealed unsafe class Run
                 BoolArg a => new Variant { Vt = 11, I2 = a.Value ? (short)-1 : (short)0 },
                 BstrArg a => new Variant { Vt = 8, Ptr = AllocBstr(a.Text) },
                 MissingArg => new Variant { Vt = 10, I4 = Native.DispEParamNotFound },
+                UI1Arg a => new Variant { Vt = 17, UI1 = a.Value },
+                R4Arg a => new Variant { Vt = 4, I4 = (int)Convert.ToUInt32(a.Bits, 16) },
+                R8Arg a => new Variant { Vt = 5, I8 = (long)Convert.ToUInt64(a.Bits, 16) },
+                DateArg a => new Variant { Vt = 7, I8 = (long)Convert.ToUInt64(a.Bits, 16) },
+                CyArg a => new Variant { Vt = 6, I8 = a.Scaled },
+                BytesArg a => new Variant { Vt = 0x2000 | 17, Ptr = AllocBytes(Convert.FromHexString(a.Hex)) },
+                NullArg => new Variant { Vt = 1 },
+                EmptyArg => new Variant { Vt = 0 },
                 ObjectArg a => new Variant { Vt = 9, Ptr = _bound[a.Name] },
                 InputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Path.Combine(_attemptDir, "inputs", _question.Inputs.Single(x => x.Role == a.Role).FileName)) },
                 OutputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Path.Combine(_attemptDir, "work", a.FileName)) },
@@ -395,7 +413,23 @@ internal sealed unsafe class Run
             {
                 Native.SysFreeString(v.Ptr);
             }
+            else if (v.Vt == (0x2000 | 17))
+            {
+                _ = Native.SafeArrayDestroy(v.Ptr);
+            }
         }
+    }
+
+    private static nint AllocBytes(byte[] bytes)
+    {
+        nint psa = Native.SafeArrayCreateVector(17, 0, (uint)bytes.Length);
+        if (psa == 0 || Native.SafeArrayAccessData(psa, out nint data) < 0)
+        {
+            throw new InvalidOperationException("SAFEARRAY allocation failed.");
+        }
+        Marshal.Copy(bytes, 0, data, bytes.Length);
+        _ = Native.SafeArrayUnaccessData(psa);
+        return psa;
     }
 
     private static nint AllocBstr(string text)

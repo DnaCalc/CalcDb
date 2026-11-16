@@ -45,6 +45,7 @@ public sealed record ArtifactRef(string Role, string Kind, string RelativePath, 
 [JsonDerivedType(typeof(FilesEvent), "files")]
 [JsonDerivedType(typeof(ModulesEvent), "modules")]
 [JsonDerivedType(typeof(SkippedEvent), "skipped")]
+[JsonDerivedType(typeof(TypeEvent), "type")]
 public abstract record CaptureEvent
 {
     /// <summary>Monotonic sequence number within the attempt.</summary>
@@ -157,6 +158,55 @@ public sealed record ReleaseEvent : CaptureEvent
 
     public bool Implicit { get; init; }
 }
+
+/// <summary>Type information of a bound object, from ITypeInfo/ITypeLib (public COM metadata).</summary>
+public sealed record TypeEvent : CaptureEvent
+{
+    public required string Target { get; init; }
+
+    public TypeLibraryInfo? Library { get; init; }
+
+    public required IReadOnlyList<TypeView> Types { get; init; }
+
+    public IReadOnlyList<string> Errors { get; init; } = [];
+}
+
+public sealed record TypeLibraryInfo(string? Name, string? HelpString, string Guid, int Major, int Minor, int Lcid, int SysKind, int Flags, int TypeCount);
+
+/// <summary>One type: TYPEKIND (0 enum, 3 interface, 4 dispatch, 5 coclass, 6 alias), flags and members.</summary>
+public sealed record TypeView
+{
+    public required string Name { get; init; }
+
+    public required string Guid { get; init; }
+
+    public required int TypeKind { get; init; }
+
+    public required int TypeFlags { get; init; }
+
+    public required int VtableBytes { get; init; }
+
+    public string? HelpString { get; init; }
+
+    /// <summary>Implemented or inherited types, with IMPLTYPEFLAGS (1 default, 2 source).</summary>
+    public required IReadOnlyList<string> Implements { get; init; }
+
+    public required IReadOnlyList<FunctionInfo> Functions { get; init; }
+
+    public required IReadOnlyList<VariableInfo> Variables { get; init; }
+
+    /// <summary>For a dual dispinterface: the vtable interface it describes, with vtable offsets.</summary>
+    public TypeView? DualInterface { get; init; }
+}
+
+/// <summary>FUNCDESC: INVOKEKIND 1 func, 2 get, 4 put, 8 putref; FUNCKIND 1 pure virtual, 4 dispatch.</summary>
+public sealed record FunctionInfo(int MemberId, string Name, int InvokeKind, int FuncKind, int CallConv, int VtableOffset, int Flags, string ReturnType, int OptionalCount, IReadOnlyList<ParameterInfo> Parameters);
+
+/// <summary>PARAMFLAGS: 1 in, 2 out, 8 retval, 16 optional, 32 has default.</summary>
+public sealed record ParameterInfo(string? Name, string Type, int Flags, CapturedValue? Default);
+
+/// <summary>VARDESC; for enum constants <see cref="Value"/> holds the constant.</summary>
+public sealed record VariableInfo(int MemberId, string Name, string Type, int VarKind, int Flags, CapturedValue? Value);
 
 public sealed record SkippedEvent : CaptureEvent
 {

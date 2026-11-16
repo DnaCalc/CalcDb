@@ -95,6 +95,12 @@ internal static unsafe partial class Native
     public static partial int SetErrorInfo(uint reserved, nint errorInfo);
 
     [LibraryImport("oleaut32.dll")]
+    public static partial nint SafeArrayCreateVector(ushort vt, int lowerBound, uint elements);
+
+    [LibraryImport("oleaut32.dll")]
+    public static partial int SafeArrayDestroy(nint psa);
+
+    [LibraryImport("oleaut32.dll")]
     public static partial uint SafeArrayGetDim(nint psa);
 
     [LibraryImport("oleaut32.dll")]

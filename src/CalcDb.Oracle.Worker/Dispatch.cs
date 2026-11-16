@@ -70,9 +70,13 @@ internal sealed unsafe class Dispatch
         uint argErr = 0;
         int hr;
         var fn = (delegate* unmanaged[Stdcall]<nint, int, Guid*, int, ushort, DispParams*, Variant*, ExcepInfo*, uint*, int>)(*(nint**)dispatch)[6];
+        // A property put passes its value (the last source argument, first after reversal) as the named
+        // argument DISPID_PROPERTYPUT.
+        int putId = -3;
+        bool isPut = (flags & (4 | 8)) != 0 && args.Length > 0;
         fixed (Variant* pArgs = reversed)
         {
-            var dp = new DispParams { Args = args.Length == 0 ? null : pArgs, NamedArgs = null, ArgCount = (uint)args.Length, NamedArgCount = 0 };
+            var dp = new DispParams { Args = args.Length == 0 ? null : pArgs, NamedArgs = isPut ? &putId : null, ArgCount = (uint)args.Length, NamedArgCount = isPut ? 1u : 0u };
             Guid iidNull = Guid.Empty;
             hr = fn(dispatch, dispId, &iidNull, _lcid, flags, &dp, &result, &excep, &argErr);
         }
