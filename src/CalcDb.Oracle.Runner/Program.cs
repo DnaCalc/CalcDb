@@ -354,7 +354,8 @@ internal static class Program
     private static string ToolingRevision(string repo)
     {
         string head = Git(repo, "rev-parse HEAD").Trim();
-        string status = Git(repo, "status --porcelain --untracked-files=no").Trim();
+        // Only tooling paths count: probe definitions, fixtures registry and evidence are data that runs change.
+        string status = Git(repo, "status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx").Trim();
         return status.Length == 0 ? head : head + "+dirty";
     }
 
