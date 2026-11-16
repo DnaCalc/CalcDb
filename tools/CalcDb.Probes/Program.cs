@@ -55,6 +55,14 @@ internal static class Program
             {
                 Console.WriteLine($"waiting {p.Card}/{p.Name}: fixture {string.Join(", ", missing)} not frozen yet");
                 waiting++;
+                // A file written from an earlier definition no longer matches this probe; retained records keep
+                // their own copy of every question, so withdrawing the file loses nothing.
+                string stale = Path.Combine(probesDir, p.Card, p.Name + ".question.json");
+                if (File.Exists(stale))
+                {
+                    File.Delete(stale);
+                    Console.WriteLine($"withdrew {p.Card}/{p.Name} (its fixture changed)");
+                }
                 continue;
             }
             var builder = new P();
