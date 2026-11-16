@@ -15,11 +15,13 @@ that hold for all work, then points into the design book, which holds the detail
 - **Design:** complete. *The Book of CalcDb* v1.1 (tag `book-v1.1`, 2026-11-16) is the
   design basis. Its [scope statement](docs/book/00-scope.md) governs if this README and
   the book ever disagree.
-- **Implementation:** starting. There is no code yet. The first result is
-  **W-01/R-ORACLE-1**: one immutable fixture, the actual loaded ACE and client
-  identities, and one genuine table read plus one failed call, captured with typed
-  values, diagnostics and file state ([II-16 §33](docs/book/II-16-development.md)).
-  Declaration and host discovery (I-FOUNDATION-1, I-HOST-1) can proceed alongside it.
+- **Implementation:** started. The first result, **W-01/R-ORACLE-1** (one immutable
+  fixture, the actual loaded ACE and client identities, and one genuine table read plus
+  one failed call, captured with typed values, diagnostics and file state;
+  [II-16 §33](docs/book/II-16-development.md)), is retained in [evidence/](evidence).
+  The oracle tooling is described in [docs/work/oracle-runner.md](docs/work/oracle-runner.md);
+  what is built, what is next and what it depends on is in the
+  [implementation register](docs/work/register.md).
 - **Approach:** [The Plan](docs/the-plan.md) (working draft v0.2, about 6k tokens) says
   how we undertake the work. Everyone working on CalcDb reads it in full. The book
   stays the authority for scope and design.
@@ -61,6 +63,15 @@ is for people reading the book end to end.
 ```
 README.md                       charter, orientation and book index (this file)
 AGENTS.md                       working rules for agents and contributors
+CalcDb.slnx, Directory.Build.props, global.json   .NET 11 solution and shared build settings
+src/CalcDb.Evidence/            platform-neutral evidence and job contracts (W-01)
+src/CalcDb.Oracle.Runner/       calcdb-oracle: submit, run, seal, show, freeze, retain
+src/CalcDb.Oracle.Worker/       Windows x64 ACE worker (raw IDispatch capture)
+src/CalcDb.Evidence.Index/      builds the derived .accdb evidence index (never committed)
+tests/                          fast unit tests
+probes/                         oracle questions, by book card
+evidence/                       retained evidence records and artifacts by SHA-256
+docs/work/                      implementation register and tooling notes
 docs/the-plan.md                The Plan: implementation approach, companion to the book
 docs/book/                      The Book of CalcDb v1.1: 39 chapters + manifest + render guide
 docs/The-Book-of-CalcDb.v1.1.pdf  the rendered book (1,200 pages)

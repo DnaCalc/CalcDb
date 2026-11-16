@@ -1,0 +1,130 @@
+# The oracle runner
+
+How CalcDb asks ACE a question and keeps the answer. This implements the first slice of
+**W-01/capture-core** for **R-ORACLE-1** ([A-02](../book/A-02-experiments.md#r-oracle-1--capture-isolation-and-service-recovery)),
+following [II-15 §§1–4](../book/II-15-evidence.md) and [The Plan](../the-plan.md) §2. The book
+is the authority; this note records the choices made at the first dependency boundary
+(The Plan §7) and how to use the tools.
+
+## Pieces
+
+| Component | Platform | Role |
+| --- | --- | --- |
+| [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
+| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`. |
+| [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt. Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
+| [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5). |
+| [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
+| [`evidence/`](../../evidence) | data | Retained records (`<card>/<probe>/<attempt>.json`) and binary artifacts by SHA-256 (`artifacts/<sha256>`). |
+
+## A question and its identities
+
+A **question** ([`Question`](../../src/CalcDb.Evidence/Question.cs)) is an ordered operation
+program (`create`, `invoke`, `loopUntil`, `forEachItem`, `release`, `observeFiles`,
+`observeModules`) with typed arguments, starting fixtures by content hash, caller surface,
+invoke LCID and observation recipe. Its key is a SHA-256 over a versioned, length-delimited
+binary encoding of the semantic body (T-EVID-01): tags, UTF-16 code units and argument
+positions are exact; labels (`probe`, `description`, `bookRefs`) are not part of the key.
+
+The runner keeps the four identities of II-15 §2 apart: the question key, the environment
+receipt the worker records (loaded modules, runtime, apartment, locale, desktop), the
+attempt id (`<token>.a<generation>`), and later a comparison id (not built yet).
+
+## Job life cycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Accepted: submit (token admitted once)
+    Accepted --> Prepared: fresh verified input copies, attempt.json
+    Prepared --> Running: worker launched, owned, then admitted
+    Running --> Complete: returned receipt, capture and artifacts verified
+    Running --> Incomplete: missing or corrupt evidence
+    Running --> Uncertain: started receipt, no returned receipt
+    Complete --> [*]
+    Incomplete --> [*]
+    Uncertain --> [*]
+```
+
+- **Submit or query (T-EVID-02).** A token is admitted once, by create-new of
+  `jobs/<token>.json`. The same token with the same question and environment returns the
+  existing job; anything else is a conflict before any worker starts. `run` on a sealed job
+  reports the existing manifest; a new attempt needs `--new-attempt` and gets fresh input
+  copies. Nothing is ever replayed to resolve an uncertain attempt.
+- **Ownership (OR-OWN).** The runner starts the worker itself, keeps its process handle,
+  puts it in a kill-on-close Job Object, and only then writes the admission line
+  (`ADMIT <attempt> <generation>`) to its stdin. The worker writes its started receipt
+  after admission and before its first native call, so "no started receipt" means no native
+  call ran (`NotStarted`). Timeout kills only that owned process tree and waits for its exit.
+- **Sealing (OR-SEAL, T-EVID-03).** [`Sealer`](../../src/CalcDb.Evidence/Sealer.cs) checks
+  receipt identities and generations (stale receipts are rejected), the capture digest
+  against the returned receipt, every artifact's length and SHA-256, worker capture errors,
+  and OR-IDENT completeness. Execution (`ReturnedSuccess`, `ReturnedFailure`, `Aborted`,
+  `NotStarted`, `Uncertain`) and capture (`Complete`, `Incomplete`) are independent: a
+  failed ACE call with a complete capture is a useful error case.
+
+## What a capture holds
+
+- **Values (OR-WIRE).** The 24-byte VARIANT is read directly. Integers are exact decimal
+  text, R4/R8/DATE/CY are raw bits, BSTRs are their exact `SysStringByteLen` bytes (odd
+  lengths survive), DECIMAL is its fields, `VT_UI1` arrays keep bounds and bytes. Objects are
+  capture-local identity labels from `QueryInterface(IUnknown)`, with the `ITypeInfo` name
+  and IID; a label is retired when the worker sees the object destroyed. `text` and
+  `display` fields are conveniences, never authority. Unsupported forms are named refusals.
+- **Error channels (OR-OBS).** Per call, in recipe order: the Invoke HRESULT, EXCEPINFO
+  (calling `pfnDeferredFillIn` at most once), then the thread's `IErrorInfo` slot, cleared
+  before the call. DAO's `Errors` collection is read by the program itself.
+- **Identity (OR-IDENT).** Module lists of the worker's own process before and after
+  activation and at the end. Each relevant module is identified by the file *mapped* at its
+  base (`GetMappedFileNameW`): Office Click-to-Run reports some modules at App-V virtual
+  paths that do not exist on disk. Version resource, file id and disk-file SHA-256 are
+  recorded. The list is enumerated again after identification and the observation repeats
+  until stable; a list that keeps changing, or an unidentified relevant module, makes the
+  capture incomplete. Every capture ends with a deliberately truncated enumeration that must
+  be reported incomplete. Class registration is read from HKCR, read-only.
+- **File state.** Lengths, hashes and times of inputs and outputs at labelled points; lock
+  files are kept as artifacts; outputs and any changed input are kept at the end.
+
+## Use
+
+```powershell
+dotnet build CalcDb.slnx
+$oracle = "src/CalcDb.Oracle.Runner/bin/Debug/net11.0/calcdb-oracle.exe"
+& $oracle submit --question probes/r-oracle-1/table-read-t1.question.json --token r-oracle-1-table-read-t1
+& $oracle run --token r-oracle-1-table-read-t1      # prepares, runs the owned worker, seals
+& $oracle show --attempt r-oracle-1-table-read-t1.a1  # inspect before deciding to retain
+& $oracle retain --attempt r-oracle-1-table-read-t1.a1 --note "why it is kept"
+& $oracle freeze --attempt <id> --artifact output:<file> --role main --file-name <file>  # output -> fixture
+src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe build
+src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe verify
+```
+
+The store lives in `.oracle-runs/` (ignored by git): transient attempts, dry runs and
+failures stay there. Only `retain` writes to `evidence/`, and it never overwrites a record.
+Retain a capture because it shows something about ACE, including surprising or negative
+outcomes; do not retain tooling failures or redundant reruns (The Plan §2.4). Fixture inputs
+are found by hash in the store or in `evidence/artifacts/`, so a fresh clone can rerun a
+retained question.
+
+## Linux-controlled operation (design; transport deferred)
+
+Everything except `run` and the index is platform-neutral. A Linux agent authors a question,
+computes its key and inspects records with `CalcDb.Evidence`. The Windows side is the job
+store plus `run`. A remote controller therefore needs only to move three things: a job
+request (token, question JSON, requested environment), status queries by token, and sealed
+attempt directories back (manifest, capture, artifacts, all verifiable by digest). Because
+admission is idempotent per token and sealing verifies content, the transport may retry
+freely: a lost reply is answered by querying the token, never by resubmitting a different
+request or re-running an attempt. The first transport (SSH plus the CLI, a shared folder, or
+a small HTTP service in front of the same store) is chosen when a Linux host first needs it
+(The Plan §7).
+
+## Limits of this slice
+
+- One caller lane: raw `IDispatch` from .NET 11 x64. VBA, .NET Framework 4.8 and .NET 10
+  projections (OR-OBS lanes) and ADO are not yet driven.
+- No Office UI: DAO alone shows no windows, so OR-DESKTOP (private desktop, UI Automation
+  dialog handling) is not yet needed or qualified; Access-host routes stay unavailable until it is.
+- OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and
+  OR-REPAIR are not yet exercised against the real worker; the sealing rules they rely on
+  are covered by synthetic tests that qualify the harness only.
+- The store assumes one runner process at a time on one host.

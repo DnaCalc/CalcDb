@@ -1,0 +1,35 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oracle-1/create-fixture-t1",
+  "bookRefs": ["W-01", "R-ORACLE-1", "OR-IDENT", "II-16 §14", "T-EVID-05", "T-EVID-11"],
+  "description": "Create the first native fixture through ACE DAO (II-16 §14): an ACCDB with table T1 (Long key, second Long, short Text, Yes/No) holding two rows, and the same schema empty as T0. The creating operations are this program; the output file is frozen as an immutable fixture.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    { "op": "observeModules", "label": "before-create" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "Version", "kind": "propertyGet", "args": [] },
+    { "op": "invoke", "target": "eng", "member": "CreateDatabase", "kind": "method", "bind": "db", "args": [
+      { "type": "outputPath", "fileName": "r-oracle-1-t1.accdb" },
+      { "type": "bstr", "text": ";LANGID=0x0409;CP=1252;COUNTRY=0" },
+      { "type": "i4", "value": 128 } ] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [
+      { "type": "bstr", "text": "CREATE TABLE T1 (ID LONG CONSTRAINT PK_T1 PRIMARY KEY, N LONG, S TEXT(50), B YESNO)" } ] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [
+      { "type": "bstr", "text": "CREATE TABLE T0 (ID LONG CONSTRAINT PK_T0 PRIMARY KEY, N LONG, S TEXT(50), B YESNO)" } ] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [
+      { "type": "bstr", "text": "INSERT INTO T1 (ID, N, S, B) VALUES (1, 10, 'alpha', True)" } ] },
+    { "op": "invoke", "target": "db", "member": "Execute", "kind": "method", "args": [
+      { "type": "bstr", "text": "INSERT INTO T1 (ID, N, S, B) VALUES (2, -20, 'Bä€', False)" } ] },
+    { "op": "observeModules", "label": "after-operations" },
+    { "op": "observeFiles", "label": "before-close" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeFiles", "label": "after-close" }
+  ]
+}
