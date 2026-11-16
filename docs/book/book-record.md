@@ -354,5 +354,5 @@ In this design manuscript, qualification and establishment name evidence obligat
 
 ## Short changelog
 
-- v1.1 · 2026-11-16: Post-review scope and mechanisms; browser failure/generation protocol, evidence directions and construction index; classified sources, explicit evidence terminology and current companion instructions. The final audit reconciles all 83 requirements, nine criteria, 23 review-named gaps and 58 PRW dispositions; counts and retirement records agree. RC-01–14 are retained and RC-15–35 appended. Native/runtime experiments are unexecuted.
+- v1.1 · 2026-11-16: Post-review scope and mechanisms; browser failure/generation protocol, evidence directions and construction index; classified sources, explicit evidence terminology and current companion instructions. The final audit reconciles all 83 requirements, nine criteria, 23 review-named gaps and 58 PRW dispositions; counts and retirement records agree. RC-01–14 are retained and RC-15–39 appended. Native/runtime experiments are unexecuted.
 - v1.0 · 2026-11-14: First tracked manuscript, 83-row/nine-criterion author audit and RC-01–14; independent A-04 review now supplies the accepted revision work.
