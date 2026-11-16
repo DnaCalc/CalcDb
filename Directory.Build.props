@@ -12,4 +12,25 @@
     <!-- CA1515 (make types internal) and CA1062 fight a small multi-project tool solution. -->
     <NoWarn>$(NoWarn);CA1515;CA1062;CA1303;CA1031;CA2007;CA1819;CA1720;CA1716;CA1848;CA1305;CA1307;CA1310;CA1859;CA1822;CA1854</NoWarn>
   </PropertyGroup>
+
+  <!-- The source state a binary was built from (commit, plus "+dirty" when tooling paths had changes), embedded
+       as assembly metadata "CalcDbSource". Evidence records name the binaries that ran, not the tree at run time. -->
+  <Target Name="CalcDbSourceState" BeforeTargets="GetAssemblyAttributes" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitHead" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx" WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CalcDbGitStatus" />
+    </Exec>
+    <PropertyGroup>
+      <CalcDbSource>$(CalcDbGitHead)</CalcDbSource>
+      <CalcDbSource Condition="'$(CalcDbGitStatus)' != ''">$(CalcDbGitHead)+dirty</CalcDbSource>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>CalcDbSource</_Parameter1>
+        <_Parameter2>$(CalcDbSource)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
 </Project>

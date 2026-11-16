@@ -126,7 +126,8 @@ internal static class Program
             // A capture the sealer could not read because of a tooling defect is not an uncertain native
             // outcome: with --retry-unreadable it gets a new attempt on fresh input copies; the old attempt stays.
             // NotStarted means no worker was admitted, so nothing ran.
-            bool unreadable = existing is not null && (existing.Execution == Execution.NotStarted
+            // Aborted means the worker itself threw (a tooling exception), not that ACE answered.
+            bool unreadable = existing is not null && (existing.Execution is Execution.NotStarted or Execution.Aborted
                 || existing.Problems.Any(x => x.Contains("is not a valid capture", StringComparison.Ordinal)));
             CaptureManifest manifest = existing is not null && !(unreadable && options.Has("retry-unreadable"))
                 ? existing
@@ -353,6 +354,13 @@ internal static class Program
     /// <summary>Exact tooling source revision: the commit, marked <c>+dirty</c> when the tree has changes.</summary>
     private static string ToolingRevision(string repo)
     {
+        // The source state these binaries were built from, embedded at build time (Directory.Build.props).
+        string? built = typeof(Program).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .OfType<System.Reflection.AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "CalcDbSource")?.Value;
+        if (!string.IsNullOrWhiteSpace(built))
+        {
+            return built;
+        }
         string head = Git(repo, "rev-parse HEAD").Trim();
         // Only tooling paths count: probe definitions, fixtures registry and evidence are data that runs change.
         string status = Git(repo, "status --porcelain --untracked-files=no -- src tools tests Directory.Build.props global.json CalcDb.slnx").Trim();

@@ -73,6 +73,15 @@ public static class Sealer
         {
             execution = Execution.Uncertain;
             problems.Add("Started without a returned receipt: native effects may or may not have happened.");
+            string trace = Path.Combine(attemptDir, "receipts", owner.Participant == "a" ? "trace.jsonl" : $"trace.{owner.Participant}.jsonl");
+            if (File.Exists(trace) && File.ReadLines(trace).LastOrDefault() is { } last)
+            {
+                problems.Add("Last native call entered (lifecycle trace): " + last);
+            }
+            if (owner.ExitCode is { } code && !owner.TimedOut)
+            {
+                problems.Add($"Worker process exit code 0x{code:X8}.");
+            }
         }
         else
         {

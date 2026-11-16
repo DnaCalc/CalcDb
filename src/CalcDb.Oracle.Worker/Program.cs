@@ -48,7 +48,7 @@ internal static class Program
             return 5;
         }
 
-        var run = new Run(attemptDir, attempt, question, participant);
+        using var run = new Run(attemptDir, attempt, question, participant);
         Capture capture = run.Execute();
 
         string capturePath = Path.Combine(attemptDir, $"capture{suffix}.json");
@@ -61,7 +61,7 @@ internal static class Program
 }
 
 /// <summary>Interprets one operation program and collects its events.</summary>
-internal sealed unsafe class Run
+internal sealed unsafe class Run : IDisposable
 {
     private readonly string _attemptDir;
     private readonly AttemptRecord _attempt;
@@ -75,6 +75,7 @@ internal sealed unsafe class Run
     private readonly List<string> _bindOrder = [];
     private readonly string _participant;
     private readonly NativeFiles _native;
+    private readonly StreamWriter _trace;
     private bool _anyFailure;
     private int _seq;
 
@@ -88,7 +89,16 @@ internal sealed unsafe class Run
         _artifacts = new ArtifactWriter(attemptDir, participant == "a" ? "" : participant + "-");
         _files = new FileObserver(attemptDir, _artifacts);
         _native = new NativeFiles(attemptDir, question);
+        // OR-SEAL lifecycle trace: one flushed line before every native call, so a worker that dies leaves the
+        // call it was in. It is read by the sealer only when no capture was returned.
+        string traceName = participant == "a" ? "trace.jsonl" : $"trace.{participant}.jsonl";
+        _trace = new StreamWriter(new FileStream(Path.Combine(attemptDir, "receipts", traceName), FileMode.CreateNew, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
     }
+
+    private void Trace(string path, string what) =>
+        _trace.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { seq = _seq + 1, path, call = what, utc = DateTimeOffset.UtcNow }));
+
+    public void Dispose() => _trace.Dispose();
 
     private IReadOnlyList<Operation> MyProgram =>
         _participant == "a" ? _question.Program : _question.Peers.Single(pt => pt.Name == _participant).Program;
@@ -119,6 +129,12 @@ internal sealed unsafe class Run
         }
 
         _native.CloseAll(_events, ref _seq);
+        _trace.Dispose();
+        if (!_events.OfType<ModulesEvent>().Any())
+        {
+            // OR-IDENT: every capture identifies the loaded modules at least once, after all lazy loads.
+            _events.Add(ModuleObserver.Observe(++_seq, "end", "end-implicit"));
+        }
         _events.Add(ModuleObserver.ObserveTruncated(++_seq, "end"));
         if (_participant == "a")
         {
@@ -201,6 +217,7 @@ internal sealed unsafe class Run
 
     private void DoCreate(CreateObject create, string path)
     {
+        Trace(path, "create " + create.ProgId);
         int clsidHr = Native.CLSIDFromProgID(create.ProgId, out Guid clsid);
         RegistrationView registration = ReadRegistration(create.ProgId, clsidHr >= 0 ? clsid : null);
         string? coHr = null;
@@ -278,6 +295,7 @@ internal sealed unsafe class Run
                 return null;
             }
 
+            Trace(path, $"{target}.{member}");
             Dispatch.Outcome outcome = _dispatch.Invoke(dispatch, dispId, (ushort)kind, variants, _question.ObservationRecipe);
             string? boundName = null;
             CapturedValue? result = outcome.Result;

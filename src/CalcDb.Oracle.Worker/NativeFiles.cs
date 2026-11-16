@@ -90,8 +90,9 @@ internal sealed partial class NativeFiles(string attemptDir, Question question)
             int got = RandomAccess.Read(h.Handle, buffer, read.Offset);
             return new HandleEvent { Seq = seq, ProgramPath = path, Op = "read", Handle = read.Handle, RelativePath = h.Relative, Offset = read.Offset, Success = true, BytesRead = got, BytesSha256 = Hashing.Sha256Hex(buffer.AsSpan(0, got)), AtUtc = DateTimeOffset.UtcNow };
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // UnauthorizedAccessException is ERROR_ACCESS_DENIED (5), for example a read through a metadata-only handle.
             return new HandleEvent { Seq = seq, ProgramPath = path, Op = "read", Handle = read.Handle, RelativePath = h.Relative, Offset = read.Offset, Success = false, Win32Error = ex.HResult & 0xFFFF, AtUtc = DateTimeOffset.UtcNow };
         }
     }
