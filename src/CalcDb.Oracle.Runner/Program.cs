@@ -379,6 +379,11 @@ internal static class Program
         {
             EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
             Console.Write(record.Capture is null ? "record has no capture\n" : Show.Render(record.Manifest, record.Capture, options.Has("all-modules")));
+            foreach ((string name, Capture peer) in record.ParticipantCaptures ?? new Dictionary<string, Capture>())
+            {
+                Console.WriteLine($"===== participant {name}");
+                Console.Write(Show.Render(null, peer, options.Has("all-modules")));
+            }
             return 0;
         }
         string attemptId = options.Require("attempt");

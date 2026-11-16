@@ -48,6 +48,20 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
   rb-rich → rb-rich2. An earlier commit message (69bb72ee) said DAO DDL refuses REFERENCES in every form; that was
   wrong, and the discriminator above corrects it.
 
+### R-CRASH-1 (native_crash_observation), process-termination model only — 34 records
+`evidence/r-crash-1-kill`: the writer (participant a) is ended by TerminateProcess at a named point with no
+release or Close; process b freezes the database and lock-file bytes 1.5 s later, before any opener, then
+opens with DAO (ACE-first) or compacts first. The OS and its cache stay alive, so these are not power-loss
+images.
+- Killed inside an uncommitted transaction: the frozen database bytes equal those frozen after a kill with
+  only a pending AddNew. A 64-byte lock file remains, and the next opener opens normally and reads the
+  original values (`SUM(N)` 5050), in ACCDB and MDB.
+- Killed right after `CommitTrans` (default options): the next opener reads the committed values
+  (`SUM(N)` 15050).
+- Killed after an exclusive open: the lock file is absent for the next opener (Win32 error 2 on opening it).
+- Deferred (the card's main route): recording ACE writes and flushes, offline reconstruction, power-loss and
+  torn-write models, Access-first openers, and the precise classification.
+
 ### R-LOCK-1/2 (native_open_probe, native_reader_probe)
 - Two-process mode built tonight (participants with barriers, W-PROBE native driver). First observation:
   DAO exclusive read/write in one process makes another process's DAO shared read-only open fail with
