@@ -133,7 +133,13 @@ internal static class Program
             // Aborted means the worker itself threw (a tooling exception), not that ACE answered.
             bool unreadable = existing is not null && (existing.Execution is Execution.NotStarted or Execution.Aborted
                 || existing.Problems.Any(x => x.Contains("is not a valid capture", StringComparison.Ordinal)));
-            CaptureManifest manifest = existing is not null && !(unreadable && options.Has("retry-unreadable"))
+            // --retry-when TEXT: a new attempt for seals with a problem containing TEXT, named per run for a
+            // diagnosed harness defect (for example a missing identity observation fixed in the worker).
+            if (existing is not null && options.Get("retry-when") is { } when && existing.Problems.Any(x => x.Contains(when, StringComparison.Ordinal)))
+            {
+                unreadable = true;
+            }
+            CaptureManifest manifest = existing is not null && !(unreadable && (options.Has("retry-unreadable") || options.Has("retry-when")))
                 ? existing
                 : RunAttempt(store, token, options, repo);
             string attemptDir = store.AttemptDirectory(manifest.AttemptId);
