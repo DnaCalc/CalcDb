@@ -21,6 +21,9 @@ public static class Execution
     public const string ReturnedSuccess = "ReturnedSuccess";
     public const string ReturnedFailure = "ReturnedFailure";
     public const string Aborted = "Aborted";
+
+    /// <summary>The program requested its own process death (TerminateSelf) after writing its capture.</summary>
+    public const string Terminated = "Terminated";
     public const string Uncertain = "Uncertain";
 }
 

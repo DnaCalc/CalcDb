@@ -142,6 +142,12 @@ public sealed class P
 
     public P NativeClose(string handle) => Add(new NativeClose(handle));
 
+    /// <summary>Wait a fixed time, for example to let a killed participant's process settle.</summary>
+    public P Pause(int ms) => Add(new Pause(ms));
+
+    /// <summary>Requested process death without any release or close (R-CRASH-1 control; not power loss).</summary>
+    public P TerminateSelf(int exitCode = 0x7E57) => Add(new TerminateSelf(exitCode));
+
     /// <summary>For each item of a collection (Count then Item(i), i from 0), bound to <paramref name="bind"/>.</summary>
     public P Each(string collection, string bind, int max, Action<P> body)
     {

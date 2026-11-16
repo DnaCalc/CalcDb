@@ -53,7 +53,7 @@ public static class Sealer
         return manifest;
     }
 
-    private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];
+    private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.Terminated, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];
 
     private static string Worse(string a, string b) => Array.IndexOf(Severity, b) > Array.IndexOf(Severity, a) ? b : a;
 

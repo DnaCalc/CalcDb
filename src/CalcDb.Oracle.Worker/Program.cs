@@ -50,13 +50,18 @@ internal static class Program
 
         using var run = new Run(attemptDir, attempt, question, participant);
         Capture capture = run.Execute();
+        WriteCapture(attemptDir, attempt, suffix, capture);
+        return 0;
+    }
 
+    /// <summary>Write the capture, then the returned receipt that names its digest.</summary>
+    internal static void WriteCapture(string attemptDir, AttemptRecord attempt, string suffix, Capture capture)
+    {
         string capturePath = Path.Combine(attemptDir, $"capture{suffix}.json");
         File.WriteAllText(capturePath, EvidenceJson.Serialize(capture));
         byte[] bytes = File.ReadAllBytes(capturePath);
         var returned = new ReturnedReceipt(attempt.AttemptId, attempt.WorkerGeneration, Hashing.Sha256Hex(bytes), bytes.LongLength, DateTimeOffset.UtcNow);
         EvidenceJson.TryCreateNew(Path.Combine(attemptDir, "receipts", $"returned{suffix}.json"), returned);
-        return 0;
     }
 }
 
@@ -103,9 +108,12 @@ internal sealed unsafe class Run : IDisposable
     private IReadOnlyList<Operation> MyProgram =>
         _participant == "a" ? _question.Program : _question.Peers.Single(pt => pt.Name == _participant).Program;
 
+    private EnvironmentReceipt? _environment;
+
     public Capture Execute()
     {
         EnvironmentReceipt environment = DescribeEnvironment();
+        _environment = environment;
         var inputHashes = _question.Inputs.ToDictionary(i => i.FileName, i => i.Sha256, StringComparer.OrdinalIgnoreCase);
         string execution;
         try
@@ -209,10 +217,46 @@ internal sealed unsafe class Run : IDisposable
                 case NativeClose close:
                     _events.Add(_native.Close(++_seq, path, close.Handle));
                     break;
+                case Pause pause:
+                    Thread.Sleep(pause.Ms);
+                    _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "pause", Name = pause.Ms.ToString(CultureInfo.InvariantCulture) + " ms", AtUtc = DateTimeOffset.UtcNow });
+                    break;
+                case TerminateSelf terminate:
+                    TerminateNow(path, terminate.ExitCode);
+                    break;
                 default:
                     throw new InvalidOperationException($"Unknown operation {program[i].GetType().Name}.");
             }
         }
+    }
+
+    /// <summary>
+    /// Requested process death: identity and the capture so far are written with execution Terminated, then the
+    /// process ends through TerminateProcess without releasing any object or closing any handle or database.
+    /// </summary>
+    private void TerminateNow(string path, int exitCode)
+    {
+        if (!_events.OfType<ModulesEvent>().Any())
+        {
+            _events.Add(ModuleObserver.Observe(++_seq, path, "before-terminate"));
+        }
+        _events.Add(ModuleObserver.ObserveTruncated(++_seq, path));
+        _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "terminate", Name = "exit code " + exitCode.ToString(CultureInfo.InvariantCulture), AtUtc = DateTimeOffset.UtcNow });
+        var capture = new Capture
+        {
+            AttemptId = _attempt.AttemptId,
+            WorkerGeneration = _attempt.WorkerGeneration,
+            QuestionKey = _attempt.QuestionKey,
+            Participant = _participant,
+            Environment = _environment!,
+            Events = _events,
+            Artifacts = _artifacts.Artifacts,
+            Execution = Evidence.Execution.Terminated,
+            CaptureErrors = _captureErrors,
+        };
+        Trace(path, "TerminateProcess");
+        Program.WriteCapture(_attemptDir, _attempt, _participant == "a" ? "" : "." + _participant, capture);
+        _ = Native.TerminateProcess(Native.GetCurrentProcess(), (uint)exitCode);
     }
 
     private void DoCreate(CreateObject create, string path)

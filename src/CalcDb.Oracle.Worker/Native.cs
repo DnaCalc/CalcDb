@@ -125,6 +125,10 @@ internal static unsafe partial class Native
     public static partial nint GetCurrentProcess();
 
     [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool TerminateProcess(nint process, uint exitCode);
+
+    [LibraryImport("kernel32.dll")]
     public static partial uint GetCurrentThreadId();
 
     [LibraryImport("kernel32.dll")]

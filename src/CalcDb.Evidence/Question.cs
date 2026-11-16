@@ -146,6 +146,8 @@ public enum DispatchKind
 [JsonDerivedType(typeof(NativeOpen), "nativeOpen")]
 [JsonDerivedType(typeof(NativeRead), "nativeRead")]
 [JsonDerivedType(typeof(NativeClose), "nativeClose")]
+[JsonDerivedType(typeof(Pause), "pause")]
+[JsonDerivedType(typeof(TerminateSelf), "terminateSelf")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -312,6 +314,22 @@ public sealed record NativeRead(string Handle, long Offset, int Count) : Operati
 public sealed record NativeClose(string Handle) : Operation
 {
     internal override void Write(CanonicalWriter w) => w.Begin("nativeClose").Text("handle", Handle);
+}
+
+/// <summary>Wait a fixed time (only between barriers; order is never inferred from timing).</summary>
+public sealed record Pause(int Ms) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("pause").Int32("ms", Ms);
+}
+
+/// <summary>
+/// A requested process death (R-CRASH-1 control, OR-FREEZE process-kill image): the worker writes its capture
+/// and returned receipt with execution <c>Terminated</c>, then calls TerminateProcess on itself, so no object is
+/// released, no database is closed and no handle is closed first. Not a power-loss image.
+/// </summary>
+public sealed record TerminateSelf(int ExitCode) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("terminateSelf").Int32("exitCode", ExitCode);
 }
 
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>
