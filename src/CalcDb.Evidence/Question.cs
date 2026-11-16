@@ -148,6 +148,8 @@ public enum DispatchKind
 [JsonDerivedType(typeof(NativeClose), "nativeClose")]
 [JsonDerivedType(typeof(Pause), "pause")]
 [JsonDerivedType(typeof(TerminateSelf), "terminateSelf")]
+[JsonDerivedType(typeof(SetReadOnly), "setReadOnly")]
+[JsonDerivedType(typeof(WriteFileBytes), "writeFile")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -288,7 +290,9 @@ public sealed record NativeOpen(string Bind, string File, uint Access, uint Shar
     internal override void Write(CanonicalWriter w) =>
         w.Begin("nativeOpen").Text("bind", Bind).Text("file", File).Int64("access", Access).Int64("share", Share).Int64("disposition", Disposition);
 
-    internal override void Validate(IReadOnlySet<string> inputRoles)
+    internal override void Validate(IReadOnlySet<string> inputRoles) => CheckReference(inputRoles);
+
+    internal void CheckReference(IReadOnlySet<string> inputRoles)
     {
         string[] parts = File.Split(':', 2);
         bool ok = parts.Length == 2 && parts[0] switch
@@ -330,6 +334,25 @@ public sealed record Pause(int Ms) : Operation
 public sealed record TerminateSelf(int ExitCode) : Operation
 {
     internal override void Write(CanonicalWriter w) => w.Begin("terminateSelf").Int32("exitCode", ExitCode);
+}
+
+/// <summary>
+/// Set or clear the read-only attribute of one of the attempt's own files (R-LOCK-1 EX-PERM, R-LOCK-2 RO-PERM).
+/// <see cref="File"/> uses the same references as <see cref="NativeOpen"/>. Never applied outside the attempt.
+/// </summary>
+public sealed record SetReadOnly(string File, bool ReadOnly) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("setReadOnly").Text("file", File).Bool("readOnly", ReadOnly);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles) => new NativeOpen("x", File, 0, 0, 0).CheckReference(inputRoles);
+}
+
+/// <summary>Create or overwrite one of the attempt's files with exactly these bytes (for example a lock file).</summary>
+public sealed record WriteFileBytes(string File, string Hex) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("writeFile").Text("file", File).Text("hex", Hex);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles) => new NativeOpen("x", File, 0, 0, 0).CheckReference(inputRoles);
 }
 
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>

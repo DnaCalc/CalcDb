@@ -107,6 +107,38 @@ internal sealed partial class NativeFiles(string attemptDir, Question question)
         return new HandleEvent { Seq = seq, ProgramPath = path, Op = "close", Handle = name, RelativePath = h.Relative, Success = true, AtUtc = DateTimeOffset.UtcNow };
     }
 
+    public HandleEvent SetReadOnly(int seq, string path, SetReadOnly op)
+    {
+        string relative = Resolve(op.File);
+        string full = Path.Combine(attemptDir, relative);
+        try
+        {
+            FileAttributes attributes = File.GetAttributes(full);
+            File.SetAttributes(full, op.ReadOnly ? attributes | FileAttributes.ReadOnly : attributes & ~FileAttributes.ReadOnly);
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = op.ReadOnly ? "set-readonly" : "clear-readonly", Handle = "-", RelativePath = relative, Success = true, AtUtc = DateTimeOffset.UtcNow };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = op.ReadOnly ? "set-readonly" : "clear-readonly", Handle = "-", RelativePath = relative, Success = false, Win32Error = ex.HResult & 0xFFFF, AtUtc = DateTimeOffset.UtcNow };
+        }
+    }
+
+    public HandleEvent WriteBytes(int seq, string path, WriteFileBytes op)
+    {
+        string relative = Resolve(op.File);
+        string full = Path.Combine(attemptDir, relative);
+        byte[] bytes = Convert.FromHexString(op.Hex);
+        try
+        {
+            File.WriteAllBytes(full, bytes);
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = "write-file", Handle = "-", RelativePath = relative, Success = true, BytesRead = bytes.Length, BytesSha256 = Hashing.Sha256Hex(bytes), AtUtc = DateTimeOffset.UtcNow };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = "write-file", Handle = "-", RelativePath = relative, Success = false, Win32Error = ex.HResult & 0xFFFF, AtUtc = DateTimeOffset.UtcNow };
+        }
+    }
+
     public void CloseAll(List<CaptureEvent> events, ref int seq)
     {
         foreach (string name in _handles.Keys.ToList())

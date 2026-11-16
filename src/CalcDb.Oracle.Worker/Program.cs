@@ -217,6 +217,12 @@ internal sealed unsafe class Run : IDisposable
                 case NativeClose close:
                     _events.Add(_native.Close(++_seq, path, close.Handle));
                     break;
+                case SetReadOnly ro:
+                    _events.Add(_native.SetReadOnly(++_seq, path, ro));
+                    break;
+                case WriteFileBytes wf:
+                    _events.Add(_native.WriteBytes(++_seq, path, wf));
+                    break;
                 case Pause pause:
                     Thread.Sleep(pause.Ms);
                     _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "pause", Name = pause.Ms.ToString(CultureInfo.InvariantCulture) + " ms", AtUtc = DateTimeOffset.UtcNow });

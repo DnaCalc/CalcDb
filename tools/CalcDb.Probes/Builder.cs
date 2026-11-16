@@ -142,6 +142,12 @@ public sealed class P
 
     public P NativeClose(string handle) => Add(new NativeClose(handle));
 
+    /// <summary>Set or clear the read-only attribute of an attempt file (input:/lock:/work: reference).</summary>
+    public P SetReadOnly(string file, bool readOnly = true) => Add(new SetReadOnly(file, readOnly));
+
+    /// <summary>Create or overwrite an attempt file with exactly these bytes.</summary>
+    public P WriteFile(string file, params byte[] bytes) => Add(new WriteFileBytes(file, Convert.ToHexStringLower(bytes)));
+
     /// <summary>Wait a fixed time, for example to let a killed participant's process settle.</summary>
     public P Pause(int ms) => Add(new Pause(ms));
 
