@@ -65,3 +65,9 @@ start inputs becomes `ready`; until then the construction index is their record.
 | `evidence/r-oracle-1/create-fixture-t1/` | II-16 §14, OR-IDENT | The T1 fixture created through ACE DAO (two-row T1, empty T0) and the loaded engine identity. |
 | `evidence/r-oracle-1/table-read-t1/` | II-16 §33, OR-WIRE, OR-OBS | Table-type recordset read of T1: field metadata and every value as typed VARIANTs. |
 | `evidence/r-oracle-1/failed-call-t1/` | II-16 §33, OR-OBS, R-ERR-1 | `OpenRecordset` on a missing table: HRESULT, EXCEPINFO, empty IErrorInfo slot, DAO `Errors`. |
+
+**Identity note (OR-IDENT, II-16 evidence boundary).** The loaded engine is not one build.
+ACEDAO, ACECORE, ACEES and ACEWSTR load as 16.0.20527.20196, ACEERR as 16.0.20527.20016
+(the build the book's supplied report names), and ACEINTL as 16.0.20326.20022, all under
+Office C2R x64 16.0.20527.20196. The book's single "ACEDAO.DLL 16.0.20527.20016" lead does not
+identify this installation; the captured per-module identities do.

@@ -1,0 +1,35 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-oracle-1/failed-call-t1",
+  "bookRefs": ["W-01", "R-ORACLE-1", "OR-IDENT", "OR-OBS", "II-16 §33", "T-EVID-05", "T-EVID-07", "R-ERR-1"],
+  "description": "First failed ACE call (II-16 §33): open the frozen T1 fixture read-only and ask for a table-type recordset on a table that does not exist. The Invoke HRESULT, EXCEPINFO (with any deferred fill), the thread IErrorInfo slot and then DBEngine.Errors are observed in that order.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": ["clearErrorInfoBefore", "excepinfo", "deferredFill", "errorInfo"],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [ { "role": "main", "fileName": "r-oracle-1-t1.accdb", "sha256": "486e67a3af61f4fedf267d3345b50d0b3dc6e10db7dea76bc93a2aad8fc57b32", "length": 200704, "provenance": "r-oracle-1-create-fixture-t1.a1 qk1-c3b69c6590bc0f47ff2cd8852af27dad19c66e6cbde0307234c59d371d26f215 output:r-oracle-1-t1.accdb" } ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open" },
+    { "op": "observeModules", "label": "before-create" },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    { "op": "observeModules", "label": "after-create" },
+    { "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method", "bind": "db", "args": [
+      { "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true } ] },
+    { "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method", "bind": "rs", "args": [
+      { "type": "bstr", "text": "NoSuchTable" }, { "type": "i4", "value": 1 } ] },
+    { "op": "invoke", "target": "eng", "member": "Errors", "kind": "propertyGet", "bind": "errs", "args": [] },
+    { "op": "forEachItem", "target": "errs", "bind": "e", "maxItems": 16, "body": [
+      { "op": "invoke", "target": "e", "member": "Number", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Description", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "Source", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "HelpContext", "kind": "propertyGet", "args": [] },
+      { "op": "invoke", "target": "e", "member": "HelpFile", "kind": "propertyGet", "args": [] } ] },
+    { "op": "release", "target": "errs" },
+    { "op": "observeFiles", "label": "after-failure" },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "release", "target": "db" },
+    { "op": "release", "target": "eng" },
+    { "op": "observeModules", "label": "after-close" },
+    { "op": "observeFiles", "label": "after-close" }
+  ]
+}
