@@ -1,6 +1,6 @@
 """Render a Markdown working doc to a PDF, A4, with the one-pager style.
 
-    python docs/build_pdf.py docs/calcdb-one-pager.md        -> docs/calcdb-one-pager.pdf
+    python tools/one-pager-pdf.py docs/calcdb-one-pager.md       -> docs/calcdb-one-pager.pdf
 
 Needs the `markdown` package (pip install markdown) and Microsoft Edge or Chrome for
 headless printing. Prints the page count; the one-pager must stay at 1.

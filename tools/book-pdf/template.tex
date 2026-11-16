@@ -1,0 +1,89 @@
+\documentclass[10pt,a4paper,oneside]{book}
+\usepackage[margin=20mm,headheight=14pt,footskip=10mm]{geometry}
+\usepackage{fontspec}
+\directlua{luaotfload.add_fallback('bookfallback', {'Segoe UI Symbol:mode=node;', 'Microsoft YaHei:mode=node;'})}
+\setmainfont{cambria.ttc}[Path={C:/Windows/Fonts/},FontIndex=0,BoldFont={cambriab.ttf},ItalicFont={cambriai.ttf},BoldItalicFont={cambriaz.ttf},RawFeature={fallback=bookfallback}]
+\setsansfont{Segoe UI}[RawFeature={fallback=bookfallback}]
+\setmonofont{Consolas}[Scale=0.92,RawFeature={fallback=bookfallback}]
+\usepackage{amsmath,amssymb}
+\usepackage{longtable,booktabs,array,calc}
+\newcounter{none}
+\usepackage{graphicx,xcolor}
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines=true,breakanywhere=true,commandchars=\\\{\},fontsize=\small}
+\fvset{breaklines=true,breakanywhere=true,fontsize=\small,breaksymbolleft=\textcolor{gray}{\raisebox{.3ex}{\rule{.5em}{.3pt}}\kern-.3pt\rule{.3pt}{.7ex}},breaksymbolright={}}
+\usepackage{pdflscape}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{xurl}
+\usepackage[unicode=true,bookmarksopen=false,colorlinks=true,linkcolor=blue!40!black,urlcolor=blue!50!black,pdftitle={The Book of CalcDb — Book v1.1},pdfauthor={CalcDb Project}]{hyperref}
+\usepackage{bookmark}
+\usepackage{footnotehyper}
+\makesavenoteenv{longtable}
+% Pandoc 3.14's deferred table-note helpers, from its installed common.latex.
+\makeatletter
+\protected\def\pandocfootnotemark#1{\footnotemark{}%
+  \expandafter\xdef\csname pandoc@fn@#1\endcsname{%
+    \noexpand\pandoc@fnrestore
+    {\unexpanded\expandafter{\@thefnmark}}%
+    {\ifdefined\Hy@footnote@currentHref
+       \unexpanded\expandafter{\Hy@footnote@currentHref}\fi}}}
+\def\pandoc@fnrestore#1#2{%
+  \gdef\@thefnmark{#1}%
+  \ifdefined\Hy@footnote@currentHref\gdef\Hy@footnote@currentHref{#2}\fi}
+\newcommand\pandocfootnotetext[1]{%
+  \csname pandoc@fn@#1\endcsname\@footnotetext}
+\makeatother
+\setcounter{secnumdepth}{-2}
+\setcounter{tocdepth}{1}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\fontsize{8.5}{10}\selectfont\nouppercase{\leftmark}}
+\fancyhead[R]{\sffamily\fontsize{8.5}{10}\selectfont\nouppercase{\rightmark}}
+\renewcommand{\chaptermark}[1]{}
+\renewcommand{\sectionmark}[1]{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt plus 1pt}
+\setlength{\emergencystretch}{3em}
+\setlength{\LTpre}{8pt}
+\setlength{\LTpost}{8pt}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.13}
+\newcommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\newcommand{\passthrough}[1]{#1}
+\newcommand{\real}[1]{#1}
+\newcommand{\pandocbounded}[1]{\begingroup\setbox0=\hbox{#1}\ifdim\wd0>\linewidth\resizebox{\linewidth}{!}{\usebox0}\else\usebox0\fi\endgroup}
+\makeatletter
+\renewcommand{\@pnumwidth}{3em}
+\renewcommand{\@tocrmarg}{4em}
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>0.78\textheight0.78\textheight\else\Gin@nat@height\fi}
+\makeatother
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+\widowpenalty=5000\clubpenalty=5000
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\vspace*{35mm}
+{\sffamily\small CALCDB PROJECT\par}
+\vspace{12mm}
+{\sffamily\bfseries\fontsize{38}{43}\selectfont The Book\\of CalcDb\par}
+\vspace{12mm}
+{\Large Book v1.1\par}
+\vspace{4mm}
+{\large Post-review reconciled design manuscript\par}
+\vfill
+{16 November 2026\par}
+\vspace{5mm}
+{\small Native/runtime acceptance remains planned and unexecuted.\\Source evidence and uncertainty labels are preserved.\par}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+$body$
+\end{document}
