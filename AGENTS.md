@@ -30,6 +30,16 @@ scope or design, the book wins.
 - MIT licence. Record third-party exact material (the Jackcess ports) in a licence
   ledger as it enters. GitHub CI stays disabled.
 
+## Tool practice
+
+- Edit files with the editing tools, not with ad-hoc scripts. Python is not project tooling.
+- Shell heredocs break on non-ASCII text (`§`, `ä`, `€`). Write such content with the file tools.
+- Commit with `git commit -F <message file>`. A message file outside the repository works in
+  every shell.
+- Inspect oracle results with `calcdb-oracle show`, not with one-off scripts.
+- About 15% of effort goes to reviewing and improving how we work (The Plan §4). Log each round
+  in [docs/work/process-log.md](docs/work/process-log.md).
+
 ## Honesty rules
 
 - Pass means matched the oracle. Fail means mismatched, refused or missing, counted over

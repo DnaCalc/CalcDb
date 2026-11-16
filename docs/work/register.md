@@ -22,7 +22,7 @@ unless retained evidence says so (The Plan §8).
 | 3. Capture qualification and job/sealing slice incl. OR-IDENT; real table read and failed call | done for the first slice | `probes/r-oracle-1`, `evidence/r-oracle-1` |
 | 4. Tool-generated JSON and artifacts, selected and retained | done | `evidence/` |
 | 5. `.accdb` index rebuilt from retained evidence and queried | done | `calcdb-evidence-index build/verify/query` |
-| 6. Review the workflow and try one improvement | not started (no task yet: session task limit) | — |
+| 6. Review the workflow and try one improvement | partial: first review done and one change tried; its effect is measured next session | [process-log.md](process-log.md) |
 
 ## Foundations and the first DAO read (II-16 §§14–15, F-216)
 
