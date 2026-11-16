@@ -1,6 +1,7 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using CalcDb.Evidence;
+using Microsoft.Office.Interop.Access.Dao;
 
 namespace CalcDb.Evidence.Index;
 
@@ -13,11 +14,11 @@ namespace CalcDb.Evidence.Index;
 /// from the JSON; equality shows the index can be regenerated without losing those observations.</item>
 /// <item><c>query --sql TEXT [--db FILE]</c>: run a query against the index and print the rows.</item>
 /// </list>
-/// The index is written through DAO with late-bound COM: it is a consumer of ACE, not an oracle capture.
+/// The index is written through the DAO primary interop assembly (package ExcelDna.Interop.Dao, types
+/// embedded): it is a consumer of ACE, not an oracle capture.
 /// </summary>
 internal static class Program
 {
-    private const int DbVersion120 = 128;
     private const string LangGeneral = ";LANGID=0x0409;CP=1252;COUNTRY=0";
 
     private static int Main(string[] args)
@@ -130,21 +131,21 @@ internal static class Program
         {
             File.Delete(path);
         }
-        dynamic engine = Activator.CreateInstance(Type.GetTypeFromProgID("DAO.DBEngine.120", throwOnError: true)!)!;
-        dynamic db = engine.CreateDatabase(path, LangGeneral, DbVersion120);
+        var engine = new DBEngine();
+        Database db = engine.CreateDatabase(path, LangGeneral, DatabaseTypeEnum.dbVersion120);
         try
         {
             foreach (Table t in tables)
             {
                 string columns = string.Join(", ", t.Columns.Select(c => $"[{c.Name}] {c.Ddl}"));
                 db.Execute($"CREATE TABLE [{t.Name}] ({columns})");
-                dynamic rs = db.OpenRecordset(t.Name, 2);
+                Recordset rs = db.OpenRecordset(t.Name, RecordsetTypeEnum.dbOpenDynaset);
                 foreach (object?[] row in t.Rows)
                 {
                     rs.AddNew();
                     for (int i = 0; i < t.Columns.Count; i++)
                     {
-                        rs.Fields.Item(t.Columns[i].Name).Value = row[i] ?? DBNull.Value;
+                        rs.Fields[t.Columns[i].Name].Value = row[i] ?? DBNull.Value;
                     }
                     rs.Update();
                 }
@@ -161,8 +162,7 @@ internal static class Program
 
     private static int Verify(string path, IReadOnlyList<Table> tables)
     {
-        dynamic engine = Activator.CreateInstance(Type.GetTypeFromProgID("DAO.DBEngine.120", throwOnError: true)!)!;
-        dynamic db = engine.OpenDatabase(path, false, true);
+        Database db = new DBEngine().OpenDatabase(path, false, true);
         int mismatches = 0;
         try
         {
@@ -170,13 +170,13 @@ internal static class Program
             {
                 List<string> expected = t.Rows.Select(r => Canonical(r)).Order(StringComparer.Ordinal).ToList();
                 var actual = new List<string>();
-                dynamic rs = db.OpenRecordset($"SELECT * FROM [{t.Name}]", 4);
+                Recordset rs = db.OpenRecordset($"SELECT * FROM [{t.Name}]", RecordsetTypeEnum.dbOpenSnapshot);
                 while (!rs.EOF)
                 {
                     var row = new object?[t.Columns.Count];
                     for (int i = 0; i < t.Columns.Count; i++)
                     {
-                        object value = rs.Fields.Item(t.Columns[i].Name).Value;
+                        object value = rs.Fields[t.Columns[i].Name].Value;
                         row[i] = value is DBNull ? null : value;
                     }
                     actual.Add(Canonical(row));
@@ -201,16 +201,15 @@ internal static class Program
 
     private static void Query(string path, string sql)
     {
-        dynamic engine = Activator.CreateInstance(Type.GetTypeFromProgID("DAO.DBEngine.120", throwOnError: true)!)!;
-        dynamic db = engine.OpenDatabase(path, false, true);
+        Database db = new DBEngine().OpenDatabase(path, false, true);
         try
         {
-            dynamic rs = db.OpenRecordset(sql, 4);
+            Recordset rs = db.OpenRecordset(sql, RecordsetTypeEnum.dbOpenSnapshot);
             int count = rs.Fields.Count;
             var header = new List<string>();
             for (int i = 0; i < count; i++)
             {
-                header.Add((string)rs.Fields.Item(i).Name);
+                header.Add(rs.Fields[i].Name);
             }
             Console.WriteLine(string.Join(" | ", header));
             while (!rs.EOF)
@@ -218,7 +217,7 @@ internal static class Program
                 var cells = new List<string>();
                 for (int i = 0; i < count; i++)
                 {
-                    object v = rs.Fields.Item(i).Value;
+                    object v = rs.Fields[i].Value;
                     cells.Add(v is DBNull ? "Null" : Convert.ToString(v, CultureInfo.InvariantCulture) ?? "");
                 }
                 Console.WriteLine(string.Join(" | ", cells));

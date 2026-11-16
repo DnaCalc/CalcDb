@@ -14,7 +14,7 @@ this runner is tier 2, for owned experiments with effects.
 | [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
 | [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`. |
 | [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt. Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
-| [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5). |
+| [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
 | [`evidence/`](../../evidence) | data | Retained records (`<card>/<probe>/<attempt>.json`) and binary artifacts by SHA-256 (`artifacts/<sha256>`). |
 
@@ -116,6 +116,13 @@ long-lived ACE workers, and this runner as its tier for owned experiments, is in
 
 - One caller lane: raw `IDispatch` from .NET 11 x64. VBA, .NET Framework 4.8 and .NET 10
   projections (OR-OBS lanes) and ADO are not yet driven.
+- The managed lanes will use the DAO primary interop assembly from the `ExcelDna.Interop.Dao`
+  NuGet package (Microsoft.Office.Interop.Access.Dao, types embedded, builds for `net452` and
+  `net6.0-windows` and up). It is the projection .NET add-ins actually use, so it is a separate
+  lane, never a replacement for the raw worker. A scratch probe on .NET 11 showed the difference:
+  `Boolean` where the raw lane keeps `VT_BOOL -1`, `String` where it keeps exact BSTR bytes,
+  and a `COMException` with HResult `0x800A0BC3` where the raw lane sees Invoke `0x80020009`
+  plus EXCEPINFO.
 - No Office UI: DAO alone shows no windows, so OR-DESKTOP (private desktop, UI Automation
   dialog handling) is not yet needed or qualified; Access-host routes stay unavailable until it is.
 - OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and

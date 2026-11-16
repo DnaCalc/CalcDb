@@ -32,7 +32,7 @@ unless retained evidence says so (The Plan §8).
 | R-ORACLE-1 OR-IDENT | — | W-01/capture-core | done for the `native-idispatch/x64` lane | — | `ModuleObserver.cs`, `evidence/r-oracle-1` |
 | R-ORACLE-1 OR-JOB | — | W-01/capture-core | partial: submit/query/conflict and receipts; loss and kill boundaries not exercised | `npmg` | `JobStore.cs`, `Sealer.cs` |
 | R-ORACLE-1 OR-WIRE | — | W-01/capture-core | partial: scalar, BSTR and UI1 arrays; full scalar fixture missing | `pvz8` | `Dispatch.cs`, `Values.cs` |
-| R-ORACLE-1 OR-OBS | — | W-01/capture-core | partial: raw IDispatch lane; VBA and managed lanes missing | `9fkt` | `Dispatch.cs` |
+| R-ORACLE-1 OR-OBS | — | W-01/capture-core | partial: raw IDispatch lane; VBA and managed lanes missing (managed lanes: DAO PIA from `ExcelDna.Interop.Dao`, checked working on .NET 11) | `9fkt` | `Dispatch.cs` |
 | R-ORACLE-1 OR-OWN, OR-DESKTOP | — | W-01/capture-core | partial: owned worker process only; no Office UI route | `b8sx` | `OwnedWorker.cs` |
 | R-ORACLE-1 OR-REUSE | — | OR-JOB | not started | `tdt9` | — |
 | R-ORACLE-1 OR-SEAL | — | W-01/capture-core | done for synthetic corruption cases | — | `Sealer.cs`, tests |
