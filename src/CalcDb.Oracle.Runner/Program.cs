@@ -12,8 +12,9 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
-/// <item><c>seal --token T</c>: seal an attempt whose runner exited before launching its worker (no started
-/// receipt): it is sealed NotStarted. An attempt that has a started receipt is never sealed this way.</item>
+/// <item><c>seal --token T</c>: seal an attempt whose runner exited before sealing it. Refused while any worker
+/// process named in its started receipts is still alive. Without a started receipt it seals NotStarted; with one
+/// and no returned receipt it seals Uncertain, and is never re-run automatically.</item>
 /// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
 /// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
@@ -207,13 +208,40 @@ internal static class Program
             throw new InvalidOperationException($"{attemptId} is already sealed.");
         }
         string dir = store.AttemptDirectory(attemptId);
-        if (Directory.EnumerateFiles(Path.Combine(dir, "receipts"), "started*.json").Any())
+        Question question = store.GetQuestion(job.QuestionKey);
+        var owners = new List<OwnerReport>();
+        foreach (string participant in (string[])["a", .. question.Peers.Select(pt => pt.Name)])
         {
-            throw new InvalidOperationException($"{attemptId} has a started receipt; it may have run and is not sealed by this command.");
+            string started = Path.Combine(dir, "receipts", participant == "a" ? "started.json" : $"started.{participant}.json");
+            int? pid = File.Exists(started) ? EvidenceJson.Read<StartedReceipt>(started).ProcessId : null;
+            if (pid is { } id && IsAlive(id))
+            {
+                throw new InvalidOperationException($"Worker process {id} of {attemptId} is still running; it is not settled.");
+            }
+            owners.Add(new OwnerReport
+            {
+                Participant = participant,
+                ProcessId = pid,
+                Ownership = "lost: the owning runner exited before sealing",
+                LaunchError = pid is null ? "No started receipt: the worker never admitted the program." : null,
+            });
         }
-        CaptureManifest manifest = store.Seal(store.GetAttempt(attemptId), new OwnerReport { Ownership = "none", LaunchError = "The runner exited after preparing this attempt and before launching its worker." });
+        CaptureManifest manifest = store.Seal(store.GetAttempt(attemptId), owners);
         Console.WriteLine(EvidenceJson.Serialize(manifest));
         return 0;
+    }
+
+    private static bool IsAlive(int pid)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(pid);
+            return !process.HasExited && process.ProcessName.StartsWith("CalcDb.Oracle.Worker", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static int Status(JobStore store, Options options)

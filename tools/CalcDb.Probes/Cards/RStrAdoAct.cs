@@ -20,7 +20,8 @@ public sealed class RStrAdoAct : ICard
 
     private static readonly string StrAccdb = Card + "-str-accdb";
     private static readonly string StrMdb = Card + "-str-mdb";
-    private static readonly string AdoAccdb = Card + "-ado-accdb";
+    // "-ado2-accdb": the first ADO fixture lost tables K and J to DAO DDL limits (DECIMAL; column-level REFERENCES).
+    private static readonly string AdoAccdb = Card + "-ado2-accdb";
 
     private static readonly string[] StrRefs = ["R-STRING-1", "D-STRING-1", "II-02"];
 
@@ -90,7 +91,7 @@ public sealed class RStrAdoAct : ICard
             StrTable, StrCompressedTable);
         yield return Creation("str-mdb", "mdb", Dao.Version40, [.. StrRefs, "R-ADO-1"],
             "the same S and C tables and rows as str-accdb, in the Jet 4 MDB format", StrTable, StrCompressedTable);
-        yield return Creation("ado-accdb", "accdb", Dao.Version120, ["R-ADO-1", "D-OBJECT-1"],
+        yield return Creation("ado2-accdb", "accdb", Dao.Version120, ["R-ADO-1", "D-OBJECT-1"],
             "R-ADO-1 fixture set: K(ID COUNTER primary key, Code TEXT(10) unique, Long, Double, Currency, Decimal, Date, Text, Memo, LongBinary) with four rows " +
             "including a Null row and an empty-text row; J with a foreign key to K and two rows; D(N LONG) with ten rows; saved queries QParam (one Text parameter) and QEmpty",
             AdoFixture, null);
@@ -153,7 +154,8 @@ public sealed class RStrAdoAct : ICard
     private static void AdoFixture(P p)
     {
         p.Call("db", "Execute", A.Str("CREATE TABLE K (ID COUNTER CONSTRAINT PK_K PRIMARY KEY, Code TEXT(10) CONSTRAINT UX_K_Code UNIQUE, " +
-                "L LONG, D DOUBLE, C CURRENCY, N DECIMAL(18,4), Dt DATETIME, T TEXT(50), M MEMO, B LONGBINARY)"))
+                "L LONG, D DOUBLE, C CURRENCY, Dt DATETIME, T TEXT(50), M MEMO, B LONGBINARY)"))
+            .AddDecimalField("K", "N")
             .Call("db", "Execute", A.Str("INSERT INTO K (Code, L, D, C, N, Dt, T, M) VALUES ('a1', 1, 1.5, 2.25, 3.125, #2024-01-02#, 'alpha', 'memo one')"))
             .Call("db", "Execute", A.Str("INSERT INTO K (Code) VALUES ('a2')"))
             .Call("db", "Execute", A.Str("INSERT INTO K (Code, L, D, C, N, Dt, T, M) VALUES ('b3', 0, -0.5, 0, 0, #1899-12-30 12:00:00#, '', '')"))
@@ -162,7 +164,7 @@ public sealed class RStrAdoAct : ICard
             .GetBind("rkf", "rk", "Fields").Item("rkb", "rkf", A.I4(0))
             .Call("rk", "Edit").Put("rkb", "Value", A.Bytes(0x00, 0x01, 0x02, 0xff, 0x00)).Call("rk", "Update")
             .Release("rkb").Release("rkf").Call("rk", "Close").Release("rk")
-            .Call("db", "Execute", A.Str("CREATE TABLE J (ID LONG CONSTRAINT PK_J PRIMARY KEY, KID LONG CONSTRAINT FK_J_K REFERENCES K (ID), Note TEXT(20))"))
+            .Call("db", "Execute", A.Str("CREATE TABLE J (ID LONG CONSTRAINT PK_J PRIMARY KEY, KID LONG, Note TEXT(20), CONSTRAINT FK_J_K FOREIGN KEY (KID) REFERENCES K (ID))"))
             .Call("db", "Execute", A.Str("INSERT INTO J VALUES (1, 1, 'j1')"))
             .Call("db", "Execute", A.Str("INSERT INTO J VALUES (2, 1, 'j2')"))
             .Call("db", "Execute", A.Str("CREATE TABLE D (N LONG)"));

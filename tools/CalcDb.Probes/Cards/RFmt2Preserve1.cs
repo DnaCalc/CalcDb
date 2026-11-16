@@ -15,7 +15,8 @@ public sealed class RFmt2Preserve1 : ICard
     private const string Card = "r-fmt-2-pres-1";
     private const string WorldAccdb = Card + "-world-accdb";
     private const string WorldMdb = Card + "-world-mdb";
-    private const string PresAccdb = Card + "-pres-accdb";
+    // "-pres2-accdb": the first fixture lost table Child to a column-level REFERENCES clause (3292 in DAO DDL).
+    private const string PresAccdb = Card + "-pres2-accdb";
 
     private const string Images = " Images: 'before' (the fixture copy as given), then one kept image of the closed file after each step; every step opens the database read/write, makes one mutation and closes it.";
 
@@ -23,7 +24,7 @@ public sealed class RFmt2Preserve1 : ICard
     {
         yield return Fixture("world-accdb", "accdb", Dao.Version120, preserve: false);
         yield return Fixture("world-mdb", "mdb", Dao.Version40, preserve: false);
-        yield return Fixture("pres-accdb", "accdb", Dao.Version120, preserve: true);
+        yield return Fixture("pres2-accdb", "accdb", Dao.Version120, preserve: true);
         foreach (Probe p in Fmt2())
         {
             yield return p;
@@ -133,7 +134,7 @@ public sealed class RFmt2Preserve1 : ICard
             "CREATE TABLE Parent (ID LONG CONSTRAINT PK_Parent PRIMARY KEY, Nm TEXT(20))",
             "INSERT INTO Parent (ID, Nm) VALUES (1, 'p1')",
             "INSERT INTO Parent (ID, Nm) VALUES (2, 'p2')",
-            "CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, PID LONG CONSTRAINT FK_Child_Parent REFERENCES Parent (ID), Note TEXT(20))",
+            "CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, PID LONG, Note TEXT(20), CONSTRAINT FK_Child_Parent FOREIGN KEY (PID) REFERENCES Parent (ID))",
             "INSERT INTO Child (ID, PID, Note) VALUES (1, 1, 'c1')");
         p.CallBind("q1", "db", "CreateQueryDef", A.Str("QSel"), A.Str("SELECT ID, A, N FROM T WHERE ID < 10 ORDER BY ID;"))
             .CallBind("q2", "db", "CreateQueryDef", A.Str("QParam"), A.Str("PARAMETERS pId Long; SELECT * FROM T WHERE ID = pId;"))

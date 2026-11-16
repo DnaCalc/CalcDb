@@ -12,7 +12,8 @@ namespace CalcDb.Probes.Cards;
 public sealed class RExpr1 : ICard
 {
     private const string Card = "r-expr-1";
-    private const string Main = Card + "-main";
+    // "-main2": the first main fixture lost table Vals to DECIMAL in DAO DDL (3292); this one adds M through DAO.
+    private const string Main = Card + "-main2";
     private const string Spanish = Card + "-spanish";
     private const string LangSpanish = ";LANGID=0x040A;CP=1252;COUNTRY=0";
     private const string AceProvider = "Microsoft.ACE.OLEDB.12.0";
@@ -694,7 +695,7 @@ public sealed class RExpr1 : ICard
         Exec(p,
             "CREATE TABLE One (ID LONG CONSTRAINT PK_One PRIMARY KEY)",
             "INSERT INTO One (ID) VALUES (1)",
-            "CREATE TABLE Vals (ID LONG CONSTRAINT PK_Vals PRIMARY KEY, B BYTE, I SHORT, L LONG, S SINGLE, D DOUBLE, C CURRENCY, M DECIMAL(28,4), DT DATETIME, Y YESNO, T TEXT(50), Q TEXT(50), N LONG)",
+            "CREATE TABLE Vals (ID LONG CONSTRAINT PK_Vals PRIMARY KEY, B BYTE, I SHORT, L LONG, S SINGLE, D DOUBLE, C CURRENCY, DT DATETIME, Y YESNO, T TEXT(50), Q TEXT(50), N LONG)",
             "CREATE TABLE Big (ID LONG CONSTRAINT PK_Big PRIMARY KEY, LL BIGINT)",
             "CREATE TABLE Den (Id LONG CONSTRAINT PK_Den PRIMARY KEY, Denominator LONG, TextValue TEXT(20))",
             "INSERT INTO Den (Id, Denominator, TextValue) VALUES (1, 2, '12')",
@@ -706,6 +707,7 @@ public sealed class RExpr1 : ICard
             "CREATE INDEX IX_S ON Pat (S)",
             "CREATE TABLE Nm (ID LONG CONSTRAINT PK_Nm PRIMARY KEY, [Date] TEXT(20), [Len] LONG, p LONG)",
             "INSERT INTO Nm (ID, [Date], [Len], p) VALUES (1, 'field-date', 42, 7)");
+        p.AddDecimalField("Vals", "M");
         AddRows(p, n, "Vals", ["ID", "B", "I", "L", "S", "D", "C", "M", "DT", "Y", "T", "Q", "N"],
             [[A.I4(1), A.UI1(255), A.I2(short.MaxValue), A.I4(int.MaxValue), A.R4(1.5f), A.R8(2.5), A.Cy(12.3456m), A.Str("-1844674407370955.1621"),
                 A.Date(45000.5), A.Bool(true), A.Str("7"), A.Str("q"), A.Null]]);

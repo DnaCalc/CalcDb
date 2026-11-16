@@ -160,6 +160,16 @@ public sealed class P
 
     // DAO conveniences --------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Add a Decimal field (DAO type 20) to an existing table through TableDef.CreateField and Fields.Append, on
+    /// database <paramref name="db"/>. DAO DDL refuses DECIMAL (3292, R-FMT-1); this route gives DAO's default
+    /// precision and scale, which the read-back records.
+    /// </summary>
+    public P AddDecimalField(string table, string field, string db = "db") =>
+        GetBind("dtdfs", db, "TableDefs").Call("dtdfs", "Refresh").Item("dtdf", "dtdfs", A.Str(table))
+            .CallBind("dfld", "dtdf", "CreateField", A.Str(field), A.I4(20)).GetBind("dfls", "dtdf", "Fields").Call("dfls", "Append", A.Obj("dfld"))
+            .Release("dfls").Release("dfld").Release("dtdf").Release("dtdfs");
+
     /// <summary>The standard opening: file state, module identity, DBEngine, identity after activation.</summary>
     public P Engine()
     {
