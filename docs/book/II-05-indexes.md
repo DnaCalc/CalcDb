@@ -1,8 +1,8 @@
 # II-05. Indexes and sort-order keys
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-The index implementation consists of a native key encoder, a checked page codec and a tree editor that prepares page/reference changes for II-03's phase-image executor. **Use inclusive child-maximum fences, retain logical row-root locators, and plan splits from recomputed compressed byte occupancy. Provisionally retain nonempty underfull pages and the physical root page; unlink empty children without introducing eager merging.** These choices fit the concrete reference mechanics developed here and limit the pages involved in the priority DAO update loop.[^authority] Native acceptance, cursor effects and crash classes decide where they change.
+The index implementation consists of a native key encoder, a checked page codec and a tree editor that prepares page/reference changes for II-03's phase-image executor. Its `IndexLayout` and `KeyCodec` are compiled from II-04’s single `FormatDescriptor`, including the page envelope, entry suffixes, physical/logical index records, scalar framing and composite-key finish rule. Text-table identity belongs to the separately bound `SortDescriptor`. The numeric tables below describe the selected Jet 4/ACE profile; generated accessors supply those coordinates to the implementation. **Use inclusive child-maximum fences, retain logical row-root locators, and plan splits from recomputed compressed byte occupancy. Provisionally retain nonempty underfull pages and the physical root page; unlink empty children without introducing eager merging.** These choices fit the concrete reference mechanics developed here and limit the pages involved in the priority DAO update loop.[^authority] Native acceptance, cursor effects and crash classes decide where they change.
 
 **Requirement trace:** §§1–6 implement RQ-SEM-02's native comparison/key obligation and the index portion of RQ-FMT-03/RQ-TYPE-01; §§7–11 implement shared navigation and mutation for RQ-ISAM-01/RQ-DAO-02. The page/reference plans support RQ-STORE-01/02/04 and the normal-write interoperability of RQ-PROD-04. Bulk construction supplies the early rebuilding mechanism required by RQ-LATE-04 without implementing the later repair product. II-02 owns the real platform Automation value boundary; II-03 owns immutable page images and physical I/O; II-04 owns row roots and allocation. Sections 12–14 make the physical phases, cost model and acceptance concrete under K-KEY/K-FORMAT/K-PREFLIGHT.
 
@@ -14,7 +14,7 @@ Bind one physical index descriptor to its owner-map identity, root page and orde
 
 All offsets in this section are relative to the logical TableDef stream described in II-04. A block can cross a continuation-page boundary; use that stream's checked reader instead of treating a logical offset as an offset in the first 4096-byte page.
 
-**Figure F-29 — three TableDef index structures.** Source-backed hypothesis tables and coordinates; not ACE-confirmed or render-verified.
+**Figure F-29 — three TableDef index structures.** Source-backed hypothesis tables and coordinates; not ACE-confirmed.
 
 ### 1.1 Twelve-byte physical counter blocks
 
@@ -63,7 +63,7 @@ The connection back to the row engine is therefore precise: resolve logical meta
 
 ## 2. The native index-page envelope
 
-**Figure F-30 — index header, boundary mask and payload.** Source-backed numeric hypothesis table; not ACE-confirmed or render-verified.
+**Figure F-30 — index header, boundary mask and payload.** Source-backed numeric hypothesis table; not ACE-confirmed.
 
 The pinned Jet4 profile and its ACE profile subclasses share the following index-page offsets. These are not the ordinary kind 01 data-page offsets after byte 11: an index page has an entry-boundary bitmap, not a row directory. In particular, **bytes 8–11 are not an index-entry count**. The pinned writer labels them a write stamp and emits zero; that source choice does not authorize zeroing an existing native stamp. [^S-JACK-FMT][^S-JACK-INDEX-PIN]
 
@@ -97,7 +97,7 @@ physical bitmap byte = 27 + bitmapByte
 entry physical end   = 480 + b
 ```
 
-There is no subtraction of one. Bit9 marks the end after nine stored bytes. The next entry begins at that boundary. The page's stored entry count is the bitmap's population count, not a header row count and not the data-page 255-slot limit. [^S-JACK-INDEX-PIN]
+There is no subtraction of one. Bit9 marks the end after nine stored bytes. The next entry begins at that boundary. The page's stored entry count is the bitmap's population count, not a header row count or a data-page row-slot bound. [^S-JACK-INDEX-PIN]
 
 The bitmap has3624 bit positions, numbered0–3623; the actual entry area has3616 bytes. A completely filled stream ends at 3616 and uses bitmap byte 452, bit 0, which is absolute page byte 479. Bits1–7 of that last bitmap byte would claim ends outside the payload. This explains why453 mask bytes are necessary even though452×8 equals3616: boundary3616 itself still needs a representable bit. Bit0 cannot terminate a nonempty entry. A bounded parser rejects either impossible case before slicing the page. The pinned capacity computation takes the minimum of page data space and bitmap bit capacity; for this profile it resolves to3616. [^S-JACK-FMT][^S-JACK-INDEX-PIN]
 
@@ -155,7 +155,7 @@ The last branch is not permission to invent a child for an empty malformed node.
 
 ### 3.2 Three duplicate Long entries and a locator-bearing prefix
 
-**Figure F-31 — a complete compressed leaf image.** Constructed 4096-byte witness; not an ACE-created page or render-verified figure.
+**Figure F-31 — a complete compressed leaf image.** Constructed 4096-byte witness; not an ACE-created page.
 
 Assume a nonunique single-column ascending Access Long index and three rows whose value is42. The pinned scalar encoder gives the hypothetical native key `7f 80 00 00 2a`: a nonnull ascending marker and the sign-adjusted big-endian32-bit integer. The scalar calculations in §4 independently give the same candidate bytes. Each row is on data page `0x012345`, in slots `02`, `07` and `fe`. These are isolated page witnesses, not an executed or complete database. [^S-JACK-INDEX-PIN][^S-JACK-IDXCODES-PIN]
 
@@ -188,7 +188,7 @@ Owner TableDef is page `0x20`; peer and tail pointers are zero; leaf level is ze
 
 ### 3.3 Two high keys and a header tail
 
-**Figure F-32 — an interior page with three leaf children.** Constructed high-key, locator and byte-order witness; not ACE-confirmed or render-verified.
+**Figure F-32 — an interior page with three leaf children.** Constructed high-key, locator and byte-order witness; not ACE-confirmed.
 
 Use ascending Long keys10 and20, and an interior page whose three children are `0x100`, `0x101`, `0x102`. Its first two stored high keys retain row locations `(0x001234,7)` and `(0x001235,9)` respectively. Its tail pointer is `0x102`. The intended children hold these ordered rows:
 
@@ -230,49 +230,54 @@ The exact constructed empty fixture header is `04 01 20 0e 20 00 00 00 00 00 00 
 Original bounded decoder proposal:
 
 ```
-decode_index_page(take image_pin, physical_descriptor, selected_profile, budget):
+decode_index_page(take image_pin, physical_descriptor, profile, budget):
     image = image_pin.bytes
-    require image.length == 4096
-    kind = load_u8(image, 0)
-    require kind is leaf or interior
-    prefix_length = load_u16_le(image, 24)
-    count, first_end, last_end = count_and_validate_all_set_bits(image[27:480])
-        // first pass rejects every position outside 0 < end <= 3616
+    index = profile.index
+    require image.length == profile.page_size
+    kind = index.read_kind(image)
+    require kind is index.leaf_kind or index.interior_kind
+    prefix_length = index.read_prefix_length(image)
+    mask = checked_slice(image, index.entry_mask_offset, index.entry_mask_bytes)
+    payload = checked_slice(image, index.entry_area_offset, index.entry_area_bytes)
+    count = count_and_validate_all_set_bits(
+        mask, lower_exclusive = 0, upper_inclusive = index.entry_area_bytes)
     reservation = reserve checked directory/scratch capacity from budget
-    ends = enumerate_set_bits_lsb_first(image[27:480], exactly count)
+    ends = enumerate_set_bits_lsb_first(mask, exactly count)
     require ends are strictly increasing
 
     if ends.empty:
         require prefix_length == 0
-        validate_empty_shape(image, physical_descriptor, selected_profile)
+        validate_empty_shape(image, physical_descriptor, profile)
         return EmptyDirectory(take image_pin, take reservation)
 
     require prefix_length <= ends[0]
-    prefix = image[480 : 480 + prefix_length]
+    prefix = payload[0:prefix_length]
     previous_end = 0
     result = page_local_entry_directory()
     for each (ordinal, end) in ends:
         if ordinal == 0:
-            view = one_span(image[480 : 480 + end])
+            view = one_span(payload[0:end])
         else:
-            view = two_spans(prefix,
-                            image[480 + previous_end : 480 + end])
-        trailer = 4 if leaf else 8
+            view = two_spans(prefix, payload[previous_end:end])
+        trailer = index.entry_trailer_bytes(kind)
         require view.length >= trailer
         key_length = view.length - trailer
-        validate_key_shape(view[0:key_length], physical_descriptor)
-        locator = read_u24_be_and_u8(view, key_length)
-        child = read_u32_be(view, key_length + 4) if interior
+        validate_key_shape(view[0:key_length], physical_descriptor, profile.key)
+        locator = index.read_row_locator(view, key_length)
+        child = Absent
+        if kind == index.interior_kind:
+            child = index.read_child_reference(
+                view, key_length + index.row_locator_bytes)
         append checked descriptor(view, key_length, locator, child)
         previous_end = end
 
     verify strict order using key bytes, then locator; exclude child
-    record expected_free = 3616 - ends.last
-    compare expected_free with stored free count under selected profile
+    expected_free = index.entry_area_bytes - ends.last
+    compare expected_free with index.read_stored_free_count(image) under profile
     return complete entry directory taking image_pin and reservation
 ```
 
-This decoder stores boundary offsets and small descriptors. It can compare the prefix and suffix spans without allocating one contiguous buffer per entry. It extracts trailers across span boundaries: the full row location can itself be partially or wholly in the prefix. The code that reads a child cannot assume that its physical four bytes are adjacent to its key in the underlying page. For the usual writer prefix limit they are in the suffix, but the logical-entry accessor remains the appropriate boundary.
+The accessors are generated from the descriptor’s offset, width and byte-order rules; `entry_trailer_bytes` derives the locator width plus an interior child reference where applicable. The same rules generate emitters and inspection labels. The decoder has no second set of constants for 4096/27/480/3616 or four/eight-byte suffixes. This decoder stores boundary offsets and small descriptors. It can compare the prefix and suffix spans without allocating one contiguous buffer per entry. It extracts trailers across span boundaries: the full row location can itself be partially or wholly in the prefix. The code that reads a child cannot assume that its physical four bytes are adjacent to its key in the underlying page. For the usual writer prefix limit they are in the suffix, but the logical-entry accessor remains the appropriate boundary.
 
 Reject invalid slice arithmetic and impossible references before following links. Preserve the original page image for diagnostics, and do not “repair” a mismatched free count, unknown stamp or unexpected level merely by recomputing the preferred value. A permissive read path can be broader than a mutation path, but a page whose write invariants are unresolved does not become writable because its keys were readable. On the first read of a physical tree, validate root ownership and the owner's usage map; traversal validates child ownership, peer reciprocity when visited, and absence of cycles. Full-tree validation can check every child maximum and every allocated index page without making every point seek a full-tree walk.
 
@@ -292,7 +297,7 @@ Use three distinct lengths: a field contribution, a composite user key, and a co
 
 There is no additional delimiter between fields and no delimiter before the four-byte row locator. Each non-null contribution starts with its direction marker; its type-specific payload supplies the rest. A null contribution is one byte. The maximum column count in the reference is ten. The row locator sorts duplicate physical entries, but it is not part of user-key equality, the key shortening operation, or a SQL equality predicate. A decoder for a page can compare the complete reconstructed key bytes without reversing them into values; reconstructing original text from an index key is impossible in general because distinct strings can share weights. Keep the original row value available for semantic comparison and for returning data. [^S-JACK-INDEX-PIN][^S-JACK-IDXCODES-PIN]
 
-The exact pinned text selector recognizes only these descriptor pairs:
+The initial CalcDb inventory is the General family under PRD-05. The exact pinned text selector supplies these descriptor pairs; native probes confirm their use within each admitted file profile:
 
 | Native sort identifier | Version interpreted by source | Selected reference family |
 |---|---:|---|
@@ -302,11 +307,13 @@ The exact pinned text selector recognizes only these descriptor pairs:
 
 `ColumnImpl.readSortOrder` reads the identifier as the descriptor's two-byte integer and, when the format stores a four-byte sort descriptor, the signed version byte at offset `+3`. It does not interpret the byte at `+2`. The raw descriptor must be preserved. Its fallback for identifier zero uses the file format's default sort order; that is a reference compatibility choice, not proof that arbitrary zero or unknown descriptors are valid native aliases. `General97` is a sort family name, not permission to open an excluded Jet 3 file and not grounds for rejecting a Jet 4/ACE file carrying that descriptor. [^S-JACK-COL][^S-JACK-INDEX-PIN]
 
-The pin has no general routing class for other language or tailored orders. Unsupported orders either become read-only in Jackcess or, behind `isWriteBrokenIndex`, are written using General Legacy with an expectation that Access repairs them later. CalcDb does not adopt that fallback. All scope-required native orders remain required: inventory every advertised and corpus-observed descriptor, attach an exact profile to each, and close the missing table or tailoring cases through R-SORT-3. An unknown profile is an incomplete implementation case; it is not a redefinition of scope. A known unrelated edit can preserve a verified unchanged existing key, but creating or changing a key requires its exact qualified profile.
+The pin has no general routing class for other language or tailored orders. Unsupported orders either become read-only in Jackcess or, behind `isWriteBrokenIndex`, are written using General Legacy with an expectation that Access repairs them later. CalcDb does not adopt that fallback. For orders outside the initial inventory, row reading and full table scans remain available. An indexed Text seek or key write returns `NotModelled.SortOrder`, counted separately as `TextSeek` or `TextKeyWrite`; the public adapter supplies the defined error channel without inventing an ACE error number. This boundary covers a compound index containing Text and the catalog-name index as well as an ordinary single-column index. It does not prohibit an otherwise admitted scalar-only index. A further order is added when a real file needs it, using SORT-DERIVE as the same table-data task. A missing encoder for General, General–Legacy or an applicable General 97 descriptor is still an implementation gap within the initial inventory.[^scope]
 
 CalcDb's profile key includes the raw sort identity/version, relevant field flags and file-family rules. The selected target cohort is an explicit product compatibility policy and evidence dimension; the oracle build is not a hidden dispatch key that changes bytes for the same file-visible descriptor. Unexplained build conflicts remain unresolved until that policy is decided. It should not be keyed only by a locale name or the machine's current culture. Text family selection and NUMERIC ordering mode are separate: the latter is selected by the file format in the reference. Store profile data with its acquisition provenance and an identity hash; use table sharing internally only when it preserves every profile's distinct behavior.
 
-**D-SORT-1 — Provisional.** Bind an exact native encoder by the file-visible sort/type descriptor, column directions and admitted target conditions. Retain full semantic values where native keys lose information. R-SORT-3 confirms the byte rules and which operations can use encoded equality/order directly. Generic host collation, text normalization and a known-broken fallback followed by Compact & Repair remain unsuitable because ordinary writes must already interoperate.
+**D-SORT-1 — Decided inventory; provisional encoder.** Bind an exact native encoder for the initial General family by the file-visible sort/type descriptor, column directions and admitted target conditions. The exact Apache-2.0 Jackcess resources are the selected table input; independently derived native tables are an alternative. Retain full semantic values where native keys lose information. R-SORT-3’s SORT-DERIVE checks all code units and the specified contexts; SORT-CHECK decides the discriminating byte/behavior rules and which operations may use encoded equality/order directly. Generic host collation, text normalization and a known-broken fallback followed by Compact & Repair remain unsuitable because ordinary writes must already interoperate.
+
+Admission is per operation. Before selecting a key seek, the planner asks whether every indexed Text descriptor has an admitted encoder; an index’s existence alone does not answer that question. Otherwise it retains a full table scan where the requested semantics are available. An explicit indexed Text seek receives the named refusal. Before key mutation, check all affected physical trees: insertion, deletion, a changed key, a changed root locator or a bulk rebuild counts as a key write. An unrelated row edit may preserve an existing entry only when membership, key bytes and root locator remain unchanged. Full scans do not silently replace required text comparison with binary BSTR comparison.
 
 ### 4.1 Direction markers and scalar payloads
 
@@ -422,7 +429,7 @@ The `A` and `a` sample establishes case equality for that pair in these profiles
 | `A`, General | `7F 0E 02 01 00` | `80 F1 FD FE FF 00` |
 | `Aé`, General | `7F 0E 02 0E 21 01 02 0E 00` | `80 F1 FD F1 DE FE FD F1 FF 00` |
 
-**Figure F-33 — a compound key with mixed directions and Null.** Constructed encoding witness; not ACE-confirmed or render-verified.
+**Figure F-33 — a compound key with mixed directions and Null.** Constructed encoding witness; not ACE-confirmed.
 
 In the compound index `(Long ASC, Text General DESC, nullable Long ASC)`, row `(42,"Aé",Null)` has sixteen key bytes:
 
@@ -486,6 +493,7 @@ Use a typed scalar view over the already validated row or a coerced pending valu
 make_key(index_plan, borrowed_values, scratch) -> Result<KeyView>
     require values cover each indexed physical column
     require index_plan.profile is exact for its native descriptor
+    require index_plan.sort_capability permits this key operation
     checkpoint = scratch.mark()
     sink = scratch.begin_key(index_plan.maximum_pre_finish_output)
 
@@ -508,7 +516,7 @@ on error:
     return error                       // no page image has changed
 ```
 
-The page writer consumes the immutable view or copies it into its mutation batch before scratch reuse. Every length addition is checked. A text encoder's temporary bound derives from 255 input units, the selected profile's maximum expansion and its auxiliary streams, not from the final shortened size. The inspected resource metadata alone shows General extended primary records as wide as eight bytes and secondary records as wide as three; allocating only 510 bytes before finishing is not safe. A reusable per-cursor or per-batch arena avoids allocations on common DAO row loops. It contains primary output plus secondary/later streams and at most ten field offsets; bounded growth happens before page mutation.
+The page writer consumes the immutable view or copies it into its mutation batch before scratch reuse. Every length addition is checked. The `KeyCodec` supplies text-input, field-count, shortening and framing limits. For the displayed profile, the text-input limit is 255 code units; temporary capacity derives from that limit, the selected sort table’s maximum expansion and its auxiliary streams, not from the final shortened size. The inspected resource metadata alone shows General extended primary records as wide as eight bytes and secondary records as wide as three; allocating only 510 bytes before finishing is not safe. A reusable per-cursor or per-batch arena avoids allocations on common DAO row loops. It contains primary output plus secondary/later streams and at most ten field offsets; bounded growth happens before page mutation.
 
 If the native shortening rule is confirmed, its final sink can retain the first 508 bytes and a small pending suffix/register rather than materializing the entire composite key. Keep the last pending emitted byte out of the digest until another byte arrives, since the pinned rule excludes the final byte. Still retain enough bytes to return unmodified keys of length 509 and 510. This streaming sink is a CalcDb implementation choice; the externally visible rule is determined by the profile. Text level construction may still need a bounded auxiliary buffer or a second pass over its borrowed span.
 
@@ -698,7 +706,7 @@ At the publication boundary, the coordinator revalidates image/descriptor/alloca
 
 ## 9. Recompression, split selection and root growth
 
-**D-INDEX-1 — Provisional.** Keep native page forms, explicit inclusive maximum fences and a stable physical root; split from byte occupancy after prefix recomputation; retain nonempty underfull pages and unlink empty ones. This limits mutation footprint and has a concrete reference basis. It holds only where R-FMT-2 finds native acceptance, R-CURSOR-1 finds compatible order/identity and R-CRASH-1/2 qualifies the prepared physical phases. Eager redistribution/merging and root contraction add pages and movement without an established early benefit; add them only if native validity/behavior requires them or measured byte/read savings justify an equally compatible variant. This decision changes II-03/04's mutation inputs, II-07's saved positions and the II-08 persistence plan, not their ownership or crash contracts.
+**D-INDEX-1 — Provisional.** Keep native page forms, explicit inclusive maximum fences and a stable physical root; split from byte occupancy after prefix recomputation; retain nonempty underfull pages and unlink empty ones. This limits mutation footprint and has a concrete reference basis. It holds only where R-FMT-2 finds native acceptance, R-CURSOR-1 finds compatible order/identity and R-CRASH-1 qualifies the prepared physical phases. Eager redistribution/merging and root contraction add pages and movement without an established early benefit; add them only if native validity/behavior requires them or measured byte/read savings justify an equally compatible variant. This decision changes II-03/04's mutation inputs, II-07's saved positions and the II-08 persistence plan, not their ownership or crash contracts.
 
 For n ordinary stored entries of full lengths L0…Ln−1, a legal shared prefix of p bytes gives payload occupancy:
 
@@ -710,7 +718,7 @@ The codec can preserve an existing legal prefix that extends into the three row-
 
 ### 9.1 A nine-byte insert can add 1210 packed bytes
 
-**Figure F-34 — prefix collapse and a byte-balanced split.** Constructed occupancy and fence witness; not an observed ACE split or render-verified figure.
+**Figure F-34 — prefix collapse and a byte-balanced split.** Constructed occupancy and fence witness; not an observed ACE split.
 
 Construct a leaf holding ascending Long values 0 through 601, one entry per value. Each full entry is five key bytes plus four locator bytes. For value v use logical-root locator `(page 0x002000+v, slot 5)`; these are legal-width constructed locators, not a captured ACE file. The keys all share prefix `7F 80 00` (three bytes):
 
@@ -790,7 +798,7 @@ new: 7F 80 00 00 0F  00 12 35 03  00 00 01 01
 
 P's overall maximum is still the tail's 30, so its ancestor fence need not change. The child pointer remains unchanged while both key and row-slot parts of the fence change.
 
-**Figure F-35 — a changed subtree maximum through an unchanged page.** Constructed dependency example; emitted prose/byte table, not ACE-confirmed or render-verified.
+**Figure F-35 — a changed subtree maximum through an unchanged page.** Constructed dependency example; not ACE-confirmed.
 
 Now delete 30 from tail leaf `0x0102`. That leaf retains 25 at `(0x001236,1)`. P's two explicit entries and header tail pointer do not change, so P can have **identical serialized bytes** before and after this second deletion. Its subtree maximum nevertheless changes from 30 to 25. If P itself is represented by an explicit high fence in its parent, that ancestor entry must change from `7F 80 00 00 1E 00 12 36 02` to `7F 80 00 00 19 00 12 36 01`, keeping the same child page pointer for P. Stopping propagation at an unchanged serialized parent page loses this update. [^S-JACK-IDXCACHE-PIN]
 
@@ -804,7 +812,7 @@ For variable-sized keys, deletion can replace a short maximum with a lexicograph
 
 ### 10.1 Preferred deletion policy and algorithm
 
-**Retain nonempty underfull pages; unlink truly empty non-root pages; propagate empty-node removal; keep the root page and turn it into an empty leaf when the tree empties. Do not introduce general borrowing, merging or single-child root contraction in the first native writer.** This is the preferred provisional direction for R-FMT-2, R-CURSOR-1 and R-CRASH-1/2, not an assumption of a universal half-full B-tree invariant.
+**Retain nonempty underfull pages; unlink truly empty non-root pages; propagate empty-node removal; keep the root page and turn it into an empty leaf when the tree empties. Do not introduce general borrowing, merging or single-child root contraction in the first native writer.** This is the preferred provisional direction for R-FMT-2, R-CURSOR-1 and R-CRASH-1, not an assumption of a universal half-full B-tree invariant.
 
 That direction is consistent with the inspected reference's empty-page cleanup and lack of a general merge path. It reduces the number of unrelated page identities and peer links changed by an ordinary delete. Native evidence changes it if retained shapes violate native validity/repair behavior or if the required native operation has additional observable consequences. Legitimate different page placement or fill ratios alone are not failure, provided the book's independent native reopening and “nothing to fix” comparison accepts the structure. A supported compact/rebuild operation can repack live entries as its separately tested behavior.
 
@@ -872,33 +880,36 @@ Bulk sorting must not postpone a required early constraint failure past later va
 
 For N included entries and K total encoded bytes, comparison sort has O(N log N) comparisons, with byte comparison work determined by keys; materialization and final page emission are O(K plus page/map output). External merge costs depend on the memory/run budget and number of merge passes, which must be reported rather than hidden in “linear build.” Pinned source population currently loops over rows and prepares ordinary adds; the sorted-run builder above is an original CalcDb design, not a claimed ACE or Jackcess bulk algorithm.
 
-A create-index operation may publish the new descriptor only after its native page/ownership state is appropriate; a rebuild of an already reachable index has a different old-root/reference transition. Do not infer that either is an atomic root-pointer swap. An existing root-page number or descriptor may need preserved identity, and old image ownership remains explicit. The exact phases, errors, count initialization, transaction effects and interrupted-build states go to R-FMT-2/R-CAT-1/R-TXN-1/R-CRASH-1/2. A streaming builder may prepare earlier pages privately, but no early native publication is justified by the availability of sorted input. Before returning, transfer every run, page image, reservation and retained source obligation to the enclosing operation owner or release it. Budget/cancellation/I/O failure settles owned runs and reports its exact stage; no untracked worker or borrowed row span survives the call. Native publication failures use II-03 receipts rather than restarting the build.
+A create-index operation may publish the new descriptor only after its native page/ownership state is appropriate; a rebuild of an already reachable index has a different old-root/reference transition. Do not infer that either is an atomic root-pointer swap. An existing root-page number or descriptor may need preserved identity, and old image ownership remains explicit. The exact phases, errors, count initialization, transaction effects and interrupted-build states go to R-FMT-2/R-CAT-1/R-TXN-1/R-CRASH-1. A streaming builder may prepare earlier pages privately, but no early native publication is justified by the availability of sorted input. Before returning, transfer every run, page image, reservation and retained source obligation to the enclosing operation owner or release it. Budget/cancellation/I/O failure settles owned runs and reports its exact stage; no untracked worker or borrowed row span survives the call. Native publication failures use II-03 receipts rather than restarting the build.
 
 ## 12. Native page phases for index changes
 
 For a split of a non-root leaf, the physical closure commonly includes new index page(s), the original leaf, its previous/next peers as affected, parent/ancestor images, index-owned map pages, global allocation pages, and any TableDef native-count image. For a row key change, it also includes the old/new row/LV/overflow graph from II-04. Several roles may share one physical page. A node split can additionally alter a child-node peer boundary even where the children's data entries stay unchanged.
 
-The preferred provisional direction under **D-WRITE-1** is to prepare complete new targets, establish the evidenced allocation/ownership state before making them reachable, publish the required child/fence/peer/row changes, and retire old references/storage according to the qualified native program. This describes dependencies to test, not a guessed universal linear write sequence. Split publication can require multiple phase images of an original page; a final-image-only dirty set cannot express them. An incoming parent link, a sibling link and a row/key update can have different crash meanings and must appear in the write-point matrix.
+The preferred provisional direction under **D-WRITE-1** starts with one final image per page in the publication unit. Initialize new targets, then publish the chosen data/index order, catalog references and final existing maps, followed by permitted extent changes and evidenced resolution/flush work. When a map both allocates and retires storage, the candidate cannot promise both an early allocation image and a late retirement image while writing it once. R-CRASH-1 compares the map and reference cuts explicitly. Split/peer/root changes share this question; a required repeated transition selects the retained phase-program fallback.
 
-No native commit marker, repair flag, “safe full page write,” fsync order or replacement WAL is invented here. R-CRASH-1/2 supplies commit-survival and `dbForceOSFlush` behavior and any native needs-repair state. If complete ACE tracing is impossible, the book's bounded exclusive writer direction still applies: enumerate CalcDb cuts, bracket native kills, compare independent next-openers and leave unsupported transition claims explicit. Optional private undo does not justify a page order that is unsafe for ACE-first reopening.
+No native commit marker, repair flag, atomic-page guarantee or replacement WAL is invented here. R-CRASH-1 records writes/flushes and contents, reconstructs candidate states and runs both engines’ cut images through the same native openers. If exact tracing or classification proves incomplete, its attainable coverage and treatment of unresolved writes remain implementation decisions under PRD-07. Optional undo is not planned and supplies no index-order justification.
 
-### 12.1 The same index page needs two different output images
+### 12.1 One final leaf image, with a repeated-image alternative
 
-**Figure F-36 — provisional indexed Long 42→43 update.** Constructed phase-image table under D-WRITE-1; not an observed ACE write sequence or a proof of crash safety. All referenced rows/pages are assumed already owned and admitted; this example allocates no new pages.
+**Figure F-36 — provisional indexed Long 42→43 update.** Constructed final-image and order table under D-WRITE-1; not an ACE trace or proof of crash safety. The rows/pages are already owned and admitted; no allocation is needed.
 
-Let leaf root page 0x90, owned by TableDef 0x20, contain two ascending Long entries:42 at row root `(17,0)` and50 at `(18,2)`. The full entries are `7F 80 00 00 2A 00 00 11 00` and `7F 80 00 00 32 00 00 12 02`. With a four-byte key prefix its payload is fourteen bytes, ending at 9 and14; bitmap byte 1 is42hex, and the little-endian free count is `12 0E`. Page17's one-Long row body is `01 00 2A 00 00 00 01`, using II-04's stored-column count and final nonnull mask.
+Leaf root page 0x90, owned by TableDef 0x20, contains Long 42 at row root `(17,0)` and Long 50 at `(18,2)`. The full entries are `7F 80 00 00 2A 00 00 11 00` and `7F 80 00 00 32 00 00 12 02`. The four-byte prefix leaves a fourteen-byte payload, ending at9 and14; bitmap byte1 is42hex and the little-endian free count is `12 0E`. Page 17’s one-Long row is `01 00 2A 00 00 00 01`.
 
-| Prepared phase | Physical page / role | Exact changed representation | Dependency in the provisional program |
+| Image | Physical page / role | Exact representation | Starting program |
 | --- | --- | --- | --- |
-| Before | 0x90, original leaf | Payload `7F8000002A00001100 3200001202`; prefix4; ends9,14 | Retain immutable before-image. |
-| Remove old index reference | 0x90, intermediate leaf | Singleton payload `7F8000003200001202`; prefix0; end9; bitmap byte 1=`02`; free=`17 0E` | Complete before publishing row43 in this candidate. |
-| Change row | 17, ordinary data | Row `01 00 2B 00 00 00 01`; root locator remains `(17,0)` | No table row-count increment; preserve unrelated bytes. |
-| Install new index reference | 0x90, final leaf | Payload `7F8000002B00001100 3200001202`; prefix4; ends9,14; bitmap byte 1=`42`; free=`12 0E` | Complete after row change in this candidate. |
-| Required native bookkeeping / resolution | Actual affected pages and transaction state | Only evidenced count/stamp/marking changes; no invented on-disk commit word | Native ordinary/forced-flush survival evidence selects acknowledgement. |
+| Before | 0x90, leaf | Payload `7F8000002A00001100 3200001202`; prefix4; ends9,14; bitmap42; free `12 0E` | Retain its old source as required by readers. |
+| Final row | 17, ordinary data | Row `01 00 2B 00 00 00 01`; root remains `(17,0)` | One final page 17 image; preserve unrelated bytes. |
+| Final leaf | 0x90, index | Payload `7F8000002B00001100 3200001202`; prefix4; ends9,14; bitmap42; free `12 0E` | One final page 0x90 image. |
+| Resolution | Actual native state | Only evidenced count/stamp/marking or flush work | No invented on-disk commit word. |
 
-The fourteen-byte final payload differs from the original at one key byte, but that fact does not authorize a one-byte native update or collapsing the two page 0x90 images. The proposed order intentionally exposes a different intermediate search structure. R-CRASH-1 must determine whether its interrupted states match the native baseline, or change the ordering/marking/physical spans. A source stamp, bitmap and free count belong to each complete image; their physical transfer granularity remains II-03's qualified choice.
+CRASH-ORDER-DATA writes final page 17 before final page 0x90. Its complete-page intermediate state has row 43 with the old key 42. CRASH-ORDER-INDEX reverses the two writes and has the new key 43 with row 42. Neither is declared safe by inspecting the final tree. At 4,096 bytes per full-page request, either candidate transfers 8,192 page bytes for this fixture, before any separately evidenced bookkeeping or flush calls. A one-byte key difference does not establish an admissible one-byte physical update.
 
-No parent fence changes in this example because the root is a leaf. For a nonroot leaf, replacing a maximum may add ancestor changes from §10; splitting adds the new page, peers and owner/global-map closure from §9. A normal completed output must pass the independent ACE/Access/T-COMPACT-1 branches. An interrupted image is assessed against the corresponding ACE crash class, including the effect of dbForceOSFlush, without depending on a private undo file.
+CRASH-ORDER-REPEAT-REMOVE keeps the previous alternative: first encode page 0x90 as the singleton Long 50 entry `7F8000003200001202` with prefix0, end9, bitmap byte1=`02` and free count `17 0E`; then write row 43; then write the final leaf. That uses three full-page requests, 12,288 page bytes. It adds an intermediate search structure and remains available if the deciding experiments select it; it is not the starting cost imposed on every key update.
+
+CRASH-ORDER-REPEAT-ADD instead installs both keys before changing the row, then removes the old key. Its constructed intermediate leaf has payload `7F8000002A00001100 2B00001100 3200001202`, prefix4, ends9,14,19, bitmap byte1=`42`, byte2=`08`, and free count `0D 0E`. This alternative also uses three full-page requests. Both repeated orders are subcases of CRASH-ORDER-REPEAT; their intermediate duplicates or missing references are observations to compare, not assumed native guarantees.
+
+No parent fence changes because the root is a leaf. A nonroot maximum change, split or reuse adds its actual ancestor, peer and map closure. The enclosing local locker rebuilds these images over the latest committed base, reusing accepted semantic effects. Normal completed outputs use independent ACE/Access checks and T-COMPACT-1’s per-write direction. Every distinct modeled interrupted image is exported to the same opener branches as ACE’s reconstructed images, with dbForceOSFlush kept separate. Exact crash classification and pass conditions are implementation work (II-08; PRD-07/08).
 
 ## 13. Cost model, preservation and independent validation
 
@@ -909,7 +920,7 @@ The hot representation is one compiled descriptor, one immutable page-image dire
 | Resident numeric Seek | Encode1+width key bytes, compare full-entry bounds and descend resident directories; no text materialization | Current leaf pin plus bounded path/anchor; cold misses add actual tree-page reads. |
 | MoveNext within a leaf | Advance offset ordinal; decode locator; apply required public cursor policy | No key copy unless an owned anchor must survive movement; row fetch is separate. |
 | Cross a leaf boundary | Acquire next image, validate context/order, switch pins | Brief two-pin overlap; full decode only for an uncached directory. |
-| Indexed field update | Old/new exact keys, one delta per affected physical tree, uniqueness range checks | Complete affected images, before/history retention and potentially multiple images of one page. |
+| Indexed field update | Old/new exact keys, one delta per affected physical tree, uniqueness range checks | One final image per changed page in the starting program, required old-source retention, and measured repeated-image fallback cost. |
 | Prefix-sensitive split | Recomputed prefix, boundary lengths, partition summaries, parent/peer closure | New native page(s), owner/global map patches, retained root identity and ancestor images. |
 | Bulk build | Bounded exact-entry runs and merge, streamed page packing, constraint provenance | Peak run buffers, spill bytes/pass count, unpublished pages and native publication closure. |
 
@@ -923,20 +934,38 @@ Retain the simple scalar encoder as a comparison baseline for later batch/SIMD/t
 
 ### 13.1 Exact source data and resource acquisition
 
-The inspected resource files are facts used to form small discriminating examples; no whole table is reproduced in the chapter. Each has its own exact hash and acquisition URI. All five code-table resources contain only grammar records with no file-level licence header; the sparse mapping file likewise has only mappings. The repository's pinned `LICENSE.txt` is Apache-2.0; its `NOTICE.txt` discusses expression-engine financial functions and does not establish the origin or separate rights status of these sort-weight tables. The POM advertises Apache-2.0 at project level. Record that context without turning it into a blanket resource clearance. Before redistributing or incorporating a table, establish exact-material provenance/licence; an independently derived table from permitted native black-box captures is an alternative data-acquisition route, not a claim that the current resource files have been cleared. No reference code, tests or tables have been ported into CalcDb in this response. [^S-JACK-RESOURCE-LICENSE-CONTEXT][^S-JACK-RESOURCE-NOTICE-CONTEXT][^S-JACK-RESOURCE-POM-CONTEXT]
+PRD-05 selects the six pinned Jackcess weight/mapping resources as exact Apache-2.0 material. Their individual source paths, byte counts and SHA-256 hashes remain in A-01. General and General–Legacy each use a 256-record base table and an extended table; General 97 uses its base table and sparse mapping file. The resource records have no file-level licence header. Their licence is recorded with the pinned project `LICENSE.txt` and POM, and incorporation retains the licence, applicable attribution and distribution notice. A generated representation records the exact input identities and any transformation or modification; its own identity must not be passed off as the source resource’s hash. [^S-JACK-RESOURCE-LICENSE-CONTEXT][^S-JACK-RESOURCE-NOTICE-CONTEXT][^S-JACK-RESOURCE-POM-CONTEXT]
+
+The provenance is the exact Jackcess revision and resource path, not a claimed Microsoft origin or an observed ACE capture. The pinned `NOTICE.txt` identifies financial-function material from Apache POI and UCanAccess; it supplies no additional history of the sort tables. Keep that distinction in the distribution record. The source-code readings remain factual input; selecting the resource data does not silently select Java implementations or tests for reuse. No table is reproduced in full here, and no CalcDb implementation or native derivation has been run for the book.
+
+`W-04/weight-tables-per-sort-order` accepts either the licensed exact resource or a table derived independently from native black-box captures. Both produce the same immutable `SortDescriptor` data interface, with a per-code-unit record directory, class-specific payloads, context rules, evidence identity and content hash. The General-family inventory is fixed; table layout and deduplication are implementation choices. For an additional real-file order, the same derivation procedure supplies new data without changing the index architecture.
+
+SORT-DERIVE is a full code-unit and finite-context experiment, sized L per order. It attempts all 65,536 UTF-16 units, records any public transport rejection explicitly, and captures admitted units alone and beside discriminating sentinels. Contexts expose primary expansions and contractions, secondary modifiers, ignored units, positional controls, `Z` flags, General 97 significant classes and surrogate behavior. Derivation separates field framing and row locators from the captured entry, solves record class and weight contributions, then predicts held-out complete context keys. Compare those results with every selected Jackcess record and the whole encoded contexts; do not treat an unaccepted unit as an observed zero-weight record. SORT-CHECK retains the small cases that distinguish competing framing, length, uniqueness and public-seek rules. Neither finite context coverage nor agreement with one reference table proves every possible Unicode string. A-02 owns the probe matrix, prerequisites and disagreement branches; no capture result is claimed here.
 
 ## 14. Acceptance and development slices
+
+**Deciding branches.** The [common terminology](book-record.md#terminology) applies to the native profiles and policy choices below. These branches decide the consequential uses of qualified or established behavior in this chapter.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–3 and 9–10: page/entry grammar, fences, splits, deletion and counters | R-FMT-2: Page envelope and mask, Common prefix, High keys and tails, Splits / stable root, Deletion, Logical/physical metadata, Statistics word and Index page retirement. |
+| §§4–6: scalar/Text keys, shortening, collisions and residual rules | R-SORT-3/SORT-CHECK and SORT-DERIVE; R-SQL-1/SQL-EQ/SQL-KEYS for semantic equality and ordering consumers. |
+| §7: Seek conversion, bounds and post-search cursor state | R-CURSOR-1/CUR-SEEK and R-DAO-1's existing II-05 index API slice, with SORT-CHECK's stored-key evidence. |
+| §§8 and 11: validation/evaluation order and accepted effects | R-CURSOR-1/CUR-EDIT, R-EXPR-1/EXPR-MUTATION, R-SQL-2/SQL-ACT-DDL and R-TXN-1/TXN-STMT. |
+| §§12–13: publication, transfer cuts and completed output | R-CRASH-1/CRASH-PROGRAM, CRASH-ORDER-DATA, CRASH-ORDER-INDEX, CRASH-ORDER-REPEAT, CRASH-PARTIAL, CRASH-RELATION and CRASH-CAPTURE; R-ORACLE-1/OR-REPAIR for T-COMPACT-1. |
+
+CRASH-PARTIAL is a model receipt witness; the actual adapter must supply its transfer evidence separately. Crash classification and the precise completed-write pass conditions remain implementation work under PRD-07/08.
 
 The following tests are designed acceptance cases. Only arithmetic/example checks were executed here, including some calculated fixtures not printed in full; the native cases remain planned. Each native case retains the common A-02 environment, immutable inputs and independent next-opener branches.
 
 | Test | Case | Required evidence / failure exposed |
 | --- | --- | --- |
-| T-IDX-01 | Page/mask/endian witnesses | Decode the complete leaf/interior/empty examples; independently verify end bits 9/10/11 and13/22, full-payload boundary3616, little-endian headers and big-endian entry trailers. |
+| T-IDX-01 | Page/mask/endian witnesses | Decode the complete leaf/interior/empty examples through the generated profile; independently verify end bits 9/10/11 and13/22, full-payload boundary3616, little-endian headers and big-endian entry trailers. Reader/emitter/inspector share one rule identity; the hand-derived bytes remain an independent check. |
 | T-IDX-02 | Prefix and entry bounds | Test prefixes through locator bytes and longer singleton prefixes; distinguish safe read, admitted key grammar and writable shape; reject impossible spans before allocation. |
 | T-IDX-03 | Scalar directions | Check every scalar family, two NUMERIC modes, signed zero/negative DATE, binary chunk09 boundaries, component-distinct GUID and55-byte extended date keys against native entries. |
-| T-IDX-04 | Text profiles and code units | Verify actual General/Legacy/97 weight examples, descriptor preservation, other required orders, accents/expansions/controls/packed flags and all surrogate boundaries. |
+| T-IDX-04 | Text profiles and code units | SORT-CHECK compares native General/Legacy/applicable97 bytes and behavior, raw descriptor preservation, accents/expansions/controls/packed flags and surrogate boundaries. General97 does not admit Jet3. |
 | T-IDX-05 | Long-key finish and collision | Test509/510/511/513-byte forms and the long-text/Long 1-versus2 pair; capture native keys, uniqueness, Seek and SQL order/residual behavior independently. |
-| T-IDX-06 | Key construction failure | Unsupported indexed field/profile, malformed source value, bounded text expansion and allocation failure leave no partial key or page mutation; RawData cannot silently drop a field. |
+| T-IDX-06 | Key construction failure and scope | Other-sort indexed Text seek/write produces counted NotModelled.SortOrder with TextSeek/TextKeyWrite detail, including compounds/catalog names. Scans remain available; the planner does not select an unsupported seek. Check unchanged-entry edits separately. Missing supported encoders, malformed values, bounded text expansion and allocation failure leave no partial key/page mutation; RawData cannot drop a field. |
 | T-IDX-07 | Bulk build and operation errors | Early duplicate then later key error/effect; Required failure then later duplicate; duplicates whose key order differs from evaluation order. Preserve the native frontier, bounded runs/spill, metadata/rollback and normal interoperability. |
 | T-IDX-08 | Preservation and repair sensitivity | Untouched index/TableDef spans and opaque references survive; independently calibrated T-COMPACT-1 distinguishes ordinary compaction from repair or remains inconclusive. |
 | T-IDX-09 | Exact fence and next locator | Bound equal to a child maximum goes left; same key with larger locator goes right; child pointer excluded from key comparison. |
@@ -955,10 +984,11 @@ The following tests are designed acceptance cases. Only arithmetic/example check
 | T-IDX-22 | Failure and budget | Reuse one scratch across several indexes without altering owned old/new keys; fail loads/allocation before publication; distinguish physical replanning from a replaced descriptor/incarnation. |
 | T-IDX-23 | Split/delete/build crash cuts | At every qualified page/span write and persistence frontier, compare ACE/Access next-openers and Compact & Repair copies, native needs-repair marking, file/lock artifacts and forced-flush survival. |
 | T-IDX-24 | Malformed graph and level policy | Cycles, bad spans/owners/extents and duplicate full entries fail boundedly; stored zero interior levels receive the selected profile policy, without blanket corruption or false NoMatch. |
+| T-IDX-25 | Complete sort-table evidence | SORT-DERIVE attempts all 65,536 code units plus the class/context matrix for each initial order; transport refusals remain explicit. Compare derived records and held-out complete keys with the exact-resource input, retain every mismatch, and verify that both acquisition paths bind the same SortDescriptor interface. |
 
-R-FMT-2 decides layout, root/tail/peer/count and deletion shapes; R-SORT-3 decides exact keys and equality; R-CURSOR-1/R-DAO-1 decides public movement/identity; R-CRASH-1/2 decides publication and survival; R-CAT-1/R-TXN-1 adds index creation/rebuild catalog and transaction consequences. No single passing round trip substitutes for those independent comparisons.
+R-FMT-2’s read-only index-envelope cases precede any R-SORT-3 entry extraction; its other branches decide layout, root/tail/peer/count and deletion shapes. R-SORT-3’s SORT-DERIVE supplies complete table evidence and SORT-CHECK decides discriminating exact-key/equality behavior; R-CURSOR-1/R-DAO-1 decides public movement/identity; R-CRASH-1 decides publication and survival; R-CAT-1/R-TXN-1 adds index creation/rebuild catalog and transaction consequences. No single passing round trip substitutes for those independent comparisons.
 
-The implementation order within W-04/W-05 is now concrete: first inspect and traverse existing native pages; then qualify scalar/text keys and bounds; then prepare one-leaf insert/delete and row-root changes; then add prefix-sensitive splits, empty-node removal and stable-root growth; then bounded bulk construction. Error, ownership and malformed-input handling arrive with each slice. R-SORT-3 must precede successful key-writing claims; complete ACE crash tracing is not a blanket prerequisite for constructing the bounded exclusive writer. Qualify only supported operation/environment crash classes and keep unresolved cases visible, as I-08 requires.
+The implementation order within W-04/W-05 is now concrete: first inspect and traverse existing native pages; then bind scalar codecs and the weight-table slice’s exact-resource or independently derived input, with native code-unit/context and discriminating checks; then prepare one-leaf insert/delete and row-root changes; then add prefix-sensitive splits, empty-node removal and stable-root growth; then bounded bulk construction. Error, ownership and malformed-input handling arrive with each slice. W-05 key mutation and W-07 catalog-name writes consume `W-04/weight-tables-per-sort-order`; the latter includes the new database’s catalog indexes. R-SORT-3 must precede successful key-writing claims; complete ACE crash tracing is not a blanket prerequisite for constructing the bounded exclusive writer. Record which operation/environment cuts were reconstructed and compared, and keep missing coverage visible. The precise crash pass condition and treatment of unresolved classes are implementation work under PRD-07; beyond the first same-width slice, the deciding order/timing branches inform broader writer construction.
 
 The full experiment cards and branch dependencies are in A-02; they now include the exact key-length counterexample, mixed Null flags, counter transitions, no-tail nodes and parent-max propagation. The next chapter is **II-06 — Catalog, properties and QueryDefs**: native catalog bootstrap and records, property blocks, object/reference preservation, saved-query serialization and invalidation.
 
@@ -984,17 +1014,19 @@ The full experiment cards and branch dependencies are in A-02; they now include 
 [^S-JACK-INDEX-PIN]: S-JACK-INDEX-PIN — [IndexData.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/IndexData.java), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
 [^S-JACK-LEGACY-PIN]: S-JACK-LEGACY-PIN — [GeneralLegacyIndexCodes.java](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/GeneralLegacyIndexCodes.java), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
 [^S-JACK-MAP]: S-JACK-MAP — [UsageMap.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/UsageMap.java), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GEN]: S-JACK-RES-GEN — [index_codes_gen.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_gen.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GEN-EXT]: S-JACK-RES-GEN-EXT — [index_codes_ext_gen.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_ext_gen.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GEN97]: S-JACK-RES-GEN97 — [index_codes_gen_97.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_gen_97.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GEN97-MAP]: S-JACK-RES-GEN97-MAP — [index_mappings_ext_gen_97.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_mappings_ext_gen_97.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GENLEG]: S-JACK-RES-GENLEG — [index_codes_genleg.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_genleg.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RES-GENLEG-EXT]: S-JACK-RES-GENLEG-EXT — [index_codes_ext_genleg.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_ext_genleg.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RESOURCE-LICENSE-CONTEXT]: S-JACK-RESOURCE-LICENSE-CONTEXT — [LICENSE.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/LICENSE.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RESOURCE-NOTICE-CONTEXT]: S-JACK-RESOURCE-NOTICE-CONTEXT — [NOTICE.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/NOTICE.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
-[^S-JACK-RESOURCE-POM-CONTEXT]: S-JACK-RESOURCE-POM-CONTEXT — [pom.xml](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/pom.xml), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
+[^S-JACK-RES-GEN]: S-JACK-RES-GEN — [index_codes_gen.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_gen.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RES-GEN-EXT]: S-JACK-RES-GEN-EXT — [index_codes_ext_gen.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_ext_gen.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RES-GEN97]: S-JACK-RES-GEN97 — [index_codes_gen_97.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_gen_97.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RES-GEN97-MAP]: S-JACK-RES-GEN97-MAP — [index_mappings_ext_gen_97.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_mappings_ext_gen_97.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RES-GENLEG]: S-JACK-RES-GENLEG — [index_codes_genleg.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_genleg.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RES-GENLEG-EXT]: S-JACK-RES-GENLEG-EXT — [index_codes_ext_genleg.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/resources/com/healthmarketscience/jackcess/index_codes_ext_genleg.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Exact Apache-2.0 resource material selected under PRD-05; individual hash, reading extent, licence, notice and provenance in A-01. The book specifies future incorporation and native comparison; it claims no implementation or ACE execution.
+[^S-JACK-RESOURCE-LICENSE-CONTEXT]: S-JACK-RESOURCE-LICENSE-CONTEXT — [LICENSE.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/LICENSE.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Licence/distribution/provenance fact supporting the exact resources selected by PRD-05; hash and inspected extent in A-01. The notice concerns financial functions and supplies no claimed origin for the weight tables.
+[^S-JACK-RESOURCE-NOTICE-CONTEXT]: S-JACK-RESOURCE-NOTICE-CONTEXT — [NOTICE.txt](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/NOTICE.txt), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Licence/distribution/provenance fact supporting the exact resources selected by PRD-05; hash and inspected extent in A-01. The notice concerns financial functions and supplies no claimed origin for the weight tables.
+[^S-JACK-RESOURCE-POM-CONTEXT]: S-JACK-RESOURCE-POM-CONTEXT — [pom.xml](https://raw.githubusercontent.com/jahlborn/jackcess/be0a2139b087a227d14cafd4ea231306a5a3a862/pom.xml), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Licence/distribution/provenance fact supporting the exact resources selected by PRD-05; hash and inspected extent in A-01. The notice concerns financial functions and supplies no claimed origin for the weight tables.
 [^S-JACK-TABLE]: S-JACK-TABLE — [TableImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/TableImpl.java), exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired/inspected 2026-11-13. Selected factual use; exact hash, read extent and separate code/resource licence status in A-01. No code/table port or target-ACE execution.
 
 [^method]: L-FRANK-3; L-ASYNC-2 — Supplied `frankensqlite-report.stage1-part3.md` §8 and `asupersync-report.stage1-part2.md` §§7–8, previously read in full and revisited for the named concepts. Bounded buffers, exact baseline comparison and reproducible differential evidence only; no external repositories inspected.
 
-[^authority]: N; C; U; A; B — Authoritative one-pager scope, compatible charter, user corrections and Stage2 continuation, governing assignment and current record. No new scope or native observation inferred.
+[^authority]: [B-SCOPE-11, C, U-PRD-01-09, U-PRW-01-58, A, B] [Scope and context](00-scope.md), §§S2, S5 and S6, governs native keys, publication and permitted evidence. Compatible charter elaboration, the assignment and current record remain subordinate to settled scope. No native observation is inferred.
+
+[^scope]: B-SCOPE-11; U-PRD-01-09; U-PRW-01-58 — [Scope and context](00-scope.md), §S2; PRD-05 and PRW-11–14/48 settle the initial General-family inventory, exact resource inputs and counted other-sort refusals. Native weight/behavior experiments remain specified, not run.

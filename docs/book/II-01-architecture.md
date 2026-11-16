@@ -1,8 +1,10 @@
 # II-01. Architecture and compatibility boundaries
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-This chapter deepens I-01 into library contracts, owned state and executable paths. It fixes no unobserved ACE behavior: the named experiments in A-02 choose the remaining policy details. The initial target remains the user-reported ACEDAO.DLL **16.0.20527.20016**, with actual loaded binaries and host configuration captured independently. No Windows/ACE experiment has run in this session.
+This chapter deepens I-01 into library contracts, owned state and executable paths. [Scope and context](00-scope.md), §§S1–S7, states the current product boundaries. The named experiments in A-02 decide unobserved ACE behavior; native acceptance remains unexecuted. The original supplied oracle identity is ACEDAO.DLL **16.0.20527.20016**. PRD-02 separately reports `Apartment` registration on Office C2R x64 **16.0.20527.20150**. Future captures identify the actually loaded components and host configuration; the two supplied reports are not interchangeable DLL-version evidence. The decision and implementation record remains in book-record.[^oracle]
+
+The terms *qualified* and *established* use the [common terminology](book-record.md#terminology). The deciding native branches are named at the field, publication and crash boundaries below; these references specify implementation evidence, not completed native results.
 
 **Requirement trace:** RQ-PROD-01, RQ-ARCH-01, RQ-PORT-01, RQ-OUT-01, RQ-OUT-02, RQ-SRC-01 and RQ-SRC-02 are owned here; this chapter supports RQ-PROD-02 (owned by I/II-13), and the value, storage, call, object-model and platform requirements are implemented through the contracts assigned to their detailed chapters. The full stable scope map remains I-16. **D-ARCH-1 — Decided.** One format description, ISAM engine, expression service, oracle and harness are fixed scope; the proposed physical library boundaries below are the recommended realization.[^scope]
 
@@ -16,7 +18,7 @@ For example, `DAO.Recordset.Update` is not implemented as a generated SQL statem
 
 The native file determines what a durable representation may be. CalcDb chooses a sparse cache map, frame pool, descriptor cache and operator structures. Those structures may be replaced after measurement while keeping the observable contract. The file's sort descriptor may select a key encoder; the oracle's build label may not secretly select whichever behavior happens to pass a test. If evidence from actual builds conflicts, record the conflict and select a declared target rather than adding an invisible environment switch.
 
-The shared semantic value is the **platform's real Automation VARIANT and real BSTR**, including the 24-byte Windows x64 VARIANT layout. The current 16-byte CalcVBA representation and its COM-boundary conversion are a transitional integration fact; the user directs this design to assume the corrected exact layout. A borrowed record span is not an alternative semantic value. It can postpone decoding and preserve native precision, but any value crossing the shared semantic boundary obeys K-VALUE/K-STRING. II-02 specifies that distinction and its ownership algorithms.[^values]
+The shared semantic value is the **platform's real Automation VARIANT and real BSTR**, including the 24-byte Windows x64 VARIANT layout. CalcVBA and CalcDb use that exact platform representation ([scope](00-scope.md), §S3). A borrowed record span can postpone decoding and preserve native precision; any value crossing the shared semantic boundary obeys K-VALUE/K-STRING. II-02 specifies that distinction and its ownership algorithms.[^values]
 
 ### Scope and source boundaries
 
@@ -24,7 +26,17 @@ The shared semantic value is the **platform's real Automation VARIANT and real B
 
 **RQ-OUT-02.** The supported native format boundary is Jet 4/ACE. Detect a Jet 3 signature before selecting a mutating profile and retain the unsupported-format outcome. The libraries expose the required local caller/host interfaces; a database server role and its network service protocol are outside this product. The SQL grammar and binder implement Access behavior and documented/native-admitted forms. A proposed convenience extension cannot introduce a CalcDb-only SQL dialect. These exclusions do not excuse refusing an operation inside the declared Jet 4/ACE, DAO, ADO or Access SQL scope.[^scope]
 
-**RQ-SRC-01/02.** Each physical rule or behavior policy records its exact documentary/reference material or public native capture and its evidence class. Use the public documentation and identified ACE observations, the permitted exact Jackcess materials with their licence/notice obligations, and mdbtools file-format facts only. No proprietary decompilation/disassembly or direct excluded FrankenSqlite/asupersync source, repository, package, mirror or external extract enters that evidence path; their reviewed attached reports supply concepts only. A-01 records what was inspected and permits factual use separately from any future adaptation. Build inputs and generated resources retain that provenance too. II-15's corpus and II-16's implementation records preserve it when a hypothesis becomes an observed rule.[^source-rules]
+The following boundaries apply to every library and public route. Their detailed object, SQL, locking and interop policies remain in the owning chapters.
+
+| Area | Current scope | Authority |
+| --- | --- | --- |
+| ADO | ACE database-provider strings; connectionless Recordsets and Streams, including `Provider=MSPersist` persistence. Other non-ACE providers, including an omitted/default database provider, receive named, counted not-modelled refusals. No system-ADO pass-through. The host selects which ADODB uses it routes to CalcDb. | PRD-03 and owner correction; scope §S2 |
+| MDB security | Unsecured/default-Admin files and unchanged access-control bytes. `WITH OWNERACCESS OPTION` remains supported under default Admin, with its behavior decided by R-SQL-2/SQL-OWNERACCESS and R-DAO-1/DAO-SEC. Named logons, supplied workgroup files, account/group changes and permission checks that would deny access receive named, counted refusals. Secured-workgroup behavior is neither initial nor later scope. | PRD-04 and owner correction; scope §S2 |
+| Text index keys | General, General–Legacy and the Access 97 General variant where admitted Jet 4/ACE files need it. Other orders retain reading/full scans; indexed Text seeks and key writes receive named, counted refusals. | PRD-05; scope §S2 |
+| In-process sharing | ACE semantics in phase 1: distinct Workspace/Connection lockers, concurrent private change sets, native conflict granularity and retry-then-error behavior. Commit and rollback preserve other lockers' accepted changes. | PRD-01; scope §S4 |
+| Threading | Windows `Apartment` registration and ordinary COM delivery; host functions use the supplied provider reference. CalcDb defines no CalcVBA-specific or host-specific thread policy. | PRD-02; scope §S4 |
+
+**RQ-SRC-01/02.** Each physical rule or behavior policy records its exact documentary/reference material or public native capture and its evidence class. Use the public documentation and identified ACE observations, the permitted exact Jackcess materials with their licence/notice obligations, and mdbtools file-format facts only when consulted. No mdbtools material was used in this book. No proprietary decompilation/disassembly or direct excluded FrankenSqlite/asupersync source, repository, package, mirror or external extract enters that evidence path; their reviewed attached reports supply concepts only. A-01 records what was inspected and permits factual use separately from any future adaptation. Build inputs and generated resources retain that provenance too. II-15's corpus and II-16's implementation records preserve it when a hypothesis becomes an observed rule.[^source-rules]
 
 ## 2. Libraries and the dependency rule
 
@@ -32,13 +44,13 @@ A library may depend only on the contracts below it in Figure F-01 (I-01), or on
 
 | Library or contract group | Owns | Consumes | Must not do |
 | --- | --- | --- | --- |
-| Shared foundation | Exact Automation types/ownership, shared conversions/functions, type descriptors and semantic status values | CalcVBA-owned published ABI and allocator services | Import the VBA interpreter merely to convert a scalar; invent a compact substitute shared VARIANT |
+| Shared foundation | Exact Automation types/ownership, shared conversions/functions, type descriptors and semantic status values | Published platform Automation ABI and shared allocator services | Import the VBA interpreter merely to convert a scalar; invent a compact substitute shared VARIANT |
 | Engine contracts | Handles/generations, resource budgets, effect interfaces, typed failures, evidence identifiers | Foundation declarations only where values are needed | Discover global filesystem, scheduler, host or registry services |
 | Format | Variant descriptions, checked codecs, structural rules, key/row/page inspection | Byte spans, format descriptors, explicit bounds and allocator budget | Open a file, acquire an OS lock, infer SQL policy |
 | Pager/storage | File sessions, stable frames, pins, dirty images, I/O receipts, allocation incarnations | Effect contracts and checked format primitives where necessary | Decide DAO EOF or SQL transaction semantics |
 | Transaction and ISAM | Workspace participants, row identity, cursor mechanisms, constraint/edit mechanics, native page changes | Pager, format/key codecs, immutable schema/constraint descriptors | Bind SQL names, activate COM objects, discover host functions |
 | Catalog | Native catalog bootstrap, schema/property/QueryDef interpretation and generation dependencies | ISAM primitives with explicit bootstrap descriptors | Require SQL binding to read the structures the binder itself needs |
-| Expression | Bound scalar nodes and context-specific evaluation over shared CalcVBA semantics | Foundation values/functions, explicit resolver/effect interfaces | Find a host globally or execute VBA on a worker |
+| Expression | Bound scalar nodes and context-specific evaluation over shared CalcVBA semantics | Foundation values/functions, explicit resolver/effect interfaces | Find a host globally or invoke host code from an engine worker |
 | SQL | Access grammar, binder, actual plans, operators, action/DDL coordination | Catalog, ISAM, expression service and bounded temporary storage | Maintain an independent storage engine or hidden saved-query database |
 | DAO/ADO policies | Real objects, collections, per-surface state and error/event adaptation | Relevant catalog/ISAM/query/transaction services | Send a simple table cursor through SQL; equate Close with final Release |
 | Native/portable adapters | Public COM entry, allocation services, host integration, actual I/O/locks/storage | Contracts they implement and public platform interfaces | Leak platform I/O into portable core libraries or transport local COM pointers through a VFS broker |
@@ -90,9 +102,9 @@ OperationContext {
 }
 ```
 
-`EngineServices` is retained by the engine's lifetime owner. `OperationContext` is borrowed for one blocking call and is not stored in a returned Recordset, pending transaction or callback registry. Those objects retain stable owner/service handles and construct a new call context on their next invocation. This prevents a continuation from retaining a dead stack reference while still allowing a cursor to keep its decoded row state or query iterator between calls.
+`EngineServices` is retained by the engine's lifetime owner. `OperationContext` is borrowed for one blocking call and is not stored in a returned Recordset, pending transaction or callback registry. Those objects retain stable owner/service handles and construct a new call context on their next invocation. The caller-thread token identifies the thread on which this CalcDb call is delivered; it does not prescribe the thread on which a supplied provider reference runs. This prevents a continuation from retaining a dead stack reference while still allowing a cursor to keep its decoded row state or query iterator between calls.
 
-The published Automation contract records actual size, alignment, field offsets, calling convention, array stride and allocator pairing for the target. It is checked at the boundary, not negotiated by sending opaque 16-byte blobs. Windows uses its real services; the portable stand-in supplies the required local interface and allocation behavior. This design does not assume the stand-in already exists. I-FOUNDATION-1 establishes the published declarations and executable minimal client; the required surface is enumerated in I-13.
+The published Automation contract records actual size, alignment, field offsets, calling convention, array stride and allocator pairing for the target. Boundary checks use the target's actual declarations and allocator rules. Windows uses its real services; the portable stand-in supplies the required local interface and allocation behavior. This design does not assume the stand-in already exists. I-FOUNDATION-1 establishes the published declarations and executable minimal client; the required surface is enumerated in I-13.
 
 A format profile is selected from validated file evidence and options. It describes page size, structural variants, supported scalar/key codecs and preservation restrictions. It contains no guessed “writer build” field. A session's admission lease is tied to the actual open file object and retained until the associated resources settle. A path, timestamp or lock-file name is not equivalent to that lease. I-09 makes the initial exclusion and reader-only handle candidates explicit; R-LOCK-1/2 determine whether those candidates admit the required native callers.
 
@@ -127,32 +139,44 @@ A Field object caches its validated field ordinal and parent identity. Name look
 
 ```text
 ReadPublicField(field_object, context) -> OwnedAutomationValue or Failure
-    input: a live interface and one blocking caller context
+    input: a live interface and one blocking call context
     output owner: caller, using the published Automation allocator rules
 
     policy = validate_field_surface_state(field_object)
     cursor = validate_owner_handle(field_object.cursor_handle)
-    row_guard = cursor.acquire_current_row(policy.visibility)
-    if row_guard failed:
-        return surface_failure(row_guard.failure, policy)
+    source_guard = cursor.acquire_public_field_source(field_object.ordinal, policy)
+    if source_guard failed:
+        return surface_failure(source_guard.failure, policy)
 
-    borrowed = row_guard.field_span(field_object.ordinal)
-    checked = validate_span_and_native_type(borrowed, policy.descriptor)
-    if checked failed:
-        release row_guard
-        return checked.failure
+    if source_guard selects AcceptedEditValue:
+        result = CaptureValueStructural(source_guard.retained_cell,
+                                        policy.value_copy, context.operation)
+    else if source_guard selects UnsetEditField:
+        result = project_unset_field_under_native_getter_policy(source_guard, policy)
+        # Do not reevaluate a default or allocate another generated value here.
+    else:
+        # UnchangedEditField uses the edit's retained original span.
+        # CurrentStoredField uses the current row and its stable page/read source.
+        borrowed = source_guard.field_span(field_object.ordinal)
+        checked = validate_span_and_native_type(borrowed, policy.descriptor)
+        if checked failed:
+            result = checked.failure
+        else:
+            reservation = context.budget.reserve(checked.output_bound)
+            if reservation failed:
+                result = reservation.failure
+            else:
+                result = materialize_real_automation_value(checked, reservation)
 
-    reservation = context.budget.reserve(checked.output_bound)
-    if reservation failed:
-        release row_guard
-        return reservation.failure
-
-    result = materialize_real_automation_value(checked, reservation)
-    release row_guard
-    return result
+    retain result under the operation while settling source_guard outside latches
+    after any foreign copy or cleanup, validate the field/edit/cursor continuation
+    transfer the owned result only if that continuation permits publication
+    otherwise settle or retain exact residual owners and return the selected failure
 ```
 
-The guard owns any pin and scratch view used by the span. The result never points into those bytes. Materialization either transfers one fully initialized owned value or returns a failure with all partial resources settled. Public state/error adaptation occurs once at the boundary; a cleanup error cannot erase an earlier uncertain persistent outcome. II-02 defines BSTR/SAFEARRAY and ByRef rules, and [II-03](II-03-pager.md) defines the guard/pin mechanics.
+The getter first selects the public edit or navigation state, as required by II-07 §13. An accepted edit cell is retained through a locally owned cell/version before any copy can reenter; replacement of the live cell cannot clear that retained value. An unchanged edit field reads its retained original, and an unset new field follows the native getter policy. It does not fall back to the cursor's previous navigation row. R-CURSOR-1/CUR-EDIT and R-DAO-1/DAO-ID/DAO-LIFE decide the projection and error at each Edit/AddNew/CancelUpdate/Update transition.
+
+The guard owns any cell version, pin and scratch view used by the source. The result never points into those bytes. Materialization either transfers one fully initialized owned value or returns a failure with all partial resources settled. Public state/error adaptation occurs once at the boundary; a cleanup error cannot erase an earlier uncertain persistent outcome. II-02 defines `CaptureValueStructural`, BSTR/SAFEARRAY and ByRef rules, and [II-03](II-03-pager.md) defines the guard/pin mechanics.
 
 For a fixed-width scalar already on a valid cached row, the design target is a bounded amount of local work plus the actual COM call: validate state, locate the field and copy/convert the required value. Whether this path allocates zero engine objects must be measured, not asserted for every type or runtime. A BSTR result ordinarily needs independently owned output storage; a decoded cache saves work only if repeated access compensates for retained capacity and invalidation. The cost of lookup, decode and ownership transfer is recorded separately by R-STRING-1.
 
@@ -179,34 +203,44 @@ ApplyPreparedMutation(prepared, context) -> OutcomeReceipt
         if no admitted preparation succeeds:
             return policy-selected failure retaining the original accepted outcomes
 
+    retain the owning locker's selected local claims under finite native retry policy
     reserve remaining transaction and cleanup obligations
-    attach prepared change to the owning rollback/statement frame
-    ordered_plan = native_write_order(prepared, selected D-WRITE-1 profile)
-    receipt = execute_effects_with_progress(ordered_plan, context)
-    record completed effects and every uncertain persistent effect
-    resolve visibility, transaction frame and public outcome by policy
-    return receipt
+    attach accepted delta and prepared images to the owning rollback/statement frame
+    if the selected boundary keeps this unit private:
+        return its accepted private receipt; submit no native write
+
+    hand the selected publication unit to II-08's ResolutionAttempt
+        preflight local claims across its known participants before any file gate
+        use PreparePublicationProgram(delta, scope, mode, profile, budget)
+            to own the short gate, rebuild over the fresh base and seal the program
+        on physical expansion, replan before submission without replaying accepted effects
+        execute once with owned progress; retain every uncertain persistent effect
+        resolve visibility, transaction frame and public outcome by policy
+        after success, release admission holds/gates before deferred foreign releases
+    return the owned resolution receipt
 ```
 
 A changed page generation alone is not a row conflict. Revalidate the stable row identity, accepted values, constraints and exact key-profile/table/index incarnations first. When those semantic dependencies remain valid, a fresh protected page or a relocated row can require new physical images without demanding another UDF, default expression or generated-value allocation. Reprepare only that physical closure, retaining every accepted semantic/effect receipt and a bounded retry budget; II-05 §8.2, II-07 §15–16 and II-09 give the concrete cases. Semantic invalidation instead follows the evidenced continuation/failure policy. Once this mutation's native program has submitted an effect, its registered coordinator owns further advancement or resolution; this prepublication reprepare path is not a generic restart of a partly executed write program.
 
-The write plan is provisional in I-08: initialize unreachable storage, establish allocation ownership before publishing references, order row/index/catalog changes, and free only after references are removed. Any needs-repair marking uses an evidenced native field/protocol; it is not an invented generic header flag. Submitted write order does not by itself imply persistence order. Ordinary commit and `dbForceOSFlush` carry separate acknowledgement/durability obligations, chosen by R-CRASH-1/2.
+The preferred starting write program uses one final image per page per publication unit. The data-versus-index order, other publication dependencies and implicit-write timing are provisional. I-08/II-08 describe the competing programs; R-CRASH-1/CRASH-ORDER-DATA, CRASH-ORDER-INDEX and CRASH-ORDER-REPEAT decide their native order, while R-TXN-1/TXN-FLUSH-LIVE distinguishes implicit-write timing. Repeated-image compilation remains an alternative if the evidence requires it. Any needs-repair marking must use a native field and protocol established by R-CRASH-1/CRASH-PROGRAM observations. Submitted write order does not by itself imply persistence order. Ordinary commit and `dbForceOSFlush` retain their distinct acknowledgement and survival obligations ([scope](00-scope.md), §S5).
 
-The receipt records logical progress, public acknowledgement eligibility and persistent uncertainty separately. An exception from a later flush cannot pretend that earlier writes never occurred. Multi-file Workspace coordination retains a receipt per participant; this architecture does not imply a distributed atomic commit protocol. Live rollback uses the same physical rules and failure accounting as forward mutation. Its success is observed completion of the required rollback, not object destruction or cancellation.
+The receipt records logical progress, public acknowledgement eligibility and persistent uncertainty separately. An exception from a later flush cannot pretend that earlier writes never occurred. Multi-file Workspace coordination retains a receipt per participant; this architecture does not imply a distributed atomic commit protocol. A Workspace or Connection is a local locker, and several lockers may retain private changes. A short publication gate protects fresh-base reconstruction and native publication, not the lifetime of a transaction. Rebase applies accepted effects to the latest committed images without repeating callbacks or generated-value choices. Rolling back unpublished work removes only the owner’s overlays and reservations; it never restores a stale whole page over a sibling’s commit. Any rollback that requires native writes uses the same receipts and failure accounting as forward work (R-TXN-1/TXN-LOCAL and FAIL-OWNER; II-09 §23).
 
-The optional private undo file is outside the baseline. If enabled, its full-file manifest and disarming rules obey I-03/I-08 exactly: same file identity; every uncovered page unchanged; every covered page exactly the before-image or intended new image; validated extent and eligibility under exclusion. Any other state discards it. No private file is required by an ACE-first opener, and no full-file image match is claimed to prove that nobody touched and restored the file in the past. That distinction follows the user's revised recovery predicate.
+R-TXN-1/TXN-LOCAL decides the fresh-base input and local conflict policy used by `ApplyPreparedMutation`. Later external-writer contexts add R-LOCK-4/WRITE-ORIGINAL and WRITE-REBASE; local acceptance does not decide those native protection intervals.
 
-If complete ACE tracing proves impossible, implementation continues on the bounded exclusive native writer. Complete CalcDb cut exploration, native invariants and semantically bracketed ACE interruptions can qualify cases only where the corresponding survival/repair classes are established. Unknown cases remain visible and unqualified. This preserves a concrete construction direction without converting an instrumentation limitation into evidence of stronger safety.
+D-UNDO-2 is outside planned work. It remains a recorded idea to reconsider only if real write programs show a useful recovery window. D-UNDO-1 remains unchanged: ACE-first reopening cannot depend on a private undo file. Any future CalcDb-first aid must validate file identity, integrity, extent and rollback eligibility under exclusion, read the complete file, require every uncovered page unchanged and every covered page equal to its before-image or intended new image, and otherwise discard the record.[^recovery] It must never undo a commit that ACE's survival rules require retaining. The predicate does not claim to prove that nobody changed and restored bytes in the past ([scope](00-scope.md), §S5).
+
+Crash parity is the target: after a crash, CalcDb leaves a state no worse than ACE at the corresponding point, including commit survival and native repair marking. The preferred direction records ACE's writes and flushes with their contents, reconstructs crash states offline, classifies them through ACE, Access and Compact & Repair, and gives CalcDb's crash states to the same openers. Observation/control tools, including a kernel driver, may be built without decompiling proprietary binaries. Exact classification is ambitious and may not be fully achievable. R-CRASH-1/CRASH-RELATION and CRASH-CAPTURE carry the deciding comparison. Its method, precise pass condition and treatment of writes whose classes cannot be established are resolved during implementation (PRD-07).
 
 ## 7. Callbacks, workers and reentrant continuation
 
-A public operation blocks its caller. The object adapter supplies a caller-thread token; every VBA callback verifies it. The expression service returns ordinary values through CalcVBA's shared primitives without starting the interpreter unless a resolved host function actually requires it. Host discovery and activation belong to supplied host services, not global scans from inside the evaluator (D-CALL-1, D-UDF-1; K-THREAD).
+A public operation blocks its caller. Windows classes use `Apartment`, matching the registration reported in PRD-02. COM delivers properly marshaled calls to the object's apartment. The priority path is one STA running CalcVBA or real VBA in Excel. Host functions are invoked through the supplied provider reference; COM apartment rules determine where that provider executes. CalcDb does not compare the entry thread with a CalcVBA runtime thread or choose its own delivery policy. The expression service uses shared scalar primitives without requiring the interpreter for ordinary values. Host discovery and activation belong to supplied services, not global scans inside the evaluator (D-CALL-1, D-UDF-1; K-THREAD; [scope](00-scope.md), §§S3–S4).
 
-Before an external callback, finish the current internal critical section. Materialize arguments whose borrows cannot safely span reentry; retain stable object/plan handles and the generation vector required afterward. Record the callback's ordinal in the operation trace. Invoke once on the caller, outside internal latches. Preserve its returned value or error before performing any diagnostic call that might overwrite error information.
+Before an external callback, finish the current internal critical section. Capture by-value inputs through II-02's `CaptureValueStructural`: no-foreign-code copies on the calling thread, one AddRef for one object, or element-wise copying with safe backing and validation after callout. An unsupported safe-capture form receives an explicit disposition. Legal ByRef arguments retain their actual alias/writeback contract. Retain stable object/plan handles and the generation vector required afterward; these engine tickets do not pretend to version caller-owned storage. Record the callback's ordinal in the operation trace. Invoke the supplied provider reference once, outside internal latches. Preserve its returned value or error before performing any diagnostic call that might overwrite error information.
 
 After the callback, validate cursor, catalog, transaction, function-registry, sandbox and other retained-plan dependencies that the callback could change. A still-live pointer is insufficient. If reentry closed or changed the operation's environment, apply the evidenced invalidation/Close policy. Do not call the UDF again in an attempt to reconstruct state. If a new prepared native change cannot be reconciled, return the proper failure with the original callback effect retained in the evidence.
 
-Workers are children of the call or a specifically named retained owner. Their inputs are stable owned values or explicitly pinned immutable pages; their outputs are ordinal-labelled, bounded work units. Initially perform native Automation copy and foreign reference-management operations on the owning caller thread; I-FOUNDATION-1 must establish the exact concurrency and reentry policy before those services are admitted on workers or assumed safe across independent callers. Ownership of distinct values alone is not evidence of a thread-safe native copy service (II-02). No internal latch is held across foreign retain/release. The caller consumes them according to the accepted serial order and chooses errors according to that order. A worker cannot expose an I/O or conversion error early merely because it completed early. Double accumulation retains the serial fold order; deterministic partition sums alone do not satisfy K-PAR.
+Workers are children of the call or a specifically named retained owner. Their inputs are stable owned values or explicitly pinned immutable pages; their outputs are ordinal-labelled, bounded work units. Native Automation copy and foreign reference management obey their platform contracts and the applicable COM apartment rules. I-FOUNDATION-1 establishes the services' concurrency and reentry behavior; ownership of distinct values alone is not evidence of a thread-safe native copy service. Internal workers do not invoke caller-bound foreign code, and CalcDb adds no CalcVBA-specific thread rule (II-02/II-13). No internal latch is held across foreign retain/release. The caller consumes them according to the accepted serial order and chooses errors according to that order. A worker cannot expose an I/O or conversion error early merely because it completed early. Double accumulation retains the serial fold order; deterministic partition sums alone do not satisfy K-PAR.
 
 Background prefetch owns its reservation, cancellation and eventual buffer disposition. Closing a cursor marks the work unwanted, joins or otherwise settles it through the adapter contract, and releases buffers only after no completion can still reference them. Browser VFS timeouts follow the same rule: a timeout does not revoke a broker's access to a shared buffer or prove that a write did not happen. The broker provides storage effects only; it does not transport local COM interfaces or run VBA remotely.
 
@@ -216,7 +250,9 @@ An internal failure contains stable operation identity, phase, object/resource c
 
 DAO and ADO error collections have different owners and lifetimes; COM also exposes HRESULT, IErrorInfo and dispatch EXCEPINFO/argument-error data. The portable stand-in must supply those channels and their allocation/lifetime rules, not merely an integer error return. I-12/I-13 and R-ERR-1 define the exact capture and translation behavior. Error formatting is outside internal latches and must not allocate unbounded diagnostic strings while handling an allocation failure.
 
-Close is a state transition that can release database resources while references remain. Final Release is an ownership event that can occur much later. Maintain explicit open/closing/closed/uncertain engine state and an independent COM reference count. Reentrant Close sees a defined transition, not partially destroyed memory. Pending commit/rollback obligations settle according to Workspace policy; the destructor cannot silently report them as completed. Cleanup failures retain the primary error and persistent uncertainty in the internal receipt, while the surface exposes the evidenced public combination.
+Close is a state transition that can release database resources while references remain. Final Release is an ownership event that can occur much later. Maintain explicit open/closing/closed/uncertain engine state and an independent COM reference count. Reentrant Close sees a defined transition, not partially destroyed memory. Under Windows `Apartment` registration, a properly marshaled final Release is delivered through COM to the object's apartment, including rollback and sink release. Pending commit/rollback obligations settle according to Workspace policy; the destructor cannot silently report them as completed. The .NET probes compare these lifetime outcomes with ACE rather than deriving them from a CalcVBA host policy. Cleanup failures retain the primary error and persistent uncertainty in the internal receipt, while the surface exposes the evidenced public combination.
+
+After a successful commit, publish its resolved state and release the hold on new views and the publication gate before draining deferred foreign releases. A destructor that opens a new recordset then enters against the committed state. The drain runs outside internal latches and retains the commit receipt; a later cleanup failure cannot replay or undo that commit (PRW-35; II-08 §19, II-09 §12).
 
 A returned owned value is complete before the operation publishes success. A returned interface already owns its reference. An enumerator's yielded VARIANT contains the required ownership, and ADO event connection points retain/release sinks through the same real interface rules. These details can be implemented in shared helpers, but they remain observable parts of the object model rather than optional adapter conveniences.
 
@@ -224,9 +260,9 @@ A returned owned value is complete before the operation publishes success. A ret
 
 Later scope changes the supported contracts without adding another engine. Encryption attaches to format-aware storage transforms, key ownership and protected temporary-storage policy; cache identity includes the relevant database/key domain. Linked tables supply source/capability descriptors and cursor/transaction adapters; they do not imply universal pushdown or cross-source durable atomicity. Complex fields reuse catalog, row/LV and cursor ownership while retaining kind-specific storage and update policies.
 
-CalcDb's later compact/repair implementation is a separate destination-building operation with explicit relocation and opaque-reference evidence. It is not needed to run the initial native acceptance test T-COMPACT-1. OLE DB and ODBC expose the existing services through their own negotiated ABI, handle and diagnostic rules. Initial CalcDb ADO routes its supported ACE-style connection strings internally and does not depend on the later external OLE DB provider.
+CalcDb's later compact/repair implementation is a separate destination-building operation with explicit relocation and opaque-reference evidence. It is not needed to run the initial native acceptance test T-COMPACT-1. OLE DB and ODBC expose the existing services through their own negotiated ABI, handle and diagnostic rules. Initial CalcDb ADO serves its ACE-provider and connectionless persistence scope internally. It remains separable for the later external OLE DB provider, which is not an initial dependency (PRD-03).
 
-The four process-sharing steps use one admission/freshness/publication interface from the first writer. Initial exclusion and reader-only sharing are real native protocols. Later reading beside ACE and shared writing add observed byte-lock and cache-coherence policy; in-process page versions cannot reconstruct a page ACE has already overwritten. Every later combination has its own experiments in A-02 and implementation prerequisites in I-16, instead of making all later work wait for shared writing.
+The four cross-process sharing steps use one admission/freshness/publication interface from the first writer. Initial exclusion and reader-only sharing are real native protocols. ACE in-process semantics, including local-owner rebase, are initial scope even when the file lease excludes other processes. Later reading beside ACE and shared writing add external byte-lock and cache-coherence policy; in-process page versions cannot reconstruct a page ACE has already overwritten. Every later combination has its own experiments in A-02 and implementation prerequisites in I-16, instead of making all later work wait for shared writing.
 
 ## 10. Acceptance and cost evidence
 
@@ -239,12 +275,12 @@ Acceptance checks the architecture at its observable seams. It does not require 
 | Preserved front-end scope | Keep forms/reports/macros/module content and native references across admitted reads and edits; no stored-code invocation occurs. Host functions require the separately admitted resolver path. |
 | Format/dialect/source boundaries | A Jet 3 input cannot reach a native mutator; query capability follows the declared Access grammar. Each admitted rule/resource has permitted material or native-capture provenance, and protected unknown content stays preserved. |
 | Exact shared value ABI | Native and managed callers exercise real VARIANT/BSTR ownership; II-02's size/offset/stride, nested-array and ByRef cases pass on the declared target. |
-| Direct row loop | Actual VBA/COM calls iterate narrow/wide, text/LV and indexed fixtures; measurements separate crossings, lookups, decode, allocation and pin work. |
+| Direct row loop | Actual VBA/COM calls iterate narrow/wide, text/LV and indexed fixtures; measurements separate crossings, lookups, decode, allocation and pin work. Field getters after Edit, AddNew, failed assignment, CancelUpdate and Update select accepted cells, retained originals or native unset state before navigation storage. |
 | Lifetime versus Close | Hold Field, Collection and enumerator references across Close/Release and reentry; results match captured surface policy without leaked leases or stale borrows. |
-| Callback continuation | A UDF closes/requeries or changes schema/registry state; the callback occurs once, outside latches, on the caller; continuation validates dependencies and selects the evidenced outcome. |
+| Callback continuation | A UDF closes/requeries or changes schema/registry state; the provider is invoked once, outside latches, through its supplied reference; COM delivery follows the selected native policy, and continuation revalidates dependencies before proceeding. |
 | Failure ownership | Exhaust reservations, fail partial I/O, cancel workers and interrupt cleanup; no buffer/lease escapes its owner, and persistent uncertainty remains visible. |
-| Normal completed write | Independent ACE/Access opening and T-COMPACT-1 pass on frozen branches; no repair converts a bad original output into a pass. |
-| Interrupted write | Every qualified CalcDb cut belongs to the established ACE class for the operation/options/environment, including forced flush; optional undo is absent from ACE-first success assumptions. |
+| Normal completed write | Target: clean native structure/content and ordinary ACE/Access opening without repair. T-COMPACT-1 maps each write to possible damage and the observers expected to detect it; implementation completes that list and its precise pass condition. Repair must not hide a damaged original output. |
+| Interrupted write | Target: no worse than the corresponding ACE crash, with the same commit-survival rules including forced flush. Capture/reconstruct both engines' states and compare the same native opener outcomes. Exact classification and acceptance are settled during implementation; no private undo file is assumed. |
 | Same production logic under control | Deterministic adapters replay actual state transitions, detect trace divergence and preserve original failure evidence; native tests cover adapter behavior outside the simulator model. |
 
 For the scalar row-loop path, record a cost vector rather than a promised time: engine allocations, owned bytes, copied bytes, decoded units, retained/pinned bytes, name-lookup probes, format branches, page reads, lock operations and public crossings. Bulk operators add rows/batches, comparisons, spill volume/passes and working-set peaks. Browser runs add bridge copies, storage rendezvous and linear-memory high-water mark. Charge owner-retained capacity to its lifetime; a faster call that retains every page can be worse for the workload.
@@ -253,9 +289,12 @@ The first accepted read slice establishes a baseline; R-STRING-1 compares materi
 
 ## Sources and status
 
-The algorithms and contracts in this chapter are proposed CalcDb design. Actual target behavior remains documentary, user-supplied or experiment-dependent as labelled. The cleared reports contribute generation-tagged ownership, reservation, scoped cleanup and replay concepts; they do not impose a runtime, WAL or isolation model.[^notes] Full exact source/use/licence metadata is in A-01; full deciding experiments are in A-02. Figure F-01 and F-02 are emitted in Part I as Mermaid source and have not been render-verified.
+The algorithms and contracts in this chapter are proposed CalcDb design. Actual target behavior remains documentary, user-supplied or experiment-dependent as labelled. The cleared reports contribute generation-tagged ownership, reservation, scoped cleanup and replay concepts; they do not impose a runtime, WAL or isolation model.[^notes] Full exact source/use/licence metadata is in A-01; full deciding experiments are in A-02. Figures F-01 and F-02 appear in Part I and are rendered by the PDF build.
 
-[^scope]: Supplied `calcdb-one-pager.md`, Draft 2, principles 1–11; `CHARTER.md` elaboration subject to the one-pager; user's scope, crash and implementation-order corrections through 2026-11-13. Requirement authority, not implementation evidence.
-[^values]: User's 2026-11-13 current/target CalcVBA clarification; supplied `calcvba-integration-note.md` subject to that correction. Microsoft's [VARIANT declaration](https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant) supplies the native union structure; II-02 derives and checks its target ABI. No existing CalcVBA internal ABI is invented here.
-[^source-rules]: Supplied `gpt6pro-book-prompt.md`, “Source rules,” with the user's corrected clearance of the nine canonical first-stage report parts. Source authority and permitted-use constraints; exact cited materials and reuse classifications remain in A-01.
+[^scope]: [B-SCOPE-11] [Scope and context](00-scope.md), §§S1–S7, is the book's scope statement. [U-PRD-01-09] `decisions.md` and [U-PRW-01-58] `work.md` govern this revision; compatible charter/integration material elaborates that scope. These are requirement sources, not native observations. A-01 records their provenance.
+[^values]: [B-SCOPE-11] [Scope and context](00-scope.md), §S3, and [U-PRW-01-58] `work.md`, PRW-43, state the shared platform value agreement. Microsoft's [VARIANT declaration](https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant) supplies the native union structure; II-02 derives and checks its target ABI.
+[^source-rules]: Supplied `gpt6pro-book-prompt.md`, “Source rules,” and [B-SCOPE-11] [Scope and context](00-scope.md), §S7, identify the nine canonical first-stage report parts as cleared concept input. Source authority and permitted-use constraints; exact cited materials and reuse classifications remain in A-01.
 [^notes]: Supplied `asupersync-report.stage1-part1.md` §§1, 3, 6, 8; `asupersync-report.stage1-part2.md` §§2–4; `asupersync-report.stage1-part4.md` §§3–4; `frankensqlite-report.stage1-part3.md` §§8, 10. Cleared concept input only; no direct excluded repositories, packages or external extracts used.
+
+[^oracle]: [U-OWNER-ACE] in A-01 records the owner-reported ACEDAO.DLL identity. [U-PRD-01-09] `decisions.md`, PRD-02, records the distinct Office C2R registration report; neither is a new native capture.
+[^recovery]: [U-OWNER-RECOVERY] in A-01 and [B-SCOPE-11] [Scope and context](00-scope.md), §S5, retain D-UNDO-1's owner-specified predicate. PRD-09 leaves the optional aid outside planned work.

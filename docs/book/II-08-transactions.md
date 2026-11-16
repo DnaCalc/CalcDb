@@ -1,12 +1,12 @@
 # II-08. Transactions, write ordering and crash recovery
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-STORE-01, RQ-STORE-02, RQ-STORE-04 and RQ-STORE-05. Shared obligations: RQ-PROD-04, RQ-FMT-03, RQ-SQL-05, RQ-SQL-06, RQ-SEM-03, RQ-DAO-01, RQ-DAO-04, RQ-ADO-01, RQ-LOCK-01, RQ-LOCK-03, RQ-LOCK-04, RQ-LATE-04, RQ-ISAM-01, RQ-CONC-02, RQ-SIM-02, RQ-CALL-04, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-05, RQ-PERF-01 and RQ-PERF-02. I-16 owns the complete scope map. II-03 supplies effect receipts and page-image ownership; II-04/05/06 supply native row/map/tree/catalog builders; II-07 supplies accepted semantic mutations and cursor outcomes. This chapter owns the resolution that connects them. II-09 deepens locking and visibility.
 
-Implement one coordinator for each logical transaction owner, backed by identity-keyed native file participants. It retains explicit and operation scopes, compiles immutable native phase images, resolves logical and persistent outcomes separately, and preserves the same attempt through failure. D-TXN-1 and D-WRITE-1 remain Provisional with named branch experiments. D-UNDO-1 is the user's Decided ACE-first baseline and exact whole-file image predicate; D-UNDO-2 separately marks the preferred optional one-shot recovery protocol Provisional.
+Implement one coordinator for each logical transaction owner, backed by identity-keyed native file participants. It retains explicit and operation scopes, compiles immutable native phase images, resolves logical and persistent outcomes separately, and preserves the same attempt through failure. D-TXN-1 and D-WRITE-1 remain Provisional with named branch experiments. D-UNDO-1 is the user's Decided ACE-first baseline and conditional whole-file image predicate. D-UNDO-2 is Retired: optional undo is an unplanned idea, with no codec, state machine or construction slice in this design.
 
-**Evidence boundary.** Microsoft documentation constrains public and operating-system behavior; it does not provide an execution trace of the selected ACE build. Exact reference-source facts remain pinned to Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, without assigning it an unsupported release identity. SQLite and the cleared supplied reports contribute labelled concepts only. Constructed pages, state traces, codec sizes and simulation examples below have independent arithmetic checks; none is an ACE capture. No ACE, Windows backend or reference Java encoder execution occurred here. The initial oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016, subject to actual environment capture. Figures are emitted as tables/Mermaid source and are not render-verified. The platform Automation VARIANT/BSTR contract remains unchanged.[^authority]
+**Evidence boundary.** Microsoft documentation constrains public and operating-system behavior; it does not provide an execution trace of the selected ACE build. Exact reference-source facts remain pinned to Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, without assigning it an unsupported release identity. The cleared supplied reports contribute labelled concepts only. Constructed pages, state traces and simulation examples below have independent arithmetic checks; none is an ACE capture. No ACE, Windows backend or reference Java encoder execution occurred here. The initial oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016, subject to actual environment capture. Figures are rendered by the PDF build. The platform Automation VARIANT/BSTR contract remains unchanged.[^authority]
 
 ## 1. The Workspace owns logical transaction scope
 
@@ -14,7 +14,7 @@ Implement one coordinator for each logical transaction owner, backed by identity
 
 Microsoft documents Workspace-wide transaction scope, current-level nesting resolution and separate Workspaces for overlapping non-nested transactions. An inner commit remains reversible by its enclosing transaction. DBEngine transaction methods route to the default Workspace. These statements support the frame mechanism below; they do not specify a cross-file durable commit protocol. [^txn-begin][^txn-guide]
 
-Represent membership at two levels. `DatabaseBinding` records a public open handle, its Workspace, permissions, schema context and verified file identity. `FileParticipant` is the coordinator's physical participant for that file identity and incarnation. Two handles opened on the same native file can share one participant while retaining their separate public object state. Paths are diagnostic labels, not participant keys. A second Workspace uses another private transaction view over the same file coordinator; it does not acquire access to the first Workspace's uncommitted overlay.
+Represent membership at two levels. `DatabaseBinding` records a public open handle, its Workspace, permissions, schema context and verified file identity. `FileParticipant` is keyed by `(LockerId, FileIdentity, file incarnation)`: it retains that locker's base, private overlay and resolution progress. Two handles in the same locker can share it while retaining separate public object state. Different lockers share the underlying `FileSession`, not this overlay-bearing participant. Paths are diagnostic labels, not participant keys. A second Workspace or ADO Connection is a separate `LockerId` over the same file coordinator. Several lockers can retain accepted private change sets at once. None gains access to another owner's uncommitted overlay merely because both run on one thread. The local lock manager grants compatible page/record footprints and handles conflicts with the native retry settings and eventual error, not an indefinite wait for a file-wide transaction owner. R-TXN-1/TXN-LOCAL defines the observed granularity, retries and visibility.
 
 Read registration and write enlistment are distinct. Opening a read cursor records its ownership and visibility policy without eagerly making every open database a write participant. Prefer write enlistment at the first accepted mutation; the participant then owns the required file lease, base view, private images and rollback obligations until the measured resolution policy releases them. A Database opened after BeginTrans still joins the active Workspace scope when its work requires enlistment. Capturing the read view at BeginTrans, first access or each statement remains the visibility decision of R-TXN-1/TXN-VIEW and II-09; lazy physical enlistment cannot accidentally choose that decision.
 
@@ -38,7 +38,7 @@ ExplicitFrame {
 }
 FileParticipant {
     verified_identity + open_incarnation, owned_native_handle
-    required_lease, admitted_base_view, private_overlay
+    required_lease, locker_id, local_grants, admitted_base_view, private_overlay
     schema/row/index generation dependencies
     native_effect_progress, unresolved_durability_intents
 }
@@ -93,7 +93,7 @@ With a hash directory this costs expected O(k) metadata work for k child-touched
 
 A scope-before page is a restoration input, not an instruction to overwrite the entire current page blindly. A generated counter or other accepted effect can have a native disposition that survives logical rollback. Its surviving field changes must be reapplied to the rollback target image where necessary. Likewise, catalog handles, cursor identities, counts and lock state need typed resolution. If the native policy permits unrelated surviving changes to the same physical page, compose the target from the selected logical state; a stale whole-page before-image cannot erase them. This is one reason to keep logical deltas and complete physical images together.
 
-II-09 makes that qualification explicit for shared writing. If CalcDb changes one row from 7 to 9 while ACE changes a neighboring row from 100 to 101, a rollback that must preserve ACE's change restores `(7,101)`, not the complete old page's `(7,100)`. Whole-page restoration requires continuous native ownership that excluded intervening changes to the restored bytes, or an observed rollback scope that includes them. Otherwise compose the scope-specific reversal over freshly protected current images, including shared index/map/catalog bytes. R-LOCK-4/TXN-RANGE selects the applicable case; retained historical images alone do not authorize native restoration.
+This qualification starts with two local lockers in phase 1. Suppose A accepts row 7→9 while B accepts a neighboring row 100→101 under a record-locking case admitted by ACE. If A commits and B then rolls back, the file must retain `(9,100)`; B cannot restore the whole old `(7,100)` page. If B instead commits, its accepted delta is rebuilt over A's new base to produce `(9,101)`. A page-locking case may conflict before both edits are accepted; TXN-LOCAL decides it. A private rollback ordinarily removes or reconstructs only B's overlay. If B's selected early-write policy already produced native effects, its exact receipt and current protected base select the live restoration program. Later R-LOCK-4/TXN-RANGE adds external actors and native roles; it does not introduce the local rule for the first time.
 
 Private rollback first builds a resolution plan over the affected scope: choose the images to restore, preserve any effects that survive, settle allocation tickets and object generations, and determine public cursor transitions. Only after its required metadata/resources are secured does it install the selected private view. Scope-owned readers and held values are not destroyed merely because the latest overlay changes; their policy either retains the older backing or explicitly invalidates their public generation. Reclamation waits for remaining owners.
 
@@ -110,6 +110,7 @@ OperationFrame {
     policy: row unit / statement unit / qualified partial-progress units
     operation_before_directory and logical delta sequence
     accepted-input and generated-value receipts
+    candidate failure policy, settled-skip and terminal-failure receipts
     selected_failure_scope, affected-count observation, error collection
     publication_units and their definite/possible effects
 }
@@ -127,10 +128,15 @@ The public flag does not define every failure class. Database.Execute's option t
 | Present | One-row DAO mutation | Merge the operation into the current user frame | Keep, reverse or retain the qualified part of this operation; earlier user work remains represented |
 | Absent | Action with admitted dbFailOnError | Resolve the statement owner | Prefer reversal of this statement's successful row work; classify counters, callbacks and physical failure separately |
 | Present | Action with admitted dbFailOnError | Merge statement changes into the user frame | Prefer statement-only reversal while preserving earlier user work and the user's remaining depth |
-| Either | Action without that statement policy | Resolve ordered accepted units | Preserve the observed successful set and counts; do not invent universal action atomicity |
+| Either | No-flag action with a native-classified skippable candidate | Settle the candidate, continue later candidates, then resolve the accepted units | SkipCandidate retains generated/effect receipts, adds no successful mutation for the skip itself and publishes no skipped error; all-skipped success is an explicit case |
+| Either | No-flag action with a stopping failure | Resolve only the native-permitted successful units | StopAction preserves the observed surviving set, count/error and remaining scope; no universal action atomicity |
 | Either | DDL/catalog/QueryDef mutation | Use the operation's qualified catalog schedule | Capture metadata, schema-generation, cursor and persistent consequences for that exact operation |
 
-For a discriminating fixture, perform change A successfully, start an action B that changes several distinguishable rows and fails on its middle candidate, then perform change C if allowed. Observe A, every candidate of B, C, explicit depth through subsequent resolution calls, RecordsAffected, the complete error collection, generated counters and held cursor/catalog objects. Repeat with both Execute surfaces, the flag absent/present, no explicit transaction/one/two levels, and first/middle/last failure. A failed syntax bind and a late I/O failure cannot be assigned the same continuation merely because both return an error.
+II-11 §30 owns the `SkipCandidate`/`StopAction` action loop; this coordinator supplies the candidate settlement. A skip is allowed only for the exact native-classified failure context after candidate-local work has a resolved permitted disposition. It can reverse the candidate's row/index/cascade changes without reversing earlier statement work, or retain native-permitted surviving units with explicit receipts. A failed or uncertain settlement cannot be hidden as a skipped row. Retain whether each generated ticket was not reached, reserved/consumed or accepted and how its counter settles; neither candidate disposal nor a later rollback authorizes regeneration. Foreign effects remain recorded even where database work is reversed.
+
+Source, qualification, target selection, accepted mutation, cascade and settled-skip events have separate counts. A skip advances only events actually reached and its one skip event; it does not itself add a successful target. Preserve earlier accepted/reversed receipts, and project the public count from the native surface policy. Do not publish the skipped failure into the public error channels. Prior error state follows the successful-call policy. Retire candidate values outside latches and revalidate the action/next continuation after cleanup. If cleanup invalidates the owner or fails, stop without repeating the already settled candidate.
+
+For a discriminating fixture, perform change A successfully, then action B with success–blocked–success candidates, then change C if allowed. The no-flag branch can complete B successfully while skipping its middle row; the flagged branch tests statement reversal. SQL-CONTINUE also tests all blocked rows, first/last failures and separate lock, conversion, validation, uniqueness, cascade and generator classes. Observe A, every B candidate, C, explicit depth through later resolution calls, each Execute object's RecordsAffected, prior/final error collections, generated counters and held objects. Repeat through Database and QueryDef, flag absent/present and no/one/two explicit levels. Add injected settlement, cleanup and unresolved-write failures to prove that a completed skip is never replayed and an unresolved candidate never advances. A failed syntax bind and a late I/O failure do not inherit the blocked-row continuation.
 
 A statement undo frame must capture its first-change image even if the enclosing user frame already has an earlier one. Suppose A has changed page 17 from 7 to 9, then B changes it from 9 to 11 before failing. Statement-only reversal restores 9; restoring the user frame's image 7 would erase A. On a successful B, transfer only the obligations not already owned by the user frame and retain accepted effect receipts. On a partial B, preserve the exact surviving logical units before updating the public count.
 
@@ -155,7 +161,7 @@ A successful Workspace resolution installs the resulting in-process views as one
 | B | Data page 21 at byte offset 86,016 | Write attempted; completion uncertain | Old and intended B images are retained, neither is asserted to be the actual file |
 | A and B | Required final force-flush sequence | Not completed | No successful forced-commit receipt exists |
 
-The logical fact that all work belonged to one Workspace does not convert this receipt into either “nothing committed” or “everything committed.” The resolution policy may retain a usable transaction, require qualified restoration, expose a surviving subset, or end in a state requiring close/reopen. R-TXN-1/TXN-MULTI and R-CRASH-1/2 select those outcomes. Do not create a two-phase-commit side file to supply a stronger promise. Nor may the coordinator return an invented success simply because one participant was definitely written.
+The logical fact that all work belonged to one Workspace does not convert this receipt into either “nothing committed” or “everything committed.” The resolution policy may retain a usable transaction, require qualified restoration, expose a surviving subset, or end in a state requiring close/reopen. R-TXN-1/TXN-MULTI and R-CRASH-1 select those outcomes. Do not create a two-phase-commit side file to supply a stronger promise. Nor may the coordinator return an invented success simply because one participant was definitely written.
 
 Reserve enough progress storage before each native submission that an out-of-memory error cannot erase the last step's definite or possible effects. Per-participant progress includes phase/image identity, completion/uncertainty, logical resolution state, flush requests and completions, and permitted next actions. The public error mapper consumes this receipt; it does not decide the durable state by looking only at the last Win32 error code.
 
@@ -165,7 +171,7 @@ Use distinct logical and durability fields in a `CommitReceipt`. An inner logica
 
 For an outer commit, the preferred initial policy remains I-08's: complete the required native writes, then complete the supported forced-flush sequence when the call requests it; ordinary commit does not add an unconditional forced flush. The native stage compiler and backend receipts determine which completions satisfy that intent. Failures after writes, during flush or before returning remain different from failures before publication. A caller can lose the success acknowledgement after its commit has crossed a native survival frontier; a receipt cannot infer “uncommitted” from the missing acknowledgement.
 
-An inner `CommitTrans(dbForceOSFlush)` is particularly discriminating. The public references do not settle whether it flushes rollback-capable native changes immediately, propagates a force requirement to the outer level, or has some narrower effect. Prefer recording the request on the inner resolution receipt and provisionally propagating its effective intent to the parent, without declaring the inner changes independently committed. TXN-FLUSH compares inner forced commit followed by outer rollback, outer ordinary commit and outer forced commit, with interruptions after each boundary. If ACE flushes still-reversible changes earlier, the implementation needs the evidenced early-write and restoration program; if it ignores or confines the request, remove the propagated effective intent while retaining the trace of the original call. Until classified, that branch cannot borrow the outer-forced case's acceptance evidence.
+An inner `CommitTrans(dbForceOSFlush)` is particularly discriminating. The public references do not settle whether it flushes rollback-capable native changes immediately, propagates a force requirement to the outer level, or has some narrower effect. Prefer recording the request on the inner resolution receipt and provisionally propagating its effective intent to the parent, without declaring the inner changes independently committed. TXN-FLUSH-LIVE compares inner forced commit followed by outer rollback, outer ordinary commit and outer forced commit, with paired R-CRASH-1 interruptions after each boundary. If ACE flushes still-reversible changes earlier, the implementation needs the evidenced early-write and restoration program; if it ignores or confines the request, remove the propagated effective intent while retaining the trace of the original call. Until classified, that branch cannot borrow the outer-forced case's acceptance evidence.
 
 Record the effective engine configuration with every capture. DBEngine.SetOption documents runtime overrides including UserCommitSync, ImplicitCommitSync, shared/exclusive asynchronous delays and FlushTransactionTimeout, plus memory/lock-related limits. The article's example registry path is Office 12.0; it does not identify the active path or defaults of the supplied Office 16 build. The oracle records supported option queries, explicit overrides and any unresolved provenance instead of installing guessed registry values. [^txn-options]
 
@@ -177,13 +183,13 @@ DBEngine.Idle is another explicit event. Its documentation describes pending eng
 
 The DAO transaction references describe a workstation TEMP transaction log, a runtime error when its storage is exhausted, potentially indeterminate partial commitment if CommitTrans then follows, and rollback as a distinct resolution. This is documentary evidence for an exceptional state to reproduce. It neither supplies the file format of ACE's TEMP log nor authorizes CalcDb to require an authoritative private journal before ACE can reopen the database. [^txn-commit][^txn-rollback]
 
-CalcDb's preferred normal path keeps uncommitted page revisions privately and may spill them into owned temporary storage. Distinguish three stores even if an allocator supplies all of them: live transaction staging/before-images, retained reader history, and the optional crash-undo record. The first two support ongoing ownership and visibility. Their accidental survival on disk does not make them recovery authority. The optional record has the separate full-file eligibility and disarm rules specified later in this chapter.
+CalcDb's preferred normal path keeps uncommitted page revisions privately and may spill them into owned temporary storage. Live transaction staging/before-images and retained reader history have distinct ownership and budgets even if one allocator supplies both. Their accidental survival on disk does not make them recovery authority. D-UNDO-2 adds no planned store or opening protocol.
 
 Budget admission for a scope includes its worst simultaneous preservation requirement: the old page revision, the modified revision, image-directory growth, allocation/constraint receipts, the native program's sealed images, and enough reserved outcome/cleanup metadata to settle a fault. Copying or spilling one image can temporarily need both the source frame and the encoded output buffer. Count that overlap. A large user transaction can contain a small resident index of images and immutable spill blocks; it must not flush uncommitted database pages simply because the RAM budget has been reached.
 
 Use a narrow, checked spill record with workspace/frame/image identity, kind, declared length, integrity check and owned payload. This is an internal live-storage format. Writes and reads are bounded; a damaged or missing record is a resource/storage failure, not a valid before-image. A partial spill write never replaces the sole retained copy until completion has been verified. When spilling a before-image is required to admit a new mutation, failure occurs before granting that mutation access to the editable page.
 
-An exhausted TEMP-like store does not always have the same consequences as an ordinary pre-admission resource rejection. Model `ResourceFailureDisposition` in the operation/Workspace receipt: no accepted changes; accepted private changes with valid rollback; known native effects; or uncertain native effects. Its fields also name the still-supported public operations. They are internal classifications and do not invent a new public DAO error. The selected native error collection and subsequent CommitTrans/Rollback/Close behavior come from TXN-TEMP and R-CRASH-2.
+An exhausted TEMP-like store does not always have the same consequences as an ordinary pre-admission resource rejection. Model `ResourceFailureDisposition` in the operation/Workspace receipt: no accepted changes; accepted private changes with valid rollback; known native effects; or uncertain native effects. Its fields also name the still-supported public operations. They are internal classifications and do not invent a new public DAO error. The selected native error collection and subsequent CommitTrans/Rollback/Close behavior come from TXN-TEMP/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE.
 
 Prefer refusing additional mutation after exhausted staging while preserving the already owned rollback data and a reserved resolution path. That is the implementation starting direction, not permission to promise stronger behavior than the measured target. If ACE's exhaustion branch can commit an accepted subset or loses part of its logical rollback facility, capture its actual surviving set and implement that qualified continuation through explicit progress units. Never choose a random subset merely to imitate the word “indeterminate.” Unknown native behavior remains unknown; it does not justify returning success or replaying the failed action.
 
@@ -205,7 +211,7 @@ These events can arrive during callback reentry. Before calling the host, retain
 
 ## 8. The ADO adapter uses the coordinator without importing DAO policy
 
-ADO transaction methods are connection-scoped. Its BeginTrans can return the nesting level, support depends on the provider, and connection Attributes can request an automatically started successor transaction after commit or rollback. Unsupported-provider calls and resolution without an active transaction are documented errors. These are surface inputs to the same coordinator machinery, not proof that an ADO connection has DAO Workspace membership or identical clone/Close rules. [^txn-ado]
+The initial adapter here serves admitted ACE database connections. Other/default/omitted database providers receive II-12's named, counted provider refusal. The supported connectionless Recordset/Stream persistence route, including MSPersist, does not itself enlist a native database transaction. Later provider machinery is a separate capability, not system-ADO passthrough. ADO transaction methods are connection-scoped. Its BeginTrans can return the nesting level, support depends on the provider, and connection Attributes can request an automatically started successor transaction after commit or rollback. Unsupported-provider calls and resolution without an active transaction are documented errors. These are surface inputs to the same coordinator machinery, not proof that an ADO connection has DAO Workspace membership or identical clone/Close rules. [^txn-ado]
 
 Retain an adapter-selected `ResolutionSuccessor`: no new scope, or a fresh transaction scope under the qualified retaining policy. Prefer reserving the next frame's local metadata before resolving the old one, while keeping their identities separate. If an external provider can fail beginning the successor after the prior commit succeeded, the result must retain that committed outcome and report the failed successor creation. It cannot undo the successful commit to make the call look atomic. Retaining must not resurrect old before-images, bookmarks or consumed generated tickets as though the old transaction never ended.
 
@@ -215,15 +221,17 @@ The connection capability descriptor also retains provider transaction/DDL decla
 
 **Requirement trace:** RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05, RQ-PROD-04, RQ-FMT-03, RQ-ISAM-01, RQ-SQL-05 and RQ-CALL-04.
 
-**D-WRITE-1 remains Provisional.** The preferred initial writer retains uncommitted work in private page revisions and publishes an admitted operation or outer-commit unit through one coordinator under exclusion. Its starting direction is unchanged: prepare and reserve; establish a native in-progress state only when one is evidenced; initialize newly assigned storage; publish native allocation and ownership; remove obsolete index references; install row/LV changes and new index references; publish operation-required catalog metadata; release unreachable storage; resolve native/logical state and the selected flush/acknowledgement policy. This section compiles that direction into actual page revisions. R-FMT-2, R-TXN-1 and R-CRASH-1/2 choose any required changes per operation and environment.
+**D-WRITE-1 remains Provisional.** Start with one final stored image per physical page per publication unit. Prepare accepted local work, acquire the file's resolution gate and rebuild it over the newest committed base. The preferred submission order is: initialize new targets; write changed existing data pages; write final indexes; publish catalog references; write final existing ownership/usage maps after affected old references have gone; then permitted tail truncation, native/logical resolution and the selected flush/acknowledgement. A new map page is initialized with other new targets. An actual native marking transition is reproduced only if evidenced; a required repeated header or map image selects the general fallback compiler.
 
-The unit of compilation is the complete physical closure of an accepted semantic change. II-07's `PreparedMutation` supplies row identities, accepted values, generated-value receipts, the scheduled constraint work and the effects already performed. II-04 supplies row/LV/map images; II-05 supplies physical-tree deltas; II-06 supplies catalog closure. The coordinator may replan their physical placement while keeping those semantic receipts. It cannot restart a callback, default evaluation, generated value or cascade merely because a page split needs another allocation.
+This candidate deliberately leaves ordering questions visible. A composed map may allocate new storage and retire old storage in one image. Map-before can offer still-referenced old storage as free; map-after can expose new references before their ownership bits. Exclusion prevents an external live writer during initial publication, but does not answer what a first opener sees after a crash. R-FMT-2 and R-CRASH-1 compare named MAP-BEFORE and MAP-AFTER variants; MAP-AFTER is the starting candidate. No claim that every interrupted graph is complete is used to select the starting order.
 
-Keep three dependency meanings explicit. A **build dependency** says which private images must exist before another can be encoded. A **transfer dependency** says which native requests must settle successfully before a later request is submitted. A **persistence dependency** says which effects must survive before another effect may survive under the named fault model. The first two do not create the third. Windows normally buffers file writes and later drains cached data; the file-cache documentation gives no general inference that completed page A must survive before subsequently completed page B after power loss. [^w-caching]
+II-07's `PreparedMutation` supplies accepted row values, generated-value receipts, constraint results and performed effects. II-04/05/06 supply the row/LV/map, tree and catalog changes. II-09's `PreparePublicationProgram` uses those effect-free deltas on a fresh committed base in Local mode, and adds native role/source protection in later External mode. Repacking, splitting or changing an allocation cannot replay a callback, default, generated ticket or already accepted cascade.
 
-Therefore each proposed persistence edge carries the actual native barrier or qualified backend property that supplies it. An edge lacking that evidence remains a hypothesis in the crash model. Adding a forced flush at every arrow would change both cost and potentially ordinary-commit survival, so it is not an automatic way to finish the design. An operation with an unqualified intermediate class remains experimental or refused in that profile while other writer operations advance. The full writer remains in scope.
+Keep three dependency meanings explicit. A **build dependency** orders private construction. A **transfer dependency** requires a native request to settle before another is submitted. A **persistence dependency** constrains which effects may survive under a declared fault model. The first two do not establish the third. Windows buffered completions alone give no general rule that page A must survive before later page B after power loss.[^w-caching]
 
-The required final graph is a necessary condition, not the crash argument. A completed update must have correct rows, entries, ownership and descriptors. A terminated update may leave an incomplete index, newly allocated pages or a native needs-repair state only where its corresponding ACE crash class supports that result. The program has no invented repair offset and no universal on-disk commit word. A field called a write stamp by an open reader is insufficient evidence for either role.
+Attach the actual barrier or backend property to each proposed persistence dependency, retaining unresolved assumptions. Do not add forced flushes at every arrow merely to simplify a model. R-CRASH-1 preferably records payloads and flushes, reconstructs states and compares independent opener outcomes. The exact relation, pass conditions and treatment of classes that cannot be established are implementation work under PRD-07; this chapter does not turn a missing crash class into a pre-decided shipping or refusal rule.
+
+The complete final graph remains necessary: correct rows, entries, ownership and descriptors, with protected bytes preserved. The crash goal is separately no worse than the corresponding ACE operation, with the same ordinary/forced commit survivors. There is no invented repair bit or universal on-disk commit word. A source-named write stamp alone establishes neither role.
 
 ## 10. Page revisions, reservations and typed effects
 
@@ -267,31 +275,28 @@ ProgressRecord {
 }
 ```
 
-A newly allocated page is not necessarily an absent page. If page 80 was a free page within the original file, its old bytes and extent already existed; `ExistingFree` retains that fact. Only newly exposed ranges beyond the original EOF have an absent before-state. This distinction matters to rollback, preserving historical images, allocation failure and the optional undo predicate. A map bit is not proof that the bytes were absent.
+A newly allocated page is not necessarily an absent page. If page 80 was a free page within the original file, its old bytes and extent already existed; `ExistingFree` retains that fact. Only newly exposed ranges beyond the original EOF have an absent before-state. This distinction matters to rollback, preserving historical images and allocation failure. A map bit is not proof that the bytes were absent.
 
 Reservations from row growth, index splits and map self-expansion share one namespace per enlisted file. II-04's finite allocation closure assigns a required bitmap page once, adds that page's own ownership effects, and repeats until every reference can be encoded. There is no separate index allocator that can hand out a page already reserved for an LVAL chain. Existing free holes remain distinct from append capacity; map expansion does not authorize discarding holes that the reference writer happens to lose.
 
 That namespace prevents conflicting CalcDb reservations; it does not reserve storage against ACE. A shared-mode candidate becomes externally exclusive only under the qualified allocator ownership or an evidenced native reservation. If a still-private candidate is lost, physical preparation may choose another location without regenerating accepted AutoNumbers or callbacks. Existing edit/transaction obligations remain owned. R-LOCK-4/WRITE-ALLOC selects the native reservation and release transitions.
 
-The physical key for composing edits is `(file incarnation, page number, allocation incarnation)`. A TableDef stream patch, two map rows and a catalog row can resolve to one page. Start from one admitted image and compose all patches whose effects belong to the same stage. Later stages derive from that composed revision, never independently from the original page. Thus `M0 → M1 → M2` is one chain of complete images. Writing an independently built M2 that forgot M1's unrelated bit would undo an earlier mutation while appearing to complete a later one.
+The physical key for composing edits is `(file incarnation, page number, allocation incarnation)`. A TableDef patch, two map rows and a catalog row can resolve to one page. Start from one fresh admitted base and compose all of the publication unit's final patches into one final image. The fallback can expand `M0 → M1 → M2` when the selected native transition needs two stored revisions. M2 then derives from M1, never independently from M0; otherwise the later image can erase an earlier bit or another locker's committed change.
 
-Under shared writing, the admitted base is refreshed under II-09's qualified native publication footprint. Reapply retained effect-free deltas to that base after checking originals, identity, schema and constraints; preserve unrelated current rows, entries, map bits and counters. A private candidate page is not automatically a current native base. Each sealed revision retains its source certificate and the native role intervals needed through transfer completion and any unresolved continuation. A logical edit owner does not by itself supply this physical protection. A release/refresh between M1 and M2 requires the profile's explicit recomposition transition; a presealed stale M2 cannot cross that gap unchanged.
+For local publication, refresh the admitted base under II-09's resolution gate and local grants; External mode additionally holds the native publication footprint. Reapply retained effect-free deltas after checking originals, identity, schema and constraints; preserve unrelated committed rows, entries, map bits and counters. A private candidate page is not automatically a current native base. Each sealed revision retains its source certificate and the native role intervals needed through transfer completion and any unresolved continuation. A logical edit owner does not by itself supply this physical protection. A release/refresh between M1 and M2 requires the profile's explicit recomposition transition; a presealed stale M2 cannot cross that gap unchanged.
 
-**Figure F-57 — physical-page composition across phases.** This is an in-memory ownership/dependency diagram, not a native record format or observed ACE schedule.
+**Figure F-57 — compose one final physical map image, with a repeated-image fallback.** This is a CalcDb construction choice, not an observed ACE schedule.
 
 ```mermaid
 flowchart TD
-    A["Admitted map page M0"] --> B["Reserve payload bit"]
-    A --> C["Reserve bitmap bit"]
-    B --> D["Composed allocation image M1"]
-    C --> D
-    D --> E["Install references on other pages"]
-    E --> F["Compose retirement changes"]
-    D --> F
-    F --> G["Final map image M2"]
+    A["Fresh admitted map M0"] --> B["Compose allocation and retirement deltas"]
+    B --> C["One final map image"]
+    C --> D["One selected map transfer"]
+    B -->|"Required native transition"| E["Fallback allocation image M1"]
+    E --> F["Fallback final image M2"]
 ```
 
-The page chain preserves both images if the qualified program writes both. Before choosing that preservation set, §19 closes fresh selection of the affected current views. Before any overwrite, the pager freezes the affected native sources, drains their permitted loads and preserves images required by active readers, rollback scopes and pending target loads. These obligations attach to actual image identities. They do not disappear because two revisions happen to compare equal. In shared mode, preservation reads also need the qualified native protection; a local source freeze cannot exclude ACE. Encoding happens into private storage; stored-byte receipts and hashes refer to those encoded bytes, including page 0's header masking where relevant.
+The starting program stores the final image once. If the fallback stores both M1 and M2, their complete source images and dependency edges remain owned. Before selecting preservation work, §19 closes fresh admission of the affected current view. Before overwrite, the pager freezes native sources and preserves every required old image, including a reader whose load has not yet acquired it, independent targets and pending loads. Physical image ownership does not promise DAO snapshot isolation. External-mode preservation also needs native protection; a local freeze cannot exclude ACE. Stored-byte receipts cover encoded bytes, including any header masking.
 
 ## 11. Finalize and check the phase graph
 
@@ -301,17 +306,19 @@ The planner first settles the complete *logical* allocation/reference closure, t
 CompileNativeProgram(prepared, scope, profile, budget) -> Program | Failure:
     require accepted semantic receipts and scope are still owned
     reserve minimal effect/outcome storage and preservation workspace
-    require current protected bases and native role receipts for shared output
+    require latest committed bases and local grants under each file resolution gate
+    require additional native roles/source protection for External mode
     close shared row/LV/tree/catalog allocation reservations under budget
     bind every descriptor, reference and actual physical page incarnation
     validate final native object graphs and preservation masks
-    select the profile's transition template for each affected object
-    compose same-stage edits by physical page into complete revisions
+    select one-final-image template and named order/timing branch
+    compose all final patches by physical page into complete final revisions
+    expand repeated-image transitions only where the selected fallback requires them
     bind each source/transfer to its qualified native ownership interval
-    connect successive revisions of each physical page
+    connect any fallback successive revisions of the same physical page
     expand extents, initialized targets, map publication and reference edges
     expand all operation-required catalog and native-state transitions
-    add reclamation only after every relevant live reference is withdrawn
+    bind composed-map placement and retirement/truncation to the selected template
     attach qualified barriers and separate acknowledgement conditions
     if a dependency cycle remains:
         require an evidenced intermediate/native transition that breaks it
@@ -326,30 +333,42 @@ The cycle result identifies the operation and missing transition; it is not a bl
 
 Checking the final graph includes actual index maxima and peer rules, row-root versus body addresses, column-specific LVAL ownership, global free membership, TableDef counts/descriptors and catalog references. Native fields whose semantics remain opaque are preserved. A row update is not permission to rewrite every TableDef counter, and an index's source-named `uniqueEntryCount` is not substituted for current cardinality. A generated-value counter or prescribed native bookkeeping update stays in the closure even when the visible row count is unchanged.
 
-After expansion, each physical revision has a unique immediate predecessor. Every transfer lies inside its exact image and native extent; every target reference names storage initialized and owned according to the selected transition policy. A retirement includes the proved referents being removed and any retained-view obligations. The validator also checks program metadata: no emitted effect lacks a progress slot, no barrier depends on a future step, and no callback can be demanded after the first write by an allegedly pure encoding stage.
+After expansion, each physical revision has a unique immediate predecessor. Every transfer lies inside its exact image and native extent; every final target reference names initialized storage with its required final ownership. Intermediate map/reference order is recorded separately and is not checked as if every cut were a complete final graph. A retirement includes the proved referents being removed and any retained-view obligations. The validator also checks program metadata: no emitted effect lacks a progress slot, no barrier depends on a future step, and no callback can be demanded after the first write by an allegedly pure encoding stage.
 
 Use a deterministic topological traversal with the policy's stable tie order. It costs O(V+E) for V effects and E edges after the byte-level builders finish. Complete-image validation costs O(total inspected image bytes), with bounded key/chain work from the supplying layers. A tie may use file/page locality only when the qualified policy allows both orders and their error/crash traces. Initially execute one effect at a time; enabling several in-flight writes adds combinations of partial completion and survival to the experiment, even when their final byte ranges do not overlap.
 
-## 12. Worked indexed-key update: three transfers, two pages
+## 12. Worked indexed-key update: two final transfers, four order candidates
 
-**Figure F-58 — isolated 42→43 phase images.** This extends II-05's constructed example into complete independently decoded page images. It is not an ACE-created database, an observed native write sequence or a proof of crash parity.
+**Figure F-58 — isolated 42→43 before, final and fallback images.** These are constructed native-layout witnesses, not ACE-created pages or observed write sequences. They use II-05's same leaf and row coordinates.
 
-Let index root leaf page `0x90`, owned by TableDef `0x20`, contain Long 42 at `(17,0)` and Long 50 at `(18,2)`. Data page 17 has one ordinary seven-byte row at offset `0x0FF9`: `01 00 2A 00 00 00 01`. Its header records one slot at `0x0FF9` and free space 4073. Page 17's owner is also `0x20`.
+Index root leaf `0x90`, owned by TableDef `0x20`, starts with Long 42 at `(17,0)` and Long 50 at `(18,2)`. Data page 17 has the seven-byte row `01 00 2A 00 00 00 01` at offset `0x0FF9`; its one slot remains at that offset and its free count is 4073.
 
-| Program revision | Complete index entries or row bytes | Selected header/payload facts |
+| Revision | Complete entries or row bytes | Prefix, payload and directory facts |
 | --- | --- | --- |
-| `I90.0` | `7F8000002A00001100`, `7F8000003200001202` | Prefix 4; packed payload 14; boundary-mask byte 1=`42`; free count `12 0E`. |
-| `I90.1` | `7F8000003200001202` | Prefix 0; packed payload 9; boundary-mask byte 1=`02`; free count `17 0E`. |
-| `D17.1` | `01 00 2B 00 00 00 01` | Slot/root unchanged; key byte changes at page offset `0x0FFB`, file offset `0x00011FFB`. |
-| `I90.2` | `7F8000002B00001100`, `7F8000003200001202` | Prefix 4; packed payload 14; mask/free restored to their final forms. |
+| `I90.0` — before | `7F8000002A00001100`, `7F8000003200001202` | Prefix 4; packed payload 14; ends 9/14; mask byte 1=`42`; free bytes `12 0E`. |
+| `D17.1` — final | `01 00 2B 00 00 00 01` | Key byte at page `0x0FFB`, file `0x00011FFB`; slot/root unchanged. |
+| `I90.2` — final | `7F8000002B00001100`, `7F8000003200001202` | Prefix 4; packed payload 14; the before/final leaf differs at page `0x01E4`, file `0x000901E4`, where `2A→2B`. |
+| `I90.1` — remove-first fallback only | `7F8000003200001202` | Prefix 0; payload 9; end 9; mask byte 1=`02`; free bytes `17 0E`. |
+| `I90.both` — add-first fallback only | Entries 42 and 43 at `(17,0)`, then 50 at `(18,2)` | Prefix 4; packed bytes `7F8000002A00001100 2B00001100 3200001202`; payload 19; ends 9/14/19; mask byte 1=`42`, byte 2=`08`; free bytes `0D 0E`. |
 
-The initial candidate submits `I90.1 → D17.1 → I90.2`, followed by any operation-required bookkeeping and native resolution. All pages and rows in this isolated example are already allocated; actual descriptor/counter evidence determines whether its full operation has further pages. The index prefix, entry boundaries and free count are rebuilt for *each* image. The last index image is not constructed by dropping one changed scalar into the intermediate singleton representation. [^w-index]
+All rows/pages are already allocated in this isolated fixture. The actual operation may also change evidenced counters or descriptors. Build every fallback leaf independently from its full entry set, including prefix, boundaries and free count; it is not a scalar patch into another representation.[^w-index]
 
-The complete before/final index pages differ only at byte `0x01E4`, file offset `0x000901E4`, where `2A` becomes `2B`. Nevertheless the three full-page candidate transfers write 12,288 bytes: one data-page transfer and two leaf transfers. That is an arithmetic cost of this candidate, not a measured ACE cost. A one-byte final difference does not authorize deleting the intermediate phase or issuing a one-byte write.
+| Named R-CRASH-1 branch | Transfer order for this isolated pair | Design selected if native evidence requires it |
+| --- | --- | --- |
+| **CRASH-ORDER-DATA** — preferred | `D17.1 → I90.2` | One final image per page; row precedes final index. |
+| **CRASH-ORDER-INDEX** | `I90.2 → D17.1` | One final image per page; final index precedes row. |
+| **CRASH-ORDER-REPEAT-REMOVE** | `I90.1 → D17.1 → I90.2` | Repeated-image fallback with obsolete reference removed first. |
+| **CRASH-ORDER-REPEAT-ADD** | `I90.both → D17.1 → I90.2` | Repeated-image fallback retaining both keys across the row change. |
 
-The transfer-boundary states are deliberately visible to the crash comparison. After `I90.1`, the table still contains 42 while this index omits it. After `D17.1`, the table contains 43 while the index still omits it. After `I90.2`, row and index agree. The first two are incomplete native graphs. They are accepted crash states only if the corresponding native operation and fault model establish an allowed missing-entry/repair outcome. Otherwise R-CRASH-1 changes the order, granularity or evidenced native transition. The word “remove” in the preferred program is not evidence that these states are safe.
+The starting two-page program transfers **8192 bytes** at full-page granularity. Either displayed fallback transfers **12,288 bytes**. These are constructed costs, excluding any additional native bookkeeping. The one-byte before/final leaf difference does not itself authorize a one-byte physical transfer.
 
-Partial writes add distinct states inside each complete-page transfer. For instance, a tear that installs the new mask/header but retains the old entry stream is not equal to any whole revision in the table. The deterministic model must decode or classify those images directly; it cannot approximate a 4,096-byte write as an atomic swap. The optional undo predicate remains before-or-intended only: `I90.1` is neither `I90.0` nor `I90.2`, so a recovery seeing that complete intermediate page discards the optional record.
+Data-first temporarily leaves the new row with the old key; index-first temporarily leaves the new key with the old row. Remove-first exposes a missing key; add-first exposes both keys for one root. These are concrete questions for native captures and opener comparison, not pre-approved ACE crash states. Repeated images enter the implementation when the investigation selects them, rather than because an arrow named “remove” sounds safer.
+
+Timing is separate from page order. **TXN-FLUSH-COMMIT** observes explicit outer-commit publication and any early reversible writes; **TXN-FLUSH-OP** observes writes completed by each implicit operation's end; **TXN-FLUSH-BEHIND** observes implicit return before owned pending writes drain. TXN-FLUSH-LIVE records ordinary/forced options, actual write/flush payloads, Idle/Close and subsequent calls. R-CRASH-1 pairs each timing case with reconstructed/interrupted images and independent openers. Commit-time explicit and operation-end implicit publication are the initial construction choices; an observed write-behind policy retains its pending-image ownership and changes acknowledgement/drain behavior.
+
+Run these deciding branches before broad writer construction, meaning **beyond the first same-width mutation slice**. That slice provides the concrete driver and candidate whose expensive alternative is being decided. Exact crash coverage and final pass conditions remain implementation work under PRD-07.
+
+Partial writes produce actual mixed bytes inside every complete-page transfer. A new mask/header with an old entry stream is not any complete revision in the table. Preserve and decode/classify it under the declared storage model; never replace a 4096-byte transfer with an assumed atomic swap.
 
 ## 13. Long-value replacement and opposite map meanings
 
@@ -359,23 +378,20 @@ The old definition is `64 00 00 40 00 46 00 00 00 00 00 00`. The intended defini
 
 Suppose the validated global declaration row begins at page-1 offset `0x0FBB`, is inline type 00 with base zero, and the owning column's LVAL map uses bitmap page 40. This choice of owner must come through the column-map metadata; TableDef ownership does not automatically put LVAL pages in the ordinary table-data map.
 
-**Figure F-59 — LV publication and repeated map revisions.** The sequence is a provisional transfer program. Other affected availability/declaration pages are expanded from their real descriptors; this table does not declare them unnecessary.
+**Figure F-59 — one final image for each LV, data, index and map page.** Preferred provisional submission order; actual map-before/reference-before alternatives and their crash states are experiment inputs.
 
-| Step | Target revision / effect | Required change and predecessor |
+| Step | Target revision / effect | Final contents and order question |
 | --- | --- | --- |
-| L1 | `L81.initialized` | Build the complete terminal row in reserved page 81. |
-| L2 | `L80.initialized` | Build the complete first row with its pointer to 81; preferred transfer follows L1. |
-| A1 | `G1.allocate80_81` | Clear the two global free bits after the initialization candidate. |
-| A2 | `M40.own80_81` | Set the owner bits after A1 in the preferred candidate. |
-| K1 | Old-key-removal index revision, if the key also changes | Remove the old reference according to the operation's index policy. |
-| D1 | Data-row revision | Install the new external definition and accepted scalar changes. |
-| K2 | Final index/ancestor revisions, if required | Install new references after D1 in the candidate. |
-| C1 | Actual TableDef/catalog bookkeeping | Include only operation-required changes, composed with all aliases. |
-| R1 | `M40.release70` | Clear old ownership after every reference to this value is gone. |
-| R2 | `G1.free70` | Publish old storage free after R1; defer its reuse within the commit. |
-| N1 | Qualified native resolution and selected flush | Preserve distinct native, visibility and acknowledgement outcomes. |
+| L1 | `L81.final` | Complete terminal row in reserved page 81. |
+| L2 | `L80.final` | Complete first row pointing to initialized 81. |
+| D1 | `D.final` | New external definition and accepted scalar changes. |
+| K1 | Final index/ancestor pages, if affected | Starting CRASH-ORDER-DATA order; CRASH-ORDER-INDEX reverses row/index placement. |
+| C1 | Final TableDef/catalog pages, if affected | Required descriptors/references, with all aliases composed. |
+| M1 | `M40.final` | Set ownership of 80/81 and clear ownership of 70 in one image. |
+| G1 | `G1.final` | Clear free bits for 80/81 and set the free bit for 70 in one image. |
+| N1 | Native/logical resolution and selected flush | Keep visibility, native state, survival and acknowledgement distinct. |
 
-Initializing the terminal chunk first is a concrete starting direction for a chain. It is not a claim that allocating an owner-visible orphan, or temporarily exposing only one map change, has no native crash effect. Owner maps and Compact & Repair can discover structures that are not yet reachable through a table row. R-FMT-2/R-CRASH-1 inspect both reachability paths.
+The final maps follow removal of the old row/reference in the MAP-AFTER starting candidate. New references can therefore precede map ownership. Moving the same final maps earlier instead exposes retirement of page 70 before its old reference disappears. Neither order establishes ACE crash parity by inspection. Compare both with payload traces and independent openers. If the native result requires separate allocation and retirement images, CRASH-ORDER-REPEAT expands `M40.allocate80_81 → M40.release70` and `G1.allocate80_81 → G1.free70`, with data/index/catalog references between their selected phases. Initialize the new LV tail first as the starting chain direction, while retaining owner-map discovery as an independent native path.
 
 The exact bit coordinates are:
 
@@ -385,17 +401,17 @@ The exact bit coordinates are:
 | Page 81 | Offset `0x0FCA`, mask `02`; allocate by clearing | Offset `0x0E`, mask `02`; own by setting |
 | Page 70 | Offset `0x0FC8`, mask `40`; free by setting | Offset `0x0C`, mask `40`; release by clearing |
 
-Compute the global coordinate as `0x0FBB + 5 + floor(page/8)` and the bitmap coordinate as `4 + floor(page/8)`. Preserve the other six bits in the page-80/81 byte and every unrelated map byte. Here G1 and M40 each need an allocation revision and a later retirement revision. The retirement image derives from the allocation image so it retains the new memberships. [^w-maps]
+Compute the global coordinate as `0x0FBB + 5 + floor(page/8)` and the bitmap coordinate as `4 + floor(page/8)`. Preserve the other six bits in the page-80/81 byte and every unrelated map byte. The starting final G1/M40 images combine the new memberships with retirement of 70. If repeated revisions are selected, derive retirement from allocation so it retains those memberships. [^w-maps]
 
 The example does not require erasing page 70 before it becomes free. The inspected PageChannel reference invalidates a short header prefix during deallocation, but that is its policy. CalcDb includes such a write only when the selected native rule requires it, retaining the old bytes for every remaining rollback/visibility obligation. Reuse of a freed physical page starts a new allocation incarnation even if the later contents happen to match old bytes.
 
-The displayed retirement candidate assumes its profile permits reuse after reference withdrawal. Shared LV retirement may additionally depend on native participant/retention conditions. II-09 and R-LOCK-4/WRITE-LV select those conditions and the corresponding native map state; withholding a page only in a private list cannot stop ACE allocating a page already marked free. Native reuse eligibility is separate from retaining an immutable old image for a CalcDb reader.
+The displayed final-map candidate places reuse after reference withdrawal, subject to the native investigation. Shared LV retirement may additionally depend on native participant/retention conditions. II-09 and R-LOCK-4/WRITE-LV select those conditions and the corresponding native map state; withholding a page only in a private list cannot stop ACE allocating a page already marked free. Native reuse eligibility is separate from retaining an immutable old image for a CalcDb reader.
 
 If the same operation instead appends pages, the graph includes explicit extent effects before any transfer to newly exposed bytes. A successful extent increase is not initialized native storage: Windows documents undefined contents in the newly extended range. A resize failure also has a separate outcome from a zero-byte transfer failure. The model includes the extent at its reported or uncertain length before native reopen. [^w-eof]
 
 ## 14. Index split and stable-root publication
 
-The byte-balanced split from II-05 turns the old 602-entry leaf containing Long 0…601 into a 259-entry left leaf containing −1 and 0…257, and a 344-entry right leaf containing 258…601. The recomputed payloads are 2,073 and 2,067 bytes. The new high fence is the complete entry for 257 at row root `(0x2101,5)`, not merely the scalar 257. Entry payload and child-pointer byte order remain the established index grammar. [^w-index]
+The byte-balanced split from II-05 turns the old 602-entry leaf containing Long 0…601 into a 259-entry left leaf containing −1 and 0…257, and a 344-entry right leaf containing 258…601. The recomputed payloads are 2,073 and 2,067 bytes. The new high fence is the complete entry for 257 at row root `(0x2101,5)`, not merely the scalar 257. Entry payload and child-pointer byte order use the index grammar described in II-05. [^w-index]
 
 **Figure F-60 — stable root changes role after its children are prepared.** Constructed isolated subtree; no ACE trace or atomic-root-write claim.
 
@@ -414,7 +430,7 @@ A nonroot split makes the ordering problem even clearer. Suppose existing right 
 
 There is no purely syntactic ordering that keeps every old and new traversal simultaneously complete. If R loses 0…257 before P selects L, an old parent descent can miss them. If P selects L first while R still holds all old entries, the right child's interval and leaf traversal can expose duplicates or inconsistent fences. Updating sibling links adds its own asymmetric cuts. A safe candidate cannot be justified by choosing a pleasing arrow order or by claiming “new pages are unreachable”: an ownership scan or a sibling link may already expose them.
 
-The phase compiler records that conflict explicitly. R-CRASH-1 must establish which missing/duplicate/repair outcomes occur under the native operation, whether it uses a real intermediate marking transition, and which data spans or repeats are required. If an accepted profile needs more than the displayed candidate, expand it into additional immutable revisions. Do not invent an index generation bit, reinterpret an opaque stamp, or add a shadow root hidden from ACE. This is a bounded implementation problem with concrete witness states, not a reason to stop implementing all splits until every native trace is complete.
+The phase compiler records that conflict explicitly. R-CRASH-1 investigates missing/duplicate/repair outcomes, any real native marking transition, and whether spans or repeated images are required. Exact classification and acceptance are settled during implementation. If the selected native policy needs more than the final-image candidate, expand it into additional immutable revisions. Do not invent an index generation bit, reinterpret an opaque stamp, or add a shadow root hidden from ACE. This is a bounded implementation problem with concrete witness states, not a reason to stop implementing all splits until every native trace is complete.
 
 ## 15. Catalog publication and deletion use the same physical machinery
 
@@ -422,25 +438,25 @@ A catalog operation can change data rows in MSysObjects, property/LV storage, MS
 
 For deletion, withdraw the relevant logical references before making their storage reusable. In particular, a drop with relationship endpoints cannot free a TableDef while a surviving endpoint names it, and deletion of a property LV cannot reclaim a packed page containing an unrelated live row. A shared physical index remains owned while another logical descriptor uses it. The compiler treats protected opaque references as retention obligations until the applicable capability can interpret them; absence from the modelled SQL graph is not proof of absence from the native file.
 
-DDL may require several revisions of the same system-table data/index page, just as the key update does. Preserving an old catalog row in RAM helps held readers; it does not make the on-disk catalog coherent during a partially completed change. Actual native marks, counts, discovery paths and post-crash repair behavior remain explicit. The operation's Workspace participation and failure scope are supplied by the transaction policy, not by the catalog helper's choice to call a writer.
+DDL starts with one composed final image per affected system-table page. The repeated-image fallback remains available if its native transition requires it. Preserving an old catalog row in RAM helps held readers; it does not make the on-disk catalog coherent during a partially completed change. Actual native marks, counts, discovery paths and post-crash repair behavior remain explicit. The operation's Workspace participation and failure scope are supplied by the transaction policy, not by the catalog helper's choice to call a writer.
 
 Tail truncation is last only after the actual reference/ownership closure proves that no surviving native object needs those pages. Retained readers must have alternate image backing and all overlapping loads/transfers must settle before the extent is shortened. A temporary lack of live table rows is insufficient if an index, bitmap, continuation page, native auxiliary structure or opaque object still occupies the tail. The preferred initial allocator can defer a valid truncation to avoid another risky transition; it must change that policy if native-visible length, allocation or failure semantics require the truncation in the operation under test.
 
 ## 16. Coalescing private work and compiling persisted rollback
 
-Repeated updates in a private outer transaction can avoid retaining a complete page copy for every scalar assignment. A scope needs the earliest before-image required for its own rollback, plus images still owned by nested frames, public views or pending physical phases. Its mutable final overlay can absorb later accepted changes. That memory optimization does not imply that all native effects may be collapsed to one final write.
+Repeated updates in a private outer transaction can avoid retaining a complete page copy for every scalar assignment. A scope needs the earliest before-image required for its own rollback, plus images still owned by nested frames, public views or pending physical phases. Its mutable final overlay can absorb later accepted changes. The starting publication unit composes one final image per page. Memory coalescing and a later evidence-selected repeated native program remain separate choices.
 
 Consider accepted updates 42→43 and then 43→44 to the same indexed row. If neither crossed the selected native persistence/publication frontier, the physical planner may derive the final row/key pair directly while retaining the two calls' counts, generated values, constraint/error observations and frame undo obligations. It may omit the intermediate stored 43 only when the operation/transaction profile permits the resulting crash classes. Native counters can record additions even when final row values cancel out; a 42→43→42 transaction is not automatically a physical no-op. A child commit also does not erase the parent's earlier rollback image.
 
-Within one physical program, two writes of page G may be merged only if all consumers of the intervening revision, all native reference/marking dependencies and all required observed persistence cuts remain satisfied. Equal final bytes alone are insufficient. In the LV example, combining allocation with release of page 70 would make the old page free before the data-row reference is withdrawn. In the key example, collapsing the two leaf images removes the very before/after relationship whose native crash effects are being qualified. Treat coalescing as a transformation with a named equivalence test and measured byte/request saving.
+Within the starting physical program, compose one final image of page G before native submission. The LV example makes its map placement a named question: map-before can retire old storage early, while map-after can expose new references before ownership. The key example directly compares two final-image orders with remove-first and add-first fallback programs. If a repeated program is later selected, further coalescing must preserve the observed dependencies and outcomes; final-byte equality alone is insufficient. Measure each alternative's request/byte cost rather than making the most expensive one the baseline.
 
 Rollback before any relevant database effect can release private revisions and reservations after restoring the selected scope's logical view. Once effects reached the native file, rollback is a new native program from the known physical progress to the required rollback target. It is not a reverse loop that writes every saved before-image in reverse submission order. Restoring maps can publish a free page too early, an old row can point to storage whose header was invalidated, and several logical undo records can alias one physical page.
 
-For the LV example, suppose the new definition and new index have been installed but page 70 has not yet been reclaimed. A candidate rollback first removes the new index reference, restores the old row definition while page 70 remains valid and owned, restores the old index entry, and only then releases 80/81 after all new references are gone. If page 70 was already retired, its required original data and ownership must be restored before the old row can point to it. If a phase partially overwrote page 17, the rollback compiler also needs the actual possible-effect classification; it cannot label the target restored merely because it owns D17's before-image.
+For the LV example, suppose the new definition and final index have been installed but page 70 has not yet been reclaimed. Build final restoration images for the selected scope over the current base: the old row definition, corresponding final index and required map changes. The row/index and map-order alternatives remain explicit. A required repeated-image rollback can remove the new index reference, restore the row, restore the old index entry and then retire new storage, but that is a fallback to investigate, not an automatic extra pair of leaf writes. If page 70 was already retired, establish its original target bytes and required ownership in the selected program before exposing an uninitialized reference. A partial page-17 overwrite retains its possible-effect classification; merely owning D17's before-image does not prove restoration.
 
-In shared mode, refresh and revalidate the restoration closure under its qualified native roles. Apply only the selected scope's reversal where other actors' changes must survive; a retired page number cannot identify an unrelated later occupant as rollback storage. The resulting program retains its own ownership intervals, before/current targets and progress through failure. The exclusive witnesses do not establish that a whole saved page remains a valid shared restoration target after a native protection gap.
+In Local mode, preserve other lockers' committed changes under the resolution gate and local grants. In External mode, additionally refresh and revalidate the restoration closure under its native roles. Apply only the selected scope's reversal where other actors' changes must survive; a retired page number cannot identify an unrelated later occupant as rollback storage. The resulting program retains its own ownership intervals, before/current targets and progress through failure. The exclusive witnesses do not establish that a whole saved page remains a valid shared restoration target after a native protection gap.
 
-Both rollback success and rollback failure retain the native policy's counts, generated-counter disposition, remaining Workspace state and admissible next actions. Restoration transfers themselves have crash cuts and errors. A rollback program must meet the same ACE-first baseline as a commit program; an emergency private repair or assumed successful buffer release cannot replace it. The optional recovery file is a separate, conditional feature and does not make this live rollback program authoritative after process death.
+Both rollback success and rollback failure retain the native policy's counts, generated-counter disposition, remaining Workspace state and admissible next actions. Restoration transfers themselves have crash cuts and errors. A rollback program must meet the same ACE-first baseline as a commit program; an emergency private repair or assumed successful buffer release cannot replace it. This is required live rollback. D-UNDO-2 is unplanned, and live spill or progress data becomes no private recovery authority after process death.
 
 ## 17. Execute from reserved receipts and stop on uncertainty
 
@@ -505,7 +521,7 @@ Keep buffered I/O as the initial adapter. `FILE_FLAG_NO_BUFFERING` has alignment
 The exact pinned Jackcess `PageChannel` contributes a useful contrast at the mechanism level. Its nested `startWrite`/`finishWrite` calls maintain a counter and optionally force on completion of the outermost logical write. Its ordinary writes operate directly on the file channel; allocation extends the file and updates the global free map; deallocation writes an invalid-header prefix; `flush` calls `force(true)` and Close calls flush. Those facts do not supply Workspace rollback, an ACE commit marker or native crash ordering. The full file and Apache-2.0 header were read for this chapter. CalcDb's program structures and algorithms above are original; none of those reference write or flush choices is adopted as an ACE requirement. [^w-channel]
 
 
-The chapter's cost model and R-CRASH-1/2 specifications below carry the workload measurements, independent reopeners and bounded evidence path for these concrete programs.
+The chapter's cost model and R-CRASH-1 specifications below carry the workload measurements, independent reopeners and bounded evidence path for these concrete programs.
 
 ## 19. Resolve an outer frame through an owned publication attempt
 
@@ -525,7 +541,6 @@ ResolutionAttempt {
                     program_id, effects_progress, source_state,
                     native_resolution_evidence, flush_evidence }
     publication_recipe, completed_logical_nodes, reserved_public_outcome_storage
-    optional_recovery_obligation          # includes a possibly Armed setup
     cancellation_requested, required_next_action
 }
 
@@ -546,7 +561,7 @@ Before selecting the preservation set or allowing a native effect to invalidate 
 
 At the qualified logical or failure outcome, apply the selected publication and release or convert each hold. A partial participant outcome can leave only the unresolved domains restricted. A private failure settles its hold according to the unchanged public state; uncertainty may retain restricted admission and the same resolution owner. No destructor or unconditional cleanup path reopens admission. The policy determines the relation to required flushes, so the hold is neither automatically released after the last write nor automatically retained until every force operation finishes.
 
-The publication recipe is prepared before persistence: which image/view bindings, catalog generations, cursor invalidations, counts and logical frame transitions must change together. Reserve its bounded metadata, deferred-release queue and the minimal error/progress record then. Publication performs no disk reads, user callbacks or unbounded allocation. Detach obsolete VARIANT/interface-backed owners into that queue; drain it outside publication permits and metadata latches while the attempt still owns its continuation, because destruction can reenter the host. Detailed diagnostics may use separately fallible storage; losing those diagnostics cannot lose the minimum record of what was attempted. Do not use an error-string allocation failure as a reason to erase a completed native operation.
+The publication recipe is prepared before persistence: which image/view bindings, catalog generations, cursor invalidations, counts and logical frame transitions must change together. Reserve its bounded metadata, deferred-release queue and the minimal error/progress record then. Publication performs no disk reads, user callbacks or unbounded allocation. Detach obsolete VARIANT/interface-backed owners into that queue; on success, first publish the selected result and release the ViewAdmissionHold, resolution gate and publication latches, then drain it while the attempt still owns its continuation. Destruction can reenter the host and open a fresh view; it must not meet a hold that exists only because cleanup was ordered too early. A failure path retains the admission restrictions required by its actual unresolved outcome rather than claiming successful publication. Detailed diagnostics may use separately fallible storage; losing those diagnostics cannot lose the minimum record of what was attempted. Do not use an error-string allocation failure as a reason to erase a completed native operation.
 
 **Figure F-61 — one resolution attempt with separate persistent and logical outcomes.** This is CalcDb's proposed internal state machine; it does not assign an ACE on-disk commit state.
 
@@ -564,7 +579,7 @@ flowchart TD
     G -->|"Evidence permits resolution"| F
 ```
 
-The edge from known failure to publication can publish a surviving prefix or a failed rollback outcome. It does not mean that every failure is recoverable automatically. The continuation can require an explicit caller operation or an independent reopen, selected by R-TXN-1/R-CRASH-2. The private-failure edge is available only before any nonrepeatable logical/publication/frame transition or possible native database effect. An empty commit can take the no-native-work success edge; a later error must retain its resolved frame even though no page was written.
+The edge from known failure to publication can publish a surviving prefix or a failed rollback outcome. It does not mean that every failure is recoverable automatically. The continuation can require an explicit caller operation or an independent reopen, selected by R-TXN-1/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE. The private-failure edge is available only before any nonrepeatable logical/publication/frame transition or possible native database effect. An empty commit can take the no-native-work success edge; a later error must retain its resolved frame even though no page was written.
 
 ```text
 ResolveOutermost(workspace, requested_intent, budget) -> ResolutionReceipt:
@@ -572,21 +587,39 @@ ResolveOutermost(workspace, requested_intent, budget) -> ResolutionReceipt:
     require matching live Workspace/frame incarnation and owner
     claim the resolution slot, retain Workspace/frame ownership and arm its guard atomically
     try:
-        bind the selected transaction and failure policies
+        bind the selected transaction, failure and native profile policies
         retain the preparation input view/private-read context
         freeze accepted effects, generated values and candidate private revisions
         discover the full currently known participant/mutation closure
         reserve known resources and bounded view-admission ownership
-        acquire/revalidate required native roles without metadata latches
-        for shared sources, refresh/revalidate and rebase retained effect-free deltas
-        close the physical footprint without replaying accepted semantic work
+        select Local mode, or External mode with additional native roles
+        preflight local claims for all known participants using finite native policy
+        if mode is External:
+            preflight known native roles for all participants in admitted order
+        for participant in admitted stable identity order:
+            prepared = PreparePublicationProgram(participant.accepted_delta,
+                         selected_scope, mode, participant.profile, budget)
+            if prepared is Failure:
+                # settle earlier still-private gates through the same retained attempt
+                return resolve_known_failure_by_native_policy(attempt,
+                           prepared.captured_conflict_or_error)
+            if prepared is ReplanPhysicalPreparation:
+                release this attempt's still-private publication gates
+                retain transaction grants, accepted effects and owner receipts
+                return drive_owned_physical_replan(attempt, finite_policy)
+            retain prepared.program, current-base certificate, gate and claims
+            # PreparedParticipant remains owned by this ResolutionAttempt
+        # each helper alone enters its gate; it never waits for a new conflict
+        # while this attempt holds another participant's publication gate
+        if the complete footprint differs from the sealed participant set:
+            release this attempt's still-private publication gates
+            return drive_owned_physical_replan(attempt, finite_policy)
         claim logical fresh-view admission holds in the admitted participant order
         snapshot registered views plus independent preservation obligations
         reserve remaining history/program/rollback capacity outside latches
-        compile operation-specific programs and their legal resolution boundaries
+        verify sealed operation programs and bind their legal resolution boundaries
         prepare allocation-free in-process publication recipe
         confirm all semantic dependencies without replaying completed effects
-        prepare optional recovery only if this exact operation/backend qualifies
         revalidate claimed owner/frame/operation generations after callbacks/waits
         if cancellation can settle before nonrepeatable resolution effects:
             return settle_private_attempt_by_policy(attempt)
@@ -604,7 +637,7 @@ ResolveOutermost(workspace, requested_intent, budget) -> ResolutionReceipt:
         record final participant evidence and return the selected public outcome
     on error before any nonrepeatable logical/publication/frame transition
                     and before any possible native database effect:
-        settle private scope and any possibly Armed optional-record obligation
+        settle only this locker's private scope and retain its required failure receipt
         release only resources whose obligations have resolved
         return the retained primary error and frame continuation
     on any other error:
@@ -618,11 +651,11 @@ The resolution program combines the native effect graph with typed `PublishViews
 
 A qualified stop can hand the attempt to a native rollback or another explicit resolution continuation. `HandedOff` is distinct from completion of the original program: transfer its receipts and ownership once, without asserting that the abandoned suffix completed or executing resolution twice. The receiving handler drives call-owned work to its permitted boundary before the blocking call returns. Only state that the captured public policy allows to remain with a named transaction/file owner can outlive the call; a handoff is not permission for unowned background work.
 
-An optional-record setup can have persistent effects before any database write. A failed seal may leave a possibly Armed record, so private-attempt failure settlement must retain or retire that obligation before allowing later writes. The optional-undo section gives the disarm protocol; releasing the frame or merely disabling the option does not erase a persistent record. A failure to settle that obligation remains in the permitted continuation even when the database itself is unchanged.
+The resolution gate is not retained for an entire open transaction. Another compatible local locker can already hold private changes. Its later publication reconstructs those accepted changes on the newly committed base. Releasing this attempt's private state or rollback scopes cannot erase those other private changes or their grants. Reentrant resolution of the same owner still follows its active-attempt policy.
 
 The resolution claim is protected immediately, including policy-binding failure. Every exit after a successful claim releases a still-private claim or transfers the same attempt to its retained continuation. Every callback, wait and deferred destruction that can change ownership ends with an incarnation/generation check before work continues; the displayed check before submission is the final one, not the only one. A nested Close or rollback can invalidate the preparation, but cannot free an image or effect receipt still owned by this attempt. After effects begin, the executor preferably returns total typed outcomes. Record each completed logical node alongside native progress, including when an empty commit has no native program. Unexpected errors in publication, flush, result construction or error mapping use the same retained-attempt path, never an unwinding destructor that implies successful rollback or revives an already resolved frame.
 
-For multiple files, the result is a vector, not one Boolean. If file A's writes completed, file B's write is uncertain and file C was never touched, retain those three facts. A forced flush of A does not flush B by implication. Stable participant ordering reduces avoidable deadlocks and gives repeatable traces, but supplies no cross-file power-loss atomicity. When late participant discovery changes the resource order, settle or replan only work that is still repeatable; never rerun an accepted callback or silently commit one participant to escape the ordering problem. The exact native partial-failure disposition remains TXN-MULTI/R-CRASH-2 evidence.
+For multiple files, the result is a vector, not one Boolean. If file A's writes completed, file B's write is uncertain and file C was never touched, retain those three facts. A forced flush of A does not flush B by implication. Stable participant ordering reduces avoidable deadlocks and gives repeatable traces, but supplies no cross-file power-loss atomicity. When late participant discovery changes the resource order, settle or replan only work that is still repeatable; never rerun an accepted callback or silently commit one participant to escape the ordering problem. The exact native partial-failure disposition remains TXN-MULTI/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE evidence.
 
 Within one process, acquire a short publication permit for the required set of file/view generations at the selected transition. The earlier admission holds have already closed the preservation race. Readers admitted to an older view keep its backing; readers that require the newly published state cannot combine an old index with a new data page by separately observing page writes. II-03 detaches old native backing before overwrite, so pending loads and retained snapshots do not reread historical bytes from an already changed file. This ownership rule is independent of the DAO visibility policy: it does not force all cursors onto the same snapshot. Shared-mode reloads require II-09's still-valid source certificate or independently owned immutable inputs; local serials and in-process multi-file ordering do not establish external freshness or atomicity.
 
@@ -630,7 +663,7 @@ On uncertainty, mark the affected native sources and participant state unresolve
 
 ## 20. Cancellation and teardown preserve the same attempt
 
-Cancellation is an input to the current attempt, not a replacement for its result. Before nonrepeatable resolution transitions or native database effects, a private preparation can be abandoned according to statement/transaction scope while retaining any optional-record obligation. An already completed logical transition remains completed even when no native write was needed. After a native request has been submitted, the file handle, immutable source bytes, request state and effect receipt must remain owned until completion is known or the adapter has retained the uncertainty in a surviving owner. II-03 supplies that request-lifetime mechanism. The Workspace coordinator decides which logical obligations remain afterwards.
+Cancellation is an input to the current attempt, not a replacement for its result. Before nonrepeatable resolution transitions or native database effects, a private preparation can be abandoned according to statement/transaction scope while retaining the required failure/cleanup receipt. An already completed logical transition remains completed even when no native write was needed. After a native request has been submitted, the file handle, immutable source bytes, request state and effect receipt must remain owned until completion is known or the adapter has retained the uncertainty in a surviving owner. II-03 supplies that request-lifetime mechanism. The Workspace coordinator decides which logical obligations remain afterwards.
 
 The supplied asupersync report parts contribute two concepts here: explicit obligations that survive a cancellation request, and a drain/finalize sequence before an owner closes. CalcDb adopts their purpose through its existing blocking call and file-session design. It does not import a runtime, require actors for DAO objects, or interpret runtime task cancellation as database rollback. The supplied report's trace-loss lesson also applies: a truncated diagnostic trace cannot silently count as a complete replay. [^r-obligations]
 
@@ -640,50 +673,54 @@ The supplied asupersync report parts contribute two concepts here: explicit obli
 | After defaults, generated values or callbacks, before native writes | Preserve completed effects and generation tickets while resolving the selected private scope. | Which effects/counters survive cancellation or failed posting. |
 | During a native write or flush | Record the request; settle request ownership and collect progress before classifying the attempt. | Whether native effects completed, failed or remain uncertain. |
 | After native survival, before public return | Preserve the surviving commit and its outcome receipt. | Actual return/error/lifetime behavior; no cancellation-induced reversal of required survival. |
-| During live rollback or optional recovery | Treat the rollback writes as their own program with progress and crash cuts. | Allowed interruption, remaining state and next-opener behavior. |
+| During live rollback | Treat the rollback writes as their own program with progress and crash cuts. | Allowed interruption, remaining state and next-opener behavior. |
 
 No metadata latch is held while waiting for I/O, running a callback or invoking a release path that can reenter user code. Before native submission, reentry can invalidate descriptors or dependencies; the continuation must use retained accepted work, a qualified stable view or a captured failure. After submission, a reentrant attempt to mutate or resolve the same owner must pass the active-attempt policy. It cannot take a second writer role while the first attempt's progress remains unresolved. R-TXN-1/TXN-CLOSE and the cursor/host reentry experiments determine the public behavior; internal serialization must not expose an accidental deadlock.
 
-A Close-triggered rollback is an explicit coordinator event with a cause and affected object/frame identities. Final interface release is a separate event. Destructors release only resources they still own; they cannot perform an unrecorded best-effort rollback and then hide its failure. During process destruction, there may be no caller to receive a failure. The file state still has to meet the native crash baseline, and any outstanding recovery eligibility has to be interpreted exactly as it would after abrupt death. No clean-shutdown path is used as evidence for the process-kill case.
+A Close-triggered rollback is an explicit coordinator event with a cause and affected object/frame identities. Final interface release is a separate event. Destructors release only resources they still own; they cannot perform an unrecorded best-effort rollback and then hide its failure. During process destruction, there may be no caller to receive a failure. The file state still has to meet the native crash baseline, and retained live spill is not treated as crash recovery authority. No clean-shutdown path is used as evidence for the process-kill case.
 
 The first implementation should keep cancellation checkpoints outside small, nonallocating publication transitions and preserve native-request ownership across every wait. This is a bounded critical section, not a promise that the surrounding commit is uninterruptible. Whether work runs on the caller thread or on a host-scheduled worker changes who waits, not the file and transaction obligations. A WASM backend exposes its own completed/uncertain effect contract through the same attempt; it cannot report Windows force-flush semantics merely because a JavaScript storage promise resolved.
 
-## 21. Crash comparison uses a fault model and an outcome relation
+## 21. Crash comparison: the goal, preferred evidence and implementation boundary
 
-**Requirement trace:** RQ-STORE-04, RQ-STORE-05, RQ-SIM-02, RQ-ORACLE-02, RQ-ORACLE-05 and RQ-CALL-04. R-CRASH-1/2 qualify native crash behavior. D-UNDO-1's ACE-first baseline remains Decided; the proposed phase order remains Provisional.
+**Requirement trace:** RQ-STORE-04, RQ-STORE-05, RQ-SIM-02, RQ-ORACLE-02, RQ-ORACLE-05 and RQ-CALL-04. **D-UNDO-1 remains Decided.** R-CRASH-1 investigates native crash behavior; D-WRITE-1 is the Provisional writer direction. PRD-07 keeps the goal and leaves the exact method and pass condition to implementation.
 
-The reference unit is a named operation under a captured environment and failure model. The environment includes the actual ACE/Access binary versions and hashes, file format/profile, bitness, locale, engine options, filesystem/storage configuration, participant set, open modes and transaction history. The starting oracle is the user's reported ACEDAO.DLL 16.0.20527.20016; the harness still captures what was actually loaded. The .NET Framework 4.8-family and .NET 10 caller lanes retain their own activation and interop metadata. A changed runtime or provider is not silently treated as the same oracle case.
+The goal is that the next ACE, Access or CalcDb opener finds a state no worse than the corresponding ACE crash, with the same commit-survival rules, including `dbForceOSFlush`. Prefer recording ACE's writes, extent changes and flushes with their contents, rebuilding candidate crash images offline, and classifying them through independent ACE, Access and Compact & Repair branches. Export CalcDb's distinct modeled cut images to those same openers. Capturing native input artifacts and merely inspecting CalcDb internally would leave one side of the comparison missing.
 
-Use at least three fault families. Process death retains the running operating system and whatever cache behavior follows termination. OS/VM loss discards a declared set of volatile state. Torn or misdirected storage faults additionally require an explicit transfer/sector model. One family's observations do not establish another's rules. Failure injection that returns a disk-full error while the process continues is a fourth kind of experiment with a live continuation; it is not a process crash in disguise.
+Each case names its operation, preceding transaction history, file profile, loaded engine/Access/provider/client identities, options and storage/fault model. ACEDAO.DLL 16.0.20527.20016 remains the original user report; PRD-02's Office C2R 16.0.20527.20150 report is separate. Future runs capture actual components rather than substituting either report for a loaded identity. Framework 4.8-family and .NET 10 retain distinct client receipts.
 
-Keep the native interrupted database image immutable and branch each next-opener experiment independently. The observable outcome includes the logical rows and typed values, indexes and relationships, catalog/schema objects, generated counters, commit survivors, errors, repair requests, native state bytes and database/lock-file mutations. Relevant TEMP existence and contents are supporting evidence. An ACE open that repairs or rewrites the file changes the state; Access, Compact & Repair and CalcDb must therefore start from their own copy or identity-preserving snapshot of the original interrupted state.
+Distinguish process death, OS/VM loss and declared torn/reordered storage faults. A live injected I/O or allocation failure retains the coordinator and has subsequent-call behavior; it is not a crash. Process death retains the OS/cache and can allow pending I/O completion or cancellation. A trace's write-submission order therefore does not by itself define every possible process-crash image, and a successful API completion is not a power-loss persistence receipt.
 
-Do not implement "no worse" as a single health ranking such as clean < needs repair < unreadable. A clean database that loses a required surviving commit is wrong. A successful repair that discards rows is not the same outcome as ordinary-open success. Establish a per-case comparison relation with explicit commit-survival constraints and admitted reopen/repair classes. Prefer the same evidenced class, including a native needs-repair indication when the corresponding native case requires it. Any accepted refinement must be justified against the user's no-worse requirement and the same commit rules; it is never inferred from a pleasant-looking final database.
+Use collected observations to develop the comparison relation. Useful fields include ordinary-open result and ordered errors; repair requested/result; required, allowed and forbidden commit survivors; typed rows and schema; and content lost or changed after repair. Native state bytes, raw structural findings, lock-file changes and TEMP artifacts support interpretation. They are not silently promoted into a fixed class identity merely because the record can capture them.
 
 ```text
 CrashCase {
-    immutable_fixture_id, operation_script_id, environment_id
-    transaction_history, accepted_effect_inputs, public_acknowledgements
-    observation_boundary, fault_model, trigger_and_observed_cut
-    trace_coverage, frozen_database_set, lock_and_temp_state
+    fixture_id, operation_script_id, environment_id, transaction_history
+    accepted_effect_inputs, public_acknowledgements, timing_and_order_branch
+    observation_boundary, fault_model, requested_and_observed_cut
+    payload_trace_coverage, frozen_database_set, lock_and_temp_evidence
 }
 ReopenObservation {
     opener_identity_and_options, starting_image_identity
     open_result_and_ordered_errors, repair_request_and_result
-    surviving_logical_changes, typed_rows_and_schema, generated_state
+    surviving_changes, typed_rows_and_schema, generated_state
     structural_findings, changed_native_ranges, lock_file_changes
 }
 ```
 
-Separate observed examples from established bounds. A commit surviving one ordinary-commit trial does not establish that every such commit must survive. A commit lost in a trial does not authorize losing every acknowledged commit. Documentation, controlled variation and the storage model determine which conclusions the capture supports. Preserve ambiguous and contradictory cases with a reduced next experiment; do not normalize them out of the compatibility denominator.
+“No worse” is not a single clean/repair/unreadable ranking. A clean file that loses a required surviving commit does not meet the goal. A repaired file with data loss is not equivalent to ordinary-open success. Conversely, an evidenced needs-repair state after an interruption is not automatically a failed completed-write test: normal completion and crash comparison have different conditions.
 
-T-COMPACT-1 continues to apply to completed healthy output. Its baseline, positive controls and semantic/structural comparisons distinguish normal repacking from a repair. Interrupted files use the corresponding native crash class, so an ACE-equivalent needs-repair result is not rejected merely for failing the healthy-output condition. Conversely, successful Compact & Repair never rescues a completed mutation that should already have opened normally. The test performs no automatic in-place repair before the ordinary-open branches.
+Exact crash classification is ambitious and may not be fully achievable. Implementation fixes the observation boundary, attainable coverage, class relation, precise pass conditions and what follows for writes whose classes cannot be established. The book neither declares that unknown classes are safe nor pre-decides a universal refusal policy for them. Preserve every missing/contradictory observation and reduce the next experiment. A sample is an observation, not an exhaustive bound; a modeled enumeration is complete only for its stated model.
+
+T-COMPACT-1 addresses completed output separately. Its preferred write/structure/observer mapping is in II-15 §15, with the closed per-write list completed during implementation under PRD-08. Successful repair never retroactively supplies ordinary-open success for a completed write.
+
+The tests in §31 distinguish the evidence mechanism from the native conclusion. A complete exported cut proves which bytes that model produced; it does not prove that ACE can leave the corresponding state. A recorded request with owned payloads can still lack a safe controllable cut. CRASH-OBS/CONTROL retain both facts, while CRASH-RELATION carries the native histories, opener observations and unresolved correspondence. The implementation's later comparison records its relation version without changing the original captures.
 
 ## 22. Observe writes without confusing observation with control
 
-W-PROBE first builds a passive trace of the smallest fixed-row update/commit and a second fixture that changes allocation or an index shape. Register the relevant open, write, flush, extent, lock and cleanup/close observations against verified file identities. Record the database, its native lock file and relevant TEMP files separately. Filtering only the original user process is insufficient as a completeness criterion: the declared observation boundary must account for all operations that reach the targeted file at that boundary.
+W-PROBE first records payload-bearing writes and flushes for the smallest fixed-row update/commit and a second fixture that changes allocation or an index shape. Record open, extent, lock and cleanup/close observations against verified identities too, covering the database, native lock file and relevant TEMP files. Retain payloads and completion/uncertainty so candidate images can be reconstructed offline. Filtering only the original process is insufficient: the declared observation boundary must account for the relevant operations that reach the target files.
 
-Use the charter's isolated, owned-process oracle environment. The run does not install kernel components or change Trust Center, macro-security or HKLM settings; a filter-based lane requires an already configured test environment with that observation capability. If it is unavailable, record the missing capability and use the bounded observation path below. Only terminate the specific harness-owned process instance, verified through its retained handle and creation identity. An ordinary user's running Access instance is never a convenient substitute.
+Use the isolated, owned-process oracle environment. PRD-07 permits building and using low-level observation/control tooling, including a kernel driver, where it helps capture the required effects; proprietary binaries must not be decompiled. The observation capability is an external input listed in II-16, with its final method settled during implementation. This does not authorize changing Office Trust Center or macro-security settings as part of a case. Terminate only the harness-owned process instance identified by its retained handle and creation identity.
 
 Microsoft's minifilter interfaces allow separate preoperation and postoperation callbacks and allow cached or paging I/O to be skipped. Read/write requests also have both IRP and fast-I/O forms. The probe must retain these distinctions and must not configure away a relevant class while advertising complete write coverage. [^r-filter-register][^r-filter-fast]
 
@@ -695,22 +732,21 @@ An observed callback is not necessarily a place where the experiment can pause s
 
 Filter placement is another coverage limit: I/O generated by a minifilter can be directed below a particular instance and is then visible only below that point. This public mechanism is a reason to calibrate the probe's observation boundary, not evidence that ACE uses such an unobserved path. [^r-filter-generated] A test driver exercises each claimed request class and checks which observations arrive. Trace completeness is established relative to that tested boundary; it is not inferred from a large event count.
 
-**Figure F-62 — capture and independent first-opener branches.** Each branch receives the frozen interruption state. The capture does not run one opener to prepare another's input.
+**Figure F-62 — recorded/reconstructed images and independent first openers.** Each branch receives an immutable candidate state, preserving whether it was captured or reconstructed.
 
 ```mermaid
 flowchart TD
-    A["Immutable fixture and operation script"] --> B["Native run with external observations"]
-    B --> C["Controlled fault and captured completion state"]
-    C --> D["Frozen database, lock and TEMP evidence"]
-    D --> E["ACE first"]
-    D --> F["Access first"]
-    D --> G["Compact and Repair first"]
-    D --> H["CalcDb first"]
-    E --> I["Compare survival and reopen classes"]
-    F --> I
-    G --> I
-    H --> I
+    A["Fixture and native operation"] --> B["Record payloads, writes and flushes"]
+    B --> C["Reconstruct candidate cuts under model"]
+    A --> D["Capture controlled interruption where available"]
+    C --> E["Immutable database, lock and TEMP state"]
+    D --> E
+    E --> F["Independent ACE, Access and Compact branches"]
+    G["Export CalcDb cut images"] --> F
+    F --> H["Record outcomes and classification limits"]
 ```
+
+Offline reconstruction starts from the exact fixture and replays only effects permitted by the recorded boundary and selected fault model. Submission prefixes are candidate constructions, not an assertion that they exhaust process-death states; pending completion/cancellation, repeated/overlapping writes, extents and subsequent cache behavior still matter. Power-loss candidates apply the declared persistence constraints between observed flushes. Retain each reconstruction recipe and its supporting coverage; a dropped payload cannot be replaced with guessed bytes. The method for establishing model completeness remains implementation work.
 
 For process death, record both the termination request and process termination. `TerminateProcess` initiated by another process is asynchronous and requests cancellation of pending I/O; termination waits for pending I/O to complete or cancel. A controller must therefore distinguish the trigger from the later observed cut. Holding an I/O indefinitely while waiting for process termination can prevent that termination from completing; the probe needs a bounded, documented request-release/cancellation protocol. [^r-terminate]
 
@@ -718,307 +754,127 @@ After death, capture the continuing file/cache effects at the declared process-c
 
 A native lock file is evidence, not a substitute for the kernel's live lock state. Capture its bytes and existence before interruption, after the modeled fault and after each independent opener. Never delete a supposedly stale lock file to make a branch pass. Lock release and delayed cleanup can explain an opening failure; retain those events alongside the error instead of treating every failed open as database corruption.
 
-The full experiment matrix covers insert/update/delete, same-width and relocating rows, short and chained LV replacement, usage-map transitions, index split/root/empty-page changes, generated counters, compound cascades, table/index/relationship/property/QueryDef mutations, nested/statement/multi-file resolution, ordinary and forced commit, and live rollback. Start with the small fixtures; add the format-specific classes as their byte interpretation becomes available. The external ACE probe does not depend on a completed CalcDb writer or a complete SQL implementation.
+The full experiment matrix covers insert/update/delete, same-width and relocating rows, short and chained LV replacement, usage-map transitions, index split/root/empty-page changes, generated counters, compound cascades, table/index/relationship/property/QueryDef mutations, nested/statement/multi-file resolution, ordinary and forced commit, and live rollback. CRASH-NEW adds creation from an absent destination through initial-image publication, preserving no-file, empty, partial and completed-image outcomes. Start with the small fixtures; add the format-specific classes as their byte interpretation becomes available. The external ACE probe does not depend on a completed CalcDb writer or a complete SQL implementation.
 
-## 23. Enumerate persistence cuts, including states outside API prefixes
+## 23. Enumerate and export cuts for the selected final-image or fallback program
 
-The deterministic VFS runs the actual CalcDb coordinator, phase compiler and pager. It separately models application-visible bytes, pending cached effects, stable storage, file length, request completion and loss/tearing rules. Model parameters are evidence-backed assumptions, not fixed claims that every 4,096-byte page is atomic or every completed write is stable. A seed records one exploration; a systematic scheduler explores the dependency-respecting alternatives needed by a small fixture.
+The deterministic VFS runs the actual coordinator, page compiler and pager. It keeps application-visible bytes, cached effects, stable bytes, extents, completion and loss/tearing rules separate. Its parameters are declared assumptions to calibrate against adapters and native captures. Neither a complete page nor a completed write is assumed atomic/stable.
 
-For a concrete reasoning example, use three application-ordered writes:
+Use §12's one-final-image indexed update. `I0/D0` is the original pair, `I2/D1` the intended pair. Under an **illustrative whole-image model** that lets the latest stable version of each page advance independently, the final-image program has `{I0,I2} × {D0,D1}`. The remove-first fallback adds `I1`, the leaf lacking the old entry. This simple model deliberately omits tearing and makes no native storage guarantee.
 
-1. Index page 44 becomes `I1`, with the obsolete entry removed.
-2. Data page 17 becomes `D1`, with the new row value.
-3. Index page 44 becomes `I2`, with the new entry installed.
+**Figure F-63 — four final-image pairs and two extra remove-first fallback pairs.** Constructed model states, not observed ACE outcomes.
 
-`I0` and `D0` are their original images. Under an **illustrative whole-image model** that permits the latest retained stable version of each page to advance independently, the possible pairs after all three write completions are the product `{I0,I1,I2} × {D0,D1}`. This model intentionally omits tearing so the ordering issue can be seen; it is not a native storage guarantee.
-
-**Figure F-63 — six constructed stable-image pairs versus four application-prefix pairs.** None is labelled an observed ACE outcome.
-
-| Stable index / data pair | An application-prefix image? | Question exposed |
+| Index/data pair | Final-image candidate | Question exposed |
 | --- | --- | --- |
-| `I0 / D0` | Yes: before the first write | Original state remains. |
-| `I1 / D0` | Yes: after obsolete-key removal | Old row remains but its old index entry is absent. |
-| `I1 / D1` | Yes: after the row write | New row exists before its new index entry. |
-| `I2 / D1` | Yes: after new-key installation | Intended row/index pair. |
-| `I0 / D1` | No | New row can coexist with the old index image in this model. |
-| `I2 / D0` | No | New index image can coexist with the old row image in this model. |
+| `I0 / D0` | Original state for either order | No visible final change at this boundary. |
+| `I0 / D1` | Data-first application prefix; also a possible independent stable pair | New row with old index. |
+| `I2 / D0` | Index-first application prefix; also a possible independent stable pair | New index with old row. |
+| `I2 / D1` | Complete final pair | Intended row/index state. |
+| `I1 / D0` | Remove-first fallback only | Old row with missing old entry. |
+| `I1 / D1` | Remove-first fallback only | New row with missing new entry. |
 
-Testing only after each API write misses the last two pairs. Adding torn sectors, partial extent operations, overlapping range writes or a failure during rollback introduces further states. A successful modeled terminal flush can constrain this simple model to the final pair, but only to the extent promised by that model. The real adapter's declared flush/device contract and ACE's forced-commit behavior must justify the corresponding claim. Do not add a flush between every pair merely to make the enumeration smaller: it changes the program and may change ordinary-commit survival.
+Add-first has its own `Iboth/D0` and `Iboth/D1` states. These do not appear in the one-final-image program. Model the selected program rather than imposing fallback images on every edit or omitting them when that fallback is exercised. A terminal flush narrows a model only according to its declared contract. Additional tears, overlaps and extent operations create additional actual byte images; do not add arbitrary phase flushes merely to reduce the count.
 
 ```text
-ExploreCuts(fixture, program, storage_model, evidence_relation):
+ExploreCuts(fixture, program, storage_model, comparison_policy):
     frontier = one state containing coordinator, pager and model snapshots
     while frontier has unexplored state:
         s = remove one state
-        validate ownership, bounded images and this phase's admitted graph obligations
-        for event in enabled completions, persistence events, faults and call events:
+        validate ownership and this phase's declared local graph obligations
+        for event in enabled completions, persistence events, faults and calls:
             next = execute the real component transition under event
             record event, effects and any public acknowledgement
             if event is a selected crash:
                 for frozen in storage_model.allowed_post_trigger_closure(next):
-                    compare phase/model invariants and native outcome relation
-                    retain unresolved outcomes rather than declaring success
+                    retain exact bytes/extents and reconstruction recipe
+                    export each distinct database set and lock/TEMP input state
+                    run independent ACE, Access and Compact & Repair branches
+                    retain raw opener outcomes and model/invariant results separately
+                    compare under the implementation's current policy, or record unresolved
             else:
                 enqueue if its relevant state/evidence key is new
 ```
 
-The state key includes surviving native bytes/extents, pending effects, current program node, logical frames, accepted semantic effects, publication generations, force/acknowledgement evidence and relevant resource ownership. Equal database hashes alone do not identify equivalent simulator states: two states can contain identical current bytes while differing in a pending flush, an Armed optional record or an already acknowledged commit. Partial-order reduction can commute genuinely independent operations only when these retained observations and future transitions are equivalent. It cannot commute two writes to the same map page just because they originated from different logical maps.
+Deduplicate exported byte-identical images only while retaining every operation/history/model link that gives them different survival obligations. The simulator state key also includes pending effects, program node, logical lockers/frames, accepted semantic effects, publication generations and force/acknowledgement evidence. Equal file hashes do not make pending flushes or already acknowledged commits equivalent. Partial-order reduction can commute only genuinely independent future observations and effects; two allocations sharing one map byte are not independent.
 
-Structural assertions are phase-specific. The key-removal intermediate image can intentionally lack an entry while remaining a validly decoded page; it must satisfy its admitted crash class, not the final graph's row/index completeness invariant. The post-trigger closure is also fault-specific. Process termination explores permitted pending-I/O completion/cancellation and subsequent cache effects before the chosen capture boundary. OS/device loss applies the declared volatile-state loss and storage rules. A live injected I/O error continues through the coordinator's ordinary failure transition instead of being frozen as if the process had died.
+Assertions are phase-specific. A fallback leaf lacking one entry can remain a validly decoded page without satisfying final row/index completeness. Its native acceptability is the crash investigation's question. Process-death closure accounts for pending-I/O settlement and subsequent cache effects; OS/device loss drops the declared volatile state. A live I/O error instead follows the coordinator's failure continuation.
 
-A failing trace retains exact source images, input and model versions, operation script, event ordering, fault details and comparison evidence. Reduction removes logical rows, effects or schedule choices only while preserving the same failure classification and required preconditions. Replaying a byte mutation against a different page-layout profile is not a reproduction. The supplied clean-room reports contribute deterministic replay and reduction concepts, not a claim that their SQLite/runtime crash model is ACE's. [^r-replay]
+Retain exact inputs, model/build versions, events, source images and opener results for reduction. A reduced case must preserve the fault family and defining discrepancy. The cleared reports contribute deterministic replay/reduction concepts, not an ACE crash model.[^r-replay]
 
-If complete ACE write-point capture cannot be achieved, keep the same writer direction. Continue complete CalcDb cut exploration for the declared model, externally bracket native operations/commits, reduce unexplained native states and qualify only supported operation/environment cases. An uncontrolled trigger, missing write class or dropped trace remains a named coverage limitation. Other writer cases can advance while a difficult case remains experimental. The full native writer remains scope; a private WAL, atomic file replacement or a stronger universal atomicity promise cannot replace the missing evidence.
+If full ACE capture is unavailable, continue this CalcDb exploration alongside smaller recorded native runs, public-operation milestones and independent openers. Preserve coverage limits rather than calling timed kills exhaustive. As §21 states, implementation settles the precise comparison, pass condition and treatment of unresolved classes. The native writer remains the architecture and product goal.
 
-## 24. Native opening remains authoritative during failed recovery
+## 24. Native opening and the conditional optional-undo constraints
 
-**Requirement trace:** RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05, RQ-LOCK-01, RQ-LATE-04 and RQ-SIM-02. **D-UNDO-1 remains Decided** by the user's crash-baseline and external-change-check instructions. **D-UNDO-2 — Provisional:** use the bounded private record below with one-shot disarm before recovery writes, initially for qualified complete-before restoration profiles. R-CRASH-2 selects the private representation, lifecycle and operation/backend enablement; it does not reopen the user's external-change predicate.
+**Requirement trace:** RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05, RQ-LOCK-01, RQ-LATE-04 and RQ-SIM-02. **D-UNDO-1 remains Decided. D-UNDO-2 is Retired.** Normal and post-crash opening follow native state recognition and the ACE-first goal. No private undo file is required for ACE, Access or CalcDb to open. A needs-repair result is reproduced where appropriate; opening does not silently clear a guessed marker or run the later CalcDb repair engine.
 
-The normal opener first establishes the native file identity and admission lease, then recognises the database state using the same native rules whether a CalcDb undo record exists or not. Before the optional audit completes, this recognition is read-only: no main-file cleanup, repair, open-time stamping or native marking may change the bytes being compared. Lock-file effects required to acquire the qualified lease remain separately recorded; they do not authorise a main-file mutation. A missing, incomplete, disarmed or rejected record leaves the native opening policy in force. In particular, a native needs-repair state is not permission to guess a repair flag, clear an unknown header field, run Compact & Repair automatically, or restore arbitrary pages from the private record. A successfully completed ordinary write must satisfy T-COMPACT-1; an interrupted write is compared with the corresponding ACE crash class. Those are distinct acceptance conditions.
+Optional undo remains only a recorded idea, to reconsider if real write programs show a useful recovery window. There is no planned codec, state machine, arming/disarming protocol or recovery writer. Live rollback still uses the owning coordinator's accepted-effect and native-progress receipts. Surviving temporary spill does not acquire that authority after process death.
 
-Live rollback and crash recovery have different evidence. A live coordinator retains the precise operation scope, attempted-write receipts, completed semantic effects and generated-value dispositions. It can compile a native rollback program from that evidence where the selected failure policy calls for rollback. A reopened process has none of those volatile facts. It can use an optional record only after its immutable data, control state, identity, lengths and complete current-file image satisfy the specified checks. The record's presence is never evidence that the engine owes an outer Workspace rollback.
+If the idea is reconsidered, D-UNDO-1's agreed constraints still apply. Record the same file identity and every page in the union of the before/intended physical extents, including page 0, maps, catalog, indexes, data/LV and physically free pages. Uncovered pages have their baseline fingerprint; covered pages have complete before and intended alternatives, with presence and exact length. At recovery, acquire exclusion and read the whole current file: **every uncovered page must be unchanged and every covered page must equal either its complete before-image or its complete intended new image; otherwise discard without applying it.** Identity mismatch, an unrecorded extent, or a torn/third page image cannot be accepted. Equality is the selected external-change test, not proof of continuous history.
 
-Optional complete-before restoration remains disabled for unqualified shared profiles. The exact whole-file predicate and exclusion required below do not supply the live shared rollback algorithm in II-09; they remain separate conditions on this optional enhancement. ACE-first safety with the private record absent continues to apply when another process participated.
+A future enhancement must also preserve native commit survivors, including forced commits, and ACE-first safety without requiring CalcDb to recover first. The idea does not supply a stronger atomicity promise or solve an unresolved native crash class. These are conditional requirements, not active recovery work or acceptance families.
 
-An already changed file must remain usable by ACE without the optional file. This applies after a failed recovery write as well as after the original crash. Therefore every recovery program has its own interruption analysis. A pagewise copy of all before-images is not automatically such a program: it could restore an old index reference before its data/LV target, or free a new page while a surviving current reference still reaches it. The image check establishes whether this record may be considered; the native rollback program establishes which byte effects are admissible.
+## 25. Retired optional-undo material
 
-SQLite's atomic-commit description contributes two useful review questions: whether recovery metadata can be partially persisted, and what happens when recovery itself is interrupted. Its recovery protocol assumes later SQLite openers honour the rollback journal. CalcDb cannot inherit that premise for an ACE-first opener, nor transfer SQLite's journal deletion, super-journal, page-sector or atomicity rules. The private record below is original CalcDb design; no SQLite code or format is reused.[^u-sqlite]
+Retired under PRD-09; this section number is retained for reference stability. The conditional constraints are in §24. No protocol or construction task remains here.
 
-## 25. A sealed record describes the complete stored-byte domain
+## 26. Retired optional-undo material
 
-Choose one immutable record per admitted native publication operation, with a separate append-only control trailer. An outer commit may be that operation; a frame containing only private images needs no crash undo yet. Never append fresh page intentions to an Armed record while a previous native program can still be interrupted. All intended images and the relevant disarm boundary must be known before the record is sealed.
+Retired under PRD-09; this section number is retained for reference stability. The conditional constraints are in §24. No protocol or construction task remains here.
 
-Let P be the native page size; B the physical file length before the operation; F the intended physical length after it; and N = ceil(max(B,F)/P). The manifest has exactly one entry for every page number in [0,N). It partitions them into C, the covered pages, and U, the uncovered pages. C includes every page affected by any native phase within that extent, even if its final bytes equal its before bytes. U pages must have identical before/intended presence, length and contents. The partition includes page 0, all catalog and TableDef pages, every ownership/free-space map, index, data and long-value page, and unallocated physical pages. Logically free space still has physical bytes.
+## 27. Retired optional-undo material
 
-`ABSENT` denotes absence from the physical extent, not absence from an allocation map. If page 80 is physically present but free before allocation, retain its complete existing bytes as its before-image. If an operation appends page 81 beyond B, page 81's before state is ABSENT. Freeing page 80 without truncating the file does not make its intended state ABSENT. Any final partial page records its exact positive byte count; normal complete-page database geometry remains the format validator's separate concern. Temporary growth beyond both recorded extents is not silently covered: a crash retaining that extra extent fails the length check.
+Retired under PRD-09; this section number is retained for reference stability. The conditional constraints are in §24. No protocol or construction task remains here.
 
-Fingerprints use **stored bytes**, including page-0 masking and any applicable stored representation. Decoded row values, logical schema hashes, used-byte spans or a hash of only the pages that were dirty in the cache are insufficient. Unknown padding and stale bytes in an uncovered page participate. On a covered page, retain the complete before-image when present and a fingerprint of the complete intended image. The preferred fingerprint is SHA-256, with a versioned domain prefix, page number, presence and byte count before the bytes. Its use is an integrity/change-detection choice, not an authentication claim. Full before bytes are compared directly when available; all current fingerprints are recomputed from the full read.
+## 28. Retired optional-undo material
 
-### A concrete private codec
+Retired under PRD-09; this section number is retained for reference stability. The conditional constraints are in §24. No protocol or construction task remains here.
 
-Use a bounded little-endian v1 codec for the first Windows implementation. It is a CalcDb-private format and contributes no fields to an MDB, ACCDB or lock file. The 160-byte header contains an eight-byte `CALCUNDO` signature, format/header/page/hash identifiers, a versioned identity kind, volume serial and 128-bit file ID, B, F, N, covered count, manifest/image/seal offsets, a 16-byte operation nonce and a 32-byte native-profile identifier. That profile is bound to its qualified backend/identity namespace as well as its native operation policy; a volume/file-ID pair is not compared across arbitrary computers as if it were globally unique. The operation nonce identifies this record; it is not evidence of the database's lifetime or a native commit identity. Other backends must supply a qualified versioned identity representation or leave this optional feature unavailable.
+## 29. Retired optional-undo material
 
-**Figure F-64 — proposed 96-byte private manifest entry.** All offsets are relative to one CalcDb entry, not to a native database page. This is an original representation to implement and fuzz.
+Retired under PRD-09; this section number is retained for reference stability. The conditional constraints are in §24. No protocol or construction task remains here.
 
-| Byte range | Representation | Meaning and validation |
-| --- | --- | --- |
-| 0–7 | `u64LE page_number` | Entries are exactly 0 through N−1, without gaps or duplicates. |
-| 8–11 | `u32LE role` | U or C; unknown values reject the record. |
-| 12–15 | `u32LE before_count` | 0 only for ABSENT; otherwise 1 through P. |
-| 16–19 | `u32LE intended_count` | Same range, independently checked against F. |
-| 20–23 | `u32LE presence_flags` | Before-present and intended-present bits; reserved bits are zero. |
-| 24–31 | `u64LE before_blob_offset` | C/present points to its complete verified before-image; other cases use zero. |
-| 32–63 | 32-byte before fingerprint | Domain includes page number, presence and count. |
-| 64–95 | 32-byte intended fingerprint | Same domain; U requires equality with its before state. |
-
-The manifest is followed by the covered before-image blobs and a 128-byte Armed seal. A control frame consists of an eight-byte control signature, kind/version, operation nonce, generation, immutable-body length/hash, reserved bytes and a frame hash. The seal binds the entire header, manifest and image payload. The sole subsequent frame is a 128-byte Disarmed record for the same body and operation, with the next generation. The loader accepts precisely the Armed length or the complete Armed-plus-Disarmed length. An unknown frame, extra bytes, partial tail, conflicting nonce, digest mismatch or invalid reserved field makes the record unusable. It never falls back from a damaged Disarmed tail to the preceding Armed seal.
-
-This strict tail rule does not assume that a 128-byte write is atomic. If no part of a disarm has persisted, an older Armed state can still be seen after a crash before disarm completion; the coordinator must not yet have crossed the native survival boundary. If a qualified durability operation has completed, the backend's declared model must rule out losing that disarm while retaining a later native commit that it protects. Checksums cannot establish that ordering by themselves.
-
-Validate lengths and every addition/multiplication before allocating or seeking. N is derived again from B, F and the format's admitted size bounds. Blob extents must be within the immutable body, nonoverlapping and consistent with their manifest entry; the before-image fingerprints must match their actual blobs. The profile identifier selects a recognised immutable recovery policy in CalcDb, never an executable callback or arbitrary path supplied by the file. Discovery starts from the database the user opened and a recognised private-record location; a record cannot redirect recovery to a filename stored inside itself.
-
-Windows supplies opened-handle identity through the volume and file identifier. `FILE_ID_INFO` supplies a 128-bit identifier, while the older 64-bit form has explicit filesystem limitations. Microsoft also documents possible ID reuse and changes on some filesystems. The profile records those limits; paths and timestamps do not replace identity. A matching operation nonce in a sidecar does not cure an unsupported database identity contract.[^u-id128][^u-id]
-
-This remains the selected current-image check. It does not add a USN journal, continuous history witness or proof that no previous external write ever occurred. A changed-and-restored history indistinguishable under the agreed identity/image predicate is not rejected merely because that history is possible.
-
-## 26. Seal and disarm before the relevant native effect
-
-The optional record has a short control-state machine, separate from the database's native state. Keep its minimal state and possible external effects in the preallocated coordinator receipt. A write or flush failure can leave a valid record even if the call that created it returned an error.
-
-**Figure F-65 — optional-record lifecycle and one-shot recovery.** Edges are coordinator transitions; each durability edge is qualified for the declared fault model. No node is an MDB/ACCDB commit flag.
-
-```mermaid
-flowchart TD
-    A["No eligible record"] --> B["Write immutable body and Armed seal"]
-    B -->|"Qualified seal completion"| C["Armed; native prefix permitted"]
-    B -->|"Failed or uncertain"| X["Possible record; retirement owed"]
-    C --> D["Durably disarm before survival effect"]
-    D -->|"Completed"| E["Native commit path may advance"]
-    D -->|"Failed or uncertain"| X
-    C -->|"Crash; full audit passes"| R["Prepare native recovery program"]
-    R --> Q["Durably disarm before recovery write"]
-    Q -->|"Completed"| W["Execute qualified native rollback"]
-    Q -->|"Failed or uncertain"| X
-    E --> Z["Best-effort removal of inactive record"]
-    W --> Z
-```
-
-Build the record under the same exclusive lease that protects the native operation. Stream the complete before-file once, checking its length and opened-handle identity while obtaining each U fingerprint and each C before-image. Intended C fingerprints come from the already sealed stored-byte final images, not from a later reread of a partly written database. A page changed in intermediate phases but restored in the final plan still belongs to C. If preparation finds an image outside the declared extent, missing intended bytes or an inconsistent coverage set, disable optional recovery for this operation before arming; it cannot guess the eventual image.
-
-Finish all immutable bytes and the seal, then request the sidecar durability capability required by the chosen profile. The initial Windows candidate uses `FlushFileBuffers` on the sidecar's own writable handle. Microsoft describes that call as a file-specific flush with an explicit success/failure result; neither its documentation nor the act of writing the seal establishes a complete storage-device fault guarantee. Do not substitute a volume flush or flush the database merely to make the private record durable. The native database program and its ordinary/`dbForceOSFlush` distinctions remain unchanged.[^u-flush]
-
-The preferred candidate needs one completed seal flush after the complete body and control frame are written. Integrity validation rejects a partially persisted body/seal rather than attempting recovery from it. A backend/profile can require a stricter private-file publication sequence, but its justification must be recorded. An absent sidecar after a crash is always an allowed loss of the optional enhancement.
-
-The compiler identifies the **first effect whose submission could cross the earliest evidenced native commit-survival frontier**, accounting for all allowed persistence schedules. Disarm must complete before that effect is submitted. Waiting until its completion, until a final database flush, or until the public return is too late. Earlier buffered writes may persist without another explicit flush. If a retained native prefix can itself already contain a commit that must survive, the disarm boundary moves before that prefix; it is not saved by calling the API result uncertain.
-
-Append the Disarmed frame and complete its qualified sidecar durability operation while the coordinator still prevents the crossing effect. Only that completed receipt releases the native program. If the disarm write, flush or its completion is uncertain, retain the original progress and stop normal advancement. A timeout or cancellation does not mean that the disarm did not happen, and also does not establish that it did. Native error/continuation policy decides the public outcome; the engine does not cross the boundary and hope cleanup will succeed later.
-
-There is a practical limitation: a profile whose frontier is earlier than any useful recoverable database prefix may have no worthwhile Armed window. If the frontier is not identifiable, or the required sidecar ordering cannot be established without changing native database survival, optional undo remains disabled for that profile. The native writer continues without it. This is expected per-operation qualification, not a reason to insert an invented native dirty bit.
-
-### Prevent a stale Armed record from surviving into later work
-
-At most one credible Armed candidate is allowed for a file in the first implementation. Use a fresh operation-specific record; do not truncate a prior inactive record back into an apparently Armed prefix for reuse. If discovery finds multiple credible candidates, never select one by filename, timestamp or an unverified counter: reject recovery from the ambiguous set and resolve its retirement obligation. Before admitting another native mutation, resolve any earlier candidate through a completed disarm or qualified permanent retirement. A failed initial seal flush deserves the same treatment: the record may nevertheless be fully readable and Armed after a subsequent crash. Silently dropping its in-memory pointer and continuing creates a stale undo candidate that could later match another operation's bytes.
-
-A parser rejection, external-change rejection or unsupported candidate means discard, with zero recovery writes. The running coordinator immediately makes the candidate ineligible and attempts qualified retirement. It can record a parsed nonce only if that nonce was validated; an unreadable or malformed record retains a retirement obligation identified by the candidate's opened handle and discovery identity, without inventing a nonce. If retirement itself fails or is uncertain, retain the cleanup obligation and its cause; do not claim that the record was removed, resurrect an older record, or admit a new mutation that could leave this candidate credible. Before optional arming, lack of private storage can simply select the baseline path. After an Armed record may exist, continuing requires resolving that ownership obligation. R-CRASH-2 tests this failure distinction explicitly.
-
-The preferred recovery path also **disarms before its first database write**. It spends the optional recovery opportunity once: a crash during the attempted restoration leaves a disarmed record and the independently safe native crash state. This sacrifices repeatable private recovery to simplify eligibility and cleanup. The immutable before-image payload stays owned by the live recovery operation until its writes settle, even though the record is no longer eligible for a fresh opener. Re-enabling replayable recovery would require separate evidence that every restart, cleanup and later mutation preserves eligibility; it is not needed for the initial optional feature.
-
-## 27. Full-file audit before any recovery write
-
-The authoritative acceptance predicate is unchanged:
-
-**At recovery, every uncovered page is unchanged and every covered page equals either its complete before-image or its complete intended new image; otherwise discard the whole record.** Identity, record integrity, rollback eligibility and the recorded extent alternatives are also required. A page's known intermediate native revision is still a third image and is rejected. The optional mechanism must not broaden its accepted images merely because the native phase program legitimately wrote such a revision.
-
-Use the database handle protected by exclusion for the whole audit and subsequent recovery attempt. Keep the validated sidecar handle and immutable body stable too. The audit streams the entire current database in page order, using O(P) read space plus compact C classification state. It never performs a recovery write while some other page remains unchecked. In particular, a successful check of data page 17 cannot authorise its restoration before an uncovered header or catalog page at the end of the file is examined.
-
-```text
-AuditUndo(db, record, exclusion, profile, budget) -> Eligible | Reject | AuditFailure:
-    require exclusive lease still names this opened database object
-    r = ValidateBoundedRecordAndAllBeforeBlobs(record, budget)
-    if r is Invalid: return Reject with no database writes
-    if r is IOFailure or ResourceFailure: return AuditFailure with no database writes
-    if control state is not exactly Armed: return Reject
-    if identity/profile/rollback eligibility is not admitted: return Reject
-    L = checked current physical length
-    if L not in {record.before_length, record.intended_length}: return Reject
-    mismatch = false; states = reserved compact classification for C
-    for each manifest entry in exact page-number order:
-        current = ReadExactPhysicalPageOrAbsent(db, entry.page, L)
-        if reading or classifying fails:
-            if mismatch: return Reject(recorded mismatch, secondary diagnostic failure)
-            return AuditFailure with no database writes
-        if entry.role == U:
-            mismatch |= not MatchRecordedBaseline(entry, current)
-        else:
-            b = ExactBeforeBytesAndPresenceEqual(entry, current)
-            n = IntendedFingerprintAndPresenceEqual(entry, current)
-            states[entry] = Both if b and n else Before if b else Intended if n else Third
-            mismatch |= not (b or n)
-    if current length/identity or held admission changed: return Reject
-    if mismatch: return Reject with recorded mismatch classes
-    return Eligible(record identity, exact body hash, L, states, retained handles)
-```
-
-`ReadExactPhysicalPageOrAbsent` uses the captured L to derive presence and exact tail length. An EOF inside an expected page is an error, not ABSENT. No unrecorded extra bytes are permitted. The loop may continue after a definite mismatch while reads remain possible to capture further mismatches, but rejection is irreversible within this audit. A later I/O, resource or diagnostic failure cannot replace that known rejection with AuditFailure or retain eligibility; return Reject with the secondary failure and proceed to the qualified discard protocol. Before any mismatch is established, an I/O or resource failure returns zero recovery writes and an explicit unresolved audit outcome rather than falsely claiming an external writer was detected. A successful audit always reads the complete current database.
-
-The returned token is valid only while its database/record handles and exclusive admission remain held and no native effect has occurred. Releasing the lease or handing control to a mutating callback invalidates it. Recovery can reread a page for transfer or verify the before payload on demand, but it cannot use a later convenience reopen under the assumption that the earlier audit still applies.
-
-### Constructed extent and page-state witness
-
-Take a synthetic manifest whose before file has 81 pages and whose intended file has 82 pages: B = 331,776 bytes and F = 335,872 bytes at P = 4,096. C is `{1,17,40,44,80,81}`; the remaining 76 pages are U. The roles correspond to the earlier global map, data row, ownership map, index leaf, newly allocated existing-free page 80, and appended page 81. This witness checks the private predicate and byte arithmetic; its synthetic payloads are not an ACE-created database.
-
-**Figure F-66 — whole-file predicate outcomes.** All rows assume a supported matching identity, intact Armed record and eligible operation unless the row explicitly changes one of them.
-
-| Current physical state | Image/extent result | Consequence |
-| --- | --- | --- |
-| Exact before file, including page 80's old bytes; page 81 absent | Pass | No database restoration is needed; retire the candidate before later work. |
-| Complete before/intended mixture, length B, page 81 absent | Pass if every present page matches an allowed complete image | Recovery still needs a qualified native rollback program. |
-| Complete mixture, length F, page 81 equal to its intended full page | Pass | Presence and extent agree with the intended alternative. |
-| Page 80 contains zeroes although its recorded existing-free bytes were different | Reject | Free allocation status does not erase the before bytes. |
-| Uncovered page 0 differs by one stored byte | Reject | Checking only the data/index write set would be unsafe. |
-| Page 44 is the old-key-removed intermediate image | Reject | A known native phase image is not an accepted third alternative. |
-| A covered page combines a prefix of before with a suffix of intended | Reject unless the result equals one entire recorded alternative | A full-page write is not assumed atomic. |
-| File length B + 1, or F + 4,096 | Reject | Neither intermediate nor unrecorded extent is accepted. |
-| All intended images plus a Disarmed control frame | Ineligible regardless of matching bytes | The image predicate cannot undo commit-survival disarming. |
-| Same pathname, different opened-handle identity | Reject | A path does not identify the original database object. |
-
-A separate partial-tail witness uses lengths P+7 and P+11. A present seven-byte or eleven-byte tail is tested against the corresponding complete recorded state; a nine-byte tail is rejected. This tests the codec's length logic without declaring such a file a valid Jet/ACE database. The native parser independently determines whether the file is a supported ordinary or interrupted state.
-
-## 28. Recovery executes an admitted native rollback program
-
-An Eligible token is input to the coordinator, not permission for `for each C: write before`. Compile a recovery program from the observed before/intended vector, the immutable before data and the operation's qualified native profile. Initialise old targets before restoring references to them; remove references to newly allocated targets before releasing their ownership or truncating appended extent. Shared map pages and index pages may need phase-specific revisions, exactly as on the forward path. Preserve unknown/native opaque spans. A generated counter or catalog field restores only when the selected rollback policy says it belongs to that scope.
-
-The preferred optional enhancement restores the recorded before file only for profiles whose eligible scope really permits that result. If native rollback retains a generated counter or another effect that the recorded before image would erase, disable this complete-before optional restoration for that operation. Do not quietly redefine the before-image to mean a partly synthesised recovery result or broaden the image predicate. A later selective-restoration design would need its own explicit policy and interruption analysis. The initial complete-before restoration profile is easiest to explain and test; it is not assumed applicable to every DAO operation.
-
-Some eligible mixtures may lack an established recovery sequence. The profile must enumerate or symbolically cover the mixtures it can produce under its declared faults and show a native-compatible recovery path for every state it elects to recover. A mixture outside that admitted set is discarded without a database write. This is a recovery-capability restriction, not a new external-change detector. If this distinction provides little useful coverage, disable the enhancement for that operation instead of complicating the baseline writer.
-
-```text
-RecoverOptionalUndo(db, record, profile, budget) -> RecoveryOutcome:
-    lease = acquire native-compatible exclusion on the opened database
-    audit = AuditUndo(db, record, lease, profile, budget)
-    if audit is Reject:
-        discard candidate through its qualified retirement protocol
-        return NativeOpenContinuation(no recovery writes, retirement receipt)
-    if audit is AuditFailure:
-        retain the possible-Armed record and mutation-admission obligation
-        return NativeOpenContinuation(no recovery writes, audit failure, retained obligation)
-    if every covered state is Before or Both and length is before_length:
-        retire candidate; return AlreadyBefore with retirement receipt
-    program = CompileQualifiedNativeRollback(audit, record, profile)
-    if no admitted program exists:
-        discard candidate through its qualified retirement protocol
-        return NativeOpenContinuation(no recovery writes, retirement receipt,
-                                      retained obligation if retirement failed or is uncertain)
-    reserve source buffers, effect receipts and retained before-image ownership
-    disarm = DurablyDisarm(record, profile.sidecar_fault_model)
-    if disarm is not confirmed:
-        retain record obligation; return FailedBeforeRecoveryWrite(disarm)
-    freeze/detach native backing needed by admitted readers and pending loads
-    for each enabled recovery effect in program:
-        r = ExecuteAuthorizedNativeEffect(effect, retained before data)
-        retain completed and possible effects in the coordinator receipt
-        if r failed or is uncertain:
-            stop advancement; retain native-state obligation
-            return profile.recovery_failure(receipts, disarmed record)
-    complete only the rollback barriers/visibility transitions the profile requires
-    remove inactive record when convenient; preserve any cleanup failure
-    return profile.recovery_success(receipts)
-```
-
-The implementation wraps the entire sequence in ownership-aware failure settlement. Failure while compiling, reserving or disarming performs no recovery database write; failure after the first native effect retains that effect and the required file-state obligation. No exception can release the live source buffer of a pending write. No catch path claims success merely because the loop stopped. The already retained public/error policy maps the outcome without discarding the primary cause when cleanup also fails.
-
-One-shot disarming is also what happens before a recovery program that ultimately performs no useful write because of a later allocation/I/O failure. That lost enhancement is acceptable. After a second crash, the record is inactive and ACE-first safety must already follow from the native image. Do not automatically re-arm it from the same before images. A later fresh operation can create a fresh record only after prior ownership obligations are resolved.
-
-Recovery ordering must be qualified under the same distinctions as ordinary writing: process termination while the OS/cache remains alive, loss of volatile OS/device state, and the specified torn/failed/reordered storage model. Microsoft distinguishes buffered write completion from explicit flushing and warns that hardware caching is outside parts of the documented buffering model. Consequently a restored page visible through the file handle is not by itself proof that the rollback survives power loss.[^u-flush][^u-buffer]
-
-Native rollback may require particular barriers or repair-state transitions. Execute those because the native profile requires them; do not add a blanket database flush solely to retire the sidecar. The coordinator decides the acknowledgement point. The one-shot control record removes the need to keep a private recovery promise alive across later ordinary database work.
-
-## 29. Enablement, cost and discriminating recovery cases
-
-Start with single-file, fixed-extent native operations whose rollback-eligible prefix, earliest survival boundary, exact complete before/intended images and recovery-write crash classes can be established. Extend to existing-free allocation, append and admitted truncation as independent cases. A multi-database Workspace is not made durably atomic by several private undo files. Optional multi-file recovery remains disabled until one qualified participant policy acquires the required exclusion, audits every affected participant before any recovery write, disarms consistently, and reproduces native partial/final survival. This limits the optional enhancement; it does not defer native multi-file Workspace coordination.
-
-| Condition | Optional choice | Baseline behavior |
-| --- | --- | --- |
-| No useful eligible window, unknown survival frontier, unsupported identity or sidecar durability | Disabled before arming | Run the qualified native writer without private recovery. |
-| One known fixed-extent operation, all native and recovery cuts qualified | Enable for that explicit profile | ACE-, Access- and CalcDb-first native states remain independently acceptable. |
-| Existing-free allocation or append | Enable only after the specific extent/ownership cases pass | Old free-page bytes and physical ABSENT remain distinct. |
-| Covered third/torn image, changed U page, mismatched length/identity or invalid record | Discard with zero recovery writes | Follow native opening/error/repair policy. |
-| Sidecar seal/disarm/retirement uncertain | Retain its eligibility/cleanup obligation; stop conflicting advancement | Never invent a successful rollback or cross a protected survival boundary. |
-| Crash after recovery disarm | No private replay | The recovery program's native cut is accepted independently of the inactive record. |
-
-For a before file of B bytes and a current file of L bytes, construction reads B bytes and a successful audit reads L bytes; both hash or compare all those bytes. The simple codec stores 96N manifest bytes plus the complete present C before-images, a 160-byte header and one or two 128-byte control frames. Its working RAM is O(P+C classification/plan metadata), not O(B). Large manifests and before images stream or use owned temporary backing. In the 82-page witness the manifest is 7,872 bytes; the five present C before-images occupy 20,480 bytes; the Armed record is 28,640 bytes, becoming 28,768 after disarm. These are constructed size calculations, not performance measurements.
-
-Keep this whole-file cost outside the ordinary DAO row loop when the feature is disabled. Count its full-read bytes, hash bytes, before-image bytes, private flush calls, native recovery writes, retained receipts and discarded opportunities separately from ordinary commit cost. Private storage capacity must cover the possible Disarmed frame before arming where the backend can reserve it; a nominal reservation still does not excuse handling a later write failure.
-
-R-CRASH-2 must distinguish at least these recovery outcomes: exact before, exact intended, admitted mixed complete pages, a native intermediate page, a torn page, changed uncovered header/catalog/map, physical free-page reuse, actual append/absence, partial tails, all forms of length mismatch, identity mismatch, invalid seal/body/control tail, disarm loss before versus after confirmed completion, and record retirement failure. Include an apparently failed seal that nevertheless leaves a valid Armed record, followed by an attempted second operation. Include interruption after successful disarm but before the first recovery write, and every admitted recovery write cut with the private record absent or inactive. These cases select whether the enhancement is enabled; they do not change the selected external-change predicate.
-
-The constructed manifest/codec checks can verify exact coverage, byte offsets, digest domains, lengths and zero-write rejection behavior without an ACE installation. They cannot demonstrate native commit-survival parity, file-identity lifetime guarantees, real sidecar durability, or the safety of a native recovery schedule. Those remain separately named R-CRASH-1/2 and R-LOCK-1 observations on the selected ACE/backend configuration.
+**Retired identities:** F-64 (private manifest entry), F-65 (optional-record lifecycle) and F-66 (whole-file recovery witness) remain reserved and are not reused. T-TXN-43–52 and R-CRASH-2 are likewise retired from planned work.
 
 ## 30. Costs and implementation slices
 
-The priority remains DAO row edits, then bulk actions, then constrained browser execution. For an ordinary row update, count the pages copied on first modification in each active rollback scope, immutable intermediate images, distinct and repeated page transfers, preserved LV/history bytes, key encoding work, effect/publication records and actual flushes. A 21-byte scalar row can still require a 4,096-byte source-preserving page image and more than one index-page revision. Report those costs rather than advertising the scalar payload size as the write cost.
+The priority remains DAO row edits, then bulk actions, then constrained browser execution. For an ordinary row update, count the pages copied on first modification in each active rollback scope, immutable intermediate images, distinct and repeated page transfers, preserved LV/history bytes, key encoding work, effect/publication records and actual flushes. A 21-byte scalar row can still require a 4,096-byte source-preserving page image and a separate final index page; an evidence-selected fallback can add repeated transfers. Report those costs rather than advertising the scalar payload size as the write cost.
 
 Let `P` be the format page size, `V` the simultaneously retained distinct page-image revisions, `E` the native effect count, `S` the transferred byte total and `F` the number of force operations actually issued. The main image charge is approximately `P × V`, with explicit metadata, temporary indexes and codec output added; the persistent byte cost is `S`, not merely `P` times the count of final dirty pages. Build/validation cost is linear in the represented program graph and page validation work, apart from the indexes used for lookup. Graph scheduling uses a bounded ready structure and stable identifiers; it does not repeatedly scan every dirty page to find a runnable step.
 
-Scope-local first-before retention and merging permit repeated edits to reuse a private mutable image when II-03's ownership rules allow it. They do not remove an intermediate native image that is required by the qualified persistence program. Optional undo incurs its separately stated whole-file manifest/read cost and must not be charged to normal DAO edits while disabled. Live spill remains independently budgeted, including locator metadata and the temporary peak where both resident and spilled copies are retained.
+Scope-local first-before retention and merging permit repeated edits to reuse a private mutable image when II-03's ownership rules allow it. They do not remove an intermediate native image that is required by the qualified persistence program. Live spill remains independently budgeted, including locator metadata and the temporary peak where both resident and spilled copies are retained.
 
-Measure at least: repeated updates to one page versus dispersed pages; no-index and one/many-index rows; a key-preserving edit versus a key change; inline versus chained long values; each nesting depth; successful and failing action prefixes; ordinary versus forced outer and inner resolution; one versus several files; cold and resident before-images; private-spill pressure and failed spill; late flush failure and uncertain writes; optional recovery audit and restoration. Record allocation counts, copied/transferred bytes, native requests, force completions, wait time and retained/spilled capacity. Compare public results and effects before comparing performance.
+Measure at least: repeated updates to one page versus dispersed pages; no-index and one/many-index rows; a key-preserving edit versus a key change; inline versus chained long values; each nesting depth; successful and failing action prefixes; ordinary versus forced outer and inner resolution; one versus several files; cold and resident before-images; private-spill pressure and failed spill; late flush failure and uncertain writes. Record allocation counts, copied/transferred bytes, native requests, force completions, wait time and retained/spilled capacity. Compare public results and effects before comparing performance.
 
-W-PROBE starts with external observation and qualified cut control independently of W-03's full implementation. W-03 supplies effect receipts, retained backing and deterministic fault seams. W-05 builds private frames and operation scopes first, then same-width row programs, allocation/LV/index programs, live persisted rollback and force/failure handling as their evidence becomes available. W-07 adds action/DDL-specific composition and partial outcomes. Native fixtures exercise the mutation coordinator without requiring the whole SQL executor. Optional crash undo is a separate enhancement after its native baseline, image predicate, survival-disarm and recovery-cut cases qualify; it is never the mechanism that makes the first writer safe.
+W-PROBE starts with payload-bearing external observation, offline reconstruction and any useful cut control independently of W-03's full implementation. W-03 supplies effect receipts, retained backing and deterministic fault seams. W-05 builds private frames and operation scopes, with W-05/local-lockers-rebase supplying the initial local grant and fresh-base machinery. Same-width row programs then expand into allocation/LV/index programs, live persisted rollback and force/failure handling as their evidence becomes available. W-03/private-images-coherence supplies old-source preservation before the first overwrite, including readers whose load has not yet acquired the page. W-07 adds action/DDL-specific composition and partial outcomes. Native fixtures exercise the mutation coordinator without requiring the whole SQL executor. D-UNDO-2 has no implementation slice. TXN-TEMP/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE retain the ordinary failure, live rollback and interrupted-output work formerly mixed with that card.
 
 ## 31. Acceptance witnesses for transaction and crash behavior
 
-**Requirement trace:** RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05, RQ-DAO-04, RQ-ISAM-01, RQ-SIM-02, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-05, RQ-PERF-01 and RQ-PERF-02. These are designed acceptance cases, not reported ACE test results. The constructed byte/state checks establish arithmetic and interpretation only. Each native case retains the complete input/environment, result/error/effect trace and a subsequent-call or independent-reopen observation. A missing, refused or inconclusive case remains visible.
+**Deciding branches.** Qualified and established behavior use the [common terminology](book-record.md#terminology). The following map identifies the native evidence for the resolution policies used above; it does not prescribe a completed crash classification.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–4: scope, nesting, partial operation outcomes and participants | R-TXN-1/TXN-NEST, TXN-STMT, TXN-MULTI and TXN-LOCAL; R-SQL-2/SQL-CONTINUE for continued action failures. |
+| §§5 and 18: force intent, write timing and flush sequence | R-TXN-1/TXN-FLUSH-LIVE with TXN-FLUSH-COMMIT, TXN-FLUSH-OP and TXN-FLUSH-BEHIND; interrupted survival uses R-CRASH-1/CRASH-RELATION/CRASH-CAPTURE. |
+| §6 and live failure continuations | R-TXN-1/TXN-TEMP/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE. |
+| §§7, 19–20: Close, publication, cancellation and retained owners | R-TXN-1/TXN-CLOSE/TXN-VIEW/TXN-LOCAL/FAIL-OWNER; R-DAO-1/DAO-CLOSE-OWN and R-CURSOR-1/CUR-LIFE. |
+| §8: ADO retaining and transaction policy | R-ADO-1/ADO-TXN/ADO-VIEW and R-TXN-1/TXN-SUPPORT. |
+| §§9–17: phase grammar, spans, marking and rollback program | R-CRASH-1/CRASH-PROGRAM, CRASH-ORDER-DATA, CRASH-ORDER-INDEX, CRASH-ORDER-REPEAT and CRASH-PARTIAL; R-CAT-1/CAT-X for catalog writes. Later external ownership uses R-LOCK-4/WRITE-ALLOC/WRITE-REBASE/WRITE-FAIL. |
+| §§21–23: observation, control, model cuts and opener correspondence | R-CRASH-1/CRASH-OBS, CRASH-CONTROL, CRASH-MODEL, CRASH-TRACE, CRASH-MILESTONE, CRASH-RELATION and CRASH-CAPTURE. |
+| Completed outputs in §31 | R-ORACLE-1/OR-REPAIR, including R-CAT-1/CAT-NEW and R-DAO-1/DAO-CREATE where the write creates a file. |
+
+CRASH-PARTIAL and CRASH-MODEL test model receipts and cut states. They do not establish actual backend transfer guarantees or ACE crash behavior. PRD-07/08 leave the exact class relation, per-write check list, precise pass conditions and treatment of unresolved classes to implementation. Calling a context qualified records that bounded implementation decision; it does not settle those questions in this manuscript.
+
+**Requirement trace:** RQ-STORE-01, RQ-STORE-02, RQ-STORE-04, RQ-STORE-05, RQ-DAO-04, RQ-ISAM-01, RQ-SIM-02, RQ-ORACLE-02, RQ-ORACLE-03, RQ-ORACLE-05, RQ-PERF-01 and RQ-PERF-02. These are designed acceptance cases, not reported ACE test results. The 54 IDs include ten retired optional-undo families, leaving 44 active families. The constructed byte/state checks establish arithmetic and interpretation only. Each native case retains the complete input/environment, result/error/effect trace and a subsequent-call or independent-reopen observation. A missing, refused or inconclusive case remains visible.
 
 | Case | Required witness |
 | --- | --- |
-| T-TXN-01 | Database bindings that alias one native file resolve to one physical participant; different Workspaces retain separate logical ownership. Opening another Database after BeginTrans does not silently evade the active scope. |
+| T-TXN-01 | Database aliases resolve to one physical participant; Workspaces/Connections remain separate lockers. TXN-LOCAL exercises one/two threads, DAO/ADO, same row/page/index leaf/different tables, finite native retries and both commit/rollback orders without a transaction-lifetime writer gate. |
 | T-TXN-02 | Empty and nonempty BeginTrans levels, actual depth limits, unsupported contexts and CommitTrans/Rollback without a level reproduce the full native errors and subsequent usable depth. |
 | T-TXN-03 | The two-file 7→9→11 / 100→101 witness preserves the outer A17=7 before-image and adopts B21=100 on inner commit; inner versus outer rollback restores the selected level. |
 | T-TXN-04 | A failed statement B restores its own page-17 value 9 while preserving earlier successful change A and the user frame's value-7 obligation; it cannot use the wrong before directory. |
 | T-TXN-05 | Generated counters, object/root identities, catalog generations, counts and cursor state follow their native rollback disposition, including effects that survive a logical rollback. |
 | T-TXN-06 | Failure reserving an inner-merge directory or receipt leaves both frames and their owners intact; successful merge transfers image handles without copying page bodies or losing retained views. |
-| T-TXN-07 | Database/QueryDef Execute, dbFailOnError, explicit depth, first/middle/last failure and failure class select the native statement/surviving-unit outcome; no blanket atomicity is inferred. |
+| T-TXN-07 | SQL-CONTINUE/TXN-STMT run Database/QueryDef Execute with/without dbFailOnError, no/explicit/nested frames, success–blocked–success, all-blocked and first/last failures. Native class/phase selects SkipCandidate or StopAction. Candidate work and generated-ticket disposition settle before continuation; counts are recorded once and no skipped error is published. Failed cleanup/settlement or unresolved I/O stops without replay, preserving earlier transaction work. |
 | T-TXN-08 | CREATE/ALTER/DROP, index/relationship/property/QueryDef changes and held objects resolve through the qualified catalog scope, including a later error and outer rollback. |
 | T-TXN-09 | Late enlistment, alias handles and opposite multi-file acquisition order retain one exact participant vector; failure on B cannot erase completed A effects or imply unsupported cross-file durability. |
 | T-TXN-10 | Table/dynaset/snapshot/forward readers before/after begin, mutation and resolution select the observed membership/value view; Recordset.Transactions=False does not determine another participant's transaction support. |
@@ -1033,47 +889,47 @@ W-PROBE starts with external observation and qualified cut control independently
 | T-TXN-19 | A failed or partial live-spill record never replaces the only authoritative image; missing/corrupt spill and resolution-budget failure retain owned before data and permitted continuations. |
 | T-TXN-20 | Row/LV/index/map allocations share one namespace, distinguish ExistingFree from Append, and preserve required allocation incarnations and scope-before bytes; shared reservations additionally require qualified native allocator ownership or native reservation. |
 | T-TXN-21 | Build, settled-transfer and persistence dependencies remain distinct; every claimed persistence edge names its actual barrier/backend property or stays an explicit hypothesis. |
-| T-TXN-22 | Same-page map/catalog/descriptor edits compose one revision chain from the admitted base; shared publication refreshes under protection and preserves unrelated changes. Unresolved dependency cycles identify a missing transition and perform zero native writes in the admitted-output path. |
-| T-TXN-23 | The indexed 42→43 witness independently decodes before/intermediate/final leaves and data pages, exact prefix/mask/free-count differences and 12,288 candidate transfer bytes across two pages. |
-| T-TXN-24 | Partial/header-only/torn versions of those pages are classified directly; a transfer of 4,096 bytes is not treated as an atomic image swap. |
-| T-TXN-25 | The 100→4,080-byte LV replacement decodes both next locators and payload lengths; global free bits clear where column-owner bits set, with both later retirement revisions preserved. |
+| T-TXN-22 | Final map/catalog/descriptor edits compose from one latest committed base. A later local locker rebuilds accepted deltas over an earlier commit without replaying effects; External mode additionally refreshes under native protection. Repeated revisions are a named fallback, not automatic. |
+| T-TXN-23 | The indexed 42→43 witness decodes before/final and both fallback leaves, exact prefix/mask/free-count bytes, 8192 final-image transfer bytes and 12,288 bytes for each three-transfer fallback. All four named order branches retain their own cut images. |
+| T-TXN-24 | Partial/header-only/torn versions retain their actual mixed bytes and independent opener observations under the declared model; a transfer of 4,096 bytes is not treated as an atomic image swap or a predefined ACE crash class. |
+| T-TXN-25 | The 100→4080-byte LV witness decodes both links and payload length; final global/owner maps combine opposite-sense allocation and retirement. Map-before/map-after cuts and separate-revision fallback remain distinct native questions. |
 | T-TXN-26 | Existing-free allocation preserves real prior bytes; append, failed resize, unknown extended contents and partial-tail outcomes retain distinct extents and effects. |
 | T-TXN-27 | Stable-root leaf-to-interior growth preserves root address, exact high-fence and tail encodings, child occupancy and reciprocal links; all root-transfer cuts remain in the crash comparison. |
-| T-TXN-28 | A nonroot split exposes parent/child discoverability gaps, duplicate ranges and sibling asymmetry as separate intermediate classes; final tree validity cannot substitute for their native qualification. |
+| T-TXN-28 | A nonroot split exposes parent/child discoverability gaps, duplicate ranges and sibling asymmetry as separate candidate outcomes. Retain native opener observations and missing correspondence; final tree validity cannot supply the implementation-defined crash relation. |
 | T-TXN-29 | Catalog publication and retirement account for logical/physical index sharing, relationship endpoints, packed LV pages, opaque references and tail occupants before any storage becomes reusable. |
-| T-TXN-30 | Coalescing 42→43→44 or 42→43→42 preserves call effects, counters, rollback levels and qualified crash classes; equality of final bytes alone never establishes equivalence. |
-| T-TXN-31 | Live persisted rollback composes an admitted restoration program from exact progress, restores targets before references and frees new storage only after references disappear; shared reversal preserves other actors' surviving changes, and rollback failure retains its own receipt and ownership. |
+| T-TXN-30 | Coalescing 42→43→44 or 42→43→42 preserves call effects, counters, rollback levels and the cut/evidence obligations attached to the selected program; equality of final bytes alone never establishes crash equivalence. |
+| T-TXN-31 | Private rollback removes only its locker's changes and preserves other committed/private owners. When its own program already has native effects, live rollback uses the exact progress and current protected base, preserving other survivors; rollback failure retains its own receipt. |
 | T-TXN-32 | Successful short writes continue only their authorized suffix; failure/uncertainty stops successors and preserves source buffers, native request ownership and possible-effect ranges. |
 | T-TXN-33 | A failed flush retains any already established native survival and participant outcome; rereading intended bytes cannot manufacture a durability receipt. |
 | T-TXN-34 | Cancellation chooses ContinueSameProgram, DeferUntil or a qualified stop without restarting or repeating effects. HandedOff transfers one owned continuation, respects the blocking boundary and cannot assert completion of the original suffix or resolve twice. |
-| T-TXN-35 | The attempt protects its claim immediately, including policy-binding failure, and retains its Workspace/frame before reentrant preparation; generation checks follow callbacks, waits and optional setup, and every exceptional exit settles or transfers the same owner. |
-| T-TXN-36 | Fresh-view admission closes before preservation selection and overwrite; pending targets remain covered. Qualified logical/failure outcomes release or convert the hold; uncertainty/destruction cannot reopen it implicitly. Publication uses reserved metadata and deferred-release capacity; reentrant VARIANT/interface destruction runs outside publication permits/latches while its continuation remains owned. |
+| T-TXN-35 | The attempt protects its claim immediately, including policy-binding failure, and retains its Workspace/frame before reentrant preparation; generation checks follow callbacks, waits and fresh-base preparation, and every exceptional exit settles or transfers the same owner. |
+| T-TXN-36 | Fresh-view admission closes before old-source preservation. On successful publication, release the view hold, resolution gate and metadata latches before draining deferred interface/VARIANT owners; a reentrant destructor can obtain the new view. Failure retains only the restrictions its actual outcome needs. |
 | T-TXN-37 | Return preparation, adapter handoff and externally observed acknowledgement remain distinct; an unobserved return never becomes an undo frontier. Failure after an empty commit's ResolveFrames node preserves the completed logical transition and subsequent native depth. |
-| T-TXN-38 | The six constructed stable-image pairs include both pairs absent from application prefixes; the model's terminal-flush result and omitted tearing assumptions are explicit. |
-| T-TXN-39 | Simulator assertions follow the current phase's admitted graph, and state keys retain pending effects, logical owners, force/return evidence and optional-record state even when database hashes match. |
-| T-TXN-40 | Trace coverage includes declared cached/fast/paging classes and pre/post relationships; dropped payloads/events, filter-position limits and unavailable controllable cuts invalidate the completeness claim. |
+| T-TXN-38 | The one-final-image whole-page model has four index/data pairs; remove-first adds two distinct pairs and add-first adds its own two. Each constructed model states its flush and omitted-tearing assumptions without claiming an ACE outcome. |
+| T-TXN-39 | Simulator state retains pending effects, logical lockers, force/return evidence and source ownership even when file hashes match. Export every distinct relevant CalcDb cut image and run the same independent native first-opener branches; successful export does not turn a modeled cut into an observed ACE outcome. |
+| T-TXN-40 | Trace coverage includes declared cached/fast/paging classes and pre/post relationships. Payload/event loss and filter-position limits invalidate affected completeness claims. Record controllable cuts separately: an observed request that cannot safely be paused retains its observation while limiting the interruption claim. |
 | T-TXN-41 | Process termination records trigger, pending-I/O settlement and actual observed death; its post-trigger cache effects differ explicitly from OS/device loss and live I/O-error continuation. |
 | T-TXN-42 | ACE, Access, Compact & Repair and CalcDb reopen independent frozen branches, preserving database, lock/TEMP existence and bytes; no preparatory opener, lock-file deletion or capture-induced flush alters the tested state. |
-| T-TXN-43 | The complete 82-page undo witness covers U and C, including headers, maps, indexes, catalog and physically free pages, and computes the exact manifest/header/blob/control sizes. |
-| T-TXN-44 | Changed U, covered third/torn images and whole-page mixtures select exactly the user-approved predicate; a later audit I/O/resource failure cannot reverse a known Reject, and rejection produces zero recovery database writes. |
-| T-TXN-45 | Before/intended lengths, true ABSENT, existing-free bytes and seven/eleven-byte synthetic tails distinguish all accepted alternatives from intermediate or unrecorded extents. |
-| T-TXN-46 | Invalid/overflowing manifests, blob ranges, digests, seal/control tails and identities reject safely; I/O/resource audit failure is distinct from detecting an external change, with no early recovery write. |
-| T-TXN-47 | A failed seal that nevertheless leaves a credible Armed record retains a retirement obligation before later conflicting work; unreadable nonce handling uses the owned candidate identity. |
-| T-TXN-48 | Durable sidecar disarm precedes submission of the first effect that can cross native survival; unknown frontier, unsupported ordering or altered ordinary durability disables the optional profile. |
-| T-TXN-49 | Complete Disarmed or damaged-tail records never fall back to Armed; live disarm uncertainty blocks advancement. A fresh opener may accept exact original Armed bytes if an unconfirmed disarm persisted nothing and the protected native frontier remained uncrossed. |
-| T-TXN-50 | Full audit and qualified rollback preparation precede one-shot disarm and the first recovery write; held handles/exclusion protect the token. No admitted recovery program means discard, retaining failed or uncertain retirement obligations before later mutation. |
-| T-TXN-51 | Every recovery write cut remains ACE-first safe with the record absent/inactive; native counter-retention exceptions disable complete-before restoration where it would erase surviving effects. |
-| T-TXN-52 | Multi-file optional recovery remains separately qualified and audits/disarms the required participant set; several sidecars do not create distributed durable atomicity. |
-| T-TXN-53 | Healthy completed output meets calibrated T-COMPACT-1; interrupted output meets its native crash class, including required commit survivors and evidenced repair behavior; successful repair cannot replace ordinary-open success. |
-| T-TXN-54 | Cost/replay reports distinguish retained revisions, unique pages, repeated transfers, real force operations and optional whole-file work; missing native coverage remains visible while bounded writer cases advance. |
+| T-TXN-43 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-44 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-45 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-46 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-47 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-48 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-49 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-50 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-51 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-52 | **Retired under PRD-09.** Optional-undo-only family; ID reserved and excluded from active coverage. |
+| T-TXN-53 | Completed output, including a new database image, retains T-COMPACT-1's applicable write/structure/control/observer list and verdict version; missing checks remain explicit. Interrupted output follows the ACE-first goal and commit survivors through separate branches. Exact per-write acceptance and crash classification are implementation work; a repaired destination cannot replace ordinary-open evidence. |
+| T-TXN-54 | Cost/replay reports distinguish final images, fallback revisions, unique pages, transferred bytes and real force operations. Missing native evidence remains explicit; implementation settles precise crash pass conditions and treatment of unresolved classes. |
 
-R-TXN-1's independently executable branches select the logical policies. R-CRASH-1 selects native ordering, marking, survival and independent opener outcomes. R-CRASH-2 selects exhaustion/uncertainty and optional seal/disarm/audit/recovery behavior. Their full cards are in A-02; I-08 retains short summaries and the preferred design. All selected-build native outcomes remain unobserved in this session.
+R-TXN-1's independently executable branches select the logical policies. R-CRASH-1 selects native ordering, marking, survival and independent opener outcomes. R-TXN-1/TXN-TEMP/FAIL-OWNER and R-CRASH-1/CRASH-FAILURE retain exhaustion, uncertainty and live-resolution failure coverage. R-CRASH-2 is retired. Their full cards are in A-02; I-08 retains short summaries and the preferred design. Native acceptance remains unexecuted.
 
 ## Sources and evidence notes
 
 Exact material, read extents, hashes, permitted use and citation locations are recorded in [A-01-sources.md](A-01-sources.md). Full experiment cards are in [A-02-experiments.md](A-02-experiments.md).
 
-[^authority]: [N], [C], [U], [A], [B] Authoritative scope and compatible charter, the approved assignment and current book record, subject to the user's Stage 0 crash answer and Part I review. The user's full-file before/intended predicate, native-first reopening, nonprescriptive length/order and corrected platform Automation ABI govern this chapter.
+[^authority]: [B-SCOPE-11, C, A, B, U-PRD-01-09, U-PRW-01-58, U-OWNER-ACE, U-OWNER-NET, U-OWNER-RECOVERY] [Scope and context](00-scope.md), §§S2–S6, final owner decisions and the closed work list govern local ACE semantics, ADO scope, crash/completed-write direction and undo retirement. A-01 records the initial ACEDAO.DLL report, managed-client targets and unchanged D-UNDO-1 whole-file predicate as owner inputs. PRD-02 supplies the separate Office registration report. The shared value is the current platform Automation VARIANT and real BSTR.
 
 [^txn-begin]: [S-MS-DAO-BEGINTRANS] Microsoft, [Workspace.BeginTrans](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-begintrans-method-dao), updated 2022-03-02; Syntax and Remarks inspected 2026-11-13, especially Workspace membership, nesting, unsupported ISAM and Close. Documentary constraints and experiment inputs, not execution of the supplied ACE build.
 
@@ -1085,9 +941,9 @@ Exact material, read extents, hashes, permitted use and citation locations are r
 
 [^txn-rollback]: [S-MS-ROLLBACK] Microsoft, [Workspace.Rollback](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-rollback-method-dao), updated 2021-09-14; current-level restoration, nesting, no-active-scope errors and TEMP failure continuation inspected 2026-11-13.
 
-[^txn-dexecute]: [S-MS-DEXEC] Microsoft, [Database.Execute](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/database-execute-method-dao), updated 2022-03-18; Parameters and Remarks inspected 2026-11-13; contradictory dbFailOnError table versus remarks retained, samples not reused.
+[^txn-dexecute]: [S-MS-DEXEC] Microsoft, [Database.Execute](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/database-execute-method-dao), updated 2022-03-18; Parameters, options and Remarks re-inspected 2026-11-16; no-flag continuation and the contradictory dbFailOnError table versus remarks remain experiment inputs. Samples not reused.
 
-[^txn-qexecute]: [S-MS-QEXEC] Microsoft, [QueryDef.Execute](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/querydef-execute-method-dao), updated 2022-03-18; Parameters and Remarks inspected 2026-11-13, statement rollback and RecordsAffected; samples not reused.
+[^txn-qexecute]: [S-MS-QEXEC] Microsoft, [QueryDef.Execute](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/querydef-execute-method-dao), updated 2022-03-18; Parameters, options and Remarks re-inspected 2026-11-16, including no-flag continuation, statement rollback and RecordsAffected; samples not reused.
 
 [^txn-commit]: [S-MS-TXN] Microsoft, [Workspace.CommitTrans](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-committrans-method-dao), updated 2022-03-18; force-flush option, current-level nesting and TEMP exhaustion remarks inspected 2026-11-13; no target-build execution.
 
@@ -1139,12 +995,7 @@ Exact material, read extents, hashes, permitted use and citation locations are r
 
 [^r-terminate]: [S-MS-TERMINATE] Microsoft, [TerminateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess), updated 2025-12-30, read 2026-11-13; asynchronous external termination and pending-I/O completion/cancellation. This documents the harness mechanism, not ACE survival.
 
-[^u-id]: [S-MS-FILEID] Microsoft, [BY_HANDLE_FILE_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information), updated 2021-04-02, read 2026-11-13; identity members and filesystem-specific reuse/change limitations. Documentary facts only; no target-filesystem experiment.
 
-[^u-id128]: [S-MS-FILEID128] Microsoft, [FILE_ID_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info), updated 2024-02-22, read 2026-11-13; opened-handle volume plus 128-bit identifier. No structure/sample code reused.
 
-[^u-flush]: [S-MS-FLUSH] Microsoft, [FlushFileBuffers](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers), updated 2021-10-13, read 2026-11-13; writable-handle requirement, explicit result, file-specific buffered-information flush. Does not prove ACE's ordering or a device-specific failure model.
 
-[^u-buffer]: [S-MS-BUFFERING] Microsoft, [File buffering](https://learn.microsoft.com/en-us/windows/win32/fileio/file-buffering), updated 2025-05-31, read 2026-11-13; system-buffering, alignment and hardware-cache limitations. No default atomic-page guarantee inferred.
 
-[^u-sqlite]: [S-SQLITE-ATOMIC], [S-SQLITE-LIC] SQLite, [Atomic Commit In SQLite](https://sqlite.org/atomiccommit.html), updated 2026-04-21 10:28:59Z, read 2026-11-13, selected §§2, 4.2–4.5, 6.1–6.2, 8 and 9; [copyright statement](https://sqlite.org/copyright.html) checked for documentation. Failure-mode concepts only; no SQLite code, journal format, hot-journal decision or ACE semantics transferred.

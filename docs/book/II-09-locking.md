@@ -1,14 +1,14 @@
 # II-09. Locking, snapshots and owned work
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-LOCK-01, RQ-LOCK-02, RQ-LOCK-03, RQ-LOCK-04, RQ-CONC-01, RQ-CONC-02 and RQ-CALL-04. Supporting RQ-STORE-02, RQ-ISAM-01, RQ-DAO-01, RQ-DAO-04, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-ORACLE-02, RQ-ORACLE-05, RQ-SIM-02, RQ-PERF-01 and RQ-PERF-02. I-16 owns the full scope map. II-03 supplies exact image/request ownership, II-04/05/06 native row/map/tree/catalog grammar, II-07 cursor/edit/identity policy, and II-08 native resolution/crash programs. This chapter supplies the admission, source protection, version retention and work lifetimes that connect them, refining K-LOCK/K-WORK without changing public scope.
 
-Prefer a held native file lease for the first two sharing steps, a captured native read/publication profile for later coexistence with ACE, and one initially admitted CalcDb writer per file. Close fresh-view admission before selecting old images to preserve. Shared writes reapply accepted effect-free deltas to protected fresh physical pages. Every request, retained image and asynchronous helper keeps a named owner through cancellation and Close; public calls remain blocking.
+Prefer a held native file lease for the first two external sharing steps and independent local Workspace/Connection lockers from phase 1. Several private overlays may coexist. A per-file publication gate coordinates fresh-base reconstruction, source preservation and the selected publication/resolution transition; it is not a transaction-lifetime writer lock. Close fresh-view admission before choosing old images to preserve. Local publication reapplies accepted effect-free deltas to the latest committed base; later sharing adds native protection around that same machinery. Every request, retained image and asynchronous helper keeps a named owner through cancellation and Close; public calls remain blocking.
 
-**D-LOCK-1 — Decided scope; provisional protocol.** Exclusion, reader-only coexistence, reading beside ACE and shared writing remain the four required steps. **D-SNAPSHOT-1 — Provisional:** immutable histories and retained input capture reproduce the selected cursor/transaction visibility, with the admission mechanism below. **D-CALL-1 — Decided:** call work settles before return; explicitly retained work has stable ownership and settles before its resource owner closes. Native ranges, freshness transitions, public wait/error rules and host dispatch remain experiment-qualified mechanisms. No change is made to D-UNDO-1's exact predicate, D-UNDO-2's optional one-shot protocol or ACE-first crash parity.
+**D-LOCK-1 — Decided scope; provisional protocol.** Exclusion, reader-only coexistence, reading beside ACE and shared writing remain the four required steps. **D-SNAPSHOT-1 — Decided target; provisional mechanism:** full ACE in-process semantics, with the locker, immutable-history and publication mechanisms below. **D-CALL-1 — Decided:** call work settles before return; explicitly retained work has stable ownership and settles before its resource owner closes. Native ranges, freshness transitions and public wait/error rules remain experiment-qualified mechanisms. Windows entry and reference release follow decided Apartment registration and ordinary COM delivery; experiments measure the actual route without imposing a CalcVBA thread model. D-UNDO-1's conditional predicate and ACE-first crash goal remain. [U-OWNER-RECOVERY, U-PRD-01-09] D-UNDO-2 is retired from planned work; neither local nor external live rollback depends on a sidecar.
 
-**Evidence boundary.** Official Microsoft references establish documented API/public behavior, including historical Jet context explicitly labelled as such. They do not supply an executed lock trace or current ACE byte-lock map. Native page facts reuse exact-pinned Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; examples below are original constructed byte/state witnesses. Cleared supplied reports contribute concepts only. No ACE, Windows backend, network or reference Java encoder execution occurred here. The initial oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016; actual loaded identities still require capture. .NET Framework 4.8-family and .NET 10 LTS remain separate caller lanes. Real platform Automation VARIANT/BSTR, including 24-byte Windows x64 VARIANT, is unchanged. Figures are emitted Markdown tables/Mermaid source, not render-verified.[^authority]
+**Evidence boundary.** Official Microsoft references establish documented API/public behavior, including historical Jet context explicitly labelled as such. They do not supply an executed lock trace or current ACE byte-lock map. Native page facts reuse exact-pinned Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; examples below are original constructed byte/state witnesses. Cleared supplied reports contribute concepts only. No ACE, Windows backend, network or reference Java encoder execution occurred here. The initial oracle remains the owner-reported ACEDAO.DLL 16.0.20527.20016 [U-OWNER-ACE]; actual loaded identities still require capture. .NET Framework 4.8-family and .NET 10 LTS remain separate caller lanes. Real platform Automation VARIANT/BSTR, including 24-byte Windows x64 VARIANT, is unchanged. Figures are rendered by the PDF build.[^authority]
 
 ## 1. Give each permission and obligation a concrete owner
 
@@ -18,17 +18,21 @@ Use the same logical lock interface in each step, but select a protocol implemen
 
 Keep owner identity separate from OS-thread identity. A call can use workers, an outstanding request can settle on another thread, and a logical edit can survive several calls. Conversely, two calls on the same thread need not be one transaction. Use stable owner records with incarnation-qualified handles, and require each transfer of responsibility to name its recipient. Raw pointers, thread IDs and the current stack depth cannot serve as durable in-process ownership identities.
 
+The initiating thread and the thread where a Windows Apartment object receives the call are distinct facts. A correctly marshaled call from an MTA can enter on a COM host STA. The same rule applies to a cross-apartment Release. Record actual delivery through ACT-THREAD; do not use a CalcVBA runtime-thread identity as an extra CalcDb admission test. Callback/provider context follows the supplied reference’s COM rules. These execution contexts do not change the Workspace/Connection LockerId. [U-PRD-01-09; S-MS-COM-INPROC-THREADING, S-MS-COM-STA]
+
 | Object | Identity and retained state | Ends when |
 | --- | --- | --- |
 | Public binding | Database/cursor incarnation, requested mode and public lifecycle state | The surface's qualified Close/Release transition; child references may remain callable as closed objects. |
 | FileSession | Opened-file identity/incarnation, native handle family, protocol/environment and active obligations | All public/internal bindings, native requests, source owners and resolution obligations allow final release. |
-| Logical owner | Workspace/frame or call/cursor work identity; cause and parent call link | The selected transaction, operation or retained-work scope settles. |
+| Locker | `LockerId` identifies a Workspace or Connection incarnation; current transaction frames, accepted deltas and logical grants remain separate | The session closes after its required grants and resolution work settle; nested frames retain the same locker. |
+| Logical owner | A frame, edit or call/cursor work scope under its locker; cause and parent call link | The selected transaction, operation or retained-work scope settles. |
+| Publication gate | One `ResolutionAttempt` for this FileSession, with current-base and source-preservation authority | The selected publication/resolution boundary releases it, or a named failed/uncertain continuation retains the obligation. |
 | Native grant | Exact handle incarnation, file role, offset/length/mode, acquisition receipt and release disposition | The exact native release or confirmed handle-level cleanup settles. |
 | Read view / image owner | View selection, per-page image identity, allocation incarnation and valid backing | Its last qualified observer or pending request releases it. |
 
 The public object tree and resource graph are therefore different. A cursor can close while another cursor still retains the same immutable image; a Database binding can detach while its Workspace's resolution attempt retains the native participant. Such retention is explicit in the file/session owner, never a hidden global cache reference that accidentally prevents unlocking.
 
-A `ResourceKey` identifies a semantic need: an edit owner for a row root, a structural index operation, an allocator region, a catalog namespace or a physical read/publication protection window. Native recipe expansion can map several keys to overlapping ranges, or one key to several operations. Conflict lookup must compare the expanded native resources as well as the logical owners. Hashing only row IDs would miss two rows on one page, two indexes sharing physical metadata, or unrelated operations using the same allocation bitmap.
+A `ResourceKey` identifies a semantic need: an edit owner for a row root, a structural index operation, an allocator region, a catalog namespace or a physical read/publication protection window. The initial local profile expands these needs to ACE-compatible page/record and structural conflict footprints; it does not need an OS range for each local claim. The later native recipe can map several keys to overlapping ranges, or one key to several operations. Conflict lookup compares the selected local footprint and, in external mode, expanded native resources as well as logical owners. Hashing only row IDs would miss two rows on one page, two indexes sharing physical metadata, or unrelated operations using the same allocation bitmap.
 
 The resource key carries the original root/descriptor identity and allocation incarnation. It does not substitute a current row-body page for the stable root. In the constructed relocation witness, key 43 continues to identify root `(17,0)` while its body occupies page 60. Any lock mapping that depends on body location must be refreshed under the protection that makes that location valid. The mapping is a captured profile rule, not an assumed `lock_offset = page_number × 4096` formula.
 
@@ -37,6 +41,18 @@ The resource key carries the original root/descriptor identity and allocation in
 **Requirement trace:** RQ-LOCK-01, RQ-LOCK-02, RQ-CONC-01, RQ-CONC-02 and RQ-CALL-04. D-LOCK-1 remains **Decided scope; provisional protocol**. The first two external protocols start with a Windows share lease, not a page-lock emulation. R-LOCK-1/2 decide whether the proposed leases admit every required compatible native client while excluding every incompatible one.
 
 Represent the requested public open separately from the physical FileSession. DAO's `Options` and `ReadOnly` arguments describe distinct choices. The public reference documents shared versus exclusive opening and read-only versus read/write access; the Database object reference also permits duplicate opens of the same source. Neither establishes the exact native handle requests or every same-process exclusive-open transition. The broad OpenDatabase remark about another user's existing open must be interpreted in context and tested, not used to erase the documented shared mode. [^a-dao-open][^a-dao-db]
+
+The initial public-to-physical mapping is explicit:
+
+| Public request | Initial physical lease | Public consequence and deciding case |
+| --- | --- | --- |
+| DAO default `OpenDatabase(name)`; shared, read/write | Step 1, RW access and share zero | Physically exclusive across processes, even for a caller that only reads; the second default open is a named, counted R-LOCK-1/EX-DEFAULT mismatch. |
+| Shared plus explicit read-only | Step 2, R access and share read | Admit compatible readers while excluding every writer; actual ACE reader access is R-LOCK-2/RO-ACTUAL. |
+| Explicit exclusive plus read-only | Step 1, R access and share zero | Exclude other independent data opens; R-LOCK-1/EX-PUBLIC. |
+| Explicit exclusive plus read/write | Step 1, RW access and share zero | Exclude other independent data opens; R-LOCK-1/EX-PUBLIC. |
+| Supported ACE ADO open | Equivalent admitted access/exclusivity after ADO policy is applied | A writable connection uses Step 1; a supported reader-only request can use Step 2. R-ADO-1 records the actual public mode mapping. |
+
+A default open is therefore not an implicit reader-only open. The initial scope cannot reproduce two ordinary writable/default opens in different processes; count the difference in both ACE-first and CalcDb-first orders. This restriction does not serialize transactions in one process. Compatible default/shared public bindings join the same held FileSession and retain separate lockers. Explicit public-exclusive requests still obey their independent-open rules. Later external stages 3–4 supply coexistence with native writers.
 
 Use the following internal objects. Their fields describe CalcDb ownership; they are not records to write into MDB, ACCDB or the native lock file.
 
@@ -52,11 +68,13 @@ FileSession {
     actual_access, actual_share_mask, protocol_profile, admission_generation
     admitted_security_connection_authority, authority_generation
     state: Opening | Active | Quiescing | Closing | Closed | Unresolved
-    logical_bindings, native_requests, native_grants, retained_native_obligations
+    logical_bindings, local_lockers, publication_gate
+    native_requests, native_grants, retained_native_obligations
 }
 BindingPermit {
     file_session_incarnation, public_binding_id, admitted_surface_rights
-    workspace_identity, admitted_authority_context, authority_generation
+    locker_id, workspace_or_connection_identity
+    admitted_authority_context, authority_generation
     open_policy_generation, close_disposition
 }
 ```
@@ -68,6 +86,28 @@ The preferred logical admission rule is to join ordinary duplicate opens only wi
 A join also requires the same admitted security and connection authority, represented by a stable context identity and generation rather than the current thread ID or a mutable ambient credential pointer. An identity probe establishes which file is named; it does not authorize data access by another impersonation, credential or connection context. Prefer supporting only the qualified process-default authority initially, and refusing an unqualified context change. Matching authority remains necessary rather than sufficient: public credential checks and any required fresh authorization still occur. If a changed permission or connection condition cannot be authorized without breaking the held lease, preserve the selected denied/unsupported outcome; do not borrow an existing writable handle to make that request succeed. R-LOCK-1 separates same-authority reuse, changed authority, changed connection credentials and permissions changed after the first open. This does not introduce impersonation support.
 
 One engine maintains one registry entry and one mutation/cache authority for a native file identity in the supported initial modes. This prevents alias paths from creating independent writable caches. It does not merge the transaction scopes of different Workspaces. A successful registry lookup must retain the session and reserve a logical binding while checking its state; otherwise Close can race the lookup and return a permit to a session that is already releasing its last lease.
+
+### 2.1 Creation holds a new-file lease until an initial image exists
+
+**Requirement trace:** RQ-PROD-02/03, RQ-DAO-01, RQ-FMT-01 and RQ-LOCK-01. `CreateDatabase` requires a new native image as well as an exclusive handle. The public call's argument and format/sort selection are in II-06 §1.2; the DAO factory path is II-12 Figure F-122. The browser uses the same creation recipe through II-14's owned acquisition path. [S-MS-DAO-CREATEDB]
+
+Before a native effect, bind the request to a `FormatDescriptor`, `SortDescriptor` and `NewDatabaseRecipe`. Validate unsupported options and the initial General-family key boundary before creating the destination. Reserve the bounded image plan, result/error storage and public Database wrapper/membership entry. This permits ordinary preflight failure without an empty file artifact. Native validation timing remains CAT-NEW/DAO-CREATE evidence; it is not inferred from the proposal's order.
+
+One **CreationAttempt** retains the call/locker identity, exact destination namespace receipt, verified new-file identity/incarnation, selected recipe, private initial images, native effect receipts, pending requests and reserved public result. Its FileSession stays in `Opening`. A namespace reservation alone grants neither ownership of an existing object nor permission to delete by name. Acquire a new file exclusively, verify its identity and attach the receipt to the attempt before submitting an initial page. On Windows, `CREATE_NEW` fails if the destination already exists. Do not fall back to a truncating disposition. The browser adapter must provide equivalent create-only ownership or return the evidenced unavailable/refused outcome; it must not overwrite an existing OPFS entry after a separate existence check.
+
+| Attempt boundary | Retained ownership and visible state | Deciding branch |
+| --- | --- | --- |
+| Recipe/preflight before create | No destination effect; reserved arguments, images and result storage belong to this attempt. | CAT-NEW option/validation and DAO-CREATE error timing. |
+| Exclusive new object acquired | Exact new-file identity, namespace receipt and lease; no normal Database binding is exposed yet. | EX-CREATE aliases/races/permissions and WASM-CREATE acquisition. |
+| Initial pages/extent/flush in progress | The same attempt owns every submitted effect and pending receipt; the name may identify an incomplete file. | CAT-NEW synthesis and R-CRASH-1/CRASH-NEW. |
+| Successful native-selected boundary | Verify complete initial graph and required resolution/flush receipts; make the FileSession active and transfer its lease to the returned Database binding. Publish the qualified collection membership with that result. | DAO-CREATE success, first table/row use and T-COMPACT-1. |
+| Failed or uncertain effect | Keep exact extent/touched-range, namespace, handle and request evidence. Settle late work before applying the native-selected cleanup rule; never publish success or substitute another path incarnation. | CAT-NEW partial files, R-ERR-1 diagnostics and CRASH-NEW next-openers. |
+
+The preferred initial writer consumes the complete private page plan and uses one final image per page. Its order and any marking or extra transition are the CAT-NEW/R-CRASH-1 question, not a second pager protocol. Final-image construction, transfer completion, flush completion and public object publication are distinct. Before the returned Database can support an ordinary table operation, its bootstrap/system-object graph must exist under the continuing lease. A last-minute wrapper allocation must not be the first operation able to fail after a completed image has been accepted.
+
+On an ordinary failure, prefer disposing of a failed new object only when settled requests and retained create-only identity prove that this attempt still owns it and CAT-NEW selects removal for that failure. Otherwise retain the appropriate failed/uncertain outcome and residue. Do not issue path-based deletion after releasing identity protection, do not destroy another creator's file, and do not interpret timeout as proof that a broker or write has stopped. Record absence, owned partial image, completed-but-unreturned image and uncertain namespace/effects separately. This retention is ordinary operation ownership, not the retired D-UNDO-2 sidecar.
+
+Creation while the Workspace has an open transaction is a public-policy experiment. Neither whole-page rollback nor deleting the new filename may be inferred from row-transaction semantics. DAO-CREATE observes Commit/Rollback/Close and collection effects; CAT-NEW and CRASH-NEW retain the resulting file/lock state. PRD-07 leaves precise crash classification and unresolved-case disposition to implementation. T-LOCK-67 checks new-file identity and lifetime without inventing a stronger atomic-create guarantee.
 
 ## 3. The share test is symmetric and uses actual access categories
 
@@ -161,7 +201,7 @@ If the probe cannot supply a reliable supported identity, the backend may still 
 
 Path replacement between probe and data open is a distinct case. The candidate may be a valid database, but it is not the reserved object. Before any database mutation or accepted host effect, close the candidate, settle the reservation, and use a bounded fresh-opening continuation only where the public policy permits it. Do not retarget the old identity's cache to the new bytes. Once the data lease is held, its no-delete-sharing property contributes to protection against ordinary rename/delete opens, but that does not replace identity verification or define every filesystem/reparse behavior.
 
-Hard links, alternate accepted path spellings, directory links and replaced filenames need separate controls. A name cache may accelerate finding a candidate session; it is never sufficient evidence to reuse it. Reopening after the native lease has ended creates a new session incarnation even if the same path and file identifier recur. Optional recovery identity rules in II-08 remain independent and unchanged.
+Hard links, alternate accepted path spellings, directory links and replaced filenames need separate controls. A name cache may accelerate finding a candidate session; it is never sufficient evidence to reuse it. Reopening after the native lease has ended creates a new session incarnation even if the same path and file identifier recur. The conditional D-UNDO-1 identity constraints remain independent; D-UNDO-2 has no active recovery protocol.
 
 ## 5. Reader-only sharing is a lifetime protocol
 
@@ -268,7 +308,7 @@ Every failure after submission is owned by the request until a terminal result i
 
 ## 9. Releasing a binding does not necessarily release the lease
 
-Prefer a two-step session shutdown. First mark the relevant public binding/session as closing and stop new admissions that depend on it. Then settle its work and native obligations outside registry and metadata latches. Detach a single binding only after its transaction/cursor policy is resolved; the physical lease may remain owned by other bindings, an enlisted Workspace participant, pending I/O, a native grant or II-08's retained recovery obligation.
+Prefer a two-step session shutdown. First mark the relevant public binding/session as closing and stop new admissions that depend on it. Then settle its work and native obligations outside registry and metadata latches. Detach a single binding only after its transaction/cursor policy is resolved; the physical lease may remain owned by other bindings, an enlisted Workspace participant, pending I/O, a native grant or II-08's retained failed/uncertain resolution obligation.
 
 The final native handle owner closes only after all operations whose source bytes or permissions depend on it are settled or transferred to an explicitly surviving owner. A failed unlock retains the exact grant and its release obligation. If the qualified continuation proceeds to final handle close, record that distinct release event instead of claiming the failed unlock succeeded. A public Close error does not erase the remaining owner, and a timeout does not prove the native operation stopped.
 
@@ -280,7 +320,15 @@ Finally, the lock-file owner names, the caller's last COM Release, and the FileS
 
 ## 10. Select a visibility policy before selecting page versions
 
-**Requirement trace:** RQ-CONC-01, RQ-CONC-02, RQ-STORE-02, RQ-CALL-04, RQ-LOCK-03 and RQ-LOCK-04. **D-SNAPSHOT-1 — Provisional:** initially admit one writer per file and preserve immutable inputs for the views that the cursor and transaction policies actually require. R-CURSOR-1/CUR-POP/ID/LIFE and R-TXN-1/TXN-VIEW select those public boundaries; R-LOCK-3 supplies the later external-writer protection.
+**Requirement trace:** RQ-CONC-01, RQ-CONC-02, RQ-DAO-04, RQ-ADO-01, RQ-STORE-02, RQ-CALL-04, RQ-LOCK-03 and RQ-LOCK-04. **D-SNAPSHOT-1 — Decided target; provisional mechanism:** initial scope matches ACE's independent in-process lockers, conflicts and visibility. R-TXN-1/TXN-LOCAL selects same-process conflict and resolution behavior; R-CURSOR-1/CUR-POP/ID/LIFE and R-TXN-1/TXN-VIEW select read boundaries. R-LOCK-3 supplies the later external-writer protection.
+
+A `LockerId` is the incarnation of a Workspace or Connection, not the OS thread, native handle or transaction-frame index. Several lockers can have accepted uncommitted changes at once. A nested transaction/frame uses its parent locker but retains its own rollback scope; an implicit operation uses its session's locker and a bounded operation scope. Microsoft documents separate Workspaces for overlapping transactions; PRD-01 selects full ACE parity, with no coarser one-writer interim mode.[^local-scope]
+
+The local manager keeps each locker's claims in the selected conflict domain: record where native record locking applies, otherwise page, plus required index, allocator and catalog conflicts. Distinct logical edits can share a physical output page without sharing an edit conflict under a record-level profile. Conversely, different rows can conflict through page locking or a common leaf/map/structural resource. Exact acquisition, escalation, retention and error timing come from TXN-LOCAL; arbitrary page-image equality is not the conflict policy.
+
+Lock contention follows ACE's finite retry behavior under the effective `dbLockRetry`, `dbLockDelay`, `dbPageTimeout` and related settings, then the captured error and object state. Record each setting's actual role; the book does not derive a timeout by multiplying unrelated constants. A conflict may outlive one call, but that call must not sleep indefinitely waiting for a later call on the same STA to commit the blocker. Other nonconflicting lockers continue independently. Section 28 supplies the local retry/request mechanism.
+
+Keep a separate per-file `publication_gate`, owned only by the active `ResolutionAttempt`. It protects selection of the latest committed base, fresh-base reconstruction, source preservation and the selected logical/failure publication boundary. Its lifetime can include I/O, so it is distinct from a short memory latch; it never extends merely because a transaction remains open. Acquire logical claims without holding this gate. If fresh-base expansion discovers a blocked additional resource before effects, release the gate and retry the effect-free preparation under the native conflict policy, retaining accepted effects and existing transaction grants.
 
 A view is an input to a read operation. It is not a new isolation level exposed to the caller. II-07 already distinguishes a dynaset's candidate membership from the values refreshed for an admitted row, a snapshot's produced values from its unfinished producer, and a table cursor's current row from the position used to continue scanning. Preserve those distinctions when choosing versions. A page resolver cannot decide that all three should advance merely because another commit occurred.
 
@@ -290,7 +338,7 @@ A current-row guard retains its actual images independently. Reading several fix
 
 For a snapshot created over its owner's uncommitted changes, a live pointer to the mutable transaction overlay is insufficient. The preferred snapshot preparation captures a bounded immutable overlay cut over the retained base view: copy the changed-binding directory together with its effective extent and catalog/identity bindings, and retain/freeze the referenced private images with the real metadata charge. Its base dependency graph must also be retained under the qualified external source context or already have complete independent backing. Later edits use II-03's copy-on-write rule. Initially this costs O(d) binding work for d private changed pages at that creation boundary; it does not copy the whole database.
 
-An ordinary read-your-writes operation instead uses the coordinator's current private-read permit and retains each resolved target. If its public policy refreshes unaffected data after an external protection gap, compose the retained effect-free own deltas over a freshly protected native base; an old whole private page is not automatically that operation's current base. In the constructed two-row case, CalcDb's accepted row0 change from 7 to 9 must coexist with ACE's surviving row1 change from 100 to 101. A retained snapshot may legitimately retain its earlier `(9,100)` cut, while a refreshing operation needs the qualified `(9,101)` composition without rerunning accepted expressions or callbacks. R-TXN-1/TXN-VIEW and CUR-POP decide those boundaries. Do not charge an O(d) overlay snapshot to every scalar getter.
+An ordinary read-your-writes operation instead uses the coordinator's current private-read permit and retains each resolved target. If its public policy refreshes unaffected data after another local publication, compose retained own deltas over the current committed base. A later external protection gap additionally needs a fresh native read certificate. An old whole private page is not automatically that operation's current base. In the constructed two-row case, locker A's accepted row0 change from 7 to 9 must coexist with locker B's surviving row1 change from 100 to 101 where those edits are admitted. A retained snapshot may legitimately retain its earlier `(9,100)` cut, while a refreshing operation needs the qualified `(9,101)` composition without rerunning accepted expressions or callbacks. R-TXN-1/TXN-VIEW and CUR-POP decide those boundaries. Do not charge an O(d) overlay snapshot to every scalar getter.
 
 The cleared report's page histories and short publication interval are useful concepts. Its first-committer-wins conflict errors, transaction-wide snapshot semantics, SSI machinery, WAL and shared-memory index are not selected CalcDb behavior. In particular, page-version differences trigger the revalidation appropriate to an edit; they do not by themselves produce a public optimistic-concurrency conflict. II-07's retained logical originals and native comparison policy still decide that result.[^v-concepts]
 
@@ -332,7 +380,7 @@ A fresh external read window receives a distinct coherence context. The public p
 
 `Free` and `Absent` differ. An allocated page can become logically free while its physical bytes remain in the file. A page beyond a view's retained extent is physically absent for that view. The allocation service returns a fresh allocation incarnation for a later object using the same page number, even if its bytes happen to match. Historical resolution chooses the incarnation within the selected interval. Live rollback resolves recorded allocation/identity changes according to II-08; it cannot simply restart the current incarnation counter.
 
-Ordinary ISAM reads require an allocated binding of the expected role. An old view that sees page 60 as free must not follow a newly introduced reference to it. A raw inspector that explicitly requests physical free-page bytes has a different retention requirement and must acquire that image while it is still available. Do not impose that raw-byte requirement on every public snapshot. Rollback before-images and optional whole-file undo have their own owners and may retain those bytes independently.
+Ordinary ISAM reads require an allocated binding of the expected role. An old view that sees page 60 as free must not follow a newly introduced reference to it. A raw inspector that explicitly requests physical free-page bytes has a different retention requirement and must acquire that image while it is still available. Do not impose that raw-byte requirement on every public snapshot. Rollback before-images have their own owners and may retain those bytes independently; the retired optional-undo idea adds no active retention obligation.
 
 Prefer a compact ordered history per changed page, with an inline current binding and a small vector or segmented directory for older intervals. Lookup is O(log h) for h retained intervals, plus expected O(1) sparse page lookup. A current, unchanged page needs only the fast binding. The representation can change after measurement, but each history entry must remain independently chargeable; moving bytes to spill does not remove its index cost.
 
@@ -369,7 +417,7 @@ A retained target outlives removal of a history lookup entry. A valid generation
 
 A publication latch alone does not close the read/overwrite race. Suppose no old snapshot exists when the writer calculates its preservation set. If a new reader can register the old current generation after that calculation but before native overwrite, that reader may require an image the writer did not preserve. A later generation check detects the mistake after the historical source has gone.
 
-Prefer a logical `ViewAdmissionHold` for the initial one-writer implementation. Acquire it before selecting the preservation set and before any native effect that can invalidate an image source. It prevents fresh selection of the current file view, while readers already registered at that serial continue using retained sources. A clone extending a valid registered view is not a new selection of an arbitrary historical serial. The hold can span I/O; no metadata latch does. Its duration is measured, not described as inherently short.
+Prefer a logical `ViewAdmissionHold` owned by the attempt that currently holds the per-file publication gate. Acquire it before selecting the preservation set and before any native effect that can invalidate an image source. It prevents fresh selection of the current file view, while readers already registered at that serial continue using retained sources. A clone extending a valid registered view is not a new selection of an arbitrary historical serial. The hold can span I/O; no metadata latch does. Its duration is measured, not described as inherently short.
 
 Fresh readers first reserve their bounded ticket/registration storage, then select and register under the same short visibility synchronization used to install the hold and to publish. If admission is resolving, retain a wait dependency on the exact attempt and release the latch. Cancellation removes only this waiter. The caller/callback wait graph must reject self-wait through the selected public continuation rather than block behind its own ancestor. If admission is restricted after uncertainty, the transaction outcome policy decides which operation may continue; no generic retry or novel error number follows from this enum.
 
@@ -391,11 +439,11 @@ SelectAndRegisterReadView(owner, policy, budget) -> ReadView | Failure:
 
 The writer retains the input view/private-read context needed by its own preparation, then reserves the metadata needed to claim its hold and the resources whose requirement is already known. It does not call fresh-view admission against its own hold. It then claims the hold, snapshots the registered view obligations, and reserves any additional preservation capacity outside latches. Failure before source detachment/effects settles the private attempt and releases or converts its hold according to the unchanged public state. If resource release can reenter, defer it to an owner-safe boundary or apply the existing same-attempt reentry policy; do not wait for the current call to unblock itself.
 
-After preservation capacity is admitted, freeze affected native sources, drain active source reads and establish complete alternative backing for every required old image. Only then detach the old native source and submit the qualified program. The preservation set includes registered views, rollback scopes, pinned/borrowed images, pending targets and image-load handoffs. One owner can cover the same image for several purposes; charging counts unique backing plus actual owner metadata rather than multiplying page bytes by the number of reasons to keep them.
+After preservation capacity is admitted, freeze affected native sources, drain active source reads and establish complete alternative backing for every required old image. Only then detach the old native source and submit the qualified program. The preservation set includes registered views, rollback scopes, pinned/borrowed images, pending targets and image-load handoffs. It also includes a changed page that an already registered view can resolve later but has not requested yet; neither a pin nor a load token is required for that obligation. One owner can cover the same image for several purposes; charging counts unique backing plus actual owner metadata rather than multiplying page bytes by the number of reasons to keep them.
 
-This algorithm coordinates CalcDb's writer with CalcDb readers. In shared mode, the preservation read also needs its qualified native source role; the local admission hold cannot stop ACE changing those bytes. Preserve required old external inputs before releasing the native protection on which they depend, or retain a qualified native retention role. An owned historical target is an obligation to keep its source, not a means of recovering that source after it has been lost.
+This algorithm coordinates the publishing locker with CalcDb readers and other lockers' retained base/cut inputs. The other lockers keep their accepted deltas and private images while this attempt preserves any old base they still need. In shared mode, the preservation read also needs its qualified native source role; the local admission hold cannot stop ACE changing those bytes. Preserve required old external inputs before releasing the native protection on which they depend, or retain a qualified native retention role. An owned historical target is an obligation to keep its source, not a means of recovering that source after it has been lost.
 
-This hold is different from the short `PublicationPermit` that changes in-memory bindings. At II-08's selected logical/failure node, publish the permitted tuple and release or convert admission. A failure can retain restricted admission and the same resolution attempt. There is no unconditional reopening during cleanup, and no hardcoded rule that the hold ends only after every flush: the qualified resolution program chooses the relationship among logical publication, force and persistent outcomes.
+This hold is different from the short `PublicationPermit` that changes in-memory bindings. At II-08's selected logical/failure node, publish the permitted tuple and release or convert admission. On a successful commit, publish first, release the view hold and publication gate, and only then drain deferred interface releases outside all latches. A destructor that opens a recordset therefore sees the post-commit admission state. A failure can retain restricted admission and the same attempt; cleanup cannot reopen uncertain sources. The selected resolution program still determines the relationship among logical publication, force and persistent outcomes.
 
 The refinement belongs at II-03's preservation step and II-08's publication step. R-TXN-1/TXN-VIEW and R-CURSOR-1 measure the resulting read waits and visible boundaries; if that bounded serialization is unacceptable under the native policy or cost evidence, the replacement must admit new readers only with preservation capacity for the images they can still select. Merely deleting the hold is not a safe optimization.
 
@@ -440,6 +488,8 @@ When the public policy permits the next operation to refresh, the new operation 
 | 5 | Keeps view10 and its result | Publishes the allowed view11 tuple; settles admission under the selected policy | Selects/registers view11 after admission becomes available |
 
 Counting active native reads would miss A at event2. Its target and load token already carry a historical-image obligation. The writer cannot wait for A's load to finish if A is itself waiting for the writer to make the frozen source readable. Instead, the preservation transition must either adopt an already completed image or perform its own admitted preservation read while new ordinary source reads remain excluded, then redirect the target. That special preservation role is owned by the writer attempt; it is not an unrestricted bypass of exclusion. Beside an external writer it includes the native role protecting the source throughout the required capture, not just local permission to bypass the frozen-page queue.
+
+The same obligation exists when A registered view10 but never requested page17 at all: the changed-page/history intersection must preserve `D17.a` before overwrite, so A can resolve it later. This is part of W-03/private-images-coherence before the first W-05 overwrite, not optional undo or a later full-snapshot optimization.
 
 The source transition and cache eviction share synchronization. Until the retained source is installed, the last resident `D17.a` cannot be evicted on the promise that the native page still backs it. Once installed, existing pins retain their bytes, pending target loads use the retained source, and no new old-image load can slip onto the mutable native page. Failed preservation before effects leaves the old native source authoritative and settles the writer's hold; failed or uncertain effects leave the exact II-08 receipt and restrictions.
 
@@ -523,7 +573,7 @@ Count view selections per public operation, registered distinct serials, history
 
 ## 20. A native sharing profile describes roles, ranges and observable timing
 
-**Requirement trace:** RQ-LOCK-03, RQ-LOCK-04, RQ-CONC-01, RQ-CONC-02, RQ-STORE-02, RQ-CALL-03 and RQ-CALL-04. The four sharing steps remain D-LOCK-1's Decided scope; the mechanisms in this section are Provisional under R-LOCK-3/4. Native readers and writers are later capabilities. They do not replace the initial exclusion and reader-only protocols.
+**Requirement trace:** RQ-LOCK-03, RQ-LOCK-04, RQ-CONC-01, RQ-CONC-02, RQ-STORE-02, RQ-CALL-03 and RQ-CALL-04. The four sharing steps remain D-LOCK-1's Decided scope; the mechanisms in this section are Provisional under R-LOCK-3/4. Coexistence with external native readers and writers is later scope; local lockers and their rebase are initial scope. They do not replace the initial exclusion and reader-only protocols.
 
 The later adapter must answer two different questions: whether a logical operation is allowed to proceed, and whether the exact native bytes being inspected or overwritten remain protected for that physical action. DAO's LockEdits documentation explicitly permits readers to read a page held for pessimistic editing. Its public Edit/Update timing therefore cannot be implemented by assuming that every edit owns an exclusive kernel byte lock over the database page for the whole edit lifetime. The native mechanism must distinguish edit ownership from physical transfer/read coordination, whether through different ranges, modes or transitions. R-LOCK-4 captures that distinction. [^x-lockedits]
 
@@ -612,7 +662,7 @@ The discovery role is substantive: if the captured protocol cannot prevent a des
 
 This algorithm reserves bounded ownership, not all possible database bytes. It may stream a large LV into admitted spill storage while the required native role remains owned. Space exhaustion then has a defined failure path; it cannot release protection halfway and resume from a mutable native chain later. Cycle, reference-count and length bounds come from the shared format reader. For N pages and E followed references, copying/validation costs O(NP+E) plus the specific index/key work, with O(number of retained page handles and reference metadata) RAM and owned spill for larger payloads.
 
-A sealed input can be used outside a transient read window. VBA callbacks receive stable owned values, never a pointer whose native source can change after a lock release. Reentry still validates cursor/session/plan generations before publication, and does not repeat a completed callback. Some evidenced logical read or edit ownership may deliberately span a callback or multiple calls; it remains with its named owner. That lifetime does not justify holding an internal memory latch across foreign code.
+A sealed native input can be used outside a transient read window. Provider calls receive owned values captured by II-02’s structural copy rule, never a pointer whose page source can change after a lock release. An effectful element copy owns its backing and completed outputs, then revalidates before reading the next element; it does not require a frozen foreign graph. Reentry still validates cursor/session/plan generations before publication, and does not repeat a completed callback. Some evidenced logical read or edit ownership may deliberately span a callback or multiple calls; it remains with its named owner. That lifetime does not justify holding an internal memory latch across foreign code.
 
 ## 22. Cache refresh, cursor identity and materialization use different policies
 
@@ -643,85 +693,115 @@ flowchart TD
 
 A source spool is not an implicit Requery. DAO describes Requery as executing the source again and repopulating its recordset. Use that public transition only when requested or when the captured native behavior requires it; refreshing current values does not license resetting membership, position, parameters or bookmark family. [^x-requery]
 
-## 23. Shared publication refreshes physical pages after acquiring ownership
+## 23. Publication rebases onto the current committed page
 
-Step 4 extends II-08's native persistence compiler with externally mutable sources. A complete page image prepared before current native publication ownership can overwrite another writer's unrelated change. Even if two logical edits affect different rows, they can share a data page, index leaf, map byte or TableDef counter. The first implementation keeps one admitted CalcDb writer per file, while recognizing that the external ACE writer is outside that in-process serialization.
+This mechanism is required in phase 1. Multiple local lockers can prepare changes from the same committed base and resolve in either order. A later publisher must not overwrite a neighboring change committed while its own transaction was open. Later Step 4 uses the same accepted-delta builder, adding native roles for externally mutable sources.
 
-**Preferred provisional direction:** retain accepted logical/structural deltas and semantic receipts, acquire the qualified native publication footprint, refresh current physical images, revalidate affected logical conditions, and rebuild the complete phase images from those fresh bases. Preserve all unrelated current bytes and references. Once a phase image is sealed, its native protection remains valid through the associated transfer and any required resolution transition. A row-level edit permission alone does not prove that a complete-page transfer cannot race ACE's own cache/writeback.
+**Preferred provisional direction:** retain accepted logical/structural deltas and their semantic receipts; acquire the local logical footprint; enter the per-file publication gate; select the latest committed source closure; revalidate the affected native conflict/constraint conditions; then rebuild the final images from that base. The candidate uses one final image per page per publication unit. If R-CRASH-1 selects a repeated-image fallback, derive those intermediate images from the same fresh base. Rebuilding physical bytes never repeats accepted callbacks, expressions or generated-value allocations.
 
-**Figure F-76 — two logical rows sharing a constructed 4096-byte data page.** This isolated page follows the earlier row grammar; it is not a complete ACE-created database. Header owner is `0x20`, slot count is 2, directory slots name offsets `0x0FF9` and `0x0FF2`, and free space is 4064 (`E0 0F`). Each seven-byte row contains one non-null Long.
+**Figure F-76 — two local lockers sharing a constructed 4096-byte data page.** This isolated page follows the earlier row grammar; it is not a complete ACE-created fixture. Header owner is `0x20`, slot count is 2, directory slots name `0x0FF9` and `0x0FF2`, and free space is 4064 (`E0 0F`). Each seven-byte row contains one non-null Long. The schedule is admissible only where TXN-LOCAL establishes that its native conflict footprint allows both edits; page-level locking can instead make the second edit retry and fail.
 
 | State | Root `(17,0)`, row at `0x0FF9` | Root `(17,1)`, row at `0x0FF2` | Meaning |
 | --- | --- | --- | --- |
-| P0 | `01 00 07 00 00 00 01` | `01 00 64 00 00 00 01` | Both writers initially read values 7 and 100. |
-| CalcDb's private candidate | `01 00 09 00 00 00 01` | `01 00 64 00 00 00 01` | Accepted change is only row 0: 7→9. |
-| Fresh native page after ACE update | `01 00 07 00 00 00 01` | `01 00 65 00 00 00 01` | ACE changed row 1: 100→101. |
-| Correct refreshed CalcDb image | `01 00 09 00 00 00 01` | `01 00 65 00 00 00 01` | Reapply only the owned delta to the protected current page. |
-| Qualified later rollback of CalcDb row 0 | `01 00 07 00 00 00 01` | `01 00 65 00 00 00 01` | Restore CalcDb's scope without undoing ACE's row 1. |
+| P0 | `01 00 07 00 00 00 01` | `01 00 64 00 00 00 01` | Both lockers initially read values 7 and 100. |
+| Locker A's private candidate | `01 00 09 00 00 00 01` | `01 00 64 00 00 00 01` | A accepted only row 0: 7→9. |
+| Current committed page after B | `01 00 07 00 00 00 01` | `01 00 65 00 00 00 01` | B committed row 1: 100→101. |
+| A's rebased final page | `01 00 09 00 00 00 01` | `01 00 65 00 00 00 01` | Apply A's retained delta to the latest committed page. |
+| A rolls back while still private | `01 00 07 00 00 00 01` | `01 00 65 00 00 00 01` | Discard A's delta; no native whole-page restoration. |
 
-The data bytes are at file offsets `0x11FFB` and `0x11FF4`. Comparing the whole page with P0 would falsely classify the unrelated row-1 change as a row-0 conflict. Writing CalcDb's old private page would lose row 1's accepted update. The whole-row comparison policy from II-07 answers whether row 0 conflicts; the fresh-page builder separately preserves row 1.
+The Long payloads begin at file offsets `0x11FFB` and `0x11FF4`. Comparing the whole page with P0 would misclassify B's unrelated row-1 change under an admitted record-level conflict policy. Writing A's old private page would lose B's commit. The native original-value policy determines whether A's logical edit conflicts; the physical builder separately preserves B's bytes. Reverse the commit order in the companion case, and repeat with each rollback/commit combination.
 
-The same rule applies to maps. In a constructed global declaration at row offset `0x0FBB`, pages 80 and 81 use masks `01` and `02` in byte `0x0FCA`. If both were free, the byte can start at `FF`. ACE allocating 81 changes it to `FD`; CalcDb subsequently allocating 80 must derive `FC`, not its stale `FE`. For a shared owner bitmap starting at zero, ACE's `02` becomes `03`, not `01`. Reversing only CalcDb's allocation restores global `FD` and owner `02`, subject to the actual native reuse policy. Changing one bit still requires ownership of the physical update that carries the other bits.
+Allocation uses the same separation. In a global declaration at row offset `0x0FBB`, pages 80 and 81 use masks `01` and `02` in byte `0x0FCA`. If both were free, that byte can start at `FF`. B allocating 81 gives `FD`; A subsequently allocating 80 must derive `FC`, not stale `FE`. For an ownership bitmap starting at zero, B's `02` becomes `03`, not `01`. Rolling back A while its allocation is private leaves committed global `FD` and owner `02`. Local allocator claims must prevent two lockers from accepting the same physical reservation; choosing another still-private location does not regenerate a semantic value.
 
-An index delta similarly applies to the fresh physical tree. Recompute search paths, separator maxima, compressed occupancy and any split closure under qualified ownership. Preserve another writer's entries, and perform the required uniqueness/relationship check while the relevant native protection makes it meaningful. A new conflicting entry is a semantic conflict to resolve under the captured policy; it is not permission to replay the caller's assignment or generated-value allocation.
+An index delta applies to the fresh physical tree. Recompute search paths, separator maxima, prefix compression, occupancy and any split closure, preserving B's entries. Revalidate uniqueness and relationships under the selected local claims. A new conflicting key follows ACE's observed conflict/constraint outcome; it is not permission to reevaluate A's assignment or allocate another AutoNumber.
+
+For later external sharing, B may be ACE in another process. The same builder then runs only after acquiring the evidenced native publication/read/structural roles and refreshing their protected source closure. The external adapter proves physical transfer protection; a local publication gate or a row-level edit permission alone cannot stop ACE's cache writeback.
 
 ## 24. Lock planning follows the full mutation and rollback closure
 
-Build the logical mutation through II-07, including cascades, native row roots, old/new keys, generated-value tickets and accepted callback results. Derive a candidate physical footprint and its native intents before making persistent effects. `Row(17,0)` may require data/body ownership, an LV allocator and chain, two physical indexes, shared usage maps and a descriptor/counter page. The physical compiler must return this closure to the sharing adapter rather than acquiring extra native locks invisibly during a late page write.
+Build the logical mutation through II-07, retaining row roots, old/new keys, cascades, generated-value tickets and accepted callback results. Derive its candidate conflict footprint before effects. `Row(17,0)` can require row/body claims, LV allocation, two indexes, shared usage maps and a descriptor/counter. The physical compiler returns this closure to the local manager. External mode expands the same needs to its native recipe; format code acquires neither hidden logical claims nor guessed native locks.
 
 ```text
-PrepareSharedProgram(accepted_delta, scope, profile, budget):
-    retain the existing attempt and accepted semantic receipts
-    footprint = derive provisional native resources from retained dependencies
-    ownership = acquire qualified edit/publication/structural roles
-    fresh = refresh the complete physical source closure under ownership
+PreparePublicationProgram(accepted_delta, scope, mode, profile, budget):
+    retain the ResolutionAttempt, LockerId and accepted semantic receipts
+    footprint = derive candidate logical resources from retained dependencies
+    claims = validate and reuse this participant's preflight local grants
+    if claims are missing or need incompatible acquisition:
+        if attempt owns any participant publication gate:
+            return ReplanPhysicalPreparation before waiting or submitting effects
+        acquire the missing local claims using finite native policy
+    if mode is External:
+        validate and retain the preflight native roles
+        if required native roles are missing:
+            if attempt owns any participant publication gate:
+                return ReplanPhysicalPreparation before waiting or effects
+            acquire the missing native roles outside local latches
+    enter this file's publication_gate for this attempt, not for its transaction
+    fresh = select latest committed closure; refresh protected native bytes if External
     compare originals and revalidate required schema/key/constraint conditions
     if validation requires a new semantic decision:
-        settle through the captured conflict/failure continuation
-        return without replaying prior effects
-    revised = apply effect-free owned deltas to fresh images
+        release this private publication admission by its unchanged-state rule
+        return Failure(captured_conflict_or_error, retained_attempt)
+            for the captured continuation without replay
+    revised = apply only accepted effect-free deltas to fresh images
     expand row/LV/index/map/catalog allocation and reference closure
-    if the closure requires incompatible acquisition order or stronger coverage:
-        if no effect from this newly prepared program was submitted:
-            release only roles allowed by the public lifetime policy
-            preserve accepted receipts and return ReplanPhysicalPreparation
-        return retained resolution obligation; never restart the mutation
-    program = compile native phases plus their required ownership intervals
-    reserve transfer, rollback, history and failure receipts
-    seal program and source certificates
-    return the same owned attempt with program and native role receipts
+    if expansion needs a conflicting claim or incompatible acquisition order:
+        if no effect from this program was submitted:
+            release publication_gate; retain existing transaction grants and receipts
+            release external roles only as their lifetime policy permits
+            return ReplanPhysicalPreparation under the finite conflict policy
+        return the same retained resolution obligation; never restart the mutation
+    reserve final/fallback images, old-source preservation and failure receipts
+    seal the selected write program and its current-base certificates
+    return PreparedParticipant(program, current_base_certificate, gate, claims)
+        retained by the existing ResolutionAttempt
 ```
 
-The acquisition planner distinguishes a private allocation candidate from an externally effective reservation. Reading a free bit and keeping a local reservation does not stop ACE from allocating that page. Retain the qualified allocator ownership or publish the evidenced native reservation before relying on exclusivity. If the candidate is lost while still private, choose another physical location without regenerating a semantic AutoNumber or repeating a user callback. If native effects occurred, use the recorded resolution path instead of silently replanning them away.
+`PreparedParticipant` owns no independent commit: its images, base certificate, gate and claims remain obligations of the existing ResolutionAttempt. The outer coordinator executes each selected program once. A `Failure` returns the captured cause and the same retained attempt to its failure handler; it never falls through to delta application or program execution. A `ReplanPhysicalPreparation` result occurs before this preparation submits effects. For multiple files, the outer coordinator preflights all known participant claims before entering the first publication gate, then invokes this helper in stable file-identity order. If a later participant needs fresh resource acquisition or expanded closure, release all still-private gates owned by this attempt before replanning admission; preserve accepted effects and transaction-held grants. Native mode applies the same rule to missing external roles. A gate is never reacquired as though its current owner were another transaction.
 
-The order of distinct roles is a profile constraint, not a universal sort by page number. Pessimistic edit ownership may already be retained when additional index/allocator resources are discovered. Releasing it to obtain a tidier order can change public conflict behavior. Prefer collecting compatible higher-order intents before the retained edit ownership where the native protocol permits that, or using its nonblocking acquisition/retry sequence. If the observed protocol instead requires a specific wait or error, preserve it. Do not add a global cross-process writer lock whose extra serialization ACE does not recognize.
+Never hold the publication gate while waiting for another locker's future transaction-ending call. Known logical claims are acquired first. Fresh-base discovery can change the footprint, but before effects it can leave the gate and replan physical preparation without discarding an accepted callback or dropping a still-required transaction grant. The gate may span actual preparation/I/O; a short metadata latch never does. A second publisher waits only for the active bounded attempt and follows the captured failure/uncertainty continuation if that attempt cannot resolve normally.
 
-Attach every native role to an interval of the actual phase program. Some resources can be released after a coherent copied read; others remain through Update, transaction resolution, rollback or an outstanding native request. An uncertain write keeps the protection and owner obligations that prevent another actor from treating the affected source as settled. Release timing follows the native policy and II-08's progress classification, not scope exit in a convenient destructor.
+A local allocation reservation excludes the same page from other local lockers because all use the same allocator and claims. It does not reserve that page against ACE in external mode. That mode additionally holds the native allocator role or performs the evidenced native reservation. Losing a private physical candidate may require another location, but never another semantic AutoNumber or callback. Native effects use their existing resolution receipt instead of disappearing into a replan.
 
-**Figure F-77 — native role ownership is independent of a memory latch.** The release points below are preferred categories pending profile evidence, not claims that all native resources share these lifetimes.
+Role ordering is a profile constraint, not a universal sort by page number. Pessimistic edit ownership may remain from an earlier call. Releasing it to obtain a tidier order can alter public conflict behavior. Use the native-compatible acquisition/retry outcome and retain the logical owner's lifetime. No new cross-process writer mutex is introduced.
+
+**Figure F-77 — resource ownership is independent of a memory latch.** Initial local claims and later external roles have distinct mechanisms. Their observable lifetimes come from TXN-LOCAL and the later R-LOCK-3/4 branches.
 
 | Role intent | Principal owner | Lifetime question |
 | --- | --- | --- |
-| Read discovery and transient physical capture | Current input-capture attempt | Which native event permits references/images to be used after release? |
-| Retained logical read | Cursor or transaction policy owner | Does Idle, movement, Requery or transaction resolution release it? |
-| Pessimistic edit | Edit state, then transferred resolution attempt | Does successful/failed Update, CancelUpdate or Close release or retain it? |
-| Publication/data/index/map protection | Prepared program and persistent receipt | Which completion/visibility/native-resolution boundary makes release safe? |
-| Structural/schema ownership | DDL or structural mutation scope | Which readers and held descriptors may coexist, and when are their native sources invalidated? |
-| Uncertain acquisition, transfer or release | File-session continuation | Which terminal evidence or independent reopen settles it without duplicate unlock or replay? |
+| Local record/page edit claim | Locker and current edit/frame scope | Which Edit/Update, resolution or Close transition releases or retains it? |
+| Local structural/allocator claim | Locker's accepted mutation and resolution attempt | Which conflicts must block, retry or fail before allocation/tree changes are accepted? |
+| Per-file publication gate | One ResolutionAttempt | Which successful or failed publication boundary releases or retains it? |
+| Read discovery and transient native capture | Current input-capture attempt | Which event permits captured references/images to survive release? |
+| Retained logical read | Cursor or transaction policy owner | Does Idle, movement, Requery or resolution release it? |
+| External data/index/map/structural protection | Prepared program and persistent receipt | Which native transfer/resolution boundary makes release safe? |
+| Uncertain acquisition, transfer or release | FileSession continuation | Which terminal evidence or reopen settles it without replay or duplicate release? |
 
-Public `dbDenyWrite` and table-only `dbDenyRead` requests also enter the logical resource plan. They are documented admission effects, not merely hints to CalcDb cursors. Their concrete native implementation, interactions with existing readers/editors and lifetime across held COM children belong to R-LOCK-4. A raw read-only request is distinct from denying other actors' writes. [^x-options]
+Public `dbDenyWrite` and table-only `dbDenyRead` requests enter the same logical resource plan. Their local admission/lifetime belongs to TXN-LOCAL and the corresponding cursor cases; their later native implementation belongs to R-LOCK-4. A raw read-only request is distinct from denying other actors' writes.[^x-options]
 
-## 25. Shared rollback restores the scope without overwriting another writer
+## 25. Local rollback preserves other lockers; external rollback adds native roles
 
-II-08's before-images remain essential for reconstruction and comparison. Under the initial exclusive lease, a complete before-page can also be a candidate restoration target. Under shared operation, its suitability depends on whether native ownership prevented intervening changes to every byte that would be restored. A before-page is not blanket permission to erase unrelated changes accepted after it was captured.
+For purely private local changes, rollback does not write old pages to the database. Remove the rolling-back scope's accepted deltas and generated/identity obligations according to II-08, then reconstruct any surviving outer overlay over its policy-selected base. Other lockers retain their private overlays, grants and committed changes. An immutable snapshot cut already accepted by the public policy keeps its own image ownership.
 
-For the two-row witness, if ACE's row 1 changed after CalcDb captured P0 and that change is required to survive, rolling back CalcDb row 0 produces `(7,101)`, not `(7,100)`. Compile the restoration from scope-specific logical/structural obligations onto freshly protected current pages, preserving other actors' state. If the native transaction retained page ownership so the intervening change could not happen, the simpler whole-page restoration may remain applicable. R-LOCK-4/TXN-RANGE distinguishes those cases at each nesting and edit-lock setting.
+```text
+RollbackLocalScope(locker, scope, receipt):
+    if receipt records any native effects:
+        continue that same II-08 resolution attempt and its selected failure policy
+        return without an unconditional before-page restore
+    remove only scope-owned accepted deltas and private allocations
+    restore scope-selected semantic/generated-value and identity state
+    rebuild surviving outer deltas over their permitted committed base
+    release only claims whose captured scope lifetime has ended
+    retain sibling lockers, published bindings and independent old-image owners
+```
 
-Restoration must include indexes, ownership and any generated/counter policy selected by the native scope. Removing an inserted row does not authorize removing a later independent index entry or returning a shared bitmap byte to its old value. A relocation rollback restores the required root/body relationship under the same discoverability and reuse protection used on the forward path. An unrelated later occupant cannot be moved merely because its page number appears in an old before-image.
+In F-76, B's committed row 1 remains 101 when A discards its private 7→9 change. Committing A's surviving outer scope later must still rebuild over B's publication. Inner rollback need not release every lock if ACE retains that ownership until outer resolution; TXN-LOCAL/TXN-RANGE decide the observable outcome. A whole-page before-image remains useful for comparison, decoding and scope history, but external file exclusion alone cannot make it a valid restore target while another local locker can commit.
 
-Shared rollback is another native phase program with its own protected intervals, progress receipts and crash cuts. It can fail. Persistent uncertainty cannot be hidden by releasing locks and reporting a logical rollback success; nor can CalcDb retain an unbounded invisible lock forever and call the public operation complete. The captured error and next-call/reopen behavior chooses the continuation, while the session retains the unresolved native obligations.
+Once an owned program has native effects, its typed receipt determines what compensation, continued resolution or failure is allowed. If restoration is needed, rebase only the scope's retained inverse/structural obligations onto the current protected state, preserving independent committed changes. A whole before-page is usable only when the ownership interval prevented every intervening change it would overwrite. This condition applies inside one process as well as beside ACE.
 
-D-UNDO-2's initial optional complete-before recovery remains disabled for unqualified shared profiles. Its whole-file predicate may reject an external change, but it does not supply the live shared rollback algorithm. A successful predicate still requires exclusion and the independently qualified one-shot recovery schedule. The native ACE-first baseline must hold with the private record absent, including crashes while another process is active.
+Later external rollback uses that same scoped builder with the native roles that protect current bytes, indexes, maps and references. For the external version of F-76, restoring A while ACE's row 1 must survive yields `(7,101)`. Removing A's allocation must preserve another actor's bitmap bits; restoring a relocated row cannot move an unrelated occupant merely because its page number occurs in A's old image.
+
+A restoration program can fail. It retains exact progress and native obligations rather than reporting invented rollback success. Precise interrupted-state comparison follows R-CRASH-1's implementation work. D-UNDO-2 is retired; no private sidecar supplies this live rollback algorithm or strengthens the ACE-first baseline.
 
 ## 26. Native reuse, escalation and errors constrain the resource policy
 
@@ -737,7 +817,7 @@ The same caution applies to errors. Two failures with the same public number can
 
 ## 27. Evidence establishes interference, not merely lock-shaped activity
 
-R-LOCK-3/4 must correlate public operation boundaries with actual handle, lock, byte and outcome traces. Capture native acquisition/release ranges and status alongside data/index/map/catalog reads and writes, but prove a role by interference: hold or pause the relevant native owner in a disposable fixture and show exactly which competing action waits, succeeds or errors. Repeat with different rows on one page, different pages, different physical indexes and shared map/descriptor pages. A range observed near Edit may serve owner bookkeeping rather than the assumed row exclusion.
+R-TXN-1/TXN-LOCAL first correlates one-process conflict and resolution boundaries with local owners; R-LOCK-3/4 later correlate public operation boundaries with actual handle, lock, byte and outcome traces. Capture native acquisition/release ranges and status alongside data/index/map/catalog reads and writes, but prove a role by interference: hold or pause the relevant native owner in a disposable fixture and show exactly which competing action waits, succeeds or errors. Repeat with different rows on one page, different pages, different physical indexes and shared map/descriptor pages. A range observed near Edit may serve owner bookkeeping rather than the assumed row exclusion.
 
 Controlled page layouts let the experiment distinguish resource granularity. Put roots `(17,0)` and `(17,1)` on one data page, a third on 18, and indexed keys in one leaf versus distinct leaves. Add LV chains whose row roots are independent but share an allocator/map. The operation pair determines the actual coverage: reading while another user merely edits, reading during Update/publication, two edits on one page, two key changes sharing a leaf, allocation while another process retains an LV value, and DDL while a row or descriptor remains held. Keep existing and late participants separate.
 
@@ -747,19 +827,21 @@ First qualify one narrow local operation with complete coverage, then extend the
 
 ## 28. Resolve local contention and native acquisition through one request record
 
-The local manager coordinates CalcDb owners even when their native requests share a physical handle. Use per-FileSession resource directories and compact request/grant arenas. The uncontended exclusive path retains one admitted exclusion proof and one local logical-owner token; it does not allocate an OS lock request per field or per page. A mixed protocol performs the native recipe only when that recipe requires another acquisition.
+The local manager coordinates independent Workspace/Connection lockers even when they share one physical FileSession handle. It is active in the first writer implementation, not only after external sharing is added. Use per-FileSession resource directories and compact request/grant arenas. The uncontended exclusive path retains one admitted exclusion proof and one local logical-owner token; it does not allocate an OS lock request per field or per page. A mixed protocol performs the native recipe only when that recipe requires another acquisition.
 
 ```text
 LockRequest {
-    request_id, slot_generation, owner_handle, owner_incarnation
+    request_id, slot_generation, locker_id, owner_handle, owner_incarnation
     file_session_incarnation, protocol_id, semantic_resource_set
-    expanded_native_plan, plan_generation, selected_wait_policy
+    local_conflict_footprint, expanded_native_plan, plan_generation
+    selected_wait_policy, effective_option_snapshot, retry_state, retry_end
     state, cancellation_requested, completion_generation
     local_blockers, native_request_owners[], acquired_grant_owners[]
     primary_outcome, secondary_release_outcome
 }
 HeldGrantSet {
-    logical_owner, plan_generation, exact_native_grant_handles[]
+    locker_id, logical_owner, plan_generation, local_claim_handles[]
+    exact_native_grant_handles[]
     qualified_borrow_receipts[], remaining_release_obligations[]
 }
 ```
@@ -785,7 +867,23 @@ flowchart TD
     G -->|"Qualified continuation"| F
 ```
 
-Prefer a deterministic local queue with no bypass of an earlier incompatible waiter, while allowing nonconflicting resources to proceed. This prevents avoidable writer starvation inside CalcDb. It is an internal scheduling choice, not a claim that ACE or Windows uses FIFO ordering. R-LOCK-4 measures cases where waiting order affects public errors or completion; change the local policy when compatibility requires it. Native waits retain their captured timeout/retry policy and are not replaced by aggressive user-space polling.
+Prefer deterministic queue bookkeeping while allowing nonconflicting footprints to proceed. No FIFO or indefinite fairness promise overrides ACE's retry/error behavior. The request retains an effective-option snapshot and the native-compatible retry schedule selected by TXN-LOCAL. `dbLockRetry`, `dbLockDelay`, `dbPageTimeout` and related options are measured as separate dimensions; do not assume a formula that documentation does not supply.[^x-setoption]
+
+```text
+WaitForLocalConflict(request):
+    repeat according to request's captured finite retry policy:
+        with manager_latch:
+            recheck exact locker, request, blockers and claim generations
+            if cancelled/closed: detach only still-local wait; return selected outcome
+            if footprint is now admissible: grant reserved local claims; return Granted
+            if native policy is exhausted: retain captured conflict cause; stop
+            record next bounded wait and its exact blocker dependencies
+        wait outside latches until next retry, relevant wake or cancellation
+    settle only this request's ungranted claims and wait edges
+    return captured conflict error/state; leave the blocking locker intact
+```
+
+In the one-STA witness, A's transaction has returned to VBA with accepted changes and B then calls Update on a conflicting resource. A is not a callback ancestor, so ancestry detection alone cannot resolve the wait. B uses the finite native retry policy and returns its observed error if A remains blocked; it never waits indefinitely for a later A.CommitTrans call. With a nonconflicting footprint, B proceeds and may commit first. Two-thread variants use the same claims and policy, with actual wake/timing results captured separately.
 
 ```text
 AcquireResources(owner, resource_plan, wait_policy, budget):
@@ -800,8 +898,20 @@ AcquireResources(owner, resource_plan, wait_policy, budget):
         if conflicting local holders or earlier incompatible requests exist:
             queue request and record current local blockers
         else:
+            grant the reserved local claims; mark request LocallyGranted
+    if locally queued:
+        local_outcome = WaitForLocalConflict outside every metadata latch
+        if local_outcome is not Granted: return its owned terminal outcome
+    with manager_latch:
+        revalidate owner admission, cancellation policy and exact local claim ownership
+        if the request may no longer proceed:
+            select owned local-claim cleanup; perform no native submission
+        elif protocol needs no native recipe:
+            transfer reserved local HeldGrantSet to its locker; select Granted return
+        else:
             mark request Submitting; retain its native handle/context
-    perform selected local wait or native plan outside every metadata latch
+    settle selected cleanup or Granted return outside the latch when applicable
+    perform only the selected native plan outside every metadata latch
     if a queued local request cancels before native submission:
         under manager latch, test ownership and detach only if still locally owned
         if detached as locally owned:
@@ -829,7 +939,7 @@ AcquireResources(owner, resource_plan, wait_policy, budget):
 
 Submitting requests retain their incompatible-resource claims. Partial acquisitions, possible late grants and unresolved releases stay indexed as blockers until their exact ownership settles or transfers to another indexed owner. Preparing a wake list does not remove those claims. This matters when two logical owners reuse a native handle: the OS cannot replace the manager's missing ownership interval.
 
-Every exceptional exit after registration reaches this same owner. Submission failure, a lost result allocation, a stale public binding or a cancellation race cannot erase a possible native grant. The code is deliberately silent about a numeric public error; the surface mapper uses the captured cause/context and remaining object state. An internal `LocalConflict`, `ExternalWait`, `ReleaseUncertain` or `SelfDependentWait` is evidence for that mapping, not a new DAO error code.
+Every exceptional exit after registration reaches this same owner. Submission failure, a lost result allocation, a stale public binding or a cancellation race cannot erase a possible native grant. The code is deliberately silent about a numeric public error; the surface mapper uses the captured cause/context and remaining object state. An internal `LocalConflict`, `ExternalWait`, `ReleaseUncertain` or `SelfDependentWait` is evidence for that mapping, not a new DAO error code. PRD-01 names error 3188 as the initial same-machine session-conflict expectation; TXN-LOCAL captures the exact number, retry timing and residual edit/transaction state for each case.
 
 A semantic resource plan can contain several native acquisitions. If the second fails after the first succeeds, the result contains both facts; it is neither a successful whole-plan grant nor a failure with no cleanup. Settling a local queue wait and settling a submitted native request are different paths, joined by a generation-qualified ownership transfer. A cancellation racing that transfer follows whichever owner actually accepted it.
 
@@ -859,6 +969,8 @@ Include dependencies imposed by queue precedence and reservations. If A holds sh
 
 Self-dependency needs an explicit check before sleeping. Suppose an outer DAO call owns a publication/admission reservation, calls VBA, and the callback reenters CalcDb seeking a fresh view that waits for that outer call. The thread cannot complete the outer call while it waits inside the callback. Recognize the active caller/ancestor ownership chain. A compatible nested operation uses its qualified retained view or native reentry rule; an incompatible one takes the selected public failure transition. It never waits on its own ancestor and never rolls back another owner merely to break the cycle. R-UDF-1, R-DAO-1 and TXN-CLOSE determine the public outcomes.
 
+On successful commit, the order is: publish the selected bindings; release the view-admission hold, publication gate and short latches; then drain deferred interface releases. A release that reenters OpenRecordset can select the new view without meeting an artificial commit hold. Failed/uncertain resolution retains its selected restrictions, so this success rule is not unconditional cleanup reopening. T-LOCK-65 and TXN-CLOSE exercise both branches.
+
 The same rule applies to Close invoked from the current callback stack. Internal serialization is not permission to create a deadlock that ACE does not have. The default preparation path releases internal latches before external entry and revalidates owner, binding, view and plan dependencies on return. Revalidation may reject or reprepare a pure physical plan; it cannot repeat completed host effects. A native logical lock may legitimately span that call if the captured protocol requires it.
 
 ## 30. Admit work by retained bytes and semantic authority
@@ -884,9 +996,9 @@ WorkOwner {
 }
 ```
 
-An admitted task's buffers and context survive queueing and completion. It captures no borrowed stack argument, unretained `PagePin`, live mutable parameter array or caller-owned scratch pointer. A worker may retain immutable row bytes with a pin and return a bounded typed result. It cannot use an apartment-bound COM interface merely because its pointer fits in a VARIANT. Keep interface-valued inputs and any destruction requiring the caller context on that context; worker authority comes from the shared value/thread contract, not from a generic “move Variant” operation.
+An admitted task's buffers and context survive queueing and completion. It captures no borrowed stack argument, unretained `PagePin`, live mutable parameter array or caller-owned scratch pointer. A worker may retain immutable row bytes with a pin and return a bounded typed result. It cannot use an apartment-bound COM interface merely because its pointer fits in a VARIANT. Capture values with `CaptureValueStructural` before a task escapes; only its admitted foreign-free owned results may enter pure worker work. Interface-valued inputs, provider calls and foreign cleanup remain with an owner that can use the reference under its COM rules. An internal worker receives no such authority from a generic “move Variant” operation.
 
-Initially restrict helpers to pure native byte work, cache loads or operators whose serial-equivalent behavior has been qualified. VBA callbacks, caller-bound interface calls, generated-value acceptance and observable mutation ordering remain on their designated owner. A supposedly pure expression can still raise an ordered error; parallel execution must not report an error for a row the serial query would never visit. II-10/11 and R-PAR-1 select those operator boundaries.
+Initially restrict helpers to pure native byte work, cache loads or operators whose serial-equivalent behavior has been qualified. Provider/sink calls, interface retention/release, generated-value acceptance and observable mutation ordering remain on their designated semantic owner and applicable COM-delivered context. A provider may execute elsewhere through its proxy; CalcDb neither relocates it privately nor assumes the initiating caller and provider share a thread. A supposedly pure expression can still raise an ordered error; parallel execution must not report an error for a row the serial query would never visit. II-10/11 and R-PAR-1 select those operator boundaries.
 
 ```text
 SubmitOwnedWork(owner, operation, immutable_inputs, result_ordinal, budget):
@@ -984,7 +1096,7 @@ CloseOwner(owner, cause, caller_context):
 
 Stopping ordinary admission does not stop already admitted Update or result-consumer work. Close obtains a qualified handoff before resolving their state, and its named cleanup/resolution authority remains allowed to use pre-reserved I/O and work capacity. It does not wait indiscriminately for an operation that itself needs the Close continuation. A failed Close that leaves the object open restores only its own admission transition after checking that no later lifecycle change superseded it. A public object may be closed while a separate backend cleanup owner remains if the captured policy permits that outcome; this is not a claim that native teardown succeeded.
 
-The displayed order is the preferred implementation skeleton. TXN-CLOSE and R-DAO-1 select differences between Workspace, Database, cursor, clone and final Release. Closing a public binding and releasing a COM reference are distinct events. Held interfaces can survive resource closure and must subsequently produce the captured closed-object behavior.
+The displayed order is the preferred implementation skeleton. TXN-CLOSE and R-DAO-1 select differences between Workspace, Database, cursor, clone and final Release. ACT-THREAD/FINAL-RELEASE also captures cross-apartment proxy release with an open transaction, rollback and lock release. Managed reachability or a finalizer-thread ID is not proof of the final native entry; retain the relevant reference and marshaling owners. Closing a public binding and releasing a COM reference are distinct events. Held interfaces can survive resource closure and must subsequently produce the captured closed-object behavior.
 
 A reentrant Close cannot synchronously wait for its own suspended ancestor. Preserve the active call's independent ownership and apply the captured immediate/deferred/failure transition. Until that combination is qualified, do not invent a successful close or a deadlocking wait. Deferred destruction is likewise performed only where the same-attempt reentry policy is defined. If uncertain native effects keep fresh-view admission restricted, releasing that restriction merely to make a destructor callback progress would violate the file-state obligation.
 
@@ -992,13 +1104,13 @@ For file-session teardown, public bindings, registered views, pending image load
 
 ## 32. Blocking Windows callers still need an explicit wait and reentry policy
 
-The host adapter supplies `WaitForOwnedEvent(context, deadline, cancellation)`. The core supplies the predicate, stable request owner and allowed continuation; it does not choose an apartment policy from a generic wait primitive. The native Windows, .NET Framework 4.8-family, .NET 10 and portable CalcVBA lanes remain separately captured.
+The platform adapter supplies `WaitForOwnedEvent(context, deadline, cancellation)` in the actual execution context delivered by COM. The core supplies the predicate, stable request owner and allowed continuation. It does not infer that context from the initiating .NET thread or a CalcVBA runtime thread. The native Windows, installed .NET Framework 4.8-family, .NET 10 and portable CalcVBA lanes remain separately captured. [U-PRD-01-09, U-OWNER-NET]
 
-For a Windows STA caller, prefer an apartment-aware wait using `CoWaitForMultipleHandles` with the narrow host-approved default dispatch policy, followed by predicate/generation revalidation. In an MTA or a portable environment without Windows apartments, use the corresponding owned event/rendezvous wait. Do not install a new message filter over the host's existing policy. R-UDF-1/I-HOST-1 and the object-lifetime cases confirm the actual permitted reentry and error behavior before changing dispatch flags.
+For execution on a Windows STA, prefer `CoWaitForMultipleHandles` with its narrow default dispatch behavior, followed by predicate/generation revalidation. ACT-THREAD distinguishes that server-entry context from an MTA client receiving a proxy. Native helper work actually executing in an MTA, and portable code without Windows apartments, use their corresponding owned event/rendezvous waits. Do not install a new message filter over the host's existing policy. R-UDF-1/I-HOST-1 and the object-lifetime cases confirm the actual permitted reentry and error behavior before changing dispatch flags.
 
 The API documentation distinguishes an STA COM modal wait from the MTA wait path. Its flags also distinguish default marshaling-related dispatch from additional window/call dispatch and alertable wakeups. A wake is therefore not always proof that the intended request became terminal. Recheck the owned completion predicate and the remaining deadline; never reuse an OVERLAPPED structure merely because the wait returned.[^r-cowait]
 
-This is an adapter choice, not a requirement to expose asynchronous DAO methods. The public call remains blocking. The engine must not use a worker's completion as an excuse to invoke VBA on that worker, nor hide broad UI message pumping in a cache helper. The caller-context policy belongs at the host boundary where reentry can be tested. On return from any permitted dispatch, validate the active operation, public binding and file/view generations before publication.
+This is an adapter choice, not a requirement to expose asynchronous DAO methods. The public call remains blocking. The engine must not use a worker's completion as an excuse to invoke VBA on that worker, nor hide broad UI message pumping in a cache helper. The adapter’s wait/reentry behavior is tested in the actual COM context; it does not prescribe the host’s or CalcVBA’s thread model. On return from any permitted dispatch, validate the active operation, public binding and file/view generations before publication.
 
 A stale generation stops stale semantic publication. It does not settle an outstanding I/O request: if dispatch reenters Close or Requery while the event remains pending, the exact request still drains or transfers through its supported continuation with all buffers and grants retained.
 
@@ -1032,15 +1144,27 @@ For a long reader, charge retained image bytes and metadata separately from cach
 
 The simulator drives the actual admission, request, version, work and resolution state machines. Inject controlled events at registration versus queue publication, native grant versus cancellation, preservation versus new view registration, completed load versus Close, and publication versus deferred destruction. Replay uses explicit clock/scheduling/I/O inputs. Trace loss or a missing native owner event invalidates completeness; it does not disappear from the compatibility denominator. The supplied reports contribute this evidence discipline without transferring their runtime-specific benchmarks or proofs.[^r-work-concepts]
 
-Implementation remains incremental. W-PROBE and R-LOCK-1 establish initial admission; W-03 carries exact handle/request ownership. W-10 adds qualified reader-only admission and in-process version retention as separate slices. W-11 adds protected external reads and freshness; W-12 adds shared mutation/rebase and network cases. Work admission, cancellation and Close ownership are needed throughout, while extra parallelism follows R-PAR-1 and measured benefit. Full shared writing does not become a prerequisite for a correct exclusive DAO read loop.
+Implementation remains incremental. W-PROBE and R-LOCK-1 establish initial admission; W-03 carries exact handle/request ownership. W-03/private-images-coherence supplies old-source preservation before W-05 first overwrites a native page. W-05/local-lockers-rebase supplies independent lockers, finite conflicts and fresh-base composition for the initial writer. W-10 adds reader-only admission and broader in-process visibility coverage using those existing results. W-11 adds protected external reads and freshness; W-12 adds external roles around the shared rebase/rollback machinery and network cases. Work admission, cancellation and Close ownership are needed throughout, while extra parallelism follows R-PAR-1 and measured benefit. Full shared writing does not become a prerequisite for a correct exclusive DAO read loop.
 
 ## 35. Implementation acceptance and the first discriminating runs
+
+**Deciding branches.** Native policy qualification follows the [common terminology](book-record.md#terminology). The section map separates initial local behavior from each later external protection context.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–9: public admission, authority, aliases, handles and release | R-LOCK-1/EX-OPEN, EX-DEFAULT, EX-CREATE, EX-ALIAS, EX-RACE, EX-PUBLIC, EX-AUTH, EX-PERM, EX-MAP, EX-LIFE and EX-RANGE; reader-only intervals use R-LOCK-2/RO-PAIR/RO-ACTUAL/RO-LATE/RO-INPROC/RO-FAIL/RO-NATIVE. |
+| §§10–19, 23 and 25: local visibility, publication and scoped rollback | R-TXN-1/TXN-VIEW/TXN-LOCAL/TXN-NEST/TXN-MULTI; R-CURSOR-1/CUR-ID/CUR-LIFE for held-row consequences. |
+| §§18–22: protected external input and refresh | R-LOCK-3/READ-ROLE, READ-PATH, READ-REFRESH, READ-ID, READ-SCHEMA, READ-SNAPSHOT and READ-LIFE. |
+| §§23–27: later external publication, allocator ownership and rollback | R-LOCK-4/WRITE-TIMING, WRITE-ORIGINAL, WRITE-REBASE, WRITE-ALLOC, WRITE-TREE, WRITE-LV, WRITE-DDL, TXN-RANGE, WRITE-PROMOTE and WRITE-FAIL. |
+| §§28–32: contention, reentry, cancellation and Close | R-TXN-1/TXN-LOCAL/TXN-CLOSE/FAIL-OWNER; R-LOCK-1/EX-RANGE/EX-LIFE; R-ACT-1/ACT-THREAD; I-HOST-1/HOST-WAIT/HOST-REENTRY/HOST-DETACH; R-PAR-1/PAR-ANCESTOR. |
+| §§30 and 34: worker/prefetch eligibility and cost | R-PAR-1/PAR-ORDER/PAR-ERROR/PAR-EFFECT/PAR-BUDGET/PAR-GENERATION/PAR-COST and R-STRING-1's measurement protocol. |
+| §33: network interruption and surviving grants | R-LOCK-4/WRITE-NET, retaining the selected native/profile configuration. |
 
 These are designed acceptance cases for the actual admission, version, lock, work and resolution machinery. They are not passing ACE results. Use deterministic scheduling and fault injection in the implementation, then compare native-facing policies with the independently identified ACE oracle. Byte/arithmetic witnesses validate only their stated constructions. The full branch conditions, captures and outcomes live in A-02; this chapter supplies their concrete implementation targets.
 
 | Test | Controlled case | Required observation / experiment |
 | --- | --- | --- |
-| T-LOCK-01 | Cross every normalized access/share pair, then actual native flags in both process orders | Symmetric access-versus-share decision; metadata exception separately represented; R-LOCK-1/EX-OPEN. |
+| T-LOCK-01 | Cross public open requests and normalized access/share pairs, then actual flags in both process orders | Symmetric lease decision; metadata exception separate; two-process default-open exclusion counted as EX-DEFAULT mismatch, not a passed coexistence case. |
 | T-LOCK-02 | Required ACE reader requests database W despite public ReadOnly | Safe denial remains a coexistence failure; no silent share-write relaxation; RO-ACTUAL. |
 | T-LOCK-03 | Readers A/B overlap while A closes and writer W arrives | No admission gap while B's required protection remains; RO-LATE. |
 | T-LOCK-04 | Path aliases versus distinct files with equal content | One authority per admitted identity, distinct public binding/Workspace rights; EX-ALIAS. |
@@ -1080,36 +1204,43 @@ These are designed acceptance cases for the actual admission, version, lock, wor
 | T-LOCK-38 | Unread old snapshot input overwritten externally before reacquisition | New coherent graph cannot recover old input; retain original protected backing or qualify different public policy. |
 | T-LOCK-39 | Delete/reinsert equal row at same root with retained bookmark/clone | External identity/expiry follows native evidence; no local incarnation or primary-key substitute; READ-ID. |
 | T-LOCK-40 | Idle, Move0, field inspection and Requery versus minimally observed control | Membership/value/lock/timing effects remain distinct and explicit; READ-REFRESH/SNAPSHOT. |
-| T-LOCK-41 | Capture stable input, release transient protection, then callback edits/closes/requeries | Callback sees owned values; continuation revalidates without repeating effects or holding memory latches. |
-| T-LOCK-42 | ACE changes row1 from100→101 after CalcDb prepares row0 from7→9 | Refreshed page publishes `(9,101)`; whole-page false conflict and stale overwrite both rejected; WRITE-REBASE. |
-| T-LOCK-43 | ACE allocates81 in shared byte before CalcDb allocates80 | Global `FD→FC`, owner `02→03`; preserved unrelated bit and actual native reservation; WRITE-ALLOC. |
-| T-LOCK-44 | Another writer changes shared leaf/parent or inserts duplicate key | Fresh path, structural closure and uniqueness interval; no replay of accepted assignment/generated value; WRITE-TREE. |
+| T-LOCK-41 | Capture native input and structural values, release transient protection, then provider edits/closes/requeries | Backing and completed captures remain owned; next-element and database continuation revalidate after callouts, with no replay or memory latch. |
+| T-LOCK-42 | Local locker B commits row1 from100→101 after A prepares row0 from7→9; later repeat with external ACE | Admitted local case rebases to `(9,101)` under TXN-LOCAL; external branch adds WRITE-REBASE native roles. Neither stale overwrite nor whole-page false conflict. |
+| T-LOCK-43 | Local locker B allocates81 in shared byte before A publishes80; later external variant | Global `FD→FC`, owner `02→03`; local reservation/rebase first, native allocator role added by WRITE-ALLOC. |
+| T-LOCK-44 | Another local locker changes shared leaf/parent or inserts duplicate key; later external variant | Fresh path, structural closure and native conflict/uniqueness outcome under TXN-LOCAL; WRITE-TREE adds external roles; accepted effects are not replayed. |
 | T-LOCK-45 | Late resource discovery conflicts with retained edit lock order | Replan only effect-free physical preparation or take captured native continuation; no dropped transaction ownership. |
-| T-LOCK-46 | Rollback own row0 while admitted external row1 change must survive | `(7,101)` and matching keys/maps; whole-before allowed only under proved uninterrupted exclusion; TXN-RANGE. |
+| T-LOCK-46 | Rollback own row0 while another local locker's committed row1 must survive; later external variant | Purely private rollback leaves `(7,101)` without native restore; any effectful compensation preserves unrelated changes under its exact claims; TXN-LOCAL/TXN-RANGE. |
 | T-LOCK-47 | LV retirement/reuse and page-to-table promotion with active participants | Native map/reuse and promotion lifetimes preserved; no private-only quarantine or early commit; WRITE-LV/PROMOTE. |
-| T-LOCK-48 | Native shared crash at each newly qualified phase and rollback cut | ACE-first baseline independently holds with private undo absent; R-CRASH-1/2 and WRITE-FAIL. |
+| T-LOCK-48 | Native local/external publication or compensation cuts under the selected writer branches | Export distinct CalcDb images to the same independent native openers; R-CRASH-1 settles exact comparison during implementation; no sidecar dependency. |
 | T-LOCK-49 | Work rejected before acceptance; exception during uncertain/confirmed acceptance | Total submission receipt, no rejected worker execution, exact one-time retention release. |
 | T-LOCK-50 | Worker Ready before Submit returns; cancellation/Close during Submitting | Acceptance receipt never regresses state; Close counts registered live work before queue visibility. |
 | T-LOCK-51 | Ordinal0 slow, later results ready; unvisited speculative page fails | Bounded result ownership and serial first-error/order; no speculative error leakage; R-PAR-1. |
 | T-LOCK-52 | Two consumers share load; one closes or cancels | Detach only that consumer; pending request/buffer and surviving target remain owned. |
 | T-LOCK-53 | Old prefetch Ready result after Requery or cursor incarnation reuse | Discard through original owner; never publish into reused result slot/generation. |
-| T-LOCK-54 | Concurrent Close, callback Close and final Release | One claimed CloseAttempt, captured join/reentry policy and no double native release; R-DAO-1/TXN-CLOSE. |
+| T-LOCK-54 | Concurrent Close, callback Close and cross-apartment final Release with open transaction | One CloseAttempt; proper COM delivery, rollback/lock lifetime and no double release; R-DAO-1/DAO-CLOSE-OWN, R-TXN-1/TXN-CLOSE and R-ACT-1/ACT-THREAD/FINAL-RELEASE. |
 | T-LOCK-55 | Close selected to fail before effects and leave owner usable | Restore only its own admission change; later qualified work proceeds; no stuck quiescing state. |
 | T-LOCK-56 | Close races accepted Update or submitted write; rollback needs cleanup I/O | Coordinator hands off one resolution attempt; ordinary admission closed, reserved cleanup admitted; no rival rollback. |
 | T-LOCK-57 | Unlock/handle/spill/interface cleanup fails or remains uncertain | Public closed state separated from retained backend obligations; no fabricated clean teardown. |
-| T-LOCK-58 | STA wait dispatch reenters Close/Requery; wake occurs without target completion | Predicate/deadline rechecked; stale publication stops, exact pending request still drains; I-HOST-1. |
+| T-LOCK-58 | COM-delivered STA wait reenters Close/Requery; wake occurs without target completion | Record actual entry separately from the client thread; predicate/deadline rechecked, stale publication stops and pending request still drains; I-HOST-1/HOST-WAIT and R-ACT-1/ACT-THREAD. |
 | T-LOCK-59 | SMB channel loss, preserved open, confirmed close and application reopen | Classify actual handle/request evidence; new handle never inherits old grants; R-LOCK-4/WRITE-NET. |
 | T-LOCK-60 | Exclusive pinned-row loop versus long readers and contended shared mutation | Count acquisitions/views/tasks/retained bytes separately; no obligatory per-field coordination; R-STRING-1/R-PAR-1 and II-15 §25–§30. |
+| T-LOCK-61 | PRW-01 two-Workspace and DAO/ACE-ADO conflicts on one STA and two properly delivered caller threads | Separate LockerIds/private overlays and actual COM contexts; nonconflicting work proceeds without a transaction-lifetime writer gate; TXN-LOCAL/ACT-THREAD/LOCAL-CONFLICT. |
+| T-LOCK-62 | Same row, different rows on one page, shared index leaf and different tables under page/record profiles | Captured footprint, lock acquisition/release, effective settings and conflict error/state; TXN-LOCAL. |
+| T-LOCK-63 | Both commit orders and each commit/rollback combination, including nested scopes | Later commit uses latest base; rollback preserves sibling overlays, committed neighbors and accepted semantic receipts; TXN-LOCAL. |
+| T-LOCK-64 | One-STA B waits on A's transaction, whose next call cannot run until B returns | Finite native retry then recorded error, with A intact; no dependence on ancestry detection alone; TXN-LOCAL. |
+| T-LOCK-65 | Successful commit defers a Release whose destructor opens a recordset; separate uncertain failure | Success drains after view hold/gate/latches release; failed restrictions are not silently cleared; TXN-CLOSE. |
+| T-LOCK-66 | A registered view has never requested page17 when first overwrite starts | Preserve its old binding/source before overwrite without a pin or target; later read succeeds on the selected image. |
+| T-LOCK-67 | Create-only acquisition races an existing/aliased destination; initialization, wrapper publication or cleanup fails with pending work | Existing bytes survive; one CreationAttempt retains the new incarnation and all receipts; no active binding precedes completed-image acceptance, and no cleanup deletes a replacement file. |
 
-Start native qualification with three small independent runs: both-order share admission, a read during retained pessimistic Edit versus during Update, and a same-page unrelated update between physical preparation and protected publication. In parallel, implement the internal registration-before-overwrite and submit-before-Close schedules in the actual state machines. Those runs settle the most consequential provisional mechanisms without waiting for full SQL, ADO or network sharing.
+Start native qualification with both-order public/default share admission and the TXN-LOCAL one-process matrix. Include a read during pessimistic Edit versus Update and a same-page unrelated local update between physical preparation and publication, with the page/record profile recorded. The later external equivalents add R-LOCK-3/4 protection. In parallel, implement the internal registration-before-overwrite and submit-before-Close schedules in the actual state machines. Those runs settle the most consequential provisional mechanisms without waiting for full SQL, ADO or network sharing.
 
-The chapter's four sharing modes remain required, with one admitted CalcDb writer initially. Unknown modern ACE byte-lock mappings are still explicit research work. Their absence does not authorize guessed ranges, a private cooperative lock namespace, a stronger crash promise or weakening reader-only writer exclusion. Complete initial exclusion/reader ownership and the internal visibility/work machinery while the later native profiles are being established.
+The chapter's four external sharing modes remain required; full local ACE concurrency is initial scope. Unknown modern ACE external byte-lock mappings remain explicit research work. Their absence does not authorize guessed ranges, a private cooperative lock namespace, a stronger crash promise or weakening reader-only writer exclusion. Complete initial exclusion/reader ownership and the internal visibility/work machinery while the later native profiles are being established.
 
 ## Sources and evidence notes
 
 Exact material, read extents, hashes, permitted use and citation locations are recorded in [A-01-sources.md](A-01-sources.md). Full experiment cards are in [A-02-experiments.md](A-02-experiments.md).
 
-[^authority]: [N], [C], [U], [A], [B] Authoritative scope and compatible charter, approved assignment and current record, subject to the user's crash answer and Part I review. Four sharing steps, blocking caller semantics, native-first reopening, nonprescriptive length/order and corrected platform Automation ABI govern this chapter.
+[^authority]: [B-SCOPE-11], [U-PRD-01-09], [U-PRW-01-58], [C], [A], [B] [Scope and context](00-scope.md), §§S3–S6, final owner decisions, accepted revision work, compatible charter, assignment and current record. Full ACE in-process semantics replace the charter's snapshot-isolation wording. The platform Automation VARIANT/BSTR is the current shared representation.
 
 [^a-create]: [S-MS-CREATEFILE] Microsoft, [CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew), updated 2023-02-09, read 2026-11-13; desired access, sharing categories, metadata exception, mapping check, creation disposition and noninheritable-handle parameters. Documentary API constraints; no ACE flags observed.
 
@@ -1172,3 +1303,5 @@ Exact material, read extents, hashes, permitted use and citation locations are r
 [^r-cowait]: [S-MS-COWAIT], [S-MS-COWAIT-FLAGS] Microsoft, [CoWaitForMultipleHandles](https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-cowaitformultiplehandles), updated 2021-10-13, and [COWAIT_FLAGS](https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/ne-combaseapi-cowait_flags), updated 2022-01-31, read 2026-11-13. Inspected parameters, returns, apartment remarks and flag semantics; no sample reuse or implication that ACE uses the proposed wait adapter.
 
 [^r-smb]: [S-MS-SMB2-LOCK], [S-MS-SMB2-LOCKELEMENT], [S-MS-SMB2-DISCONNECT] Microsoft Open Specifications [MS-SMB2] [§2.2.26 SMB2 LOCK Request](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/6178b960-48b6-4999-b589-669f88e9017d), updated 2024-11-20; [§2.2.26.1 SMB2_LOCK_ELEMENT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/73e941c7-9b07-42f6-8b0f-31c1a2cbf0b2), updated 2022-04-27; [§3.3.7.1 Handling Loss of a Connection](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/eb5bfe99-47fe-4e87-8e87-08a084dcefb6), updated 2025-07-28; read 2026-11-13. Handle association, exact unlock and preserved/closed-open cases only; no SMB source or wire implementation reused, and no ACE network behavior inferred.
+
+[^local-scope]: [S-MS-DAO-WORKSPACE], [S-MS-DAO-SETOPTION], [S-MS-LOCKEDITS] Microsoft, [Workspace object](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-object-dao), updated 2022-02-08; [DBEngine.SetOption](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/dbengine-setoption-method-dao), updated 2022-03-18; [Recordset.LockEdits](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-lockedits-property-dao), updated 2022-03-21; substantive descriptions/Remarks reread 2026-11-15. Documentary overlapping sessions, option names/lifetime and edit timing only. Current granularity, timing and errors require TXN-LOCAL; no samples or native execution used.

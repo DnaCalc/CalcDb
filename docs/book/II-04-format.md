@@ -1,10 +1,10 @@
 # II-04. Format, rows, long values and allocation
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
 This chapter specifies the physical layer that turns a checked page image into a row, a field or a long value, and turns an accepted logical change into complete native page images and reference changes. **The preferred design is a compiled format description, raw-preserving row edits and an allocator that plans the complete map/reference change before publishing it.** Concrete Jet 4/ACE structures drive that design below. II-03 supplies page identity, pins, positioned I/O and phase-image execution; it does not decide what a field or allocation bit means.
 
-**Requirement trace:** §§1–6 satisfy RQ-FMT-01/02/03 and the native Jet 4/ACE boundary in RQ-PROD-03; §§7–10 supply long values, allocation and RQ-STORE-03/RQ-PROD-05 preservation; §12 supplies RQ-PROD-04's normal-write interoperability and calibrated T-COMPACT-1 acceptance. RQ-TYPE-01 and RQ-VAL-01/03 use II-02's real platform VARIANT/BSTR boundary. RQ-STORE-01/02/04/05 use the existing transaction/crash design; RQ-LATE-01/03/04 retain codec, complex-value and rebuild hooks without making those later capabilities prerequisites for ordinary native writes. Front-end payloads remain readable and unexecuted under RQ-OUT-01/02. Full scope text is in I-16.
+**Requirement trace:** §§1–6 satisfy RQ-FMT-01/02/03 and the native Jet 4/ACE boundary in RQ-PROD-03; §§7–10 supply long values, allocation and RQ-STORE-03/RQ-PROD-05 preservation; §12 supplies RQ-PROD-04's normal-write interoperability and T-COMPACT-1’s per-write acceptance direction. RQ-TYPE-01 and RQ-VAL-01/03 use II-02's real platform VARIANT/BSTR boundary. RQ-STORE-01/02/04/05 use the existing transaction/crash design; RQ-LATE-01/03/04 retain codec, complex-value and rebuild hooks without making those later capabilities prerequisites for ordinary native writes. Front-end payloads remain readable and unexecuted under RQ-OUT-01/02. Full scope text is in I-16.
 
 **Evidence boundary.** The numeric layouts are observations of permitted Jackcess material at commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, with exact file hashes, inspected passages and licence-header checks in A-01. Microsoft documents support the separately identified API/type facts. All shown database bytes are constructed hypotheses, independently checked arithmetically; none is an ACE capture. The user-reported first oracle remains ACEDAO.DLL **16.0.20527.20016**. R-FMT-1/2 must confirm or change each proposed native profile on that build. The CalcDb pseudocode is original design, with no reference code port or adoption of Java coercion, damaged-file handling or write ordering.[^authority][^fmt]
 
@@ -14,7 +14,20 @@ This chapter specifies the physical layer that turns a checked page image into a
 
 **D-FMT-1 — Recommended. D-OPAQUE-1 — Recommended.** Retain one source of physical layout rules, but compile small checked readers and emitters for the selected file profile and schema. A DAO field access should use a bound column descriptor and a few loads, not interpret a general schema language. A raw-preserving writer needs the same coordinates as the reader; an inspector needs their explanation; a fuzzer needs both valid constructors and ways to violate particular constraints.
 
-The description has four layers. `PageProfile` specifies envelopes and locators. `TableLayout` describes the logical TableDef stream, columns, map references and type-dependent metadata. `RowLayout` binds physical column positions to fixed offsets or variable-directory positions. `ValueCodec` describes an exact payload, with coercion performed separately by the shared semantic service. The selected profile carries an immutable identity; schema binding carries its own incarnation. Neither is inferred from a cached page's current contents after the binding was made.
+The description covers every native structure consumed by the storage engine. These are parts of one source, compiled into one immutable `FormatDescriptor`; they are not independently maintained reader and writer constant sets.
+
+| Description part | Rules it owns and generated consumers |
+| --- | --- |
+| `PageProfile` | Header/data/map envelopes, stored and decoded representations, locator roles and bounds. Generates the pager's checked accessors, `reader_slot_capacity` and separate writer policy. |
+| `TableLayout` | Logical TableDef continuation stream, columns, physical/logical indexes, map references and type-dependent metadata. |
+| `RowLayout` and `ValueCodec` | Physical column coordinates, row directory/mask, exact scalar/Text/LV payload grammar and preservation spans. Coercion remains outside the physical codec. |
+| `IndexLayout` (`profile.index`) | Kind/owner/peer/tail fields, common prefix, boundary bitmap, entry area, free count, row locator and child trailer. II-05's reader, builder, validator and inspector use these generated fields/accessors. |
+| `KeyCodec` (`profile.key`) | Per-field markers, scalar ordering transforms, key framing/end rules, direction transforms and typed key-shape checks. Text weight data is selected by a separate `SortDescriptor`, with its own identity and provenance. |
+| `CatalogLayout` (`profile.catalog`) | Object-table bootstrap root, system-table schemas, object/column/relationship/query row codecs, identity and reference roles. II-06 consumes these rules without a SQL bootstrap cycle. |
+| `PropertyGrammar` (`profile.property`) | Property-block headers, lengths, tags, name dictionary, value records and opaque-span/relocation rules. The reader and writer share the same bounded grammar. |
+| `NewDatabaseRecipe` (`profile.creation.recipe`) | Initial header/extent, fixed roots, system tables and indexes, namespace and default-Admin ownership rows, properties, optional system objects, allocation closure and accepted per-call identity/time inputs. II-06 §1.2 synthesizes new images through the preceding codecs. |
+
+The selected profile carries an immutable identity; schema binding carries its own incarnation. Neither is inferred again from a cached page's contents after binding. A sort-table change does not silently change page geometry, and an executable ACE build label does not select either one. The creation recipe names the profile's catalog/property/index descriptions instead of embedding a second empty-file grammar.
 
 | Rule member | Concrete use |
 | --- | --- |
@@ -24,10 +37,36 @@ The description has four layers. `PageProfile` specifies envelopes and locators.
 | Bounds and dependencies | A variable index requires the stored V and trailer to exist; page kind alone does not establish LVAL ownership. |
 | Reference role | TableDef continuation, data owner, map declaration, bitmap backing, overflow body, LV chunk or catalog link. |
 | Existing-byte policy | Preserve exactly, patch an understood scalar, relocate only with a known reference rule, or retain at the same address. |
-| New-byte policy | Qualified creator template and admitted form-selection rule; distinct from what an existing reader can accept. |
+| New-byte policy | Profile creator pattern and admitted form-selection rule; distinct from what an existing reader can accept. |
 | Fault classification | Exact failed predicate and bounded location, supplied to the native error adapter; no accidental host exception or partial successful value. |
 
 Descriptions generate offsets, checked span access and inspection labels. Handwritten systems routines implement bounded traversal, allocation and memory ownership using those generated rules. Avoid a descriptive language powerful enough to hide arbitrary callbacks, allocation or I/O inside a scalar location expression. Inspectors and failures print the rule ID, physical page/slot, logical field and descriptor identity, making a wrong offset reducible to a small fixture.
+
+The following is one worked rule in the proposed declarative notation. It is a source-backed hypothesis for the admitted Jet 4/ACE index layout, not an ACE measurement.[^fmt][^index]
+
+```text
+rule jet4.index.prefix_length:
+    projection: FormatDescriptor.index.prefix_length
+    applies_to: admitted Jet4-family index page
+    location: page + 24
+    width: 2
+    byte_order: little
+    value: unsigned prefix byte count
+    conditions:
+        page.kind in profile.index.{leaf_kind, interior_kind}
+        page.length == profile.page_size
+    bounds:
+        empty entry mask => value == 0
+        nonempty entry mask => value <= first validated entry end
+    reference_role: none; length of the shared entry prefix
+    existing_bytes: preserve unless rebuilding this index image
+    new_bytes: emit the checked selected prefix length
+    evidence: S-JACK-FMT; S-JACK-INDEX-PIN; R-FMT-2 index-envelope cases
+```
+
+For bytes `04 00` at offsets 24–25, the generated `profile.index.read_prefix_length(image)` returns 4. If the first validated boundary is 9, the prefix occupies the first four of those nine entry bytes; an empty mask with the same length fails the empty-page rule. The compiler also projects `prefix_length_offset` and generates the checked emitter, validator condition, inspector label and valid/malformed generators from this declaration. A boundary generator changes 4 to 10 against first-end 9; another keeps 4 while clearing the mask. Those are malformed candidates, not claims about native error numbers.
+
+The same source declares `entry_mask_offset`, `entry_mask_bytes`, `entry_area_offset`, `entry_area_bytes`, `free_count_offset`, `owner_offset`, `previous_peer_offset`, `next_peer_offset`, `child_tail_offset`, `row_locator_bytes` and `child_reference_bytes`. It generates kind/prefix/free-count accessors, the role-specific locator readers and `entry_trailer_bytes(kind)`. II-05 passes `profile.index` and `profile.key` to its bounded decoder; numeric values remain in the descriptor and worked fixtures. II-06's catalog and property routines likewise consume `profile.catalog` and `profile.property`. A consumer may specialize a rule at compile time, but may not own a second copy of its width, offset or byte-order decision.
 
 Validation is layered: memory-safe envelope checks; contextual row/type/reference checks; and an explicit whole-object/file audit. Agreement among generated reader, writer and validator establishes internal consistency only. Acceptance additionally needs independently produced ACE bytes, hand-calculated witnesses, behavioral comparison and the calibrated repair test. Malformed generators deliberately break one relationship—such as an EOD preceding a requested field—rather than merely feeding bytes from the same valid encoder back to its decoder.
 
@@ -64,12 +103,12 @@ The inspected Jet 4 column-definition block is 25 bytes. The inspected ACE profi
 
 The reference's table-definition header also distinguishes the historical maximum column count at +41, historical variable count at +43, and active column count at +45. Those are three different u16 fields. The reader sorts active physical columns and variable-directory indices separately; an API/display ordinal is a fourth coordinate. [^fmt][^col][^table]
 
-The reference's 255 active-column limit and 255 data-page row-slot limit do not make the row's stored physical-column count an eight-bit field. The row count is a u16 and historical/deleted positions matter. Decode it unsigned into a wider integer, derive its mask length, and bound that length against the actual row extent. Do not impose C <= 255 as a memory-safety rule. Conversely, the two-byte encoding does not prove ACE accepts every value through 65535. Native semantic limits remain experimental.
+The reference's 255 active-column limit and provisional 255-slot writer limit do not make the row's stored physical-column count an eight-bit field. The data-page reader separately admits the structural domain of 256 slots (§1.1; II-03 §3.3). The row's physical-column count C is a u16 and historical/deleted positions matter. Decode it unsigned into a wider integer, derive its mask length, and bound that length against the actual row extent. Do not impose C <= 255 as a memory-safety rule. Conversely, the two-byte encoding does not prove ACE accepts every value through 65535. Native semantic limits remain experimental.
 
 
 ## 2. The ordinary row envelope
 
-**Figure F-23 — ordinary row regions and reversed directory.** Source-backed layout hypothesis, emitted as a Markdown table; not ACE-confirmed or render-verified.
+**Figure F-23 — ordinary row regions and reversed directory.** Source-backed layout hypothesis; not ACE-confirmed.
 
 For this profile, let L be the row-body byte length from the checked page slot, C its first u16LE, M = ceil(C/8), and V its stored variable-slot count when a variable trailer is present. The row's own C determines the mask width, including on an old row after schema changes.
 
@@ -110,7 +149,7 @@ The inspected profile's ordinary-row writer limit is 4060 bytes. Its unrelated g
 
 ### 3.1 Row A: fixed Long, Text, Boolean and Null Text
 
-**Figure F-24 — complete 19-byte row A.** Constructed byte table; arithmetic checked, not an ACE capture or render-verified figure.
+**Figure F-24 — complete 19-byte row A.** Constructed byte table; arithmetic checked, not an ACE capture.
 
 This is a 19-byte row-body fixture, not a complete database page. It uses deliberately uncompressed UTF-16LE Text bytes; a separate text codec profile decides when native compression is appropriate.
 
@@ -143,7 +182,7 @@ A mutation to Name that leaves all lengths unchanged may permit a narrow private
 
 ### 3.2 Row B: a deleted variable slot, an appended field and padding
 
-**Figure F-25 — row B with a deleted position and pre-trailer padding.** Constructed byte table; arithmetic checked, not an ACE capture or render-verified figure.
+**Figure F-25 — row B with a deleted position and pre-trailer padding.** Constructed byte table; arithmetic checked, not an ACE capture.
 
 Use the explicit schema evolution below. It illustrates known coordinates; it does not assert that every ACE DDL/repair path forever forbids ordinal reuse.
 
@@ -588,7 +627,7 @@ For calculated Memo (§5.6), the assembled LV payload includes the calculated-re
 
 The length counts **payload bytes only**. It excludes the twelve-byte definition and every four-byte chained-row locator. For Long Text this is the encoded byte count; it is not a BSTR code-unit count. Reassemble or stream encoded bytes through the text codec with state retained across chunk boundaries. A storage chunk need not end at a text-codec state boundary. [^long]
 
-Do not turn reference **writer choices** into universal format rejection limits. For Jet4-family constants, the inspected writer chooses inline only when payload is at most 64 bytes **and** the enclosing row has room for twelve definition bytes plus that payload. Otherwise it chooses one external row for payload at most 4076 bytes, and chained rows for longer payloads. The 64-byte threshold is not evidence that every larger inline value is forbidden by ACE. Likewise, the reader must not reject a valid alternative partition of a chained value merely because this writer would choose fuller chunks. [^long][^fmt]
+Do not turn reference **writer choices** into universal format rejection limits. The structural 256-slot reader bound and provisional 255-slot creator limit in II-03 are another instance of this distinction. For Jet4-family constants, the inspected writer chooses inline only when payload is at most 64 bytes **and** the enclosing row has room for twelve definition bytes plus that payload. Otherwise it chooses one external row for payload at most 4076 bytes, and chained rows for longer payloads. The 64-byte threshold is not evidence that every larger inline value is forbidden by ACE. Likewise, the reader must not reject a valid alternative partition of a chained value merely because this writer would choose fuller chunks. [^long][^fmt]
 
 Preserve an existing definition's opaque bytes unless an evidenced mutation rule authorizes replacing them. Zero in a newly constructed reference fixture means exactly that; it does not establish an ACE checksum, commit stamp, transaction sequence or general reset rule.
 
@@ -608,7 +647,7 @@ The inspected LVAL page uses the same basic slot envelope as a data page, with a
 | `0x000E` onward | 2 per slot | Slot offset words, with the established offset/flag interpretation. |
 | From page end downward | variable | Packed rows. Each row may contain one entire external value or one chained chunk. |
 
-For the Jet4-family reference profile, the maximum external LV row size is **4076 bytes**. A full chained row therefore carries **4072 payload bytes** after its four-byte next locator. One slot costs another two bytes. A page can have several shorter LV rows; its byte counter and slot-count limit are separate admission checks. The reference `rowFitsOnDataPage` tests `row_length + 2 <= free_space` and `slot_count < 255`. The table-row limit of 4060 bytes is a different constant. [^fmt][^table]
+For the Jet4-family reference profile, the maximum external LV row size is **4076 bytes**. A full chained row therefore carries **4072 payload bytes** after its four-byte next locator. One slot costs another two bytes. A page can have several shorter LV rows; its byte counter and slot-count limit are separate admission checks. The reference `rowFitsOnDataPage` tests `row_length + 2 <= free_space` and `slot_count < 255`; that latter test belongs to the provisional writer policy, not the structural reader bound. The table-row limit of 4060 bytes is a different constant. [^fmt][^table]
 
 In a fresh 4096-byte LVAL page, a 4076-byte row begins at `4096 − 4076 = 20 = 0x0014`. The first slot ends at byte 16. Four bytes remain between the slot directory and row body. The free counter is therefore `4082 − 4076 − 2 = 4`, even though the row already occupies the largest size this reference writer will emit.
 
@@ -647,7 +686,7 @@ The row begins at `0x0F9C = 3996`; the free counter is `0x0F8C = 3980`. The row'
 
 #### 7.3.3 Two chunks containing 4080 payload bytes
 
-**Figure F-26 — a 4080-byte value in two LVAL rows.** Constructed page/row layout table; arithmetic checked, not an ACE capture or render-verified figure.
+**Figure F-26 — a 4080-byte value in two LVAL rows.** Constructed page/row layout table; arithmetic checked, not an ACE capture.
 
 The twelve-byte definition points to row 0 on page 80 (`0x50`):
 
@@ -786,6 +825,33 @@ For illustration, a target row beginning at `0x0FA0` has slot word `0x8FA0` (`A0
 
 The reference delete function sets **both** deleted and overflow bits on the original root, removes index entries and updates the row count. It does not, in that inspected path, reclaim all overflow or long-value bodies. That is evidence that deletion must not be equated with immediate native reclamation; it is not proof of ACE's retention policy. The reference writer also zeroes the rest of the old root extent when turning it into an overflow stub. Neither this clearing policy nor the source's lack of reclamation should be silently inherited. R-FMT-2 must determine native update/delete/slot-reuse behavior and the bytes to preserve.
 
+### 8.1 A three-byte root needs an explicit expansion plan
+
+A Yes/No-only ordinary row can have body `01 00 01`: two count bytes and one mask byte. Its three-byte extent cannot hold a four-byte overflow locator. Adding a Text column and then growing that old row therefore requires more than setting the overflow flag. The reader accepts the old short row through its ordinary envelope; the writer must obtain the extra root byte before installing a stub.
+
+**Preferred provisional rule — R-FMT-2/FMT-SHORTROOT.** Keep the original root page and slot. Plan a new final body, then repack the original page in private storage to give that root an extent of at least the locator width. Moving body offsets within that page updates its slot words while preserving slot numbers and every live row identity. Use only known relocatable spans and proved free space. If compaction alone cannot provide the byte, the existing overflow mechanism may move an eligible larger neighboring body out and retain that neighbor's own root stub, but only where FMT-SHORTROOT establishes that native transition and the complete reference/preservation closure. Compose the moves into one final root-page image, with all new targets initialized before incoming references under the selected write program.
+
+An anchored unknown span, missing relocation rule or inability to reserve the required space returns an explicit failed preparation before native effects. That outcome is an unresolved required compatibility case until the native experiment selects its behavior; it is not permission to call a permanently refused valid update complete. Do not overwrite a neighboring byte, silently change the row's page/slot identity, or weaken the reader to reject all three-byte roots.
+
+A constructed one-row page makes the extra byte visible. Before growth, page 17 / slot 0 has word `FD 0F`, body `01 00 01` at `[0x0FFD,0x1000)`, count 1 and free count 4077 (`ED 0F`). Reserve a target at page 33 / slot 2. Repacking the root to `[0x0FFC,0x1000)` gives slot word `FC 4F`, locator `02 21 00 00` and free count 4076 (`EC 0F`). The logical root is still 17:0; only its physical start moves back one byte. These bytes are an arithmetic witness, not a native packing result. The target's row, slot/owner maps and any index/catalog changes are additional prepared structures, not implied by this four-byte patch.
+
+```text
+PlanOverflowRoot(root, accepted_body, profile, view, budget):
+    target = plan complete replacement body and ownership under view
+    root_plan = retain root's page/slot identity and original image
+    if root.extent.length < profile.ordinary_locator_bytes:
+        root_plan = plan known same-page repacking with that minimum root extent
+        if root_plan lacks proved space:
+            root_plan = plan the FMT-SHORTROOT-selected neighboring-body move
+                        and repacking, or return the unresolved/no-fit outcome
+    require root_plan gives the root a complete locator-sized extent
+    compose target, repacking, stub, slot flags and maps by physical page
+    verify all other roots, body bytes and protected spans remain valid
+    return private images and dependencies; submit no native write here
+```
+
+The `ordinary_locator_bytes` field is generated from PageProfile's `u8 row` plus `u24LE page` rule; for this family it is 4. Replanning after a sibling locker commits uses the fresh base and retained accepted body, without repeating conversion or generation. FMT-SHORTROOT compares free and packed pages, same-page and external targets, live/deleted/overflow neighbors, rollback, reopen and native root/bookmark/index-locator continuity. If ACE pads short roots at creation or selects another transition during growth, the writer rule changes to match; the bounded reader still handles evidenced short existing rows.
+
 For CalcDb, enumerate and preserve the old row/overflow/LV graph under its immutable view before overwriting any root or target that is still needed for rollback, existing readers or pending loads. Page reuse changes physical incarnation. A chain retained as bare page numbers would otherwise reopen a different value after reuse. Reclamation needs the old immutable payload to have independent backing where its lifetime outlasts the native bytes; retaining only a descriptor is insufficient.
 
 
@@ -805,7 +871,7 @@ The source presents three different meanings for a set membership bit. A generic
 #### Native column-map metadata
 
 
-**Figure F-27 — table and column ownership paths.** Native-reference hypotheses and the required ownership distinction; Mermaid source emitted, not render-verified.
+**Figure F-27 — table and column ownership paths.** Native-reference hypotheses and the required ownership distinction;
 
 ```mermaid
 flowchart TD
@@ -873,7 +939,7 @@ The inspected source uses a strict `< capacity` condition for fitting a newly ba
 
 Members 8 and 700 cannot share a 512-page window. A reference declaration can point to one bitmap page covering both. If that bitmap is page 90, declaration bytes `+0..4` are `01 5A 00 00 00`. Bitmap byte 5 has bit 0 set for page 8; bitmap byte `4 + floor(700/8) = 91 = 0x5B` has mask `0x10` set for page 700. Both memberships still require an admitted owner role and complete native map metadata; this byte example does not establish ownership of an arbitrary reserved page.
 
-CalcDb's complete private replacement image must preserve every old member while changing the encoding. Do not adopt the reference's intermediate “clear declaration, write type, then re-add members” disk sequence merely because that writer uses it; emit any such intermediate images only if the native operation/crash evidence qualifies them. Publication order follows the qualified native write program, and bitmap backing must be initialized before an incoming reference is published unless an evidenced native protocol establishes a different safe phase.
+CalcDb’s complete private replacement image preserves every old member while changing the encoding. The starting writer composes the final declaration and bitmap memberships before publication, rather than adopting the reference’s intermediate clear/type/re-add sequence. New bitmap pages are initialized as new targets; an existing map that combines allocation and retirement is written once in the starting candidate. R-CRASH-1 compares map-before-reference and map-after-reference cuts and selects repeated map images if the evidence requires them. No ordering here is asserted as observed ACE behavior.
 
 #### Global-map growth and its own allocation
 
@@ -881,17 +947,17 @@ The global map cannot use the object map's movable-window reasoning indiscrimina
 
 Allocation of a map bitmap creates a real dependency: that bitmap page itself must be marked allocated in the global map, possibly requiring another bitmap. The reference handles this through deferred pending allocation. The CalcDb proposal is to solve the finite reservation closure in private state before native publication.
 
-**Figure F-28 — map growth includes the bitmap itself.** Constructed allocation dependency table; not an ACE write trace or render-verified figure.
+**Figure F-28 — map growth includes the bitmap itself.** Constructed allocation dependency table; not an ACE write trace.
 
 For example, suppose a 512-page file has an inline global declaration, with page 37 known free and all other in-file pages used. The operation reserves appended payload page 512 and a new global bitmap page 513. The new reference declaration's pointer is `01 02 00 00` (little-endian 513). The initialized bitmap retains page 37 free and marks pages 512 and 513 used. Its own page cannot still look free merely because it was allocated while expanding the map. Bits beyond the current extent follow the evidenced global-map convention but are never handed out as existing pages without a corresponding initialized extent operation. This is an original constructed planning example, not an observed ACE growth schedule.
 
 
 | Prepared object | Exact role in the example | Publication dependency to qualify |
 | --- | --- | --- |
-| Payload page512 | Newly initialized owner-specific page | Do not publish its incoming live reference before its initialized image and allocation/owner state. |
+| Payload page512 | Newly initialized owner-specific page | Initialize its target image before the incoming live reference; MAP-BEFORE/AFTER separately decides existing allocation/owner-map placement. |
 | Global bitmap page513 | Kind05; page37 remains free, pages512/513 are used | Initialize it before the declaration points to it; include its own allocation in the prepared bitmap. |
 | Global declaration row | Type01; pointer bytes `01 02 00 00` identify bitmap513 | Replace the old inline representation with the complete native reference form. |
-| Applicable owner/available maps | Membership for payload512 and any other required structures | Compose aliases on shared physical pages; retain required intermediate phases. |
+| Applicable owner/available maps | Membership for payload512 and any other required structures | Compose aliases into one final image per physical page; retain repeated-image alternatives for the deciding crash branches. |
 
 The example intentionally requests append placement to exercise map growth while retaining a hole. It does not prescribe an append-only allocator.
 
@@ -932,9 +998,9 @@ Three transitions deserve separate fixtures:
 | Allocate new owner page | Global allocated state, complete page contents, applicable owner-map membership, available-space membership and incoming logical reference. | Publish an LV descriptor before its target or owner exists. |
 | Retire last live content on page | Remove every relevant incoming native reference; retain required immutable old images; apply evidenced owner/global/page-header transition; establish reuse timing. | Free each page encountered while deleting one value, even though another row/chunk or snapshot still needs it. |
 
-The inspected `PageChannel.deallocatePage` overwrites only its invalid-header prefix and adds the global free bit; it does not wipe the entire page. Existing payload remnants are therefore not evidence that the page is live, and zeroing the rest is not automatically a compatibility-preserving change. Conversely, source append-only behavior does not remove page reuse from CalcDb's full implementation scope. Measure ACE reuse, tombstone behavior, page/slot retention, tail truncation and repair effects in R-FMT-2; qualify persistence cuts with R-CRASH-1/2.
+The inspected `PageChannel.deallocatePage` overwrites only its invalid-header prefix and adds the global free bit; it does not wipe the entire page. Existing payload remnants are therefore not evidence that the page is live, and zeroing the rest is not automatically a compatibility-preserving change. Conversely, source append-only behavior does not remove page reuse from CalcDb's full implementation scope. Measure ACE reuse, tombstone behavior, page/slot retention, tail truncation and repair effects in R-FMT-2; qualify persistence cuts with R-CRASH-1.
 
-The provisional CalcDb direction remains I-08's prepared mutation: retain old images, initialize new storage, publish evidenced native allocation/ownership before reachability, then retire old references/storage according to the qualified phase graph. This section supplies the graph's concrete vertices—LVAL descriptors and chunk rows, overflow roots and targets, declaration rows, bitmap pages and owner/free-space bits—without claiming that Jackcess's file-write order specifies ACE crash behavior.
+The provisional CalcDb direction remains I-08’s prepared mutation. Retain required old sources, initialize new targets, then provisionally publish changed data, final index and catalog references, final existing ownership/free-space maps, any permitted tail change, and native resolution/flush work. A combined map’s allocation and retirement bits make its ordering an explicit R-CRASH-1 question. This section supplies the concrete vertices—LVAL descriptors and chunk rows, overflow roots and targets, declaration rows, bitmap pages and owner/free-space bits—without treating source-code write order as ACE crash evidence.
 
 
 ## 10. Preparing a native mutation without discarding unknown content
@@ -991,9 +1057,9 @@ The amount of structural work is proportional to the row/long-value bytes and th
 
 ### 10.3 Concrete ordering and retirement
 
-For replacing a chained long value, prepare all replacement rows and locators privately, initialize the target LVAL pages, establish the evidenced global and applicable column ownership/availability state, publish the changed ordinary-row definition together with required index/catalog effects, then retire the old value's slots/pages according to native ownership. Multiple values may share an LVAL page, so retiring one chain may only retire its rows. Old images needed by snapshots, rollback or pending loads need valid backing before any native overwrite or reuse.
+For replacing a chained long value, prepare all replacement rows and locators privately. Compose the final column/global map images, including both new ownership and old-chain retirement, in the same reservation closure. Multiple values may share an LVAL page, so retiring one chain may retire only its rows. Before overwriting or reusing any native source, give old readers and pending loads independent backing, including readers that have not yet pinned that page. This mandatory source preservation and local rollback support are independent of optional undo. A publishing locker rebuilds its accepted change over the newest committed base without overwriting a sibling’s accepted state (II-03; II-09 §23).
 
-That is the preferred provisional direction under **D-WRITE-1**, not a claim about ACE write ordinals. Required intermediate images of a shared map page remain separate phases. Required completion ordering is distinct from persistence ordering. Any needs-repair marking, commit-survival frontier and `dbForceOSFlush` barrier must come from R-CRASH-1/2, not an invented header bit. The optional undo file in I-03/I-08 does not make any phase safe for an ACE-first opener.
+D-WRITE-1 starts with one final image per page per publication unit. Its preferred candidate initializes new targets, then writes changed data, final indexes and catalog references, final existing maps and permitted extent changes before the evidenced resolution/flush work. CRASH-ORDER-DATA/INDEX compare orders, including map placement; CRASH-ORDER-REPEAT retains multiple images only as a fallback. Completion ordering and persistence ordering are separate. Any needs-repair marking and dbForceOSFlush behavior require native observation; exact crash classification and acceptance are settled during implementation. ACE-first reopening never depends on a private undo file.
 
 If complete ACE crash tracing proves impossible, continue the bounded exclusive writer with complete CalcDb cut exploration, bracketed native kills and independent next-opener comparisons. Qualify the operations and environments for which those observations establish the required parity; keep unresolved transitions explicit. This chapter adds the exact row/LV/map structures to those cases, without strengthening the baseline into a private recovery guarantee.
 
@@ -1049,23 +1115,40 @@ The following are acceptance specifications for implementation, not reported exe
 | T-FMT-17 Reclamation | Deleting one LV among packed neighbors retains every live neighbor and required old image; page/slot reuse follows native evidence. |
 | T-FMT-18 Opaque preservation | Supported edits beside properties/front-end objects preserve protected bytes, references and reachability; unsafe relocation refuses before publication. |
 | T-FMT-19 Native completion | ACE-first, Access-first and calibrated actual Access Compact & Repair branches pass from frozen normal-write images, with typed content and native invariants intact. |
-| T-FMT-20 Crash phases | Row overflow, LV replacement and map growth exercise every CalcDb phase/span cut and the available ACE cut matrix, including forced-flush survival and repair-state parity. |
+| T-FMT-20 Crash phases | Row overflow including short-root expansion, LV replacement and map growth exercise every CalcDb phase/span cut and the available ACE cut matrix, including forced-flush survival and repair-state parity. |
 | T-FMT-21 Generated values | Increment/random/GUID, explicit-value/reseed and failed/cancelled/rolled-back insert paths reproduce native generation and counter effects without duplicated semantic work. |
 | T-FMT-22 Budgets and cost | Hot field paths meet the stated allocation structure; huge counts/lengths and large healthy values distinguish resource limits from corruption; measured costs have provenance. |
+| T-FMT-23 Single description | Change a descriptor rule once and check the generated reader, emitter, validator, inspector and malformed generator agree on its identity and coordinates; index/key/catalog/property consumers have no second literal rule set. Independent native fixtures remain necessary. |
+| T-FMT-24 Short roots | FMT-SHORTROOT starts from a three-byte Boolean root, adds Text and grows it on free and packed pages; the native-selected expansion preserves root identity, neighbors and protected spans or returns the captured preparation failure before native writes. Check rollback/reopen and all resulting references. |
 
 ### 12.2 Which observations change the provisional choices
 
+**Deciding branches.** Qualification and established behavior use the [common terminology](book-record.md#terminology). The section map identifies the existing native cases that decide the profile rules used above.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §1 profile and TableDef geometry; §§2–4 historical coordinates and row reconstruction | R-FMT-1's II-04 structural discrimination; R-FMT-2's Historical row coordinates and Overflow / deletion branches. Unknown relocation also consumes R-PRESERVE-1's II-04 preservation cases. |
+| §5 scalar signs, widths, precision and wrappers | R-FMT-2: Scalar boundaries, NUMERIC, Dates / GUID, Extended Date/Time and Calculated wrappers; R-DAO-1/R-ADO-1 for actual public-value projection; I-FOUNDATION-1 for any required shared representation/services. |
+| §6 text grammar, terminal mode and public decode failures | R-FMT-2: Text grammar and Binary and OLE; R-ERR-1/ERR-BASE for the public failure channels. |
+| §§7–8 LV form, terminal shape, packing, roots and retirement | R-FMT-2: LV form selection, LV malformed/stream, Overflow / deletion and FMT-SHORTROOT; R-CURSOR-1/CUR-ID for observable root identity. |
+| §9 map ownership, growth and reuse | R-FMT-2: Map ownership and growth; R-TXN-1/TXN-LOCAL for other local lockers' accepted allocations. |
+| §10 semantic order and native publication; §11 matching cost cases | R-EXPR-1/EXPR-MUTATION, R-CURSOR-1/CUR-EDIT and R-TXN-1/TXN-STMT select semantic stages. R-CRASH-1/CRASH-PROGRAM and CRASH-RELATION select the physical program and comparison; CRASH-PARTIAL tests the receipt model. R-ORACLE-1/OR-REPAIR supplies completed-write evidence. |
+
+The model receipt witness does not establish an actual backend's transfer guarantee. The last row does not fix PRD-07/08's exact classification or pass conditions; implementation completes those definitions for the applicable writes.
+
 **R-FMT-1** identifies signatures, page/column descriptors, TableDef continuation geometry and feature-specific wrappers from independently generated files. It starts with raw inspection after R-ORACLE-1, before a production writer. Stable coordinates populate one compiled profile; file-visible variants create explicit variants; unresolved signatures or metadata keep affected mutations unsupported. An executable build label alone is not a descriptor selector.
 
-**R-FMT-2** now has concrete discrimination points: row C/V/mask boundaries and historical columns; numeric word/sign and fixed/variable placement; complete text grammar; exact Extended Date/Time and calculated-value wrappers; LV 63/64/65 with different row room and 4075/4076/4077 boundaries; old/new column maps; overflow/deleted targets; inline rebase/promotion; and global growth with free holes. Capture the complete descriptors and changed-page closure, not just the requested row. The full expanded card is in A-02. Native results choose creator policy, legitimate read shapes, normalization/rounding and reuse timing; they do not remove listed initial-scope types.
+**R-FMT-2** now has concrete discrimination points: row C/V/mask boundaries and historical columns; numeric word/sign and fixed/variable placement; complete text grammar; exact Extended Date/Time and calculated-value wrappers; LV 63/64/65 with different row room and 4075/4076/4077 boundaries; old/new column maps; overflow/deleted targets; FMT-SLOTS256 separates the 256-slot structural reader domain from creator policy; FMT-SHORTROOT selects expansion of roots shorter than the locator; inline rebase/promotion; and global growth with free holes. Capture the complete descriptors and changed-page closure, not just the requested row. The full expanded card is in A-02. Native results choose creator policy, legitimate read shapes, normalization/rounding and reuse timing; they do not remove listed initial-scope types.
 
 **R-PRESERVE-1** checks protected byte ranges together with their identities, references, ownership and reachability. Raw equality of an orphaned object is a failure. Native normalization seen only during Compact & Repair is not automatically authorized during ordinary Update. **R-TXN-1, R-CURSOR-1 and R-DAO-1 and R-ADO-1** supply generated-value effects, logical row identity and public projection/error timing for the corresponding physical cases; they are branch-specific dependencies, not a reason to delay unrelated codec construction.
 
-**R-CRASH-1/2** confirm or change the prepared publication graph, retirement order and actual write granularity for these structures. All comparisons use independent next ACE, Access and actual Compact & Repair branches with ordinary versus `dbForceOSFlush` outcomes. Complete source-writer order is never substituted for those observations. T-COMPACT-1's calibrated clean/damaged controls are required for “finds nothing to fix”; a successful command return or no `MSysCompactErrors` table alone is insufficient. Normal completed images and interrupted crash images have different acceptance comparisons, as already specified in A-02.
+**R-CRASH-1** compares publication candidates, map placement, retirement and transfer granularity through independent ACE, Access and Compact & Repair openers, with ordinary and dbForceOSFlush outcomes kept separate. Both recorded/reconstructed ACE images and CalcDb cut images enter those branches. T-COMPACT-1 pairs each write kind with possible structural damage and detecting checks; a successful command return or absent MSysCompactErrors alone is insufficient. Its closed list and exact pass conditions, like the crash comparison, are completed during implementation. A reference writer’s order is not an observed ACE result.
 
 ### 12.3 Implementation result
 
 Build the descriptor compiler and byte inspector alongside checked row/scalar readers, then exact private encoders and the raw-preservation model. Add LV traversal, owner-map resolution and allocation closure using the same structures. Connect those prepared edits to the pager's phase-image executor as native mutation evidence arrives. The result of this chapter is a concrete W-04/W-05 storage component with visible coverage: each supported profile/operation has source facts, native fixtures, generated/malformed tests, preservation checks and the relevant crash/repair evidence. It is not certified by a self-generated round trip.
+
+New-database creation uses the same compiled descriptions through `profile.creation.recipe`, with the argument-to-profile/sort and system-object inventory in [II-06 §1.2](II-06-catalog.md). It synthesizes complete owned pages rather than copying a template file. R-CAT-1/CAT-NEW classifies every page of each native empty-file control, including reserved/free pages and optional system objects. Creation obtains II-09's exclusive creation lease and uses the ordinary page executor; R-DAO-1, R-CRASH-1 and T-COMPACT-1 cover public failure, interrupted partial files and completed output. The recipe is not considered complete while a required page or system-object role is unexplained.
 
 [II-05](II-05-indexes.md) supplies the corresponding index-page envelopes, entry masks and prefix compression, row references, composite native keys, comparison descriptors and traversal/split/delete algorithms. Its prepared index changes join this chapter's row/LV/map closure through the same mutation planner; R-SORT-3 and R-FMT-2 qualify the relevant byte rules.
 
@@ -1074,8 +1157,9 @@ Build the descriptor compiler and byte inspector alongside checked row/scalar re
 
 Exact versions, hashes, selected read extents, licence checks and permitted use are in [A-01](A-01-sources.md). Full experiment cards are in [A-02](A-02-experiments.md). All direct source study remains factual/conceptual, with original CalcDb pseudocode and no source adaptation or port.
 
-[^authority]: [N, C, U, A, B] Supplied one-pager, charter and assignment; user corrections and current working record. These govern scope, exact platform VARIANT/BSTR and ACE-first crash parity; they are not public implementation evidence.
+[^authority]: [B-SCOPE-11, C, U-PRD-01-09, U-PRW-01-58, A, B] [Scope and context](00-scope.md), §§S1–S3, S5 and S7; compatible charter and assignment; owner decisions and current record. These govern native formats, shared platform values, preservation and crash parity; they are not public implementation evidence.
 [^fmt]: [S-JACK-FMT] Jackcess, [JetFormat.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/JetFormat.java), selected constants/inheritance at the immutable pin above; see A-01 for exact hash/read extent. Geometry, ordinary-row and LV bounds, field coordinates and map capacities are reference facts awaiting target qualification.
+[^index]: [S-JACK-INDEX-PIN] Jackcess, [IndexData.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/IndexData.java), same pin; the prefix/mask/entry interpretation already identified in II-05 and A-01. The worked declarative rule is original CalcDb notation; its reference facts remain subject to R-FMT-2.
 [^pagetypes]: [S-JACK-TYPES] Jackcess, [PageTypes.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/PageTypes.java), complete kind declarations at the same pin.
 [^table]: [S-JACK-TABLE] Jackcess, [TableImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/TableImpl.java), selected TableDef/column parsing, row reading/encoding, update/delete, overflow and map construction passages at the same pin.
 [^col]: [S-JACK-COL] Jackcess, [ColumnImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/ColumnImpl.java), selected descriptors, scalar/text/GUID/date codecs, flags and calculated dispatch at the same pin. Earlier live-xref readings remain separately identified in A-01.

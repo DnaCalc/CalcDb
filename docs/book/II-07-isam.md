@@ -1,12 +1,12 @@
 # II-07. ISAM, cursors and constraints
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-DAO-02 and RQ-ISAM-01. Shared obligations: RQ-PROD-02, RQ-SQL-04, RQ-SQL-05, RQ-DAO-01, RQ-DAO-03, RQ-ADO-01, RQ-LATE-02, RQ-LATE-03, RQ-ORACLE-02, RQ-FMT-03, RQ-VAL-03, RQ-CONC-01, RQ-CALL-01, RQ-CALL-03, RQ-CALL-04, RQ-PERF-01 and RQ-PERF-02. I-16 owns the complete scope text. K-CURSOR is implemented using II-03's page-image ownership, II-04's native row roots and codecs, II-05's full-entry/index mutation service and II-06's schema/relationship descriptors. II-08 owns transaction and persistent failure resolution.
 
 This chapter specifies the executable ISAM mechanisms and their public policy boundaries: physical enumeration and row binding, result population, positioning and search, bookmark families, edit buffers, generated values, constraints and cascades. D-CURSOR-1 remains Provisional for native visibility/lifecycle transitions under R-CURSOR-1/R-DAO-1. Its shared mechanism and the original internal data structures below provide the implementation direction; a single global snapshot rule does not stand in for those transitions.
 
-**Evidence boundary.** Microsoft documentation is cited as documentary evidence, with contradictions retained in the experiment. Reference mechanisms use the exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; exact files, headers, hashes and inspected extents are in A-01. That pin is not a release identification. Native bytes and state tables labelled constructed are independently calculated witnesses, not captured ACE results. No ACE or reference Java encoder execution occurred here. The initial oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016, subject to environment capture. The real platform Automation ABI remains unchanged, including the 24-byte Windows x64 VARIANT and real BSTR. All new figures are emitted as tables/Mermaid source and are not render-verified. [^authority]
+**Evidence boundary.** Microsoft documentation is cited as documentary evidence, with contradictions retained in the experiment. Reference mechanisms use the exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; exact files, headers, hashes and inspected extents are in A-01. That pin is not a release identification. Native bytes and state tables labelled constructed are independently calculated witnesses, not captured ACE results. No ACE or reference Java encoder execution occurred here. The initial oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016, subject to environment capture. The real platform Automation ABI remains unchanged, including the 24-byte Windows x64 VARIANT and real BSTR. [^authority]
 
 ## 1. Cursor policies and the state they own
 
@@ -89,7 +89,7 @@ A page-image ID establishes which bytes are read; it does not establish that the
 
 The ordinary table owned map determines the candidate page sequence. The available-space map is irrelevant to enumeration: it can omit full pages and is a placement hint. Column-owned LVAL maps likewise do not belong in the ordinary row scan. A checked map iterator supplies increasing page numbers for a forward scan and decreasing numbers for a reverse scan; each data page supplies row-slot numbers in the corresponding direction. This is a source-compatible physical enumeration mechanism, not an SQL `ORDER BY` guarantee or a complete statement about an unindexed DAO table's observable order. [^p-s9-scan][^p-s9-map]
 
-Read the page under one admitted visibility ticket, validate its kind/owner and directory, then inspect root slot flags. A deleted-marked slot encountered in this enumeration is not yielded. A live overflow root is yielded once and resolved only when its requested fields require a body. Crucially, a deleted-marked body reached through that root is not skipped. Context determines whether the bit suppresses an independent table row or belongs to a still-live overflow body, as II-04 established. [^p-s9-table]
+Read the page under one admitted visibility ticket, validate its kind/owner and directory, then inspect root slot flags. A deleted-marked slot encountered in this enumeration is not yielded. A live overflow root is yielded once and resolved only when its requested fields require a body. Crucially, a deleted-marked body reached through that root is not skipped. Context determines whether the bit suppresses an independent table row or belongs to a still-live overflow body, as II-04 explains. [^p-s9-table]
 
 **Figure F-45 — complete constructed page 17 with a same-page overflow target.** This is an arithmetic witness over the II-03/II-04 grammar, not an ACE-created page. Page size is 4096; the owning TableDef is page 9. All ranges not listed below are zero for reproducibility, without asserting that ACE clears them.
 
@@ -125,9 +125,11 @@ NextRoot(scan_state, selected_view, direction, budget) -> Candidate | End | Erro
         if no current candidate page, or candidate slot crossed its directory:
             page_number = next owned-map page after work.page_anchor
             if absent: return End with the completed traversal ticket
+            charge one owned-page visit, including an empty page
             pin = AcquireCheckedDataPage(selected_view, table, page_number)
             directory = ValidateSlotEnvelope(pin)
-            work.replace_page(pin, directory, first slot for direction)
+            work.replace_page(page_number, pin, directory, first slot for direction)
+            continue                 # re-test exhaustion before taking any slot
         slot = work.take_next_slot(direction)
         charge one slot inspection even when the slot is skipped
         header = checked slot flags and extent
@@ -135,6 +137,8 @@ NextRoot(scan_state, selected_view, direction, budget) -> Candidate | End | Erro
         token = AcquireRetainableRootIdentity(selected_view, table, page, slot)
         return Candidate(token, guarded root extent, move(work), selected_view)
 ```
+
+`replace_page` advances the owned-page anchor even when the new directory is empty. Its initial slot is an explicit exhausted boundary for zero slots; reverse traversal does not underflow an unsigned count to manufacture a slot index. Returning to the loop test after every page load therefore skips empty pages in both directions. For a constructed owned sequence 17 (empty), 21 (two live roots), 25 (empty), forward traversal yields only 21:0 then 21:1, and reverse traversal only 21:1 then 21:0. Consecutive empty pages and an all-empty owned set terminate at the actual map boundary. R-CURSOR-1/CUR-EMPTY-PAGES compares public movement and failure state while the physical checks exercise both directions.
 
 The implementation can keep tentative position changes in fixed-size locals and reuse the cursor's map/slot buffers, retaining the old pin until successful admission or failure policy releases it. A directory check can be cached per immutable page image. Full envelope validation is bounded by the native slot limit and actual page bytes. Empty pages, pages containing only suppressed slots and sparse map segments still consume traversal budget; none is a reason to loop without charging work. A wrong owner, truncated page or invalid slot extent is an error, not a successful end-of-table result.
 
@@ -163,6 +167,8 @@ BindRow(token, selected_view, table_layout, budget) -> RowBinding | RowAbsent | 
 ```
 
 These are memory-safety and ownership invariants, not a claim that every unusual chain shape is a valid ACE output. The admitted format profile controls which shapes the writer may create. A raw inspector may describe additional bounded structures without making them writable. The public error adapter chooses the native-compatible response and point of failure from R-FMT-2/R-CURSOR-1; the physical routine does not invent a DAO error number.
+
+A short ordinary root is valid input to `ValidateRowEnvelope` when its actual row grammar permits it. For example, the three-byte Yes/No body `01 00 01` is not an overflow stub. The four-byte check above applies only after the overflow bit selects a locator. On growth, II-04 §8.1's provisional FMT-SHORTROOT rule expands or repacks that same root page/slot to a locator-sized extent before setting the flag, with complete neighbor/reference preservation. The public root token and index suffix retain the original page/slot. Preparation that cannot establish a valid expansion is an explicit unresolved required compatibility case, not an out-of-bounds patch or an invented successful row relocation. Native short-root fixtures decide padding, neighboring-body movement and failure behavior.
 
 Do not release the root identity when the body is found. The next indexed update/delete needs the root locator, while row field decoding needs the final extent. If both occupy one page, share one immutable guard/image identity; if an edit touches both, compose into one prepared page revision. Keeping two stale writable copies would lose either the root-pointer change or body change. When the next operation admits a newer view, reconstruct the binding from its root and discard cached offsets or values tied to the earlier body generation.
 
@@ -285,6 +291,8 @@ This wrapper allocates only when its bounded retained state must grow; ordinary 
 ## 8. Seek: argument semantics above native bounds
 
 The selected logical index controls traversal; changing it does not sort native data pages. The new index must exist, and Seek requires one. Capture position, pending edit, NoMatch and bookmark behavior immediately after `.Index = name`; do not infer that assigning Index performs a MoveFirst because examples do so explicitly.[^c-s9-index]
+
+Check the selected native Text sort descriptor before constructing a Seek path. The initial General, General–Legacy and applicable General97 inventory is II-05's D-SORT-1 boundary; General97 does not admit Jet 3 files. Other Text orders leave ordinary reads and full table scans available, but indexed Text Seek returns the named, counted `NotModelled.SortOrder` with `TextSeek` detail. A full scan must not be used to disguise that specified refusal as a successful Seek. Mutation checks the same descriptor before preparing any affected Text key write, including deletion or a changed locator, and returns `TextKeyWrite` detail when unsupported. An unrelated edit may preserve an unchanged entry only while its membership, key and root locator stay unchanged. Missing implementation for a supported General-family descriptor remains a completion gap, not a scope exclusion.
 
 For Seek, bind the comparison operator and each supplied argument before encoding native keys. The documentary method model searches forward for `=`, `>=`, `>` and backward for `<`, `<=`; it gives a special end-duplicate caveat. Omitted trailing arguments are Null defaults, not an internal prefix wildcard. The tutorial conflicts about direction and which operators permit omissions. Prefer the method model provisionally, retaining actual missing-slot information until qualification and testing every operator with explicit Null and omitted trailing values separately.[^c-s9-seek][^c-s9-seek-guide]
 
@@ -439,7 +447,7 @@ UpdateMap:
     field_origins[], per_field_capabilities[]
     candidate_target_sets                         # edit/add/delete can differ
     join_multiplicity_and_nullable_sides
-    native_consistency_policy, permission_context
+    native_consistency_policy, admitted_default_admin_access_context
     definition_and_schema_dependencies
 ```
 
@@ -457,13 +465,13 @@ Let parent row `P7` have `CompanyId=7, CompanyName="North"`, and let child rows 
 
 The table lists origins, not a promise that every listed field is writable. A consistency policy may prohibit a parent update which would affect several result occurrences. A native inconsistent-update policy may permit it, in which case the engine mutates P7 once and applies the separately captured refresh behavior to J0/J1. Referential integrity is still enforced by the common mutation service. An absent outer-join side is not a fabricated row with every field Null; whether assigning to it creates a child row, fails, or requires additional key fields is an explicit R-CURSOR-1 provenance branch.
 
-The preferred implementation computes structural updateability during binding and combines it with source capabilities, requested cursor options and current permission context. Actual mutation revalidates the retained target and affected capabilities. It must not conclude that a successful Updatable getter guarantees that a later Edit, assignment or Update succeeds. Conversely, a missing visible primary key does not prove a local native table is unidentifiable: the row-root mechanism remains available. The broad unique-index sentences in some DAO edit references require the local/linked and table/dynaset controls in the experiment, not a blanket refusal to edit local heap tables.
+The preferred implementation computes structural updateability during binding and combines it with source capabilities, requested cursor options and the admitted unsecured/default-Admin access context. PRD-04 excludes workgroup-security enforcement: a named logon, supplied workgroup file or required permission check that would deny access receives the named, counted `NotModelled.UserLevelSecurity` refusal. Do not derive an editable route by ignoring a denial, and do not add a principal/group store to answer it. Preserve access-control bytes unchanged during admitted writes.[^scope-boundary] Actual mutation revalidates the retained target and affected capabilities. It must not conclude that a successful Updatable getter guarantees that a later Edit, assignment or Update succeeds. Conversely, a missing visible primary key does not prove a local native table is unidentifiable: the row-root mechanism remains available. The broad unique-index sentences in some DAO edit references require the local/linked and table/dynaset controls in the experiment, not a blanket refusal to edit local heap tables.
 
 For `dbConsistent` versus `dbInconsistent`, prefer a policy attached to the update map rather than a bypass around constraint enforcement. Microsoft's DAO one-to-many guidance describes the effect on parent-side updates and says the option is ignored for table, snapshot and forward-only recordsets; the enumeration includes snapshot in its applicability wording. Record both sources and measure actual option/type handling. Neither text establishes that a database relationship declared as enforced can be violated merely by requesting inconsistent dynaset updates. [^r-s9-inconsistent][^r-s9-options]
 
 `DISTINCT` and `DISTINCTROW` cannot share a deduplication key by accident. The SQL reference says DISTINCT selects unique projected tuples and makes the result nonupdatable; DISTINCTROW considers complete source records and has a different effect when only some joined tables contribute output fields. II-11 prefers a provisional full-logical-row equality key for contributing families while keeping physical identity separately. If physically distinct equal rows collapse, retain the class's mutation provenance or an owned recoverable recipe under the accepted view, without eagerly discovering future members. A first display representative cannot silently discard another target identity. TOP does not by itself remove updateability. The exact update map after DISTINCTROW, join nesting or hidden fields is captured in R-SQL-3 and the provenance branch, including comparisons with and without a supporting index. [^r-s9-predicates]
 
-A query-surface capability matrix covers single tables, aliases, repeated projected fields, one-to-one/one-to-many/many-to-many joins, outer joins, aggregates, UNION, crosstabs, DISTINCT/DISTINCTROW, linked sources and permissions. The Access query-editing guidance supplies useful cases but includes front-end behavior and exceptions, so it is fixture input, not the complete DAO implementation rule. In particular, a query being read-only does not make a successful read an unsupported operation. [^r-s9-queryedit]
+A query-surface capability matrix covers single tables, aliases, repeated projected fields, one-to-one/one-to-many/many-to-many joins, outer joins, aggregates, UNION, crosstabs, DISTINCT/DISTINCTROW, later linked sources and the default-Admin access/refusal boundary. It has no successful secured-workgroup permission-enforcement branch. The Access query-editing guidance supplies useful cases but includes front-end behavior and exceptions, so it is fixture input, not the complete DAO implementation rule. In particular, a query being read-only does not make a successful read an unsupported operation. [^r-s9-queryedit]
 
 For a qualified update, project changed output slots onto base physical fields before preparing native bytes. If two aliases target the same base field, apply the captured assignment policy rather than producing two independent writes. If a result row can legally update more than one base table, build one semantic operation containing those target records, then apply the native atomicity/failure scope through II-08; do not silently commit separate table edits. AddNew and Delete require their own target derivation. The edit target for a joined occurrence does not automatically determine what Delete means for that occurrence.
 
@@ -666,22 +674,26 @@ PostEdit(edit, operation_policy, budget) -> MutationOutcome:
         resolve scope and edit continuation by operation/failure policy
         release unpublished reservations and tentative physical images
         retain or dispose accepted input/effects exactly as that policy requires
-        return mapped outcome with no invented successful rollback
+        return owned mutation outcome with no invented successful rollback
     on known_persistent_failure:
         resolve only the native-selected failed-operation scope
         retain surviving changes, counts and exact rollback outcome
-        apply the evidenced edit continuation; return mapped failure
+        apply the evidenced edit continuation; return owned failure outcome
     on uncertain_persistent_error:
         retain coordinator progress and admitted next actions
         apply the evidenced failed-call state; do not retry semantic steps
-        return mapped outcome
+        return owned mutation outcome
 ```
 
 Physical reprepare retains the graph's accepted values, completed-effect receipts and generated tickets. It uses freshly admitted, protected inputs and rechecks the required row originals, identities, key profiles, constraints and table/index incarnations; a changed page image alone is not a semantic conflict. Changed meaning or ownership follows the qualified continuation/failure policy. Once this mutation's native effects have been submitted, continuation belongs to its existing coordinator receipt; it cannot re-enter this prepublication loop.
 
+A SQL caller receives the retained `MutationOutcome`, including its candidate failure and native-progress receipt, before any public error is published. II-11 §30 and II-08 §3 classify it as `SkipCandidate` or `StopAction`. A skip settles candidate work and generator disposition, retains accepted effects and resumes the protected source once without publishing that skipped error. Failed settlement or uncertain native effects cannot be disguised as a completed skip. The direct DAO Update adapter instead applies its own captured edit/error continuation.
+
 The algorithm does not imply whole-statement atomicity for every action. The coordinator supplies the statement and Workspace disposition, including the `dbFailOnError` matrix in I-08. Preparing one row or a qualified cascade unit before publication is distinct from preparing an entire action's successful and failing candidates before any effects. If native failure leaves a successful prefix of a cascade, compile that policy into ordered publication units with retained progress, rather than validating the entire graph before the first persistent effect. The displayed single-unit path applies only where its observed failure scope permits it. A memory-budget error cannot be reported as a constraint violation.
 
 The physical closure contains the root/body and long-value images, every affected physical index, native ownership/free-space maps, row and index metadata, and any generated counter changes. Unchanged opaque spans retain II-04's preservation obligations. Native page write order and acknowledgement remain the coordinator's phase program; this chapter's semantic schedule is not a disk-write schedule.
+
+The starting writer composes that closure into one final image per physical page; data/index and combined-map order are R-CRASH-1 branches, with repeated images as a fallback. Each accepted operation belongs to its Workspace/Connection locker. Local conflict claims follow the native page/record policy and bounded retry settings. At publication, rebase accepted row/index/map deltas onto the latest committed base without replaying validation callbacks, defaults or generated-value tickets. A stale private page image cannot overwrite another locker’s committed row on the same page. Local rollback removes only its owner’s accepted/private work and preserves sibling lockers and reader sources (R-TXN-1/TXN-LOCAL; II-09 §23).
 
 ## 17. Foreign keys and cascades use scheduled overlays
 
@@ -829,7 +841,7 @@ The pseudocode does not make every failure a successful short return. Decode err
 | (1,1) | BSTR `South` | second extracted record, Name |
 | Next unread position | occurrence for Id 12 | outside the returned two-row array |
 
-For two fields and three returned records, six canonical Windows x64 VARIANT elements account for `6 × 24 = 144` bytes before SAFEARRAY metadata, strings, binary arrays and allocation overhead. This is an ABI arithmetic example, not a benchmark or fixed total size. Numeric scalars need no separate per-cell payload allocation; BSTR and binary values need their correct owned backing. The call removes repeated COM crossings for those fields, not their semantic conversions or required copying. A mixed row containing a large Memo can dominate bytes copied even when there are few fields.
+For two fields and the two returned records shown, four canonical Windows x64 VARIANT elements account for `4 × 24 = 96` bytes before SAFEARRAY metadata, strings, binary arrays and allocation overhead. This is an ABI arithmetic example, not a benchmark or fixed total size. Numeric scalars need no separate per-cell payload allocation; BSTR and binary values need their correct owned backing. The call removes repeated COM crossings for those fields, not their semantic conversions or required copying. A mixed row containing a large Memo can dominate bytes copied even when there are few fields.
 
 DAO CacheSize, CacheStart and FillCache describe a different cache: the documented facility serves engine-connected ODBC sources. CacheStart is a bookmark in the qualifying dynaset, and FillCache operates within that cache window. The documentation says cached records need not reflect concurrent server changes and describes resetting the size to force refill. These properties must not be wired to the native database page-cache size or to the in-memory cursor population budget. [^r-s9-cachesize][^r-s9-cachestart][^r-s9-fillcache]
 
@@ -864,9 +876,21 @@ Counters include COM calls, dispatch/name lookup, conversions, BSTR/SAFEARRAY al
 
 Implementation starts with W-04's read cursor: owned maps, row roots, bounded decode, basic position, field handles and index navigation. The initial R-CURSOR-1 identity/state cases can run before a SQL executor; use table cursors and simple native-created fixtures. W-05 adds row edit buffers, the minimal shared default/validation service, generated-value policy, the constraint/cascade engine and prepared native mutation, using native-created relationship fixtures. It requires the relevant cursor/write/transaction evidence, not every later provider or query case. W-06 adds query producers with explicit provenance and population; W-07 composes them with mutation for action selection, richer join updateability and action-specific cascade/error coverage. W-08/09 attach DAO/ADO activation, read and edit slices as their dependencies arrive; they do not wait for complete W-07 before exposing the read cursor. Exact W identifiers and dependency boundaries are reconciled in I-16.
 
-R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independently. R-FMT-1/2 and R-SORT-3 settle native references/keys, R-CAT-1 supplies schema and relationship descriptors, R-EXPR-1 supplies context semantics, and R-TXN-1/R-SQL-2/R-CRASH-1/2 settle logical/persistent failure scope. Later live-ACE sharing adds R-LOCK-3/4 observations without changing an exclusive-mode source counter into a claim of external freshness. Full cards live in A-02; the chapter's algorithms remain implementable while those public policies are qualified case by case.
+R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independently. R-FMT-1/2 and R-SORT-3 settle native references/keys, R-CAT-1 supplies schema and relationship descriptors, R-EXPR-1 supplies context semantics, and R-TXN-1/R-SQL-2/R-CRASH-1 settle logical/persistent failure scope. Later live-ACE sharing adds R-LOCK-3/4 observations without changing an exclusive-mode source counter into a claim of external freshness. Full cards live in A-02; the chapter's algorithms remain implementable while those public policies are qualified case by case.
 
 ## 22. Acceptance witnesses
+
+**Deciding branches.** The [common terminology](book-record.md#terminology) applies to cursor and mutation policies. Each row below identifies the existing evidence that decides those policies for its sections.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–7 and 19: position, population, visibility and identity | R-CURSOR-1/CUR-POS, CUR-EMPTY-PAGES, CUR-POP and CUR-ID; R-TXN-1/TXN-VIEW. |
+| §§8–10: Seek, Find, Filter, Sort and derived results | R-CURSOR-1/CUR-SEEK/CUR-POP; R-DAO-1's II-05 index API and II-07 executable state branches; R-EXPR-1/EXPR-BIND and PAT-01..18 for predicate profiles. R-SORT-3/SORT-CHECK and LIKE-RANGE-01..06 decide eligible native bounds. |
+| §§11 and 20: bookmark lifetime, clone/requery and bulk extraction | R-CURSOR-1/CUR-ID/CUR-LIFE/CUR-BULK; R-DAO-1/DAO-LIFE. |
+| §12: update routes and collapsed query targets | R-CURSOR-1/CUR-PROV; R-SQL-3/SQL-DR and R-SQL-2/SQL-ACT-UPDATE. |
+| §§13–16: edit state, checks, generated values and conflicts | R-CURSOR-1/CUR-EDIT; R-EXPR-1/EXPR-MUTATION; R-FMT-2's Generated values branch; R-TXN-1/TXN-STMT/TXN-LOCAL. Later calculated-value changes use R-COMPLEX-1/CX-CALC. |
+| §§17–18: relationship schedules, cascades and deletion | R-CAT-1/CAT-D, R-CURSOR-1/CUR-EDIT and R-SQL-2/SQL-ACT-DELETE; R-TXN-1/TXN-STMT for failure scope. |
+| Retained continuations, cleanup and native publication throughout | R-UDF-1/UDF-REENTRY/UDF-CLOSE, R-CURSOR-1/CUR-LIFE and R-TXN-1/TXN-CLOSE/FAIL-OWNER; R-CRASH-1/CRASH-PROGRAM/CRASH-RELATION for persistent effects. |
 
 **Requirement trace:** RQ-DAO-02, RQ-ISAM-01, RQ-ORACLE-02 and the shared requirements cited in the sections above. These are designed acceptance cases, not executed ACE results. Each public test compares the complete state/effect/error trace with its native control, including a subsequent call after failure. Byte witnesses test arithmetic and interpretation independently; they do not establish native acceptance by themselves. The full R-CURSOR-1 card and its branch outcomes are in A-02.
 
@@ -878,7 +902,7 @@ R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independen
 | T-ISAM-04 | Lazy field access respects historical physical columns, variable directories, raw scalar precision and LV ownership; faults appear at the captured call phase, and public values survive cursor movement. |
 | T-ISAM-05 | Retained old-view identities survive current-view retirement where required; deletion/reuse, rollback, drop/recreate and generation exhaustion never redirect a stale token to a replacement row. |
 | T-ISAM-06 | Full-entry restore selects the intended duplicate root; refresh after deletion/split/empty-leaf removal returns the first eligible successor/predecessor without an extra increment. |
-| T-ISAM-07 | Null-omitting/unsupported/lossy index access has an explicit completeness/range proof; a convenient incomplete index cannot silently replace a complete scan. |
+| T-ISAM-07 | Null-omitting/lossy index access has an explicit completeness/range proof; other-sort Text Seek/key writes return counted `NotModelled.SortOrder` while full table scans remain available. An existing unsupported or incomplete index is not selected as a valid shortcut. |
 | T-ISAM-08 | Omitted/explicit cursor type and all relevant option/locking combinations have native results/errors, including Dynamic/provider-only contexts, read-only/append-only and mutually exclusive options. |
 | T-ISAM-09 | Current-row validity, DeletedCurrent, BOF/EOF, NoMatch and EditMode remain independent through empty/singleton/many-row movement, failed searches and deletion. |
 | T-ISAM-10 | Named moves and signed Move agree with their captured boundary rules; Move 0, bookmark-relative movement, Long-minimum displacement and failures preserve the correct edit/position state. |
@@ -891,7 +915,7 @@ R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independen
 | T-ISAM-17 | Raw Bookmark VARIANT type/array bounds or BSTR length, clone interchange, unrelated-family rejection and malformed setters match; issued tickets remain valid until qualified expiry regardless of client copying. |
 | T-ISAM-18 | Clone initial position/index/edit/history, parent/clone Close, pending-transaction rollback effects and Requery success/failure have native transitions; old LastModified/bookmarks never silently retarget a new incarnation. |
 | T-ISAM-19 | Result occurrences retain correct base provenance through omitted keys, aliases, duplicate projected fields and joins; local equal-value heap rows remain distinct targets. |
-| T-ISAM-20 | Updatable/DataUpdatable, permissions, consistent/inconsistent options and null-extended sides select actual per-field and operation-specific edit/add/delete routes; query support is not reduced to one coarse writable flag. |
+| T-ISAM-20 | Updatable/DataUpdatable in the unsecured/default-Admin context, consistent/inconsistent options and null-extended sides select per-field edit/add/delete routes. A required denying workgroup-permission check receives counted `NotModelled.UserLevelSecurity`, never an editable route or successful security-emulation claim; admitted writes preserve access-control bytes. |
 | T-ISAM-21 | Membership, ordinal directories, issued bookmark maps, old images/LVs and result spools obey ownership/budgets; pressure never eager-evaluates effects merely to release versions. |
 | T-ISAM-22 | Owned edit originals and accepted fields survive eviction/reentry; failed assignment leaves its qualified prior state, and no borrowed VARIANT/BSTR or scratch key escapes. |
 | T-ISAM-23 | Repeated Edit/AddNew, Update without edit, failed Update, movement, Delete-during-edit and Close reproduce EditMode, buffer contents, LastModified and subsequent-call outcomes. |
@@ -907,13 +931,15 @@ R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independen
 | T-ISAM-33 | FK existence/restriction uses ordered compound endpoint mappings and qualified key semantics; all-null and partly-null tuples, self-reference and another relationship's obligations are tested separately. |
 | T-ISAM-34 | The compound(1,7)→(1,9)cascade captures original child roots once before key movement; a key-moving action uses only its qualified selection/evaluation boundary and cannot revisit its own new entries. |
 | T-ISAM-35 | Multipath identical/conflicting assignments and self/cyclic relationships terminate through the qualified policy, preserving required check/effect multiplicity without duplicate physical retirement or invented depth limits. |
-| T-ISAM-36 | Parent unique, child unique, field/table validation and other-FK collisions select native precedence, counts and rollback/partial-progress scope; planned final images do not create deferred uniqueness. |
+| T-ISAM-36 | Parent unique, child unique, field/table validation and other-FK collisions select native precedence, counts and rollback/partial-progress scope; planned final images do not create deferred uniqueness. SQL-CONTINUE consumes the same owned outcomes: candidate/generator settlement precedes a permitted skip, no skipped error is published, and later candidates do not replay accepted effects. |
 | T-ISAM-37 | Delete retains the native deleted-current/clone/bookmark behavior; root/body/LV/index retirement respects ownership and old-view backing, and counts/reclamation cannot happen twice. |
 | T-ISAM-38 | GetRows returns the correct typed field-first array and frontier, including EOF/deleted-row short returns; every field uses one retained occurrence binding, and decode/advance/finalization failures use the captured state policy. |
 | T-ISAM-39 | Local CacheSize/CacheStart/FillCache behavior and later provider caching are distinct from page cache/prefetch; DAO and ADO reuse physical mechanisms with separately captured surface policies. |
 | T-ISAM-40 | Resident/cold Move/Field/Seek/Find/GetRows and edit/cascade benchmarks expose crossings, allocation/copy/decode, retained/spilled bytes, reseeks and actual I/O/flush work without invented targets. |
-| T-ISAM-41 | Every qualified row/cascade/generated-counter native write cut is compared under R-CRASH-1/2, including dbForceOSFlush; completed outputs pass independent reopen and calibrated T-COMPACT-1. |
+| T-ISAM-41 | Every modeled row/cascade/generated-counter cut is exported to R-CRASH-1’s independent opener branches, including dbForceOSFlush; completed outputs follow T-COMPACT-1’s per-write checks. Exact acceptance is completed during implementation. |
 | T-ISAM-42 | Callback reentry, owner shutdown, cancellation and resource failure retain one valid continuation or fail at the qualified point; they cannot mix rows in one result, replay effects, leak ownership or claim unobserved rollback. |
+| T-ISAM-43 | CUR-EMPTY-PAGES places zero-slot pages first, between live pages, last, consecutively and throughout the owned set; forward/reverse traversal never reads a nonexistent slot, skips no live root and charges every page. Suppressed-only pages, I/O failure and budget exhaustion stay distinct from EOF. |
+| T-ISAM-44 | FMT-SHORTROOT grows an old three-byte Boolean row after a Text addition; root binding accepts the old body, then follows only a complete native-selected stub. Index entries retain the logical root locator; bookmarks follow CUR-ID's captured lifetime rules. Same-page packing, neighboring bodies, rollback and reopen match the control. |
 
 ## Sources
 
@@ -981,4 +1007,6 @@ R-CURSOR-1 qualifies CUR-POS/POP/ID/SEEK/EDIT/PROV/BULK/LIFE branches independen
 [^r-s9-cachesize]: [S-MS-DAO-CACHESIZE] Microsoft, [Recordset.CacheSize property (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-cachesize-property-dao), updated 2021-09-14; syntax/remarks inspected 2026-11-13. ODBC source scope; not the native page cache.
 [^r-s9-cachestart]: [S-MS-DAO-CACHESTART] Microsoft, [Recordset.CacheStart property (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-cachestart-property-dao), updated 2021-09-14; syntax/remarks inspected 2026-11-13. Provider-cache bookmark/window and refresh behavior.
 [^r-s9-fillcache]: [S-MS-DAO-FILLCACHE] Microsoft, [Recordset.FillCache method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/recordset-fillcache-method-dao), accessed 2026-11-13; signature/parameters/remarks inspected. Bounded cache-window filling and concurrent visibility; sample not reused.
-[^authority]: [N, C, U, A, B] Authoritative one-pager scope, compatible charter, user corrections, governing assignment and current record. Public sources and constructed witnesses do not change product scope or establish an ACE execution result.
+[^authority]: [B-SCOPE-11, C, U-PRD-01-09, U-PRW-01-58, U-OWNER-ACE, U-OWNER-NET, A, B] [Scope and context](00-scope.md), §§S1–S6, governs the common ISAM, object behavior, local concurrency and writes. A-01 records the initial ACEDAO.DLL report and managed-client targets as owner inputs. Compatible charter, owner decisions, assignment and current record supply design authority; constructed witnesses are not ACE executions.
+
+[^scope-boundary]: [B-SCOPE-11, U-PRD-01-09, U-PRW-01-58] PRD-04 and PRW-10/52; [Scope and context](00-scope.md), §S2. Cursor updateability consumes the same default-Admin/preservation/refusal boundary as II-12; it does not restore a secured-workgroup capability.

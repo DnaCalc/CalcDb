@@ -1,12 +1,14 @@
 # II-02. Values, strings and ownership algorithms
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-This is the complete first design of the value and ownership chapter. Its algorithms are proposed CalcDb mechanisms, not descriptions of an unpublished CalcVBA implementation. It develops **RQ-VAL-01**, **RQ-VAL-03** and **RQ-TYPE-01**, and supports **RQ-COM-01**, **RQ-PORT-03** and the shared semantics required by **RQ-VAL-02**. Its binding contracts are **K-VALUE**, **K-STRING**, **K-PAGE**, **K-ADMISSION**, **K-THREAD**, **K-ERROR** and **K-EXPR**. Native layout facts have documentary support; target Windows/ACE/CalcVBA execution is still outstanding.
+This chapter specifies the value and ownership algorithms. They are proposed CalcDb mechanisms, not descriptions of an unpublished CalcVBA implementation. It develops **RQ-VAL-01**, **RQ-VAL-03** and **RQ-TYPE-01**, and supports **RQ-COM-01**, **RQ-PORT-03** and the shared semantics required by **RQ-VAL-02**. Its binding contracts are **K-VALUE**, **K-STRING**, **K-PAGE**, **K-ADMISSION**, **K-THREAD**, **K-ERROR** and **K-EXPR**. Native layout facts have documentary support; target Windows/ACE/CalcVBA execution is still outstanding.
+
+The [common terminology](book-record.md#terminology) distinguishes established documentary facts from a qualified implementation. I-FOUNDATION-1/FOUND-SDK and FND-ABI decide target declarations; FND-ALLOC, FND-COPY, FND-ARRAY-OWN and FND-CONCUR decide the actual ownership services used below. These are planned evidence obligations for the named target and caller.
 
 ## 1. The representation boundary is settled
 
-**D-VALUE-1 — Decided representation; provisional package.** CalcDb and the corrected CalcVBA share the real platform Automation VARIANT and real BSTR. The user's current implementation fact is different: CalcVBA presently has its own 16-byte value and converts at the COM boundary. It is being corrected. The CalcDb design assumes the corrected layout, including **24-byte VARIANTs on Windows x64**. It does not keep that present compact representation inside the engine and translate it at each public call. Prefer an interpreter-independent common foundation; I-FOUNDATION-1 determines its actual package and declarations.[^integration]
+**D-VALUE-1 — Decided representation; provisional package.** CalcDb and CalcVBA share the real platform Automation VARIANT and real BSTR, including **24-byte VARIANTs on Windows x64**. They use the same target layout and allocator contract. Prefer an interpreter-independent common foundation; I-FOUNDATION-1 determines its actual package and declarations.[^integration]
 
 Three things remain distinct without creating competing semantic value systems. A physical field descriptor explains bytes in a native Access record. A canonical VARIANT carries a semantic value. An ownership handle explains who must release a value or how long bytes may be borrowed. The field descriptor may retain precision, collation, compression and unknown storage flags absent from the public value. That is necessary format information, not another definition of arithmetic, Null propagation or coercion.
 
@@ -65,46 +67,64 @@ The common foundation must expose the following distinctions, whether through wr
 
 Use a fresh initialized temporary for construction and copy. The wrapper's publication contract is stronger than blindly writing into a caller's output: on failure, no partially constructed result is published. Public `[out]` storage is handled according to the actual interface declaration; CalcDb must not clear arbitrary uninitialized caller memory. For `[in,out]`, replacement and writeback obey that method's documented and observed policy.
 
-An opaque native `VariantCopy`/`VariantCopyInd` call does not expose an incremental allocation-budget callback. For a supported, stable owned graph, preflight a conservative bound on BSTR byte lengths, array descriptors/elements and nested owned payload, then reserve that bound before the native call. Checked products and a bounded traversal are required; source stability must cover both preflight and copying. Alternatively, use an explicitly budget-aware shared-foundation copy that admits each allocation before making it and preserves canonical semantics. That service is a requirement to implement and validate, not an assumed feature of the native API. Opaque record copying and foreign interface calls can allocate beyond CalcDb's control: identify and account for that external work where observable, and admit it only under an explicit supported policy. A path requiring a hard bound must reject an unbounded opaque copy before invoking it; a nominal reservation is not a universal memory guarantee.
+### Structural capture, with a rule for each source form
 
-Register a `CopyAttempt` under the retaining operation before acquiring source anchors or performing any potentially reentrant preparation. For a public argument it is the owned-snapshot child of II-13 §9's `ArgumentAttempt`; internal retention uses the same owner protocol without creating another argument ABI. The attempt holds the initialized temporary, reservation, source-lifetime and stability anchors, completed resource ownership and foreign-call progress. Source lifetime alone is insufficient: the reachable graph must remain mutation-stable throughout preflight and opaque copying, including nested foreign callbacks, or first become a safely owned immutable/local source. A post-copy generation check cannot protect an opaque copy that has already traversed freed or changed nested storage. It validates whether the completed result may enter the enclosing continuation. Legal alias-preserving ByRef arguments remain outside this snapshot helper.
+`CaptureValueStructural(source, read_contract, operation)` produces an owned by-value result only when the member permits that operation. A legal alias-preserving ByRef argument uses II-13 §9's separate alias path. Register a `CopyAttempt` before any retain, allocation or cleanup that can reenter. It owns the initialized destination, source/backing handles, array access tokens, reservations, completed element prefix and foreign-effect receipts. Registering the attempt does not make caller storage immutable.
 
-Microsoft documents native `VariantCopy` as not thread-safe.[^copy] Provisionally perform native Automation copy/cleanup and foreign reference operations on the caller's runtime thread. This default alone does not prove safety when multiple callers run concurrently or reenter. I-FOUNDATION-1 must validate permitted sharing, concurrency and reentry, including any service-level restriction, before those paths are enabled. No internal engine latch or global mutex may be held across foreign `AddRef`, `Release` or record callbacks; introducing a hidden runtime/worker dispatch is not a substitute. Pure local scalar loads remain distinct from these native/foreign operations.
+The structural branch is decided from the active value form and the operations its copy requires. Inspection is bounded and performs no foreign call. It records no fictitious generation counter for a caller's VARIANT or SAFEARRAY. Caller arguments must be valid for the documented call interval, including the required referent lifetime and absence of unsynchronized concurrent mutation. CalcDb cannot turn a forged pointer or an external data race into a safe Automation call.
+
+| Branch | Concrete rule | Remaining checks |
+| --- | --- | --- |
+| `NoForeignCode` | Copy scalars, exact-byte BSTRs and supported arrays whose complete copy invokes no foreign code on the calling thread. No reentrant code runs between inspection and copying, so the valid argument supplies the stable interval. | Check tags, bounds, products, nesting/work limits and allocation admission. Use canonical allocation and element ownership; the caller's array is not a private vector. |
+| `SingleObjectAddRef` | Read one valid interface pointer into the attempt and call its AddRef once, outside latches. On return, the attempt owns that captured reference; it does not reread the source slot to choose a different object. | Record the completed retain and validate the enclosing continuation before publishing. Null pointers follow the active type's canonical rule. One object occurrence causes one retain, including repeated occurrences in different array slots. |
+| `ElementwiseCallout` | Establish safe backing, initialize the destination and copy one element at a time. Capture the current element's inputs before its foreign step, then validate actual container structure and the next continuation before reading another element. | Do not keep a borrowed nested payload across a callout. Admit each next allocation using the current checked input. If safe backing or the element recipe cannot be established, return `UnsupportedCaptureForm` before that unsupported step. |
+
+Here the calling thread means the thread on which the CalcDb call is delivered. Windows classes use `Apartment`; COM supplies delivery and any proxy used by an object or provider reference. Capture, cleanup and callbacks do not dispatch themselves to a CalcVBA runtime thread. The priority single-STA path and multi-apartment probes remain distinct (PRD-02; scope §S4).[^threading]
+
+For `NoForeignCode`, preflight a checked conservative bound for descriptor, element and owned payload allocations, or use a shared-foundation routine that admits each allocation before making it. The no-callout interval covers both preflight and copying. An opaque native `VariantCopy` offers no allocation-budget callback. It may be used only for a form and service-concurrency policy that I-FOUNDATION-1 has validated; a nominal reservation cannot impose a bound on opaque foreign allocation. Microsoft describes `VariantCopy` as not thread-safe.[^copy] The structural rule does not change that API contract or authorize a global mutex across foreign calls. Prefer the explicit foundation construction path for these branches and verify its allocator and concurrency contracts with simultaneous callers as well as a single STA.
+
+For an array containing foreign-copy elements, retain its descriptor/data backing with a canonical access/lock token before entering foreign code. The token prevents destruction and redimensioning while held; it does not freeze element values. Balance it on every terminal path. Concurrent access to the same SAFEARRAY instance still needs the caller's valid synchronization contract.[^arraylock] Before each element, validate dimensions, bounds, element width/type/features and the checked location under that token. Retain a nested array's own token before any callout that could invalidate its parent slot. Copy a scalar or BSTR subtree completely before the next callout; for an object, save its pointer and perform the single AddRef branch. After each callout, keep the returned ownership and reread the live descriptor and next element under the retained backing. Never continue through a borrowed BSTR, nested descriptor or record pointer fetched before that call.
+
+The result can contain elements captured on opposite sides of a reentrant mutation. It is not automatically a snapshot of the whole array at one instant. The member's native capture policy decides whether that sequence is permitted. If it requires one immutable source, use a locally retained immutable value version or reject this unsupported capture route; an in-scope rejection remains a compatibility gap. A mismatching descriptor, lost required source identity or invalid continuation stops the attempt with its accepted prefix and effects still owned. It does not restart at element zero. Changed element contents are read and checked when that element is reached, rather than presumed unchanged from an earlier size pass.
+
+A record recipe must expose its field ownership and foreign steps, and supply an actual locally retained backing that cannot be freed while those steps run. Apply the same per-field rule where that recipe exists. An arbitrary `IRecordInfo` does not provide such a lifetime or immutability guard. Without a safe recipe, opaque record copying and record-array elements receive `UnsupportedCaptureForm` before their unsupported copy call. Never claim that a shallow record-byte copy has retained its nested resources. `UnsupportedCaptureForm` is an internal disposition; the member adapter supplies its named refusal/error mapping and counts any required native success as a gap. It is not a new universal Automation HRESULT. I-FOUNDATION-1 distinguishes supported canonical forms, safe-capture gaps and invalid caller arguments; R-STRING-1/R-CAT-1 decide which forms a particular DAO member actually admits. Foreign allocation and latency remain separately reported when observable; a hard-budget route refuses an unbounded foreign step before invoking it.
 
 ```text
-clone_for_retention(source, read_contract, operation) -> owned_value | failure
-  require source is valid for this call and its active form is supported
-  require read_contract permits a by-value snapshot rather than retained alias/writeback
-  require caller-thread execution and a validated concurrency/reentry policy
-  require no internal engine latch is held across foreign reference operations
-  attempt := register CopyAttempt under operation with an initialized empty temporary
-  acquire source-lifetime and mutation-stability anchors into attempt
-  after any foreign preparation: capture outcome and revalidate continuation
-  require the source graph is stable through both preflight and the complete copy
-  copy_plan := inspect the supported ownership graph under those anchors
-  if copy_plan has a conservative bound for an opaque native copy:
-      reserve that complete bound from operation.budget into attempt before copying
-  else if an explicitly budget-aware shared-foundation copy supports this graph:
-      require its per-allocation admission and partial-failure cleanup contract
+CaptureValueStructural(source, read_contract, operation) -> owned_value | failure
+  require valid call arguments and a by-value copy permitted by read_contract
+  require no internal latch spans a foreign retain/copy/release
+  attempt := register CopyAttempt with initialized empty destination
+  shape := bounded inspection of supported source forms, without foreign calls
+
+  if shape is NoForeignCode:
+      admit checked allocation bound or per-allocation foundation path
+      construct canonical copy on the calling thread without foreign code
+  else if shape is SingleObjectAddRef:
+      capture the one interface pointer into attempt before entry
+      invoke AddRef once through that reference; record acquired ownership
+      validate enclosing continuation without recopying the source
   else:
-      fail through attempt with an explicit admission/capability failure before copying
-  if copy_plan selects the native route and source is a supported ByRef form:
-      invoke canonical indirect copy once into attempt.temporary within its reservation
-  else if copy_plan selects the native route:
-      invoke canonical copy once into attempt.temporary within its reservation
-  else:
-      invoke the shared-foundation copy with explicit budget admission
-  capture copy outcome and exact completed/residual owners before foreign cleanup
-  revalidate source/continuation dependencies before accepting the copied value
-  settle releasable source anchors; revalidate after any foreign cleanup
-  on preparation, copy, continuation or required-cleanup failure:
-      settle or retain attempt through its valid residual cleanup state
-      release only unused reservation; retain every still-owned resource and obligation
-      return the selected typed failure without publishing or repeating the copy
-  transfer attempt.temporary and its accounting obligation to the returned owner
+      establish actual backing tokens or return UnsupportedCaptureForm
+      validate root structure; reserve and initialize the destination container
+      for each element in the member's admitted capture order:
+          validate current container structure and locate this element afresh
+          capture its local input or nested backing before any foreign step
+          refuse an unsupported element recipe before invoking that step
+          admit this element's allocations; copy it through its structural branch
+          record initialized destination element and completed foreign effects
+          after each foreign boundary, validate backing structure and continuation
+          on incompatibility or failure, stop; do not recapture the accepted prefix
+
+  retain completed destination while settling temporary backing outside latches
+  after foreign cleanup, validate the next enclosing continuation
+  on copy, continuation or required-cleanup failure:
+      settle or transfer exact initialized/residual owners and effects
+      release only unused reservations; publish no partial result
+      return the selected typed failure without replay
+  transfer destination ownership and its accounting obligation
 ```
 
-This algorithm has no right to chase arbitrary cycles or unsupported ByRef combinations. Canonical permitted forms and argument directions bound dereferencing. In-process native callers are responsible for valid pointers; tag/count checks cannot make an arbitrary forged address safe to read. Test legal edge cases and deliberate contract violations in isolated fixtures without claiming a memory-safe native ABI.
+This retention helper adds no public ABI or additional tag to a VARIANT. A supported ByRef snapshot resolves only the referent forms allowed by the member and then uses the appropriate structural branch. Dereferencing is bounded, and arbitrary cycles or unsupported ByRef combinations have explicit outcomes. The method's true writeback aliases never pass through this helper merely for convenience. Safe-array locks and local backing owners are implementation mechanisms to verify against native calls, not new promises about ACE's reentrant capture order.
 
 For replacing an internal existing value, first construct the new temporary. Then clear or otherwise transfer the old owner's obligation through a path whose failure remains representable. A locked old array must leave a tracked owner; overwriting its pointer with the new value would leak it and conceal a cleanup failure. The implementation may use a deferred cleanup owner, but it must report/account for the failure and eventually settle it. Ordinary error unwinding must not abandon resources.
 
@@ -148,7 +168,7 @@ Ordinary decoding from native integer bytes into the corresponding canonical fie
 
 Integer range/sign checks, native Yes/No interpretation, AutoNumber identity, Currency scale and public DAO/ADO type selection belong to their evidenced descriptors and shared conversion rules. A Boolean's canonical arm and an ordinary native packed Boolean field have different physical shapes; do not copy one directly over the other. GUID, OLE and Hyperlink metadata must survive even if a selected API projects a display value that does not expose all of it. Unsupported semantic operations stay explicit rather than silently replacing a typed value with a string.
 
-Extended date/time is an initial requirement. If the corrected shared foundation lacks a representation or operation required by its evidenced DAO/ADO behavior, I-FOUNDATION-1 and R-FMT-2 must extend the shared contract and establish the exact public projection. The design does not reserve a private CalcDb tag or silently turn the value into Double. Until the mapping is established, preserving bytes is useful reader/writer groundwork but does not count as complete semantic support.
+Extended date/time is an initial requirement. If the shared foundation lacks a representation or operation required by its evidenced DAO/ADO behavior, R-FMT-2's Extended Date/Time branch and the R-DAO-1/R-ADO-1 public-value captures decide the exact public projection; I-FOUNDATION-1 specifies any required shared-contract extension. The design does not reserve a private CalcDb tag or silently turn the value into Double. Until the mapping is established, preserving bytes is useful reader/writer groundwork but does not count as complete semantic support.
 
 For a resident fixed-width field with cached ordinal and descriptor, the target local work is bounded checks, a native load/decode and canonical scalar construction. No per-field heap allocation or mandatory atomic reference count is needed by that design. This is an implementation hypothesis; the measured path also includes actual DAO object, dispatch or managed-wrapper calls. Materializing text/binary costs at least the produced payload length; traversing long values additionally costs the visited storage spans/pages.
 
@@ -194,7 +214,7 @@ SAFEARRAY is a descriptor with dimensions, element information, bounds, lock cou
 
 Array copying must respect element ownership. Strings and VARIANT elements need their proper copy operations; object elements retain references.[^arraycopy] A `SAFEARRAY(VARIANT)` uses the target's real element stride, including 24 bytes on Windows x64. Allocate checked element-count products and initialize any owned elements before exposing them to a cleanup routine. If construction fails after element k, clean the initialized ownership state without clearing uninitialized memory or freeing the same element twice.
 
-`SafeArrayAccessData` creates a lock-count obligation and must be paired with unaccess.[^arrayaccess] A raw data pointer remains a borrow; it does not independently keep the descriptor alive. Keep the array owner and access token together, balance access on every exit, and never invoke a callback with an internal mutable array borrow exposed to uncontrolled reentry. Clear failure while an array remains locked is a real ownership condition, not a successful release.
+`SafeArrayAccessData` creates a lock-count obligation and must be paired with unaccess.[^arrayaccess] Keep the array owner/backing and access token together; a raw data pointer alone is not a lifetime guard. Section 4 uses the token to protect descriptor/data storage, then captures and checks each element around callouts. It does not expose a mutable engine borrow to foreign code or treat locked elements as immutable. Clear failure while an array remains locked is a real ownership condition, not a successful release.
 
 ByRef has two different uses that tests must keep separate. An input borrowed for conversion may be copied indirectly into an owned value when the operation needs to retain a snapshot. A true `[in,out]` or event cancellation argument must preserve its alias and writeback semantics throughout that public call. Always cloning on entry would make lifetime easier but would implement the wrong method. The interface inventory decides which behavior applies.
 
@@ -216,9 +236,9 @@ An internal operator may use typed columns, bitmaps or encoded slices to avoid c
 
 ## 9. Callback, error and continuation discipline
 
-Before invoking a VBA function, event sink or externally implemented object operation, stabilize the arguments and retain necessary owners. Release internal pager/cursor/catalog latches. Invoke on the caller thread. After return, check the object state and generations that the continuation depends on. Logical database locks have their own ACE-defined lifetime; releasing an internal latch is not a transaction commit or an instruction to release those locks.
+Before invoking a VBA function, event sink or externally implemented object operation, prepare by-value arguments through `CaptureValueStructural` and retain necessary owners. Legal ByRef arguments instead retain their aliases and writeback lifetime. Release internal pager/cursor/catalog latches. Invoke the supplied reference once; ordinary COM apartment rules determine where it executes. CalcDb does not choose a CalcVBA host thread. After return, capture the value/error and check the engine object state and generations on which the continuation depends. These tickets validate CalcDb state; they are not a mutation counter for caller-owned values. Logical database locks have their own ACE-defined lifetime; releasing an internal latch is not a transaction commit or an instruction to release those locks.
 
-Reentry can move a recordset, change a parameter, close a database, alter the function registry or invalidate a plan while all underlying memory remains allocated. Ownership keeps memory valid; generation checks keep the operation meaningful. Both are required. If continuation fails, return the established error and preserve the already performed host effect. Never invoke the callback again simply to obtain a fresh set of inputs.
+Reentry can move a recordset, change a parameter, close a database, alter the function registry or invalidate a plan while all underlying memory remains allocated. Ownership keeps memory valid; generation checks keep the operation meaningful. Both are required. If continuation fails, return the error selected by R-UDF-1/UDF-REENTRY/UDF-ERROR and R-ERR-1/ERR-NEST for that context, and preserve the already performed host effect. Never invoke the callback again simply to obtain a fresh set of inputs.
 
 The boundary prepares error information while it still has stable context. HRESULT, argument-error position, EXCEPINFO, thread error-info state and DAO/ADO error collections are distinct observable surfaces, specified in I-12/I-13. Cleanup must not accidentally replace the intended error through a nested COM call after publishing it. Publish thread error information at the last suitable boundary point, following the canonical error-info lifetime.[^errorinfo]
 
@@ -242,7 +262,7 @@ Measure cold activation/object construction separately from a warm resident row 
 
 For N resident scalar reads, the proposed basic materialization path performs O(N) bounded local work and no payload allocation. For text values with total decoded length U, direct BSTR construction performs O(U) emission plus any validated sizing pass. Scratch can save repeated decode work but adds an output copy and retained capacity. A cost comparison must include both, alongside the application's call pattern; a lower allocation count alone is not a result.
 
-R-STRING-1 uses repeated A/A controls and separate native, dispatch, Framework 4.8-family, .NET 10 and portable runtime captures. Exact values, types, errors and lifetimes are checked before timing is interpreted. Unknown client frees or allocator caches are reported as measurement limits rather than converted into invented leak totals. No speedup or memory figure in this chapter is an observed benchmark.
+R-STRING-1 uses repeated A/A controls and separate native, dispatch, Framework 4.8-family, .NET 10 and portable runtime captures. A-01's U-OWNER-NET records those owner-selected .NET target lanes. Exact values, types, errors and lifetimes are checked before timing is interpreted. Unknown client frees or allocator caches are reported as measurement limits rather than converted into invented leak totals. No speedup or memory figure in this chapter is an observed benchmark.
 
 ## 11. Boundary acceptance cases
 
@@ -258,11 +278,11 @@ The following cases instantiate the contracts; their full environment/capture ru
 | SAFEARRAY shape | Required element kinds, nonzero lower bounds, multiple dimensions, empty arrays, nested ownership and partial-construction failure. Record bounds/order through each real caller. |
 | Native projection | Exact field descriptors and untouched byte preservation; correct DAO/ADO projection for scalar, binary, GUID, OLE, Hyperlink and extended temporal cases. Missing mappings remain failures. |
 | Reentry and cleanup | Callback moves/closes the cursor, changes retained dependencies, unsubscribes an event sink or raises an error; stable arguments survive and effects are not repeated. |
-| Allocation/length failure | Conservative native-copy preflight bounds versus explicit budget-aware copying; opaque-record/foreign allocation restrictions; failure before reservation, at output allocation and during array/nested construction; overflow and malformed chain rejection. No partial value is published and no resource becomes unowned. |
-| Copy concurrency/reentry | Native Automation copy/cleanup and foreign reference operations run on the caller thread by default; exercise simultaneous callers and nested foreign callbacks under the proposed service policy. Register the attempt before retention, prove source-graph stability through preflight/copy, and invalidate the enclosing owner during a foreign AddRef/record callback or source-anchor release: the completed temporary stays owned and is not published into the invalid continuation. A thread-affinity default alone is not proof of multi-caller safety, and no latch/mutex spans a foreign callback. |
+| Allocation/length failure | `NoForeignCode` preflight versus per-allocation construction; next-element growth after a callback; unsupported opaque-record and unbounded-foreign steps. Fail before reservation, at output allocation and during nested construction; retain the completed prefix/effects and every residual owner without publishing a partial value. |
+| Copy concurrency/reentry | Exercise all three structural branches through one STA and separate COM apartments. A single object logs one AddRef. During an element AddRef, replace a later BSTR/object/nested-array value, attempt redimension/destruction of a locked array, invalidate the engine owner, or fail the next allocation. Verify actual backing/bounds/type checks, supported capture order or explicit refusal, owned prefix and no retry. An opaque record with no safe recipe is refused before its copy callback. No caller generation or array-immutability assumption may supply the check; no latch/mutex spans a foreign callback. |
 | Actual runtime paths | CalcVBA early/late binding, native x64/.xll, installed Framework 4.8-family and .NET 10 separately, plus CalcVBA using each portable prototype. Record actual loaded implementation and allocator. |
 
-No target execution occurred in this session. The first executable slice is a real canonical value round trip through a minimal factory, then one resident native row with a retained BSTR. It can run before complete DAO, SQL or writer implementation. The source declarations and owner-state instrumentation should be published with the fixture so a failure can be attributed to layout, conversion, ownership, activation or native decoding.
+Target acceptance remains unexecuted. The first executable slice is a real canonical value round trip through a minimal factory, then one resident native row with a retained BSTR. It can run before complete DAO, SQL or writer implementation. The source declarations and owner-state instrumentation should be published with the fixture so a failure can be attributed to layout, conversion, ownership, activation or native decoding.
 
 ## 12. What remains provisional
 
@@ -272,9 +292,9 @@ The algorithms above deliberately expose failure and ownership states before opt
 
 ## References and evidence limits
 
-The following primary documentation was accessed 2026-11-13. It supports public data/interface contracts, not observations of ACE 16.0.20527.20016. No source/example code is adopted; exact-material licence checks remain in the source ledger before any future adaptation.
+The following primary documentation was accessed 2026-11-13. It supports public data/interface contracts, not observations of the owner-reported ACE 16.0.20527.20016 baseline recorded as U-OWNER-ACE in A-01. No source/example code is adopted; exact-material licence checks remain in the source ledger before any future adaptation.
 
-[^integration]: Supplied `calcvba-integration-note.md`, provenance CalcVBA commit 8115aa781, corrected by the user's current Part I review. The current 16-byte implementation and corrected target assumption are deliberately separate.
+[^integration]: [B-SCOPE-11] [Scope and context](00-scope.md), §S3, and [U-PRW-01-58] `work.md`, PRW-43, state the shared platform VARIANT/BSTR contract. The supplied `calcvba-integration-note.md`, provenance CalcVBA commit 8115aa781, elaborates compatible shared-service requirements.
 [^variant]: Microsoft [VARIANT structure](https://learn.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant), updated 2021-04-02, **S-MS-VARIANT**. Native declaration and active union members.
 [^x64]: Microsoft [x64 ABI conventions](https://learn.microsoft.com/en-us/cpp/build/x64-software-conventions?view=msvc-170), updated 2025-06-25, **S-MS-X64ABI**. Pointer sizes and aggregate/union alignment; the VARIANT size calculation is the design's explicit inference from these rules and the declaration.
 [^decimal]: Microsoft [DECIMAL structure](https://learn.microsoft.com/en-us/windows/win32/api/wtypes/ns-wtypes-decimal-r1), **S-MS-DECIMAL**. Magnitude, scale/sign and declaration; the overlay hazard follows from combining this with VARIANT's outer union.
@@ -289,3 +309,6 @@ The following primary documentation was accessed 2026-11-13. It supports public 
 [^arrayaccess]: Microsoft [SafeArrayAccessData](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-safearrayaccessdata), updated 2024-02-22, **S-MS-SAFEARRAYACCESS**. Balanced data access and lock count; the article's example is not reused.
 [^errorinfo]: Microsoft [GetErrorInfo](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-geterrorinfo), updated 2024-02-22, **S-MS-GETERRORINFO**. Caller-thread state and ownership transfer/consumption.
 [^concepts]: Supplied `asupersync-report.stage1-part2.md` §2, `asupersync-report.stage1-part4.md` §§4–5 and `frankensqlite-report.stage1-part2.md` §§4–7, already cleared concept input. No external repository, mirrored extract or package was consulted.
+
+[^threading]: [U-PRD-01-09] `decisions.md`, PRD-02, and [B-SCOPE-11] [Scope and context](00-scope.md), §S4. Apartment registration and provider-reference delivery are the decided target; the .NET ACT-THREAD probes remain specified, not run.
+[^arraylock]: [S-MS-SAFEARRAYLOCK] Microsoft, [SafeArrayLock](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-safearraylock), updated 2024-02-22; [S-MS-SAFEARRAYREDIM] [SafeArrayRedim](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-safearrayredim), updated 2021-10-13; both inspected 2026-11-16. Lock/data-pointer lifetime, deletion restriction, locked redimension failure and same-instance synchronization. Element capture and continuation rules are CalcDb design; no example code adopted.

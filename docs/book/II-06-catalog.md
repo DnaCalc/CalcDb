@@ -1,12 +1,12 @@
 # II-06. Catalog, properties and QueryDefs
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-**Requirement trace:** Primary RQ-SQL-08. Shared obligations: RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-EXPR-03, RQ-CALL-03, RQ-CALL-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04 and RQ-OUT-01. The full scope text is in I-16. K-CATALOG uses II-04's native row/LV codecs and II-05's index mutation service; binding and object-model adapters consume the resulting descriptors.
+**Requirement trace:** Primary RQ-SQL-08. Shared obligations: RQ-PROD-03, RQ-PROD-04, RQ-DAO-01, RQ-PROD-05, RQ-STORE-03, RQ-FMT-01, RQ-SQL-02, RQ-SQL-03, RQ-SQL-04, RQ-SQL-06, RQ-DAO-03, RQ-DAO-04, RQ-EXPR-03, RQ-CALL-03, RQ-CALL-04, RQ-LATE-02, RQ-LATE-03, RQ-LATE-04 and RQ-OUT-01. The full scope text is in I-16. K-CATALOG uses II-04's native row/LV codecs and II-05's index mutation service; binding and object-model adapters consume the resulting descriptors.
 
-This chapter specifies the catalog bootstrap, typed native identities, relationships and ownership rows, property-block grammar, saved-query records, preserving edits and derived execution state. It develops D-CATALOG-1's recommended native authority and immutable descriptor design. The serializer recipes, public invalidation transitions and native write schedules are provisional under the named R-CAT-1 branches and their format/transaction/crash dependencies.
+This chapter specifies catalog bootstrap and new-database synthesis, typed native identities, relationships and ownership rows, property-block grammar, saved-query records, preserving edits and derived execution state. It develops D-CATALOG-1's recommended native authority and immutable descriptor design. The serializer recipes, public invalidation transitions and native write schedules are provisional under the named R-CAT-1 branches and their format/transaction/crash dependencies.
 
-**Evidence boundary.** The concrete source mechanics use the exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired and inspected as recorded in A-01. That pin is not a release identification. Microsoft documentation establishes public documentary contracts, with contradictions retained as experiments. Worked bytes are constructed and independently calculated; no ACE or reference Java encoder execution occurred here. The initial native oracle remains the user-reported ACEDAO.DLL 16.0.20527.20016, subject to the environment capture. All new figures are emitted as tables/Mermaid source and are not render-verified. Native ordinary output must pass the independent ACE/Access and T-COMPACT-1 checks; the crash baseline remains ACE-first parity.
+**Evidence boundary.** The concrete source mechanics use the exact Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, acquired and inspected as recorded in A-01. That pin is not a release identification. Microsoft documentation establishes public documentary contracts, with contradictions retained as experiments. Worked bytes are constructed and independently calculated; no ACE or reference Java encoder execution occurred here. The initial native oracle remains the owner-reported ACEDAO.DLL 16.0.20527.20016, recorded as U-OWNER-ACE in A-01 and subject to the environment capture. Native ordinary output must pass the independent ACE/Access and T-COMPACT-1 checks; the crash baseline remains ACE-first parity.
 
 ## 1. Catalog bootstrap without a binder cycle
 
@@ -18,9 +18,9 @@ The minimum bootstrap decoder reads column definitions before it interprets cata
 
 The next bootstrap issue is namespace identity. The reference uses `0x0F000000` as its default top-level parent, then resolves the `Tables`, `Databases` and `Relationships` containers. It also contains a scan path for files where the `(ParentId, Name)` catalog index is unavailable or has an unsupported sort order; that path discovers container IDs and the system-table parent from actual rows. These mechanisms justify a profile seed and checked native discovery. They do not justify one universal constant for every parent ID, or selecting the first row named `Tables` regardless of ancestry. [^S-JACK-CATDB-PIN]
 
-CalcDb should start with a bounded structural scan of the small catalog identity projection. It establishes the self-entry, parent relationships and selected profile's required namespaces, and detects duplicate identities or ambiguous container candidates. A recognized indexed path may accelerate subsequent lookup. For an unqualified catalog key encoder, scanning can still expose records for inspection; it does not supply the missing identifier-comparison semantics. Public lookup must use evidenced name equality, and writing an affected catalog index requires its exact native key encoder. Host `ToUpper`, Java `equalsIgnoreCase`, or a Unicode normalization routine is not automatically that rule.
+CalcDb starts with a bounded structural scan of the catalog identity projection. It establishes the self-entry, parent relationships and selected profile's required namespaces, and detects duplicate identities or ambiguous container candidates. Subsequent native name-index lookup requires the exact admitted `SortDescriptor` and II-05 key encoder. Initial coverage is General, General – Legacy and General97 where the latter occurs in an admitted Jet 4/ACE file; this does not admit Jet 3. A catalog carrying another sort order remains readable by a full scan. Do not choose its Text index merely because the tree exists. A requested native Text seek or an operation that changes Text keys, including catalog-name creation, rename or deletion, receives the named, counted `NotModelled.SortOrder` refusal with `TextSeek` or `TextKeyWrite` detail. Scan-based identifier lookup still needs the separately evidenced identifier-equality rule; neither a scan nor a General-family data key supplies that rule automatically. Host `ToUpper`, Java `equalsIgnoreCase` and Unicode normalization are not substitutes. [II-05 §4](II-05-indexes.md#4-native-field-keys-and-descriptor-binding) owns sort admission and R-SORT-3/SORT-DERIVE/SORT-CHECK evidence.
 
-**Figure F-37 — bootstrap dependencies.** The diagram describes dependency direction, not disk-write order. Mermaid source only, not render-verified.
+**Figure F-37 — bootstrap dependencies.** The diagram describes dependency direction, not disk-write order.
 
 ```mermaid
 flowchart TD
@@ -38,7 +38,7 @@ An original bootstrap operation can be expressed as follows. The caller owns the
 
 ```text
 BootstrapCatalog(file_view, qualified_profile, budget) -> CatalogSnapshot | Error:
-    root = checked profile.catalog_tdef_page          # candidate value 2
+    root = checked qualified_profile.catalog.object_table_root  # candidate value 2
     seed = DecodePhysicalTableDef(root, file_view, budget, StorageOnly)
     # II-04 segmented view; defer property-dependent semantic completion
     projection = BindCatalogFields(seed,
@@ -66,6 +66,92 @@ The identity scan costs the catalog data pages and projected fields, not every u
 
 Structural admission and a whole-catalog integrity audit have different error boundaries. A raw inspector can retain duplicate/orphan/cyclic records as bounded diagnostics; an affected semantic lookup cannot silently pick one. Whether an unrelated DAO open fails immediately, later lookup fails, or useful access remains available is a native surface policy. Do not turn every audit anomaly into an invented eager ACE open error.
 
+### 1.1 Catalog and property rules belong to the shared format description
+
+**RQ-FMT-01/02, RQ-SQL-08 and RQ-DAO-03.** The `FormatDescriptor` in II-04 is also the source of catalog and property coordinates. Its `profile.catalog` records the bootstrap locator, native object-kind fields, namespace conventions, required/optional column projections, query-role encodings and relationship-row fields. A projection binds those fields to the system table's actual `TableLayout`; it does not replace that layout with offsets copied from a sample row. `profile.property` records the signature, section/name/value framing, type-dependent payload codecs and preserved ranges described in §§5–6. A profile-specific namespace seed is data in this description, followed by checked discovery, not a second constant hidden in the catalog opener.
+
+Generate the catalog field bindings, property readers/emitters, inspector labels and malformed-fixture constructors from these rules. Handwritten code still performs bounded graph traversal, ownership, name resolution and publication. For example, the six-byte section header and eight-byte value-record header shown in F-40 are this profile's rule values; `ReadPropertyDirectory` below reads `profile.property.section.header_bytes` and `profile.property.value_record.header_bytes`. The worked bytes retain their numbers so the reader can check them. The executable consumer does not maintain another literal copy.
+
+### 1.2 New database image
+
+**RQ-PROD-03/04, RQ-DAO-01, RQ-FMT-01/02/03 and RQ-STORE-01/03/04.** `CreateDatabase` must leave a native database, with the initial system catalog and allocation state, and return an opened Database. An exclusive empty handle is only the beginning. Microsoft documents the creating Workspace, required locale/Connect string and optional format/encryption options; the exact accepted arguments and defaults are captured by R-CAT-1/CAT-NEW and R-DAO-1/DAO-CREATE.[^create-database]
+
+**Preferred provisional design: synthesize the image from the shared format description.** Each admitted creation profile has a `NewDatabaseRecipe` at `profile.creation.recipe`. It describes native objects, fields and initial allocation, and uses the same row, TableDef, map, index, key and property emitters as an existing-file edit. Do not ship an ACE-created empty file as an unexplained byte template. The pinned reference takes that template route: it selects separate empty resources for its file formats and copies one into a newly truncated channel. That is a useful alternative to assess, not CalcDb's chosen creation or failure policy.[^creation-reference]
+
+Synthesis makes the format rules inspectable and prevents an opaque template from concealing default locale, stale identifiers or application metadata. CAT-NEW confirms or changes the recipe when every page of an oracle-created empty file has been classified. An unexplained required object or byte range remains an open recipe item; the creator is not considered complete by omitting it or replacing it with zeros. Reconsider a template only if that evidence makes synthesis impractical, with a separately recorded provenance/licence decision and exact mutation rules. No such template is adopted here.
+
+#### Select the format and sort before encoding
+
+Keep the caller's exact Name, Connect/locale text and Option presence/value. Decode public enum values through the captured declaration profile, then select the creation recipe. The file extension is a name check, not the format selector. Keep process locale, database default sort, catalog-name index sort and a user Text column's later sort metadata distinct.
+
+| Accepted input class | Creation-profile direction | Deciding evidence |
+| --- | --- | --- |
+| `dbVersion40` (`64`) | Jet 4 MDB recipe; its application metadata variant is explicit. | CAT-NEW captures header, default properties and all system objects. |
+| `dbVersion120` (`128`) | ACE-family recipe selected by the actual target's option semantics. | Capture the actual header code and defaults; do not infer them from Office16 or assume every ACE generation has a separate DAO constant. |
+| Option omitted, Empty, Null, zero or an option combination | Keep these distinct and use the target's default/error rule. | DAO-CREATE captures validation order; CAT-NEW records any accepted resulting profile. |
+| `dbLangGeneral` or another admitted spelling selecting the General family | Select the evidenced `(sort identifier, sort version)` and matching table resource. | General97 `(1033,-1)`, General – Legacy `(1033,0)` and General `(1033,1)` are separate source profiles, not interchangeable LCID 1033 tables. |
+| Locale selecting another order | Refuse creation through `NotModelled.SortOrder` / `TextKeyWrite` when the required catalog Text keys would be generated. | Count the refused case; do not silently create a General database. Existing files remain readable by scans under PRD-05. |
+| Database-password or `dbEncrypt` request | Retain the argument and its actual native meaning; use the existing encryption/password capability boundary. | Keep these cases separate from excluded workgroup security; R-ENC-1 owns later codec completion. |
+| Old Jet 1/2/3 option, invalid format combination or unsupported feature | Preserve native recognition/error precedence and the explicit scope disposition. | General97 sort coverage does not create a Jet 3 writer. |
+
+The public constants distinguish `dbVersion40`, `dbVersion120` and the encryption flag; they do not establish the target's omitted-option behavior.[^create-options] Microsoft's locale/Connect documentation also permits a `;pwd=` string to request a password with the default locale. That is a creation-option case, not a secured-workgroup login. No numeric sort version is guessed from that string.[^create-database] CAT-NEW crosses accepted format/default/locale combinations with both explicit and default Workspaces. Where a later ACE header generation cannot be selected by empty-file creation alone, record that fact and its actual feature-promotion route instead of inventing another `CreateDatabase` option.
+
+#### System objects are part of each recipe
+
+The following is a **reference-backed candidate inventory**, not an observed list of what this ACE build creates. The pinned `testSystemTable` supplies these sets for its own empty resources; it has not been run here.[^creation-inventory]
+
+- **C:** `MSysObjects`, `MSysQueries`, `MSysACEs`, `MSysRelationships`.
+- **A:** `MSysNavPaneGroupCategories`, `MSysNavPaneGroups`, `MSysNavPaneGroupToObjects`, `MSysNavPaneObjectIDs`, `MSysAccessStorage`.
+- **X:** `MSysComplexColumns` and `MSysComplexType_` tables with suffixes `Attachment`, `Decimal`, `GUID`, `IEEEDouble`, `IEEESingle`, `Long`, `Short`, `Text`, `UnsignedByte`.
+- **R:** `MSysResources` and its associated resource-data table.
+- **W:** `MSysWSDPCacheComplexColumnMapping`, `MSysWSDPChangeTokenMapping`, `MSysWSDPRelationshipMapping`.
+
+| File profile / reference variant | Candidate table set | Required creation decision |
+| --- | --- | --- |
+| Jet 4, header code `01`, generic/2000/2003 variants | C; the reference's 2000 variant adds `MSysAccessObjects`, while its 2003 variant uses C+A. | CAT-NEW decides the target's empty-MDB application metadata variant. |
+| ACE 2007, code `02` | C+A+X | Capture the actual initial complex-type metadata even though complex-field operations remain later scope. |
+| ACE 2010, code `03` | C+A+X+R | Bind the resource-data identity from the creation recipe; do not copy a reference fixture's generated name. |
+| ACE 2016, code `05` | C+A+X+R | Retain this profile's own headers, schemas and default properties. |
+| ACE 2019, code `06` | C+A+X+R+W | The reference changes the resource-data identity; CAT-NEW decides the actual target inventory and identities. |
+
+The namespace/property records are also required: the evidenced `Tables`, `Databases` and `Relationships` containers, the database's `MSysDb` record, and `SummaryInfo`/`UserDefined` property owners where the profile creates them. These are catalog objects or property owners, not automatically additional user tables. The recipe records their native kinds, parents, names, IDs, Owner data and complete default `LvProp` records. A system table with no user rows still has its real TableDef, maps, indexes and any seed rows. Public `TableDefs`, `Containers`, `Documents` and Database.Properties must project the resulting structures through their normal adapters.
+
+A table-name list alone is insufficient. CAT-NEW captures the physical schemas, every logical/physical index and root, default property payloads, initial ownership/access-control rows and any application-owned storage. Creation uses only the evidenced unsecured/default-Admin recipe; it does not implement workgroup accounts or permission changes. Generating initial default-Admin records differs from preserving an existing file's ACL bytes. Nor does creating an empty complex-type or application-storage system table implement the later feature or execute front-end content.
+
+#### Assemble and validate a finite page plan
+
+`NewDatabaseRecipe` carries `header_defaults`, `initial_extent_pages`, `fixed_roots`, `system_tables`, `namespace_rows`, `ownership_rows`, `property_records`, `optional_system_objects`, `nondeterministic_fields` and `allocation_plan`. These are native structures with evidence and reference rules, not a second private catalog. `fixed_roots` includes the header, global free-map declaration and `profile.catalog.object_table_root`; their candidate locations are page 0, page 1/row 0 and page 2. Other roots and continuation pages come from the recipe's allocation plan. Every conditional object has a creation predicate and an explicit absent outcome.
+
+Capture accepted timestamps and generated identifiers once under the public operation owner. Reserve storage for the finite image set or a bounded owned spool, then encode all pages privately. Count and resolve all references before submitting any image: system TableDefs and their continuation streams; record/LV pages; owned/available/global maps; index roots, siblings and keys; catalog and property links. A complete page has exactly one final image in the starting creation program, even if several system objects share it. The validator checks that every page in the initial extent is owned by a known native structure or explicitly free/reserved, and that all claimed allocations agree with the maps. A new image has no protected preexisting payload; that does not make unknown required native bytes disposable.
+
+A constructed arithmetic witness can reserve 32 pages while allocating pages 0–23. At 4,096 bytes per page the extent is `0x20000` bytes; the catalog TableDef begins at `0x2000`. For the illustrated global free-map role, bits 0–23 are clear and bits 24–31 are set, giving `00 00 00 FF` for those four bitmap bytes. An ownership map uses its own opposite meaning. A Jet 4 header uses the admitted `01` format code at byte 20 before the normal stored-header transform is applied. These values check addressing and map accounting only. Thirty-two pages is not a proposed minimum native database, and the witness does not supply missing system records.
+
+```text
+PrepareNewDatabase(request, profile, sort_tables, call_owner, budget):
+    bind the accepted creation profile and native validation-phase policy
+    require profile.creation.recipe is complete for this accepted option tuple
+    require admitted sort tables for every generated Text index key
+    capture nondeterministic inputs once under call_owner
+    reserve wrapper, collection-attachment, receipt and image/spool capacity
+    allocate the recipe's complete finite page/reference closure privately
+    emit header, TableDefs, rows, properties, keys and maps through shared rules
+    validate ownership, all references, initial extent and native bootstrap
+    seal one final stored image per page plus the selected write/flush program
+    return owned PreparedCreation; no destination byte has been submitted
+```
+
+The new-image slice consumes `W-04/weight-tables-per-sort-order`, the checked format/catalog readers and the first writer's owned I/O/progress machinery. It does not require the full SQL executor or the later compact/repair implementation. A profile recipe can be compared with independently created native files before the DAO wrapper is complete.
+
+#### Creation admission, publication and failure
+
+II-09 §2.1 supplies the exclusive creation lease and `CreationAttempt`, selected by R-LOCK-1/EX-CREATE. It prevents replacement of an existing file and retains the new file's identity and namespace effect. The prepared image joins that attempt; an ordinary `BindingPermit` is not published for a zero-length or partly initialized file. The initial candidate writes nonbootstrap target pages first, then the global-map and catalog bootstrap structures, and the header last. This is provisional. CAT-NEW with R-CRASH-1/CRASH-NEW compares header-first/last and map-order alternatives, captures actual writes/flushes and routes reconstructed states through independent ACE, Access and Compact & Repair openers. No page-sized write is assumed atomic, and header-last is not a stronger recovery promise.
+
+After the complete initial image and the native-selected resolution/flush work, validate the opened bootstrap through the normal reader, then publish the Database binding and its Workspace membership at the selected public boundary. Creating a file, admitting its native contents, exposing a collection member and transferring the returned interface have separate receipts. The operation does not return success merely because the destination has the expected length. Failure after a complete accepted file must not cause an automatic second creation or deletion of that accepted file.
+
+Before any destination effect, failure releases private preparation. After creation or a partial write, retain the exact file identity, extent, submitted ranges, completed/uncertain I/O and public membership state. Cleanup follows the measured native failure disposition and the retained ownership proof. Remove a failed new entry only when its identity is still this attempt's, all I/O is settled and the selected cleanup rule permits removal; otherwise retain the owned failed/uncertain outcome. Never delete a later file merely because it occupies the same path. A crash is assessed through R-CRASH-1, with the precision and unresolved-case disposition settled during implementation under PRD-07. No private undo dependency is added.
+
+DAO-CREATE also decides how CreateDatabase interacts with an already active Workspace transaction, rollback, Close and final Release. Do not infer that rolling back table changes deletes the database file. T-COMPACT-1's creation cases check the initial catalog, all maps, empty trees and first subsequent user-table/row writes; the final closed acceptance list remains implementation work under PRD-08. The browser path in II-14 §5.1 uses this same recipe and publication owner after storage admission.
+
 ## 2. Native identity and typed locators
 
 The following is a field projection, not a claim that every profile has exactly these columns in this order. The row's TableDef supplies physical layout and nullability.
@@ -77,7 +163,7 @@ The following is a field projection, not a claim that every profile has exactly 
 | `Name` | Original native text, with a separate lookup representation. |
 | `Type` | Signed 16-bit source discriminator; dispatch before interpreting `Id` or associated payload. |
 | `Flags` | 32-bit flags, retaining unknown bits. The reference recognizes system bits `80000000`/`00000002` and hidden bit `00000008`. |
-| `Owner` | Opaque native ownership data, relevant to qualified creation/security behavior. |
+| `Owner` | Opaque native ownership data; preserve existing bytes and use only the evidenced default-Admin creation recipe. |
 | `DateCreate`, `DateUpdate` | Native date values and raw encodings; timestamp updates belong to the actual operation policy. |
 | `LvProp` | Property-group payload carried through the ordinary LV mechanism. |
 | `Database`, `ForeignName`, `Connect` | Linked-source metadata; preserve independently of whether provider execution is available. |
@@ -119,7 +205,7 @@ The ordinal is semantic: row traversal order must not silently reorder a compoun
 
 The public flags `1` (one-to-one), `2` (not enforced), `4` (inherited), `256` (cascade update), `4096` (cascade delete), `16777216` (left default join) and `33554432` (right default join) come from Microsoft's enumeration. The pin additionally recognizes `0x2000` as null-on-delete; that bit requires its own native capture rather than being exposed as an invented DAO constant. Default join preference and referential-integrity enforcement are different consumers of metadata. [^S-MS-REL-FLAGS][^S-JACK-REL-PIN]
 
-**Figure F-39 — constructed two-column relationship.** Source-backed row/descriptor witness; no ACE observation or rendered result is claimed.
+**Figure F-39 — constructed two-column relationship.** Source-backed row/descriptor witness; no ACE observation is claimed.
 
 Let `Orders(CompanyId, OrderId)` on TableDef page 42 be referenced by `Lines(CompanyId, OrderId)` on page 43. Construct relationship `OrdersLines` with cascade update/delete flags `0x1100`. Its two relationship rows contain:
 
@@ -147,7 +233,11 @@ The relationship descriptor binds primary and foreign physical column identities
 
 The pinned table-creation path adds both an `MSysObjects` row and `MSysACEs` rows. Its ACL fields are `ObjectId`, `SID`, `ACM` and `FInheritable`. It obtains prospective SIDs from the parent container, tries the `MSysDb` object's `Owner` for new ownership, and contains fallback constants for an Admin-like SID and full access. Those fallbacks are observations of a permissive reference writer, not an ACE permission-inheritance specification. [^S-JACK-CATDB-PIN]
 
-CalcDb must preserve existing owner/ACL payloads and qualify the exact creation policy for the target file and caller. A successful table-data round trip does not establish that access-control records may be omitted or reset. Microsoft's documentation distinguishes `.mdb` user-level security from the `.accdb` family, which does not provide that feature; the presence of catalog ownership/access-control structures must therefore be interpreted in the actual file/profile context. Keep the later encryption capability separate from this metadata. [^S-MS-USER-SECURITY]
+**RQ-DAO-01/04, RQ-SQL-06 and RQ-STORE-03.** PRD-04 excludes MDB user-level workgroup security from initial and later scope. CalcDb opens unsecured files and files needing only default Admin with a blank password, following ACE without a supplied workgroup file. Existing owner/access-control bytes remain opaque preserved input. New database/table creation uses only the default-Admin recipe established by R-CAT-1/CAT-NEW/CAT-D with R-DAO-1/DAO-SEC. Generating those new rows does not authorize normalizing existing SIDs, masks or inheritance flags. A successful table-data round trip does not prove that protected records may be omitted or reset.[^security-scope]
+
+The catalog supplies raw ownership and access-control associations for preservation; it supplies no authenticated-principal, group-membership or permission-evaluation service. A named logon, explicit workgroup file, account/group change or operation requiring access that would be denied receives the named, counted `NotModelled.UserLevelSecurity` disposition before protected mutation. The public member recipe maps that internal key to its reported failure; no new universal HRESULT is assigned here. If the admitted default-Admin operation cannot preserve an affected opaque access-control structure safely, it cannot publish that transformation. The reference writer's permissive constants never supply a fallback. DAO-SEC distinguishes default-Admin admission, unchanged protected bytes and these refusals, without attempting account-store derivation.[^security-scope]
+
+Microsoft's documentation distinguishes `.mdb` user-level security from `.accdb`, which does not provide that feature. This is a format fact, not a reason to discard an ACCDB's ownership records.[^S-MS-USER-SECURITY] Database passwords and page encryption retain their separate capability boundary and R-ENC-1 cases; they do not add named workgroup authentication.
 
 System and hidden flags are presentation/engine metadata, not grounds for discarding an object. Forms, reports, macros and database modules retain catalog records, properties, raw payloads and known references. Opening a raw-object handle does not run code or activate the Access front end. Unknown native objects remain in the same preservation inventory. Reclaiming a page requires proven ownership and absence of retained references; it cannot be based on the fact that CalcDb has no executable descriptor for its owner.
 
@@ -239,33 +329,38 @@ This controlled example has only understood sections and no unexplained position
 The following original algorithm parses framing before typed values. It uses unsigned loads to make arithmetic checks explicit, while the profile separately restricts accepted ranges. The reference uses signed Java short loads for several two-byte fields; that does not prove the high half of the unsigned field is a legal native range.
 
 ```text
-ReadPropertyDirectory(outer_value, format, budget) -> owned directory or structured error:
+ReadPropertyDirectory(outer_value, profile, budget) -> owned directory or structured error:
+    grammar = profile.property
     if admitted outer value is absent/Null or has zero bytes:
         return empty directory retaining that exact outer-state tag
     raw = admitted assembled bytes of outer_value
     require raw is immutable for directory lifetime
-    check admitted signature and total-byte budget
+    check grammar.signature and total-byte budget
     directory = reserve bounded offset entries
-    active_dictionary = none; cursor = 4
+    active_dictionary = none; cursor = grammar.signature.size
     while cursor < raw.length:
-        require at least 6 bytes remain
-        length = checked_u32le(raw, cursor)
-        require length >= 6 and length <= raw.length - cursor
-        section = [cursor, cursor + length); kind = u16le(cursor + 4)
-        if kind == 0x80:
-            names = scan length-prefixed name spans within section
+        require grammar.section.header_bytes remain
+        length = checked_load(grammar.section.length, raw, cursor)
+        require length >= grammar.section.header_bytes
+        require length <= raw.length - cursor
+        section = [cursor, cursor + length)
+        kind = checked_load(grammar.section.kind, raw, cursor)
+        if kind == grammar.kind.names:
+            names = scan spans with grammar.encoded_name within section
             charge name count, encoded bytes and UTF-16 decode budget
             retain duplicates, raw spelling, and any unaccepted decode state
             active_dictionary = append dictionary descriptor(names, section)
-        else if kind is an admitted value-block kind:
+        else if kind is in grammar.value_block_kinds:
             retain section with active_dictionary identity
-            scan an admitted map-name block; retain name-block residual bytes
+            scan grammar.map_name; retain admitted residual bytes
             while a value record remains:
-                require 8 bytes for its header
-                n = u16le(record_start); bytes = u16le(record_start + 6)
-                require n >= 8 and n <= section.end - record_start
-                require bytes <= n - 8
-                retain flags, type, ordinal, payload span, residual span
+                require grammar.value_record.header_bytes remain
+                n = checked_load(grammar.value_record.length, raw, record_start)
+                bytes = checked_load(grammar.value_record.payload_length, raw, record_start)
+                require n >= grammar.value_record.header_bytes
+                require n <= section.end - record_start
+                require bytes <= n - grammar.value_record.header_bytes
+                retain grammar-defined flags, type, ordinal, payload and residual spans
                 validate ordinal against this section's dictionary if decodable
                 charge count and advance exactly n bytes
         else:
@@ -307,7 +402,7 @@ PreparePropertyEdit(object_view, request, policy, budget) -> PreparedCatalogChan
 
 The request can change a table or field constraint, so a built-in property handler may require table/index work beyond its property payload. A change to `Required`, a default, or a validation rule must not be acknowledged solely because the blob was rewritten. Existing-row checks, coercion, syntax validation, timing of evaluation and rollbackability belong to the native operation policy, decided by R-CAT-1 with R-EXPR-1 and R-TXN-1. No read of property metadata invokes its expression. Handler selection also must not replay arbitrary saved flag 80 state as an executable command.
 
-For a relocated `LvProp`, the prepared change initializes replacement LV rows/pages, includes qualified owner/global maps, publishes the changed catalog-row reference at the selected native phase, and retires prior storage only under the applicable visibility/rollback rules. Index changes are limited to catalog fields that actually changed; a new property value does not automatically change every catalog index. Native timestamp/stamp changes, if observed, are explicit members of the plan. Completion still uses D-WRITE-1 and R-CRASH-1/2; there is no property-specific atomicity promise or private recovery dependency.
+For a relocated `LvProp`, the prepared change initializes replacement LV rows/pages, includes qualified owner/global maps, publishes the changed catalog-row reference at the selected native phase, and retires prior storage only under the applicable visibility/rollback rules. Index changes are limited to catalog fields that actually changed; a new property value does not automatically change every catalog index. Native timestamp/stamp changes, if observed, are explicit members of the plan. Completion still uses D-WRITE-1 and R-CRASH-1; there is no property-specific atomicity promise or private recovery dependency.
 
 ## 7. DAO property projection and persistence
 
@@ -315,7 +410,7 @@ DAO's documented collection contains built-in and user-defined properties. `Crea
 
 The Property object's public `Value` is a Variant, with `Name`, `Type` and `Inherited` as distinct metadata. Inherited recordset-field properties are views of underlying TableDef/QueryDef metadata, not independent copies to save automatically into the file. Context-sensitive built-in properties can fail when read or written through an inappropriate object state; a generic blob setter is therefore insufficient.[^s8p-ms-property]
 
-Microsoft describes user-defined properties as belonging to persistent objects and documents the DDL argument's permission significance. Changing DDL to non-DDL requires delete-and-recreate because no corresponding mutable DDL property is exposed. This should be tested in the actual supported file/security context; the flags byte alone does not establish the required MDB or ACCDB permission behavior. Full DAO coverage remains subject to the actual format and object context.[^s8p-ms-create]
+Microsoft describes user-defined properties as belonging to persistent objects and documents the DDL argument's permission significance. Changing DDL to non-DDL requires delete-and-recreate because no corresponding mutable DDL property is exposed.[^s8p-ms-create] Preserve the argument and stored flag, and capture create/append/delete behavior on unsecured/default-Admin files in R-CAT-1/CAT-P. A secured-workgroup permission requirement takes the §4 refusal. The flag does not introduce a permission engine or remove the supported default-Admin property operation.[^security-scope]
 
 The public Property.Type is writable before appending and read-only afterward. The documented type list spans capabilities that an underlying database may reject; the public enum list is not a table of native payload encodings accepted by every ACE file format. Capture the full error collection and the phase of rejection for each type family rather than inferring support from one byte in a blob.[^s8p-ms-type]
 
@@ -380,6 +475,8 @@ The fixed attribute vocabulary is small; the number and size of rows are not fix
 | `FF` | End marker | Defined as a constant; preserve its row and unknown payload. |
 
 The option bits recognized in attribute 3 are `0001` for a star projection, `0002` for DISTINCT, `0004` for owner-access, `0008` for DISTINCTROW, `0010` for TOP and `0020` for PERCENT. `0002` also selects UNION rather than UNION ALL in the UNION reader. Keep these as bits with a query-family context. A generic enum which assigns one meaning to every `Flag` value would misread parameters and joins. The reference's SELECT formatter takes precedence branches for DISTINCT, DISTINCTROW and TOP; that code is not evidence that every combined bit pattern is either valid or correctly reconstructed by the reference. Test the combinations ACE actually produces.[^qformat][^qbase][^qunion]
+
+Keep `WITH OWNERACCESS OPTION` and its native representation on unsecured/default-Admin files. R-CAT-1/CAT-Q with R-SQL-1/2 captures the saved option, `.SQL` view, default Admin identity, execution result and errors, using a control without the option. Do not strip bit `0004` as part of security removal, or claim that the option is a no-op before the experiment. Only the obligations needing a secured workgroup are excluded; a request crossing that boundary receives §4's refusal.[^security-scope]
 
 Declared parameter type values in the pin include Bit=1, Byte=2, Short=3, Long=4, Currency=5, IEEESingle=6, IEEEDouble=7, DateTime=8, Binary=9, Text=10, LongBinary=11 and Guid=15; zero is printed as `Value`. This is the inspected reader's supported mapping. It does not narrow CalcDb's required type support or prove how ACE serializes newer numeric/date parameter declarations. A parameter's native type record, public DAO `Type`, inferred expression type and an assigned value's VARIANT subtype are related but distinct pieces of state.[^qformat][^qtypes]
 
@@ -455,7 +552,7 @@ For ODBC execution, documented `ODBCTimeout=-1` selects the containing object's 
 
 The public lifetime boundary is clear: Microsoft describes named permanent QueryDefs as saved collection members, and empty-name temporary QueryDefs as object-owned definitions that are not saved or appended. Temporary definitions use the same SQL/metadata services but do not allocate a persistent object ID or native query rows merely because they are prepared or executed. Promotion to a named persistent object follows the tested public operation sequence; naming/appending rules must not be approximated by an arbitrary internal “save” flag.[^msquery][^msquerydefs]
 
-Use three owned structures:
+Use these owned structures:
 
 ```text
 QueryDefinition:
@@ -466,7 +563,12 @@ QueryDefinition:
 ParameterSet:
     owner QueryDef instance and declaration incarnation
     stable declaration identities, names/types/order
-    owned values and assignment state; no borrowed caller VARIANTs
+    current_version: locally owned immutable ParameterSetVersion
+
+ParameterSetVersion:
+    declaration incarnation and immutable cell-owner vector
+    assignment state and owned canonical values; no borrowed caller VARIANTs
+    retained locally by captures/executions; setters publish a replacement version
 
 ExecutionBinding:
     accepted definition/dependency token
@@ -476,7 +578,7 @@ ExecutionBinding:
 
 The declaration set is metadata; the values belong to a particular object/execution context. Microsoft's Parameters collection cannot have objects appended or deleted directly. Changing declarations is a definition edit, normally through SQL, while setting `Parameter.Value` supplies arguments. The SQL reference documents that supplied values continue to apply until reset. The API therefore supports a hot path which replaces one owned value cell without rewriting catalog rows or recompiling unchanged expression structure.[^msparams][^msqsql][^msparam]
 
-Distinguish unassigned internal state from an explicitly supplied `Null`, and distinguish a null BSTR from a zero-length BSTR where the public conversion contract requires it. This internal distinction does not preselect ACE's initial getter value or missing-parameter error. R-CAT-1/R-DAO-1 captures getter and execute behavior for untouched, Empty, Null, omitted and wrong-type values. Value assignment performs the required public coercion at the evidenced point, copies/dereferences caller-owned storage under II-02's Automation contract, and leaves the previous cell intact if the selected atomic-set policy fails. Native timing decides whether some conversion is deferred to execution.
+Distinguish unassigned internal state from an explicitly supplied `Null`, and distinguish a null BSTR from a zero-length BSTR where the public conversion contract requires it. This internal distinction does not preselect ACE's initial getter value or missing-parameter error. R-CAT-1/R-DAO-1 captures getter and execute behavior for untouched, Empty, Null, omitted and wrong-type values. Value assignment performs the required public coercion at the evidenced point and captures caller-owned storage once through II-02's `CaptureValueStructural`. An accepted candidate replaces the cell by publishing a new locally owned ParameterSet version. The old version and its owned value storage remain alive while a capture or execution retains them. Failure before acceptance leaves the prior cell intact. Native timing decides whether some conversion is deferred to execution; copying is not permission to move that conversion earlier. Object values retain identities, not snapshots of the objects' mutable state.
 
 An opened recordset needs its own accepted binding. Microsoft's Requery documentation says the no-argument form reuses the definition and parameter values used originally, while supplying the QueryDef permits its current values. Consequently, mutating a QueryDef's parameter cell cannot unconditionally mutate every existing recordset's value vector. Use an immutable snapshot or an equivalent owned version, and let the public operation select the correct version.[^msrequery]
 
@@ -486,7 +588,7 @@ Nested saved queries add declaration origins. A parameter exposed by a dependenc
 
 Parameters.Refresh's official page describes refreshing a collection to current schema without settling held parameter objects or assigned values after an SQL rewrite. QueryDefs.Refresh's page states that the method is unsupported while its remarks specifically discuss nonpersistent Connection.QueryDefs. R-CAT-1 therefore tests Database.QueryDefs, Connection.QueryDefs and QueryDef.Parameters independently; neither page supplies a universal refresh policy.[^msparamrefresh][^msqrefresh]
 
-**Figure F-43 — QueryDef instances and captured execution bindings.** Original ownership design; arrows mean retained definition/plan/value inputs. Parameter capture and public lifetime transitions are qualified by R-CAT-1; Mermaid source only, not render-verified.
+**Figure F-43 — QueryDef instances and captured execution bindings.** Original ownership design; arrows mean retained definition/plan/value inputs. Parameter capture and public lifetime transitions are decided by R-CAT-1/CAT-V and CAT-I.
 
 ```mermaid
 flowchart TD
@@ -628,7 +730,9 @@ An engine descriptor can know a new physical field layout before an existing Rec
 
 An execution instance contains the immutable bound plan, an owned or immutably shared parameter frame captured at the native-qualified boundary, current data/transaction view, cursor/operator state, cancellation owner and accounting. The reusable QueryDef ParameterSet is a different owner: later assignment, reentry or Close cannot mutate or clear an active execution's captured values accidentally. A cached plan contains none of the last caller's parameter values, Recordset position, output buffers, by-reference VARIANT addresses or active locks. Parameter slots use II-02's real Automation values and explicit copy/clear rules; their validity and reset behavior follow the owning DAO/ADO object. A plan's immutable parameter layout can be shared while each public QueryDef/Command instance owns its values separately.
 
-Capturing that frame is a potentially reentrant preparation phase. `VariantCopy` can call a contained object's AddRef, while owned cleanup can call Release; neither is an inert byte copy.[^cat-value-copy] Register preparation under II-12's call attempt before any such retention. Prefer acquiring a locally retainable immutable ParameterSet version at the native-selected capture point. If independent copies are required, use II-13 §9's qualified mutation-stable source interval and owned copy protocol: retaining the top-level ParameterSet or checking its generation after an opaque copy returns does not protect nested payloads while that copy is traversing them. This adds no object-valued DAO parameter capability; only values/forms admitted by the actual member recipe reach this branch. Fixed-width local values and already immutable local frames keep their direct path. Conversion remains at its native-qualified phase, not an automatic side effect of making the frame owned.
+Capturing that frame is a potentially reentrant preparation phase. Value copying can call a contained object's AddRef, while cleanup can call Release; neither is an inert byte copy.[^cat-value-copy] Register preparation under II-12's call attempt before any such retention. Prefer retaining a locally owned immutable ParameterSet version at the native-selected capture point. This local retain keeps its complete value storage alive without calling a foreign interface. A parameter setter replaces the live version rather than mutating storage retained by an earlier capture. The version freezes value representation and ownership, not the state of referenced objects.
+
+If the member requires independent copies, call II-02 §4's `CaptureValueStructural`, also used by II-13 §9. Its `NoForeignCode` branch completes under the ordinary valid-argument contract on the calling thread; `SingleObjectAddRef` retains the captured pointer once; `ElementwiseCallout` uses actual backing ownership and validates the next element/continuation after each foreign step. A SAFEARRAY lock does not freeze its elements, and no caller-supplied mutation generation is assumed. An array/record form without safe backing or a supported recipe receives `UnsupportedCaptureForm` before its unsupported copy step, with a counted gap if the native member admits that form. This adds no object-valued DAO parameter capability: the member's native recipe first decides its legal forms. Conversion remains at the native-qualified phase, not an automatic side effect of owning the frame. PRD-02 supplies ordinary COM delivery through the provider/reference; CalcDb imposes no CalcVBA host-thread policy.[^capture-policy]
 
 Choose a cache key from definition identity and semantic context. For a persistent QueryDef this includes file/catalog incarnation, native object identity and definition epoch, plus the relevant context below. For a temporary QueryDef use its object-owned definition incarnation. Ad-hoc SQL may use owned exact SQL bytes plus a context key; preserve the original SQL and do not invent a text canonicalizer that changes literals, identifier resolution, errors or observable metadata. A cache hit is an optimization of the same binding result, not another query-definition authority.
 
@@ -639,7 +743,7 @@ Choose a cache key from definition identity and semantic context. For a persiste
 | Physical access path | Selected index removed/replaced, sort descriptor changes, schema-dependent covering proof invalidated | The actual index/descriptor used by the executed plan. |
 | Write semantics | Default, validation, generated-value, relationship or constraint changes relevant to the action | Dependencies of the affected insert/update/delete path, including metadata-only expressions that are not selected as output. |
 | SQL and comparison context | Wildcard/dialect option, identifier resolution profile, relevant locale/collation changes | Explicit compilation context; never an unkeyed process-global switch. |
-| Functions and sandbox | Resolver/registry generation, host binding, relevant capability or sandbox context changes | Function and permission dependencies; the caller-thread/effect rules of I-10 still apply. |
+| Functions and sandbox | Resolver/registry generation, host binding, relevant capability or sandbox context changes | Function and permission dependencies; I-10's COM-delivery, effect and continuation rules still apply. |
 | Ordinary row data | Different rows/values or visibility | Fresh execution/data view; no unconditional semantic rebind when no binding assumption depends on the data. |
 | Statistics | Updated estimates or index distinct-count information | Optional plan choice invalidation; correct execution cannot depend on an estimate being exact. |
 | Presentation/custom metadata | A caption or unrelated custom property changes | Property views update; rebind only if a specific executed operation consumes that property. |
@@ -681,13 +785,17 @@ FinishExecutionPreparation(plan, tickets, parameter_state, attempt, cache_admiss
     all steps use guarded preparation: no next dependent work after unvalidated foreign reentry
     reconcile declarations under the evidenced public declaration-change policy
     require owner parameter layout/incarnation to match the plan's declaration layout
-    acquire one coherent parameter source at the native-qualified capture point
-    retain its immutable version or qualify stability for the complete copy traversal
-    capture the owned frame through the shared foundation under this attempt
+    retain one local immutable ParameterSet version at the native-qualified capture point
+    if the member permits the execution to share that owned version:
+        attach the retained version to the attempt without foreign reference calls
+    else:
+        capture each required value with CaptureValueStructural under this attempt
+        retain completed elements, exact backing tokens and foreign-effect receipts
     after every foreign retention, due conversion or cleanup boundary:
         preserve completed effects and initialized or residual cleanup owners
-        validate source stability and the next dependent owner/layout/view/context ticket
+        check the actual retained backing and next owner/layout/view/context dependency
         on invalidation, obtain a qualified retained-view continuation or fail without replay
+        never consult a fictional generation on caller-owned value storage
     build fresh execution state with that accepted frame still owned by the attempt
     perform optional cache admission only with its reserved ownership and cleanup path
     settle required temporary/cache-retirement work outside internal latches
@@ -710,34 +818,49 @@ Likewise, changing a parameter's Value is an execution-state operation. It does 
 
 ## 14. Prepared catalog mutations and native publication
 
-**D-CATALOG-1 remains Recommended for native authority and immutable views; its serializers and native publication schedules remain Provisional under R-CAT-1, R-TXN-1 and R-CRASH-1/2.** The preferred implementation prepares one operation across native table definitions, properties, system-table rows, indexes, maps and ownership records. It publishes a new in-memory catalog view at the coordinator's evidenced visibility boundary. A separate private catalog store or an atomic file replacement would not implement the required native operation.
+**D-CATALOG-1 remains Recommended for native authority and immutable views; its serializers and native publication schedules remain Provisional under R-CAT-1, R-TXN-1 and R-CRASH-1.** The preferred implementation prepares one operation across native table definitions, properties, system-table rows, indexes, maps and ownership records. It publishes a new in-memory catalog view at the coordinator's evidenced visibility boundary. A separate private catalog store or an atomic file replacement would not implement the required native operation.
+
+A Workspace or Connection is a local locker. Simultaneous private catalog/row changes share the coordinator but not one mutable overlay. Before publication, II-09’s initial fresh-base rebase checks schema incarnations and conflict claims, then composes accepted effect-free deltas into the current pages. It never replays callbacks or republishes a stale full-page catalog image over a sibling’s commit. Rollback removes the owner’s private work while preserving sibling state and any old reader sources; R-TXN-1/TXN-LOCAL and R-CAT-1 decide observable conflict and visibility details.
 
 For `TableDefs.Append`, start with an object-owned transient definition. Microsoft places duplicate-name and invalid-definition errors at Append and requires at least one field before appending. Construction and property assignments can still have their own errors, so the native validation schedule is preserved rather than moving every possible failure to object creation. [^S-MS-CREATE-TABLEDEF]
 
 The initial create-table program reserves the complete finite allocation closure in private state: TableDef/continuations, table and LV maps, empty or populated index roots, and any system-table growth caused by catalog/ACL/property rows. It prepares table/column properties together with that operation. The reference first writes a TableDef, adds catalog/ACL records, and later saves properties; this is useful for identifying participating structures, but its statement order is not the required ACE order. [^S-JACK-TABLE-CREATE-PIN][^S-JACK-TABLE]
 
-The candidate native phase direction is to establish allocated target structures and their ownership before publishing catalog references to them; complete required property/relationship/index/ACL associations within the actual native operation closure; publish required counts or catalog descriptors only after their referents are valid; then perform evidenced native resolution/flush steps. If an existing system-table index or row changes more than once across those phases, retain the intermediate images as II-05 does. Physical dependency cycles and a native trace that uses earlier discoverability can change the phase graph. Do not assign an unused field to a commit or needs-repair marker. Successful completion is checked by independent ACE/Access opening and the calibrated T-COMPACT-1 branch; interrupted states use the ACE crash comparison.
+The starting native program composes one final image per physical page across TableDef, LvProp, system rows, indexes and maps. Its preferred order initializes new targets, then publishes changed data, final indexes and catalog references, final existing maps, permitted extent changes and evidenced resolution/flush work. An existing map can combine new allocation and old-storage retirement; its placement is a deciding branch, not an unconditional allocation-before-reference promise. R-CAT-1 supplies catalog closure, while R-CRASH-1 compares order alternatives and repeated-image fallback. Never assign an unused field to a commit or needs-repair marker. T-COMPACT-1 maps catalog write kinds to structural checks; its closed list and exact acceptance are completed during implementation.
 
 ```text
 PrepareCatalogChange(request, catalog_view, transaction_policy, budget)
     -> OwnedCatalogChange | Error:
     run the target operation's ordered validation steps
+    require the admitted unsecured/default-Admin route; refuse secured-workgroup work
     bind names, object incarnations and related descriptors in catalog_view
     capture owned semantic inputs once, including injected timestamp decisions
-    collect native participants: rows, properties, TableDefs, trees, maps, ACLs
+    collect rows, properties, TableDefs, trees, maps and evidenced new default-Admin rows
+    retain existing owner/access-control payloads as protected unchanged input
     build preservation constraints and reject unknown required relocation rules
     solve allocation and shared-page closure in private images
     encode exact changed rows and descriptor patches through II-04 / II-05
-    compile the qualified native operation phases; retain repeated page images
+    retain accepted catalog delta, source dependencies and one-final-image candidate
+        repeated revisions belong only to the selected fallback
     prepare replacement catalog projection and explicit dependency invalidations
-    return owned images, read dependencies, reservations and visibility plan
+    return owned delta/images, read dependencies, reservations and visibility plan
 
 ApplyCatalogChange(prepared, coordinator) -> Result:
-    revalidate object/incarnation and physical dependencies at the allowed boundary
-    obtain the coordinator's operation-specific native publication permit
-    execute the phase program with owned I/O lifetimes and observed error policy
-    on qualified visibility, publish the prepared catalog view and invalidations
-    on uncertain native effects, retain uncertainty and follow coordinator policy
+    revalidate the semantic continuation; retain accepted effects without replay
+    retain the locker's selected local claims under the finite conflict policy
+    attach the accepted catalog delta to the owning operation/transaction scope
+    if the selected DDL boundary keeps it private:
+        publish only the owner-visible projection selected by the native policy
+        return its accepted private receipt; submit no native write
+    hand the selected unit to the common ResolutionAttempt
+        preflight known participant claims before acquiring any publication gate
+        invoke PreparePublicationProgram(delta, scope, mode, profile, budget)
+            for protected fresh-base revalidation and effect-free physical reconstruction
+        on ReplanPhysicalPreparation, release private preparation/gates and replan
+        execute the sealed selected program with owned I/O progress
+        at native-selected visibility, publish the rebased catalog view and invalidations
+        retain exact effects/uncertainty; release success holds before foreign cleanup
+    return the coordinator's receipt
 ```
 
 No helper here chooses whether DDL starts, joins, commits or escapes a Workspace transaction. The R-TXN-1 policy selects that behavior per operation. Semantic work whose effects have occurred is not repeated merely because physical allocation needs replanning. Raw-record ownership prevents a later catalog cursor advance from invalidating saved patches; simultaneous edits to rows on one physical system-table page compose through one image revision. Cost is proportional to the changed metadata and tree/map closure, plus native validation scans such as verifying existing foreign keys. It is not necessarily constant for DDL.
@@ -753,7 +876,7 @@ Drop first resolves references and the native error/DDL policy. Its preferred ph
 
 Publishing a new in-process CatalogSnapshot has a separate time from writing its native pages and acknowledging a commit. The statement/Workspace policy chooses who sees private schema changes, whether the operation participates in rollback, and when another Database object must refresh. On write failure, retain the transaction outcome and actual uncertainty from II-03; do not publish a success view because a proposed descriptor was already built. On rollback, restore the appropriate native state and publish fresh current generations as described above. No private catalog side file, new on-disk generation counter or atomic database-file replacement is introduced.
 
-R-CAT-1's ordinary-output branches independently reopen with ACE and Access and run T-COMPACT-1. Its interrupted-operation branches reuse R-CRASH-1/2's native comparator and keep the original failed-state copy for every opener. Access may change application metadata just by completing an application-specific operation, so those changes must be classified against controls rather than erased from the comparison. The optional undo rules remain in I-03/I-08; no catalog-private recovery shortcut weakens ACE-first parity.
+R-CAT-1’s ordinary-output branches independently reopen with ACE and Access and apply T-COMPACT-1’s write/structure/check direction. Interrupted branches reuse R-CRASH-1’s recorded/reconstructed images and the same independent opener copies. Access may change application metadata during an application-specific operation; controls distinguish those changes from corruption. Exact crash classes and acceptance are implementation work. D-UNDO-2 is retired from planned work; the conditional D-UNDO-1 baseline remains, without a catalog-private recovery dependency.
 
 ## 15. Cost model and implementation slices
 
@@ -761,6 +884,7 @@ Catalog work should be concentrated at database open, first use of a descriptor,
 
 | Path | Work to count | Capacity and lifetime |
 | --- | --- | --- |
+| New database | Recipe binding, complete initial page/reference closure, generated system keys, native writes/flushes and independent reopen | Finite prepared image set or owned spool, creation lease and reserved public binding; no full SQL executor. |
 | Open/bootstrap | Header/root reads, system TableDef decode, bounded catalog scan or admitted index seeks, namespace comparisons | Small initial directory; large property/front-end payloads remain lazy with explicit source retention. |
 | First TableDef/QueryDef use | Native row reads, property/QueryDef decoding, exact UTF-16 names, dependent descriptor admission | Owned descriptor and necessary raw provenance; no uncharged pin of every catalog page. |
 | Repeated DAO field access | Bound coordinate validation, field codec and COM value materialization | Existing cursor/descriptor plus required BSTR/VARIANT return ownership; zero catalog traversal in the unchanged case. |
@@ -776,16 +900,30 @@ The implementation order follows mechanisms that can be built and checked indepe
 
 1. **W-04 catalog read slice:** native root/bootstrap, schema validation, opaque object directory, property parser and lossless QueryDef row capture. R-ORACLE-1/R-FMT-1 and the read branches of R-CAT-1 suffice; execution and a catalog writer are not prerequisites.
 2. **W-04 descriptor slice with W-06 binding:** compile TableDef/index/relationship/property descriptors, bind read queries and record namespace/object dependencies; expose the required metadata through W-08/W-09 as their surfaces become available. Expression-dependent results add the relevant R-EXPR/R-SQL evidence.
-3. **W-05/W-07 native metadata-write slice:** property changes, create/rename/drop and relationship/query row mutation use the shared row/LV/index allocator and transaction machinery. Add only the relevant R-FMT-2, R-PRESERVE-1, R-CAT-1, R-TXN and crash evidence. A structural property writer does not await a complete SELECT executor.
-4. **W-07 saved-query translation and execution slice:** the Access parser/binder supplies tested native row recipes, parameter/result metadata and action/DDL behavior; complete execution depends on the corresponding W-06/W-07 operators. Temporary QueryDefs share those services with transient ownership.
-5. **W-08/W-09 held-object and refresh slice:** finish the surface-specific membership, property, parameter, Close, error and reuse transitions, including both .NET client lanes and the portable COM caller. Runtime/COM execution is a test surface; the catalog codec remains independent.
+3. **W-07 new-database-image slice:** synthesize the admitted empty-file profile from shared format rules; consume `W-04/weight-tables-per-sort-order`, catalog bootstrap and the first owned writer. R-CAT-1/CAT-NEW and R-DAO-1/DAO-CREATE cover option selection, all-page classification and public failure; R-CRASH-1 and T-COMPACT-1 add interrupted and completed-output checks.
+4. **W-05/W-07 native metadata-write slice:** property changes, create/rename/drop and relationship/query row mutation use the shared row/LV/index allocator and transaction machinery. Add only the relevant R-FMT-2, R-PRESERVE-1, R-CAT-1, R-TXN and crash evidence. A structural property writer does not await a complete SELECT executor.
+5. **W-07 saved-query translation and execution slice:** the Access parser/binder supplies tested native row recipes, parameter/result metadata and action/DDL behavior; complete execution depends on the corresponding W-06/W-07 operators. Temporary QueryDefs share those services with transient ownership.
+6. **W-08/W-09 held-object and refresh slice:** finish the surface-specific membership, property, parameter, Close, error and reuse transitions, including both .NET client lanes and the portable COM caller. Runtime/COM execution is a test surface; the catalog codec remains independent.
 
-R-CAT-1 grows to **L** because it now covers independent bootstrap, property grammar, query-row serialization, DDL/relationship closure and lifetime/invalidation branches. The single experiment ID remains a family of controlled fixtures, not one monolithic run. Its basic native-record observations begin before SQL execution. Writer construction continues on qualified native recipes while unresolved representations and crash classes remain explicit coverage failures rather than silently becoming a reduced product scope.
+R-CAT-1 grows to **L** because it now covers independent bootstrap, property grammar, query-row serialization, DDL/relationship closure and lifetime/invalidation branches. The single experiment ID remains a family of controlled fixtures, not one monolithic run. Its basic native-record observations begin before SQL execution. Writer construction records its actual recipe and evidence coverage. Unresolved representations remain visible compatibility work; precise crash classification, acceptance and the treatment of unresolved classes are settled during implementation without silently reducing product scope.
 
 
 ## 16. Acceptance witnesses
 
-These are **32 designed acceptance tests**, not reported native passes. The original property/catalog/query arithmetic fixtures are separately identified as calculated checks. Their bytes qualify the internal examples; only the native corpus and differential executions qualify ACE compatibility. The complete conditions and outcome branches are in [R-CAT-1](A-02-experiments.md#r-cat-1--native-querydefs-catalog-round-trips-and-invalidation).
+**Deciding branches.** The [common terminology](book-record.md#terminology) applies to the profile, preserving-edit and public-transition policies used above.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–2: bootstrap, self-entry, typed identities and new-file recipes | R-CAT-1/CAT-B and CAT-NEW; R-DAO-1/DAO-CREATE for the public creation outcome. |
+| §§3–4 and 14: relationships, default-Admin ownership and metadata closure | R-CAT-1/CAT-D; R-DAO-1/DAO-DRAFT/DAO-SEC. Default-Admin OWNERACCESS uses R-SQL-2/SQL-OWNERACCESS. |
+| §§5–7: property grammar, precedence, flags and safe edits | R-CAT-1/CAT-P and R-PRESERVE-1's II-06 catalog/property discrimination. |
+| §§8–11: query roles, order bytes, SQL views and parameter/held-object transitions | R-CAT-1/CAT-Q and CAT-V; R-DAO-1/DAO-QUERY. |
+| §§12–13: namespace equality, dependency invalidation and captured bindings | R-CAT-1/CAT-B, CAT-I and CAT-V; R-EXPR-1/EXPR-BIND; I-FOUNDATION-1/FND-COPY/FND-ARRAY-OWN and R-UDF-1/UDF-REENTRY where capture calls foreign code. |
+| Native visibility, phase plans and completed/interrupted output throughout | R-TXN-1/TXN-VIEW/TXN-LOCAL/TXN-DDL; R-CAT-1/CAT-X; R-CRASH-1/CRASH-PROGRAM/CRASH-RELATION/CRASH-CAPTURE and R-ORACLE-1/OR-REPAIR. |
+
+These are scoped implementation decisions. The last row retains PRD-07/08's implementation boundary for exact acceptance.
+
+These are **35 designed acceptance tests**, not reported native passes. The original property/catalog/query arithmetic fixtures are separately identified as calculated checks. Their bytes qualify the internal examples; only the native corpus and differential executions qualify ACE compatibility. The complete conditions and outcome branches are in [R-CAT-1](A-02-experiments.md#r-cat-1--native-querydefs-catalog-round-trips-and-invalidation).
 
 | Test | Discriminating fixture and acceptance |
 | --- | --- |
@@ -793,7 +931,7 @@ These are **32 designed acceptance tests**, not reported native passes. The orig
 | T-CAT-02 | Catalog historical/deleted physical columns and reordered visible fields still bind required native fields correctly; invalid roots, map ownership and bounded lengths fail safely. |
 | T-CAT-03 | Table, query, relationship, linked and container IDs retain type-specific meaning; negative IDs and ParentId never become accidental page locators. |
 | T-CAT-04 | Native identifier equality, namespace ancestry, duplicate names and original UTF-16 spelling agree across cases/locales; hash equality matches the admitted comparer. |
-| T-CAT-05 | Structural scan remains usable when a catalog index profile is unsupported; public lookup and writes do not silently acquire guessed collation semantics. |
+| T-CAT-05 | A non-General catalog retains full scans and evidenced identifier lookup. Native Text seeks and catalog Text-key writes take the counted `NotModelled.SortOrder` refusal; an available index never implies encoder admission. General97 does not admit Jet 3. |
 | T-CAT-06 | Decode the complete 139-byte MR2 fixture with section starts 4/52/80/109; default, column Code and index Code remain distinct. |
 | T-CAT-07 | Absence, Null, Empty, empty BSTR, empty binary, zero and false retain distinct public/native outcomes at each supported property phase. |
 | T-CAT-08 | Property Boolean, inline Memo/OLE and name-sensitive Binary GUID use the explicit property codec; no nested LV or ordinary-row Boolean assumption. |
@@ -809,7 +947,7 @@ These are **32 designed acceptance tests**, not reported native passes. The orig
 | T-CAT-18 | Temporary/permanent QueryDef creation and Name transitions have the observed collection/persistence/error behavior, compared with opener controls. |
 | T-CAT-19 | Default/validation/Required changes apply their actual syntax/coercion/existing-row/error policy and invalidate the affected expression/mutation descriptors. |
 | T-CAT-20 | Compound relationship rows and reciprocal logical-index bytes agree; shared physical trees remain correctly owned, and every compound Null/cascade case uses the native policy. |
-| T-CAT-21 | Owner/MSysACEs and MDB/ACCDB security-context effects are preserved or generated by qualified recipes; permissive reference fallbacks are not substituted for native behavior. |
+| T-CAT-21 | Default-Admin MDB/ACCDB creation uses the evidenced ownership rows; existing Owner/MSysACEs payloads remain byte-preserved. Named logon, explicit workgroup, account/group changes and denied-access cases take counted `NotModelled.UserLevelSecurity` refusals. Default-Admin property DDL flags and OWNERACCESS retain their native-tested behavior; no secured-workgroup success or permissive fallback is required. |
 | T-CAT-22 | Create/alter closure includes TableDefs, properties, catalog/ACL rows, native indexes and all maps; detached construction versus Append failures remain at the observed phase. |
 | T-CAT-23 | Engine-only rename and Access Name AutoCorrect controls remain distinguishable; known references follow native behavior and opaque front-end content survives without generic text replacement. |
 | T-CAT-24 | Drop/recreate with native ID/name/page reuse creates a new logical incarnation; shared trees/LV pages and surviving opaque references prevent premature reclamation. |
@@ -817,16 +955,19 @@ These are **32 designed acceptance tests**, not reported native passes. The orig
 | T-CAT-26 | Positive and negative name dependencies, shadowing and SELECT-star metadata changes invalidate precisely enough for correct binding; restoration of old bytes cannot create token ABA. |
 | T-CAT-27 | Held TableDef/Field/Property/QueryDef/Parameter and enumerators follow each collection's actual Refresh/requery/error policy; refreshed membership does not silently retarget an old interface. |
 | T-CAT-28 | Same Database, same Workspace/different Database and different Workspace views remain coherent; later live-ACE mode adds real external freshness qualification. |
-| T-CAT-29 | Cache-on/off and two simultaneous execution owners agree. Reenter during parameter retention/conversion and cache retirement, changing values, declarations, schema or Close state: an immutable accepted frame stays coherent, opaque copy uses a qualified stable source, and each next dependent continuation is validated without repeating accepted effects or retargeting stale coordinates. Native policy captures and controlled foreign-reference fixtures remain separate evidence. |
-| T-CAT-30 | Every qualified native catalog write cut, including repeated images of one page and forced flush, stays within its ACE crash class for each independent next opener. |
+| T-CAT-29 | Cache-on/off and two simultaneous execution owners agree. Reenter during parameter retention/conversion and cache retirement, changing live values, declarations, schema or Close state. A locally retained immutable ParameterSet version stays coherent. Independent copies exercise all three structural branches, protected array backing, next-element replacement and unsupported opaque records; no invented caller generation or atomic-array snapshot is used. Each next dependent continuation is checked without replaying accepted effects or retargeting stale coordinates. Native member-policy captures and constructed ownership fixtures remain separate evidence. |
+| T-CAT-30 | Export every modeled native catalog cut, including selected repeated-image alternatives and forced flush, to each independent next-opener branch. Compare with the reconstructed ACE states; exact crash acceptance is completed during implementation. |
 | T-CAT-31 | Completed outputs pass independent ACE/Access metadata and query use, protected-byte/reference comparison and calibrated T-COMPACT-1. |
 | T-CAT-32 | Cold/warm bootstrap, property edits, repeated executions, Refresh and eviction expose actual bytes/allocations/I/O; retained descriptors/plans/raw spans obey budgets and settle at their named owner boundary. |
+| T-CAT-33 | CAT-NEW compares each admitted empty-file profile with the synthesized image: every page, system object, property, index and map has a role; independent ACE/Access open, first user-table/row writes and T-COMPACT-1 check the result. Reference template inventories are hypotheses, not native passes. |
+| T-CAT-34 | Cross explicit/default format and locale options, General-family variants, non-General orders, password/encryption and unsupported combinations. Preserve native validation/default phases, exact selected profile/sort and counted refusals; no extension-based format or LCID-only table substitution. |
+| T-CAT-35 | Inject failure before creation, during each image/flush, after accepted image and during result publication. The attempt retains actual namespace/file/membership effects; no existing-file overwrite, path-only deletion, duplicate creation or invented rollback occurs. Interrupted outputs use R-CRASH-1; DAO-CREATE captures transaction/Close consequences. |
 
 The next chapter, **II-07 ISAM, cursors and constraints**, takes the admitted TableDef/index/relationship descriptors and the property-bound mutation policy from this chapter. It develops recordset population, position, bookmarks, seeks, edits, generated values and constraint enforcement without creating a second catalog or expression engine.
 
 ## Sources
 
-[^cat-value-copy]: [S-MS-VARIANTCOPY] Microsoft, [VariantCopy](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantcopy), initialization, failure and owning-versus-ByRef reference remarks; and [S-MS-VARIANTCLEAR] Microsoft, [VariantClear](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantclear), owned release, ByRef distinction, initialization and locked-array failure remarks; re-read 2026-11-14. These document possible foreign reference operations. Registration, source stability and continuation checks are CalcDb design derived from II-02/12/13, not observed ACE parameter behavior.
+[^cat-value-copy]: [S-MS-VARIANTCOPY] Microsoft, [VariantCopy](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantcopy), initialization, failure and owning-versus-ByRef reference remarks; and [S-MS-VARIANTCLEAR] Microsoft, [VariantClear](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-variantclear), owned release, ByRef distinction, initialization and locked-array failure remarks; re-read 2026-11-14. These document possible foreign reference operations. Attempt registration, structural value capture, actual backing ownership and continuation checks are CalcDb design derived from II-02/12/13, not observed ACE parameter behavior.
 
 [^S-JACK-CATDB-PIN]: [S-JACK-CATDB-PIN] Exact pinned [DatabaseImpl.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/DatabaseImpl.java); inspected constants, bootstrap, catalog/relationship/ACL writes, lazy property resolution, table-type dispatch and table finders. Exact hashes and read extents are in the A-01 source ledger. Source facts/concepts only; no code port.
 [^S-MS-RELATION]: [S-MS-RELATION] Microsoft, [Relation object (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/relation-object-dao), reference requirements, index side effects and public relationship behavior; native details remain to be measured.
@@ -877,3 +1018,12 @@ The next chapter, **II-07 ISAM, cursors and constraints**, takes the admitted Ta
 [^S-MS-CREATE-TABLEDEF]: [S-MS-CREATE-TABLEDEF] Microsoft, [Database.CreateTableDef method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/database-createtabledef-method-dao), object construction versus Append validation.
 [^S-JACK-TABLE-CREATE-PIN]: [S-JACK-TABLE-CREATE-PIN] Exact pinned [TableCreator.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/TableCreator.java), read in full. Source facts, not ACE ordering evidence.
 [^S-JACK-TABLE]: [S-JACK-IDXIMPL-PIN, S-JACK-TABLE] Existing S-JACK-TABLE / S-JACK-IDXIMPL-PIN evidence in II-04/II-05 supplies segmented definitions, row mutation and the 28-byte logical index slots; those chapters retain the exact source records.
+
+[^create-database]: [S-MS-DAO-CREATEDB] Microsoft, [Workspace.CreateDatabase method (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-createdatabase-method-dao), updated 2022-03-18, inspected 2026-11-16; required Connect/locale, optional options, password/default-locale form and opened Database result. Documentary behavior, not an ACE capture. No example code reused.
+[^create-options]: [S-MS-DAO-DATABASETYPE] Microsoft, [DatabaseTypeEnum enumeration (DAO)](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/databasetypeenum-enumeration-dao), updated 2022-03-18, inspected 2026-11-16; public constant values, not evidence of every accepted combination.
+[^creation-reference]: [S-JACK-CATDB-PIN] Same pinned `DatabaseImpl.java`; additional inspection of lines 116–127 and 491–530 on 2026-11-16 identifies per-format empty-resource selection and its copy-based creation path. No empty resource, implementation code or native failure policy is adopted.
+[^creation-inventory]: [S-JACK-DATABASETEST-PIN] Jackcess, [DatabaseTest.java](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/test/java/com/healthmarketscience/jackcess/DatabaseTest.java), exact commit identified above; Apache-2.0 header and `testSystemTable` lines 776–836 inspected 2026-11-16. The file is 36,786 bytes, SHA-256 `52c3dbe961ccabb179f66b183dec5924ede0f5604febd605a11ef641dfb721b2`. These are reference test expectations, not executed tests or the target ACE's initial object list; its generated resource-table names are not copied into CalcDb recipes.
+
+[^capture-policy]: [U-PRW-01-58] `work.md`, PRW-32/46, and [U-PRD-01-09] `decisions.md`, PRD-02. [B-SCOPE-11] [Scope and context](00-scope.md), §§S3–S4, states the shared value and ordinary COM delivery boundaries. R-CAT-1/CAT-I and I-FOUNDATION-1 specify the deciding native-policy and constructed ownership cases.
+
+[^security-scope]: [U-PRD-01-09] `decisions.md`, PRD-04; [U-PRW-01-58] `work.md`, PRW-10/52, including retained default-Admin OWNERACCESS behavior; [B-SCOPE-11] [Scope and context](00-scope.md), §S2. These define scope, preservation and refusals. R-DAO-1/DAO-SEC and R-CAT-1/CAT-NEW/CAT-P/CAT-Q/CAT-D supply the specified native experiments; none was run here.

@@ -1,12 +1,12 @@
 # II-14. WASM and later capabilities
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-**Requirement trace:** Primary RQ-PROD-06 and RQ-LATE-01 through RQ-LATE-06; supporting RQ-PROD-02, RQ-PROD-04, RQ-PROD-05, RQ-PORT-01, RQ-PORT-02, RQ-PORT-03, RQ-VAL-01, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-CALL-04, RQ-STORE-01, RQ-STORE-02, RQ-STORE-03, RQ-STORE-04, RQ-STORE-05, RQ-LOCK-01 through RQ-LOCK-04, RQ-OUT-01, RQ-OUT-02, RQ-PERF-01, RQ-PERF-02, RQ-DEV-01 and RQ-DEV-02. I-16 retains the complete scope and phase map. II-03 supplies owned positioned I/O, II-04/05/06 the native format/index/catalog rules, II-08/09 persistence and protection, II-11 the common query engine, and II-12/13 object and interop behavior. This chapter realizes K-BROWSER and extends the existing storage, source and external-surface seams; it creates no second evaluator, object model or authoritative database format.
+**Requirement trace:** Primary RQ-PROD-06 and RQ-LATE-01 through RQ-LATE-06; supporting RQ-PROD-03, RQ-DAO-01, RQ-FMT-01, RQ-PROD-02, RQ-PROD-04, RQ-PROD-05, RQ-PORT-01, RQ-PORT-02, RQ-PORT-03, RQ-VAL-01, RQ-CALL-01, RQ-CALL-02, RQ-CALL-03, RQ-CALL-04, RQ-STORE-01, RQ-STORE-02, RQ-STORE-03, RQ-STORE-04, RQ-STORE-05, RQ-LOCK-01 through RQ-LOCK-04, RQ-OUT-01, RQ-OUT-02, RQ-PERF-01, RQ-PERF-02, RQ-DEV-01 and RQ-DEV-02. I-16 retains the complete scope and phase map. II-03 supplies owned positioned I/O, II-04/05/06 the native format/index/catalog rules, II-08/09 persistence and protection, II-11 the common query engine, and II-12/13 object and interop behavior. This chapter realizes K-BROWSER and extends the existing storage, source and external-surface seams; it creates no second evaluator, object model or authoritative database format.
 
 **Preferred direction.** Keep CalcVBA, the shared Automation foundation and CalcDb in one qualified wasm32 address/call domain in a dedicated caller worker. Run blocking object calls locally. Use prepared direct storage handles for the common path and an owned host broker for operations whose acquisition is asynchronous; qualify reader-only sharing separately. Keep browser commit, export and durability outcomes distinct. **D-WASM-1 remains Provisional**, settled by R-WASM-1 and the applicable foundation/crash/lock branches. **D-LATER-1 remains Recommended**: explicit codec, source, complex-field, rebuild and provider seams now, feature-specific implementations in later scope. DAO row loops retain priority over bulk SQL and browser costs; ADO may proceed alongside DAO.
 
-**Evidence boundary.** The initial ACE oracle remains user-reported ACEDAO.DLL 16.0.20527.20016. Public specifications and named reference implementations establish their stated facts, not observations of this ACE build or the user's browsers. All actual browser, CalcVBA, native encrypted/complex/rebuild, provider, driver and managed-client acceptance remains unexecuted. Worked bytes, request records and relocation examples are constructed witnesses. Native layout details learned from readers remain hypotheses until native-file and oracle qualification. The real target Automation layout is assumed, including 24-byte Windows x64 VARIANT; the wasm32 foundation must publish and qualify its own exact target ABI. Figures are emitted tables/Mermaid source, not render-verified.[^root-authority]
+**Evidence boundary.** The initial ACE oracle remains user-reported ACEDAO.DLL 16.0.20527.20016. Public specifications and named reference implementations establish their stated facts, not observations of this ACE build or the user's browsers. All actual browser, CalcVBA, native encrypted/complex/rebuild, provider, driver and managed-client acceptance remains unexecuted. Worked bytes, request records and relocation examples are constructed witnesses. Native layout details learned from readers remain hypotheses until native-file and oracle qualification. The shared value is the platform Automation VARIANT and real BSTR, including the 24-byte Windows x64 VARIANT; the wasm32 foundation supplies its exact target ABI. Figures are rendered by the PDF build.[^root-authority]
 
 ## 1. Bind the browser build to one actual address and call domain
 
@@ -82,6 +82,10 @@ The initial portable execution strategy is likewise measured against the actual 
 
 Reading beside an ACE writer and shared writing remain the later protection profiles developed in II-09, R-LOCK-3/4 and W-11/12. A codec or linked-table implementation need not wait for those profiles to exist. Its combination with external sharing does need the applicable protected-source, rebase, lock and crash tests. Conversely, successful browser exclusion between cooperating contexts cannot stand in for native ACE lock-file interoperability.
 
+MDB user-level workgroup security is excluded from initial and later scope. These seams retain unsecured/default-Admin admission and access-control-byte preservation. Named logons, explicit workgroup files, account/group changes and operations requiring denied access take the counted `NotModelled.UserLevelSecurity` refusal. Database passwords and page encryption remain their separate supported capability families; later linked-source credentials do not add a Jet workgroup account store. Initial ADO remains scoped to ACE strings and connectionless persistence, including MSPersist, with its object layer separable for the later OLE DB provider.[^scope-boundaries]
+
+The initial file admission is distinct from local transaction ownership. Several Workspaces/Connections inside one admitted CalcDb domain may hold private changes as separate lockers. A broker’s exclusive native-store handle does not give one Workspace a transaction-lifetime writer monopoly. The common bounded conflict policy, short publication gate and fresh-base rebase apply before later external sharing exists (II-09 §23; R-TXN-1/TXN-LOCAL).
+
 Require each concrete source/storage descriptor to answer the operation being attempted: supported byte transfers, lock/admission behavior, stable identity, enumeration/update capabilities, transaction scope and observed durability. Do not reduce that record to `can_read`, `can_write` and `supports_transactions`. A true flag supplies no ordering proof, row identity or distributed commit protocol. Missing capability produces a typed unresolved/refused case under the existing compatibility accounting; it cannot silently select a private format or an unrelated engine.
 
 ## 4. Select a browser execution profile before entering VBA
@@ -94,7 +98,9 @@ The inspected File System Standard makes sync-handle acquisition a Promise, rest
 
 The browser profile is selected from tested behavior, not from method-name presence. Capture browser engine/build, OS, secure context, effective cross-origin isolation, worker ancestry, storage partition/bucket, permitted file routes, actual ABI profile, budgets and supported fault observations. Its capabilities say whether it can supply a requested operation. They do not select different SQL results or hidden answers based on a browser version. An operation missing from the required coverage remains a failed or unresolved compatibility case.
 
-**Figure F-160 — proposed browser ownership topology.** Original design; Mermaid source, not render-verified. The two file routes share one pager and persistence coordinator.
+Bootstrap also registers a host lifecycle supervisor outside the caller and storage broker. It retains their identities, the fixed mailbox, the host invocation and the minimal pending-effect record; its event loop remains available while the caller blocks. Prefer the existing Window host for this role. The supervisor owns the session-failure decision and the outer invocation's result gate. The initial failure exit ends the affected caller/broker cohort; it does not depend on unwinding the caller's abandoned VBA stack. Section 8 defines the observations that trigger that exit and the separately qualified return-error alternative.
+
+**Figure F-160 — proposed browser ownership topology.** Original design. The two file routes share one pager and persistence coordinator.
 
 ```mermaid
 flowchart TD
@@ -143,6 +149,23 @@ Direct-to-broker or broker-to-direct migration is an explicit quiescent operatio
 
 The browser handle table can be sparse and bounded. A cold open pays for pathname resolution, admission and acquisition; a warm page transfer names a slot and generation. It does not rescan the directory or call `isSameEntry` for every DAO field access. Reuse is permitted only after the entry's previous owners have ended, with generation exhaustion handled by quiescent session replacement rather than wraparound.
 
+### 5.1 New database creation uses the native image builder
+
+**RQ-PROD-03/04/06, RQ-DAO-01, RQ-FMT-01 and RQ-LOCK-01.** Resolving a new browser name and acquiring a handle does not create a usable database. The caller first binds the exact locale/options and prepares II-06 §1.2's `NewDatabaseRecipe` through the shared format, key and catalog services. The broker supplies only namespace admission and owned file operations. It does not synthesize another header or system catalog in JavaScript, and it does not choose a different database sort from the browser locale.
+
+For the cooperating host namespace, retain exclusive namespace admission across the absent-entry check and creation request. `getFileHandle(..., create=true)` can also return an existing entry, so the flag alone is not an exclusive-create receipt. Verify absence under that admission, retain the acquired entry identity and distinguish known creation from an uncertain namespace effect. If absence or ownership cannot be established, do not truncate or overwrite the entry. II-09's creation policy and the actual browser storage profile select the error/disposition; method-name presence supplies no atomic-create proof.
+
+The `CreationAttempt` retains the `AcquisitionAttempt`, entry binding, prepared page images and subsequent `BrowserTransfer` receipts until the file and public outcome are settled. Start the same one-final-image creation program only after new-file admission. Publish no ordinary binding or Workspace.Databases member for a zero-length placeholder. After the selected writes/flushes and normal bootstrap validation, transfer the opened binding through the same DAO creation path. Direct prepared storage and broker-owned storage share this image and publication policy; storage ownership changes neither the format nor the Workspace's local-locker semantics.
+
+| Failure point | Required retained outcome |
+| --- | --- |
+| Before namespace creation | Private recipe/image work can be released; no file-success receipt is invented. |
+| Creation requested, entry effect unknown | Retain the acquisition and namespace uncertainty; a later same-name entry is not proof that it belongs to this attempt. |
+| New entry acquired, image incomplete | Keep exact identity, extent, completed/possible writes and unsettled owners. Native-selected cleanup may remove only the proved owned entry after I/O settlement. |
+| Complete file accepted, public reply lost or result transfer fails | Preserve the accepted creation receipt and its public-state disposition. Do not replay creation or silently delete the accepted database. |
+
+R-WASM-1/WASM-CREATE adds this complete path to the dynamic-acquisition case, with R-LOCK-1/EX-CREATE supplying the creation-admission comparison. T-PLAT-65 checks output through CAT-NEW/DAO-CREATE and independent exported-image openers. Browser export is a distinct copy/publication step. Worker or broker loss during creation enters R-CRASH-1/CRASH-NEW as crash evidence with its actual observation limits; it does not establish power-loss survival or a private undo route.
+
 ## 6. Use a fixed mailbox with one live request per caller
 
 **RQ-CALL-01/04, RQ-SIM-01/02, RQ-PERF-02.** Start with one outstanding broker request per caller and one fixed shared mailbox, allocated separately from the growable WASM memory. The broker can serve several caller mailboxes later, but each request retains its own session and file owners. This bounds the initial protocol and makes each observed file effect attributable to a single current request.
@@ -154,9 +177,9 @@ A host message is a wake hint. The shared request state is the authoritative in-
 | Bytes | Field | Owner while live |
 | --- | --- | --- |
 | 0–3 | Atomic state: Idle, Requested, Accepted, Done | Caller publishes Requested; broker claims/finishes; caller consumes Done |
-| 4–7 | Atomic wake counter | State-changing participants |
+| 4–7 | Atomic failure-request reason: None, Transport or Protocol | Caller/broker records the first request; supervisor observes it |
 | 8–11 | Atomic cancellation generation | Authorized host/caller |
-| 12–15 | Atomic session failure state | Host lifecycle owner |
+| 12–15 | Atomic session failure state: Live or Failed | Lifecycle supervisor; Failed is never cleared in this session |
 | 16–19 | Request generation | Caller before publication; immutable until consumed |
 | 20–23 | Session generation | Bootstrap owner; immutable |
 | 24–31 | Handle slot and generation | Caller before publication |
@@ -164,16 +187,19 @@ A host message is a wake hint. The shared request state is the authoritative in-
 | 40–47 | File offset, low/high 32-bit words | Caller before publication |
 | 48–55 | Requested byte count and payload descriptor | Caller before publication |
 | 56–63 | Reserved request context | Zero/validated according to protocol version |
-| 64–71 | Terminal status and native cause code | Broker before Done |
-| 72–79 | Raw backend byte count as low/high words | Broker before Done |
-| 80–87 | Proved prefix within bounded arena and response/count-validity flags | Broker before Done |
-| 88–103 | Possible-effect start/end, each as low/high words | Broker before Done |
-| 104–119 | Result extent or acquired-handle result | Broker before Done |
-| 120–127 | Fixed bounded diagnostic/phase fields | Broker before Done |
+| 64–71 | Response request generation and session generation | Broker copies its claimed request identity before Done |
+| 72–79 | Response handle slot and generation | Broker echoes the claimed input handle, or the specified absent-handle sentinel |
+| 80–87 | Terminal status and native cause code | Broker before Done |
+| 88–95 | Raw backend byte count as low/high words | Broker before Done |
+| 96–103 | Proved prefix within bounded arena and response/count-validity flags | Broker before Done |
+| 104–119 | Possible-effect start/end, each as low/high words | Broker before Done |
+| 120–127 | Operation-specific result: extent, or acquired handle slot and generation | Broker before Done |
 
 The payload arena begins at byte 128. Choose its capacity from page, path and measured transfer requirements; reserve it at session bootstrap. For the illustrative 4,096-byte-page profile, a 4,096-byte arena plus header occupies 4,224 bytes. That is a protocol example, not a universal transfer target. A qualified contiguous run can use a larger bounded arena; an oversized request is split before publication without changing the native write program's order or failure boundaries.
 
-Publish all request metadata and, for a write, the immutable payload before the atomic transition to Requested. The broker claims the state, validates the session/request/handle generations, and only then reads payload or submits an effect. It writes its complete bounded receipt and read payload before publishing Done. The caller checks the terminal generation and copies/adopts the result before returning the slot to Idle. Neither side modifies the other side's payload during ownership.
+Publish all request metadata and, for a write, the immutable payload before the atomic transition to Requested. The broker claims the state, validates the session/request/handle generations, and only then reads payload or submits an effect. The claimed identity is retained in the attempt; the broker copies that identity into the response instead of rereading whichever request fields happen to occupy the mailbox later. It writes its complete bounded receipt and read payload before publishing Done; no broker path writes either again after that publication. The caller checks the response echoes against its retained request and copies/adopts the result before returning the slot to Idle. An acquisition request echoes the absent input-handle sentinel; its newly acquired handle is the separate result at bytes 120–127. The operation determines that result union's interpretation. Bounded phase/diagnostic context remains in the preallocated attempt record identified by the request; no arbitrary object pointer is placed in the header.
+
+The identity being matched is the registered mailbox and session incarnation, together with the session generation, request generation and input-handle slot/generation. A fresh session receives a fresh mailbox; it never resets a failed mailbox for another broker. Every asynchronous completion checks its retained attempt, mailbox identity and ownership before touching response bytes or the arena. A stale wake or completion is rejected without modifying a newer request. A Done state carrying mismatched echoes is a protocol failure: the caller neither consumes it nor clears it to Idle. The old wake counter is removed. Bytes 4–7 now carry a one-way failure request, which the supervisor polls independently of message delivery; the actual failure decision remains at bytes 12–15.
 
 The control words must not overlap ordinary metadata bytes, and there are no simultaneous non-atomic reads/writes of a published field. Session and request counters do not wrap while stale messages could exist. Version the mailbox and validate its lengths at bootstrap; a malformed request is rejected before any file effect. Do not encode object pointers or growable-heap addresses in it. A 32-bit WASM pointer and a 64-bit file offset have different types even if they happen to carry the same small number.
 
@@ -181,44 +207,59 @@ The control words must not overlap ordinary metadata bytes, and there are no sim
 
 ```text
 BrowserTransfer(session, operation, range, stable_buffer) -> TransferReceipt:
-    require admitted session, checked range and one idle request slot
+    require admitted Live session, checked range and one idle request slot
     reserve/register attempt, result capacity and all buffer/file owners
+    retain expected mailbox/session/request/input-handle identity
     copy the immutable selected stored-byte image into the arena if Write
     fill immutable request fields; publish Requested atomically
     send wake message carrying only session and request generation
-    if wake send fails: enter owned request resolution; retain publication
+    if wake send fails: atomically request Transport failure; retain publication
     loop:
+        if atomic_load(mailbox.session_failure) == Failed:
+            enter ResolveHostFailure(attempt)       // initial exit never returns
+        if atomic_load(mailbox.failure_request) != None:
+            wait for the supervisor's failure decision; retain every owner
+            continue                              // no normal continuation
         state = atomic_load(mailbox.state)
-        if state == Done and response names this exact generation:
+        if state == Done:
+            if response bounds/status are invalid or echoes mismatch retained identity:
+                atomically request Protocol failure; continue
             receipt = copy validated bounded response into owned result
             if Read: copy only proved received bytes into unpublished frame
+            if atomic_load(mailbox.session_failure) == Failed:
+                enter ResolveHostFailure(attempt)   // do not publish the frame
+            if atomic_load(mailbox.failure_request) != None:
+                retain copied result and unpublished frame; continue
             end broker payload ownership; publish Idle
             return receipt
-        if session failure is recorded:
-            enter the owned host-failure path; do not synthesize completion
         observe atomic cancellation and publish the supported request once
         atomic_wait(mailbox.state, state, bounded_observation_interval)
 ```
 
-The interval only bounds how soon the caller rechecks independently writable control state; it is not an I/O deadline or failure detector. The wait holds no engine latch. The exact page/source permits and attempt remain retained across it. A cancellation request needs neither a message handler nor a timer callback on the blocked caller.
+The interval only bounds how soon a runnable caller rechecks independently writable control state; it is not an I/O deadline or failure detector. Waiting for a failure decision uses the failure cell's predicate and a bounded observation interval, not repeated waits on a mismatched Done. The supervisor notifies the state and failure cells after declaring failure; an omitted notification is covered by predicate rechecking. These waits hold no engine latch. The exact page/source permits and attempt remain retained across them. A cancellation or failure request needs neither a message handler nor a timer callback on the blocked caller.
+
+Failure has priority over an available Done at each observation and before a received frame or receipt is adopted. The common session gate also guards new storage/cursor continuation and outer result delivery. A failure declared after a completed observation does not retroactively erase that observation or an already accepted file effect; it closes subsequent continuation. The supervisor's serialized host gate decides whether the outer invocation result was delivered before revocation. A late Done can settle retained storage ownership, but cannot reopen that gate or turn an abandoned host invocation into success.
 
 The broker dispatch is similarly small:
 
 ```text
 OnBrokerWake(mailbox, announced_generation):
-    if no exact Requested generation exists: return
+    if mailbox is not this retained session, or no exact Requested generation exists: return
+    if session is Failed or failure is requested: retain for failure resolution; return
     claim Requested -> Accepted; retain its registered owners
+    capture the exact session/request/input-handle identity in the attempt
     validate range, handle incarnation, rights and payload bounds
-    if validation fails: publish terminal pre-submission failure
+    if validation fails: publish matching terminal pre-submission failure
     else if operation needs asynchronous acquisition/admission:
         start exactly one owned continuation; return to event loop
     else:
         execute the selected synchronous primitive once
         classify completion and possible effects from the qualified adapter
-        publish response fields, then Done, then notify
+        claim terminal publication once for this exact attempt/mailbox
+        publish captured identity echoes and response, then Done, then notify
 ```
 
-A failed wake send is itself recorded under the already published attempt. Retrying a wake hint for the same generation cannot repeat the physical request because the broker claims that generation once. If the channel is unusable, enter owned failure resolution; do not unwind and free the mailbox as though nothing were published. The claim belongs to the request, not to the wake message. The async continuation checks its attempt state after each await, retains any newly obtained resource before another fallible action, and settles late cancellation through the same owner. It never calls back into CalcVBA. A broker supporting multiple sessions must also serialize overlapping effects on each retained handle according to the existing file program; wake arrival order is not a new transaction ordering policy.
+A failed wake send is itself recorded under the already published attempt and requests the supervisor's failure decision. A duplicate wake hint for the same generation cannot repeat the physical request because the broker claims that generation once. The claim belongs to the request, not to the wake message. The async continuation checks its attempt state after each await, retains any newly obtained resource before another fallible action, and settles late cancellation through the same owner. If the session has failed, it retains any exact terminal evidence or late resource for residual cleanup rather than admitting the next operation. It never calls back into CalcVBA. A broker supporting multiple sessions must also serialize overlapping effects on each retained handle according to the existing file program; wake arrival order is not a new transaction ordering policy.
 
 Both normal paths use O(1) control work plus O(n) explicitly charged payload copying. The state machines are simple enough to test exhaustively as a small constructed model before the real browser fixture, but that model cannot prove browser API completion or durability.
 
@@ -239,7 +280,10 @@ This matters to the page-17 witness. Reading page 17 at 4,096 bytes per page nam
 | Complete 4,096-byte write | Full submitted bytes reported complete; durability still separate | Advance only the next justified edge in II-08's program |
 | Short write reports 1,536, prefix property unproved | Native count 1,536; attempted range `[0x11000,0x12000)` possibly changed | Stop and retain uncertainty; no suffix loop |
 | Same short result under a qualified exact-prefix profile | Proved prefix `[0x11000,0x11600)` | Continue only the authorized remaining 2,560 bytes at `0x11600` |
-| Broker disappears after submission | No terminal receipt; effect and payload owners remain unresolved | Enter host-failure/resolution ownership; do not return a fabricated zero-byte failure |
+| Done echoes request 40 while the live request is 41, with session 7 and input handle `(3,9)` | The state alone proves no completion of request 41; the claimed response identity is stale | Request Protocol failure; copy no read payload into a publishable frame, clear no slot and enter the failed-cohort path |
+| Done echoes session 6 instead of 7, or input-handle generation 8 instead of 9 | A prior incarnation cannot satisfy the current request even when its byte count is 4,096 | Reject before receipt adoption; retain exact owners and the stale evidence |
+| Matching Done races the supervisor's Failed state | The exact receipt may establish a storage effect; it cannot restore a revoked caller/file session | Failure wins once observed; retain the receipt for resolution and suppress stale frame/public-result publication |
+| Broker disappears after submission; no exact terminal receipt is recovered | Supervisor records the observation or declared unavailability; effect and payload owners remain unresolved | Initial profile ends the caller/broker cohort; the outer host invocation reports session failure, with no fabricated zero-byte result or DAO return |
 
 Pass an explicit positioned offset on every primitive. A retained browser cursor is not the engine's file position. Extending and truncating the file are distinct operations with distinct extent receipts; a successful size query does not grant permission to change that size. New native pages must receive the required initialized bytes before references to them are published. Browser zero-filling of a newly exposed range would not create a valid index, usage map or catalog page.
 
@@ -257,28 +301,42 @@ A browser cannot establish its error mapping by translating every DOMException n
 
 Use one cancellation generation for the outer admitted call, with the current request recording which generation it has observed. Poll it at bounded engine checkpoints and at broker wait observations. A long pure VBA loop needs CalcVBA's corresponding polling support; the database adapter cannot make that loop responsive merely by adding a UI cancel button. The broker checks the control state before starting an effect and after each asynchronous acquisition boundary, then applies the relevant operation policy.
 
-HTML worker termination can abort running script and discard queued tasks; the queued cleanup or cancellation message is therefore not a reliable termination protocol.[^wb-workers] Treat termination as a fault injection. A heartbeat gap can trigger investigation or a declared failure policy, but is not proof that an agent is dead or that a write has not occurred. Background throttling, slow I/O and suspension are separate fixtures.
+HTML worker termination can abort running script and discard queued tasks; queued cleanup is therefore not a reliable termination protocol.[^wb-workers] An uncaught worker error is an observable report, not proof of termination. Calling `terminate()` supplies neither a join result nor a terminal file-I/O receipt. The host must distinguish its decision to withdraw a session from observations about what a browser operation actually did.
 
-**Figure F-163 — request ownership through cancellation or lost delivery.** Original proposed state diagram; Mermaid source, not render-verified.
+**Failure detector and decision.** The bootstrap lifecycle supervisor is the sole writer of the sticky session-failure cell. It can run while the caller is blocked because it is outside both workers. It declares failure on any of these observations: its own decision to terminate a member of the cohort; an observed worker error or explicit fatal report that the profile treats as making the session unusable; a Transport/Protocol failure request in the shared cell; or expiry of the profile's recorded no-progress allowance for an outstanding request. The supervisor records which observation caused the declaration. The last case is an availability policy, not a diagnosis of worker death, failed storage or rollback. Successful `postMessage` is not proof that a broker remains alive, and the design assumes no universal worker-death event.
+
+The supervisor monitors the registered outstanding request and its control state using its own event loop. No-progress policy and observation intervals are part of the admitted host profile, not invented ACE timeouts. Slow I/O, background throttling and suspension are required controls: a conservative false declaration may end a usable session but cannot license replay or release. While the supervisor itself is suspended, the design promises no wall-clock detection bound. If the whole host/browser disappears, no surviving-script failure notification is promised; the later bootstrap starts a new session and treats the old operation as interrupted. WASM-BROKER-LOSS decides whether the deployment supplies this lifecycle path, independently of the caller's `Atomics.wait` timeout.
+
+Before admitting a request, the supervisor retains the mailbox, cohort identities and enough attempt/effect metadata outside the caller to identify the affected file and possible range after caller loss. The broker still owns its actual handle and any pending acquisition. A supervisor cannot transfer an untransferable handle out of a dead worker; it retains the uncertainty and host admission record instead. On failure it closes its host admission/result gate, records the cause, stores Failed, notifies blocked observations and selects one of the following exits. It does not overwrite the broker's Requested/Accepted/Done state, change response echoes or release payload ownership merely because it stored Failed.
+
+| Failure exit | Preconditions and retained ownership | Public outcome |
+| --- | --- | --- |
+| EndSession — end the cohort; initial profile | Revoke the caller's session and affected file/cache/reload bindings; quarantine the fixed mailbox and pending effects under the retained host attempt; request termination of caller and broker. No in-worker unwind or finalizer is assumed to run. | The pending DAO/ADO call has no normal or error return in the abandoned caller. The outer host invocation reports that its session failed and whether effects remain unknown. Previously acknowledged effects are not undone. |
+| ReturnError — return an owned failure; alternative to qualify | Before unwinding, transfer every still-needed request, payload, file/admission and result owner to a live residual owner; revoke affected bindings; demonstrate safe cleanup and the existing public error boundary. Missing evidence selects EndSession. | The blocking call returns through the established DAO/ADO error path with the retained cause and uncertainty. No guessed ACE error number, continued use of the failed file or replay follows from that return. |
+
+The initial profile uses EndSession. The caller's `ResolveHostFailure` stops ordinary continuation, retains the attempt and parks for the supervisor's termination; it never throws a convenient timeout exception through the VBA stack. If termination is delayed, the parked path still cannot return to VBA. The supervisor reports the outer failure through its own event loop, without awaiting a message handler in the blocked caller. Termination requests and subsequent storage observations are recorded separately. A matching late response may settle residual ownership, but does not change the failed host result. ReturnError requires a measured runtime/owner-transfer path before it can replace this exit; it is not a second mandatory implementation track.
+
+**Figure F-163 — request ownership through cancellation or lost delivery.** Original proposed state diagram. Residual ownership is separate from the mailbox's atomic request state.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
     Idle --> Requested: Publish owned request
     Requested --> Accepted: Broker claims generation
-    Requested --> Done: Proven rejection before submission
-    Accepted --> Done: Exact operation settles
-    Accepted --> Residual: Outcome or broker lifetime unresolved
-    Done --> Idle: Caller consumes result
-    Residual --> Done: Qualified resolution settles owners
-    Residual --> AbandonedSession: Host ends the failed cohort
+    Accepted --> Done: Exact settlement or rejection before effect
+    Requested --> Residual: Supervisor declares failure
+    Accepted --> Residual: Supervisor declares failure
+    Done --> Residual: Failure or invalid response identity
+    Done --> Idle: Exact live result consumed
+    Residual --> AbandonedSession: Initial exit ends cohort
+    Residual --> FailedCall: Qualified owner transfer permits error return
 ```
 
-Residual is host ownership, not a fabricated terminal VFS receipt. The residual owner retains the mailbox, immutable input bytes, file/session admission, pending acquisition objects and minimal effect record. The host sets the separate failure cell rather than overwriting the broker-owned Accepted/Done transition. A recovered terminal payload still requires continuation validation; it does not restore an expired file lease. It cannot issue the next normal mutation for that entry. If the runtime cannot safely transfer those obligations through its existing failure path, the affected caller session fails closed as a unit. A generic timeout exception that unwinds and frees a still-owned frame is not an implementation of this path.
+Residual is host ownership, not a fabricated terminal VFS receipt. Its terminal bookkeeping may receive the exact old attempt's eventual receipt or record an unresolved interrupted effect. Neither exit recycles the old mailbox or restores a lost file lease. Revocation can race claim, physical submission or completion: the supervisor's observation alone does not decide which file effects occurred. A result with mismatched generations cannot settle a different request's owners, and generation checks do not make unsafe late writes into a reused arena harmless. Retaining the old arena and validating before publication are both required.
 
-Keep the broker and its caller as an explicit failure cohort. For a controlled shutdown, stop admission to the caller first, settle or classify the active operation, drain accepted broker work and late acquisitions, then close handles and release leases. Killing the broker first can release its browser locks while a caller still holds cached or reloadable state. Independent unexpected broker death is a required R-WASM-1 fault branch: the admitted profile must establish how the surviving caller loses permission to continue and how storage ownership is reacquired safely. If it cannot, that profile cannot claim the corresponding cross-context sharing behavior.
+Keep the broker and its caller as an explicit failure cohort. For a controlled shutdown, stop admission to the caller first, settle or classify the active operation, drain accepted broker work and late acquisitions, then close handles and release leases. Killing the broker first can release its browser locks while a caller still holds cached or reloadable state. Independent unexpected broker death is a required WASM-BROKER-LOSS branch, including a browser-level kill that produces no usable script error. Capture the kill, first supervisor observation, Failed store, last caller continuation and actual release/reacquisition separately. Probe another reader/writer between them. If a surviving caller can use a lost reload source or publish through an expired lease, the corresponding sharing/fault profile fails qualification; a watchdog does not conceal that gap.
 
-A known stopped agent does not by itself provide the missing terminal storage receipt. Backend work may already have changed bytes; the effect range and required buffer lifetime must be settled or conservatively retained. A fresh broker does not inherit the old request table merely by using the same numeric slots. It obtains a fresh session nonce, reacquires exclusion, audits the file through the existing coordinator and treats prior outcomes as uncertain. It must not read a previous in-memory request and execute it again.
+A known stopped agent does not by itself provide the missing terminal storage receipt. Backend work may already have changed bytes; the effect range and required buffer lifetime must be settled or conservatively retained. Keep the old mailbox unreachable from all new calls, with no arena or handle-slot reuse based on a timeout or termination request. A fresh broker obtains a fresh session nonce and mailbox, reacquires exclusion, audits the file through the existing coordinator and treats prior outcomes as uncertain. It does not inherit the old request table merely by using the same numeric slots, or execute a previous in-memory request again. An inability to reacquire safely remains a failed or unresolved admission, not permission to continue with cached bytes.
 
 For normal Close, reject new requests for the closing public binding, preserve requests already accepted under their owners, and execute the evidenced close/transaction policy. The caller can block waiting for its broker's final close receipt because that broker's event loop remains available. Close inside a VBA callback must still obey II-09's ancestor/self-wait rule; the browser supplies no exemption. If the current callback would wait for the suspended ancestor to finish, resolve through the qualified reentry policy instead of sleeping.
 
@@ -363,7 +421,7 @@ Prefer serial execution initially. Optional internal workers add stack/runtime c
 
 **RQ-STORE-01/02/04/05, RQ-PROD-03/04/05.** Browser storage is a different environment for the same native file program. It retains the distinction among logical transaction resolution, submitted bytes, reported completion, requested durability, public acknowledgement and the bytes that survive the declared interruption. Neither a successful `write` nor a successful `close` is recorded as `dbForceOSFlush` parity.
 
-Prefer a direct mapping of an explicitly selected force operation to the browser's actual flush primitive, with a distinct recorded receipt. Do not add an unconditional flush to every ordinary commit or omit a requested flush because the origin has persistent-storage permission. Whether the result meets the required ACE survival class is determined by the fault profile and R-CRASH-1/2 combined with R-WASM-1. A platform whose required durability cannot be established remains an unresolved compatibility case.
+Prefer a direct mapping of an explicitly selected force operation to the browser’s actual flush primitive, with a distinct recorded receipt. Do not add an unconditional flush to every ordinary commit or omit a requested flush because the origin has persistent-storage permission. R-CRASH-1 and R-WASM-1 compare captured stored-byte states through the same ACE/Access/Compact & Repair branches. The fault profile, attainable classification and precise pass condition are implementation work under PRD-07; persistent-storage permission does not settle them.
 
 Keep import and export explicit host operations. Import streams byte chunks into a new owned native working file, checks the complete length and hash as appropriate, and publishes its host binding only after the selected validation and storage disposition. Preserve the original external file. A failed import has an owned partial destination; it is not a damaged database that normal opening should repair automatically.
 
@@ -383,9 +441,9 @@ For interruption experiments, preserve the post-fault native bytes before any Ca
 
 Worker termination, renderer termination, whole-browser exit/restart, OS failure and power interruption are different experiments. A worker-only test can leave browser and OS caches alive. A clean browser close can perform extra work. Those observations cannot be promoted into power-loss guarantees. Ordinary completed writes still require the calibrated T-COMPACT-1 checks; repairing a crashed export does not make an originally completed ordinary write acceptable.
 
-Keep optional private undo disabled in the initial browser profile unless its identity, side-file durability, disarm frontier and recovery ordering can all be qualified. If enabled, the exact D-UNDO-1 test remains unchanged: under exclusion validate file identity, then full-read the database; every uncovered page must match its recorded original fingerprint and every covered page must equal its before-image or intended new image, including the recorded length/ABSENT alternatives. Otherwise discard. Fingerprints and covered before/intended images are over physical stored bytes; a torn ciphertext page is a third image and must discard the candidate, even if a decoder could return plausible values. No continuous-history witness is added. A matching locator or timestamp alone does not discharge file identity.
+D-UNDO-2 is retired from planned work on every platform. No browser side-file codec, disarm protocol or recovery state machine is part of the initial design. The idea can be reconsidered only if real write programs expose a useful recovery window. D-UNDO-1’s unchanged conditional eligibility predicate is recorded in I-08/II-08: identity and full stored-byte comparison, with every uncovered page unchanged and every covered page equal to its before-image or intended new image, otherwise discard. It never changes ACE-first parity.[^owner-inputs]
 
-D-UNDO-2's one-shot recovery still durably disarms before the first recovery write, and an Armed candidate must be disarmed before the earliest effect that can cross the native commit-survival frontier. Failed retirement remains owned. A browser-specific inability to prove those operations disables the optional enhancement; it does not insert a WAL, make the browser's copy authoritative over the native file, or change ACE-first parity.
+Ordinary interruption, failed flush, quota failure, owner settlement and reopen coverage remain mandatory in R-CRASH-1/CRASH-FAILURE, R-TXN-1/FAIL-OWNER and R-WASM-1. Removing the optional aid removes none of those baseline cases. Reader-only opening does not run a private recovery protocol.
 
 ## 12. Measure storage crossings at the page boundary
 
@@ -476,11 +534,13 @@ Time is the transform cost for the admitted image, plus any page-parameter deriv
 
 A logical phase that changes one native page several times gets separately prepared encoded images for the relevant revisions. Re-encoding only the final page and submitting it at each phase would erase the write-order design of II-08. Native header resolution, allocated data, usage maps, indexes and catalog publication keep their existing phase relationships; encryption changes the bytes and possibly the required physical granularity, not the meaning of commit.
 
-Crash testing must capture stored ciphertext, header state, attempted spans and settled/uncertain progress. A decoded page is a useful additional observation only when its codec remains interpretable. The same distinction matters to optional private undo: its exact whole-file external-change check is performed against the physical file extent and recorded stored-byte alternatives. Every uncovered page must be unchanged; every covered page must be exactly its before-image or intended new image, otherwise discard. A torn ciphertext page is a third image even if a tolerant decoder can extract some values. This does not authorize recovery across an evidenced native commit-survival frontier or change the optional record's existing disarm-before-recovery-write protocol.
+Crash testing captures stored ciphertext, header state, attempted spans and settled/uncertain progress. A decoded page is an additional observation only when the codec remains interpretable. Export the exact stored-byte candidate for each independent native opener; a tolerant decode cannot validate a torn ciphertext page. Optional undo remains unplanned; any future D-UNDO-1 comparison would use the same physical stored-byte domain, not plaintext equality.
 
 ## 15. Credential changes, rekeying and temporary plaintext have separate owners
 
 The pinned Jet password utility warns that its open-database form changes both page-zero password material and SIDs, and that interruption is not repaired simply by rerunning it. The later 5.0.2 release documentation describes separate-file forms. That is a concrete reason to make `CredentialChangePlan` broader than a page codec.[^fmt-enc-password][^fmt-enc-changes]
+
+Scope this database-password/encoding work to files admitted under the default-Admin rule. An admitted password/encryption operation may change only the required native encoded representation of ownership/access-control data, including an evidenced re-masking of stored SID bytes. Its decoded payload, identities and access rights remain unchanged. This does not authenticate a named workgroup user, change group membership or rewrite permission masks. Ordinary edits keep the existing access-control bytes unchanged. R-ENC-1 captures the exact password/encoding closure on default-Admin fixtures and keeps secured-workgroup requests as `NotModelled.UserLevelSecurity` refusal controls. No secured-file success is inferred from the reference utility's ability to edit bytes.[^scope-boundaries]
 
 Prefer a separate native destination for **explicit whole-file maintenance conversions**: copy/transform the admitted source, verify the complete destination under its new credentials, and publish only when the host's requested operation calls for publication. Use the same destination ownership and publication mechanism as compaction below. The source is a native Access file throughout; the destination is another native Access file being constructed. This is not a second authoritative database format or a WAL.
 
@@ -488,7 +548,7 @@ That preference does not redefine an existing in-place DAO password-changing mem
 
 Keep the old codec domain alive for any pinned old image, pending transfer, permitted snapshot or cleanup that still requires it. A proposed key epoch is runtime identity, never an extra field written into an Access page. Before switching active domains, settle the admitted readers/writers required by that operation; publish one new binding rather than mutating a shared key buffer in place. A failed conversion leaves an explicit source/destination outcome, not a blanket successful rollback.
 
-Plaintext protection is a resource policy attached to the operation. It names decoded page frames, old versions, row scratch, BSTR/VARIANT results, query spill, optional undo, attachment staging, compaction output and diagnostic captures. The encrypted native file alone does not protect those copies. Prefer retained owned buffers that are cleared before allocator reuse, no plaintext in ordinary diagnostic text, and host-protected temporary backing for workloads that must spill. The host must supply and qualify that backing; do not silently fall back to unprotected disk storage. A memory-only fallback must retain its real budget and expose exhaustion rather than enabling an unbounded encrypted query.
+Plaintext protection is a resource policy attached to the operation. It names decoded page frames, old versions, row scratch, BSTR/VARIANT results, query spill, attachment staging, compaction output and diagnostic captures. The encrypted native file alone does not protect those copies. Prefer retained owned buffers that are cleared before allocator reuse, no plaintext in ordinary diagnostic text, and host-protected temporary backing for workloads that must spill. The host must supply and qualify that backing; do not silently fall back to unprotected disk storage. A memory-only fallback must retain its real budget and expose exhaustion rather than enabling an unbounded encrypted query.
 
 Keep runtime values ordinary canonical Automation values once admitted. Encryption does not create an encrypted BSTR type or force every scalar read back through credential acquisition. Host authorization controls who can obtain/use the database binding; already-issued values have their normal ownership. Test the chosen application's behavior on credential revocation separately from code/key lifetime.
 
@@ -653,7 +713,7 @@ Append-only Long Text history is a neighboring native mechanism that the full ob
 
 ## 23. Compact a complete ownership graph into a separate native destination
 
-**RQ-LATE-04, RQ-PROD-04/05, RQ-STORE-01/03 and RQ-OUT-01.** CalcDb's later compactor is a native graph transformation. It is not an export of known tables through SQL followed by recreation. Such an export would omit native relationships, query metadata, security associations, complex storage, historical column coordinates and preserved front-end material unless every one of those features were separately reconstructed.
+**RQ-LATE-04, RQ-PROD-04/05, RQ-STORE-01/03 and RQ-OUT-01.** CalcDb's later compactor is a native graph transformation. It is not an export of known tables through SQL followed by recreation. Such an export would omit native relationships, query metadata, opaque ownership/access-control associations, complex storage, historical column coordinates and preserved front-end material unless every one of those structures were preserved. Compaction retains the default-Admin admission boundary; preserving access-control records does not implement workgroup security.[^scope-boundaries]
 
 DAO documents a closed exclusive source, a distinct destination and enough capacity for both files. It exposes format, collation and encryption conversion options with format-specific restrictions.[^fmt-compact] Those public options become separate maintenance profiles. Prefer same-format, same-collation, same-credential compaction first; it exercises relocation without simultaneously changing every native key or page codec. Later conversion branches reuse the same graph engine with additional qualified transformations. Jet 3 remains excluded.
 
@@ -716,7 +776,7 @@ The original source remains available until the requested publication is settled
 
 The encrypted conversion path uses this machinery with the appropriate codec domains. Physical page relocation can require a different page-derived key/IV even when every logical byte is identical. A source ciphertext page cannot simply be copied to a different page number and treated as a correctly encrypted destination page. Likewise a rekey operation must not mix old-domain pages with a new header and call the file complete. The whole-file destination verification checks each required page under the destination domain before publication.
 
-Completed compaction output must preserve the selected native semantics, including values with exact stored precision, multiplicity, indexes, QueryDefs and parameters, properties, relations, security/native object associations, long values, complex payloads and opaque front-end bytes. Capture the native counter/AutoNumber effects explicitly: a generic “retain every seed” or “reset to maximum plus one” rule is not inferred merely from a smaller output file. Source file identity and row bookmarks may change according to the public maintenance operation; the test distinguishes those permitted changes from lost logical identity and dangling native references.
+Completed compaction output must preserve the selected native semantics, including values with exact stored precision, multiplicity, indexes, QueryDefs and parameters, properties, relations, protected ownership/access-control records and native object associations, long values, complex payloads and opaque front-end bytes. Capture the native counter/AutoNumber effects explicitly: a generic “retain every seed” or “reset to maximum plus one” rule is not inferred merely from a smaller output file. Source file identity and row bookmarks may change according to the public maintenance operation; the test distinguishes those permitted changes from lost logical identity and dangling native references.
 
 T-COMPACT-1 remains the independent test for ordinary completed writes, including a compactor's output where applicable. Its clean controls, positive damaged controls, fresh ACE/Access/Compact & Repair branches and content/structure comparison are reused. A second compaction can test stability but cannot establish canonical file bytes. A native tool that silently rebuilds an index on both clean and damaged input does not, by that output alone, prove that the original CalcDb index was undamaged.
 
@@ -749,15 +809,17 @@ The preferred later sequence follows the uncertainty each slice removes. Start e
 
 Measure ordinary work as well as maintenance. Encryption adds page transforms and retained key/output ownership; complex fields add native child range traversal and LV decoding; compaction adds source reads, destination writes, relocation-map lookups and index construction. Report bytes of raw versus decoded attachments, ciphertext versus plaintext buffers, preserved versus rewritten extents, spill reads/writes, retained pins and peak owned memory. Do not call a file smaller because data disappeared, or a read faster because an unsupported complex column was skipped.
 
-**R-ENC-1 (L)** selects native provider/page recipes, credential errors, password/SID closure and ordinary versus whole-file conversion behavior; use independent encrypted/plain twins and interruption branches. **R-COMPLEX-1 (L)** selects catalog associations, kind-specific storage, held-child/edit lifetime, attachment wrappers and calculated/history effects. **R-REBUILD-1 (L)** selects relocation and publication profiles and bounded salvage from clean plus singly damaged native fixtures. The full cards are in A-02; all three remain planned and unexecuted.
+**R-ENC-1 (L)** selects native provider/page recipes, credential errors, default-Admin database-password/SID encoding closure and ordinary versus whole-file conversion behavior; use independent encrypted/plain twins, interruption branches and secured-workgroup refusal controls. **R-COMPLEX-1 (L)** selects catalog associations, kind-specific storage, held-child/edit lifetime, attachment wrappers and calculated/history effects. **R-REBUILD-1 (L)** selects relocation and publication profiles and bounded salvage from clean plus singly damaged native fixtures within the same admission boundary. The full cards are in A-02; all three remain planned and unexecuted.
 
 ## 27. Implement the later OLE DB provider as its own surface adapter
 
-**RQ-LATE-05, RQ-COM-03 and RQ-ADO-02.** The later provider exposes genuine OLE DB interfaces over the existing engine. Initial CalcDb ADO continues to use its native-file adapter directly and has no dependency on this provider. An OLE DB method does not mechanically call the nearest DAO method: both enter shared catalog, query, cursor and transaction services through their own captured surface policies.
+**RQ-LATE-05, RQ-COM-03 and RQ-ADO-02.** The later provider exposes genuine OLE DB interfaces over the existing engine. Initial CalcDb ADO uses a direct native-file adapter and has no dependency on this provider. Keep ADO's public object state, event/error policy, binding and connectionless persistence separate from that attachment. The later provider can then replace the direct attachment without rewriting ADO behavior or introducing another engine. This is the intended refactoring seam under PRD-03; the initial provider boundary remains ACE strings plus connectionless persistence, including MSPersist, with other effective database providers refused and counted. There is no interim system-ADO pass-through.[^scope-boundaries]
+
+An OLE DB method does not mechanically call the nearest DAO method: both enter shared catalog, query, cursor and transaction services through their own captured surface policies. The provider is independently usable by its genuine consumers, including system ADO where later integration requires it; that later consumer route does not supply initial CalcDb ADO implementation evidence.
 
 Microsoft's model begins with an initialized data-source object, then a session that creates commands, transactions and rowsets.[^ad-session] Prefer distinct internal owners matching these observable lifetimes. The data-source object owns configuration and initialization; the session owns a transaction context and connection admission; a command owns text, parameters, properties and prepared bindings; a rowset owns its accepted execution/population and issued row/accessor handles. Retaining a command does not automatically keep every old rowset live, and closing a connection cannot free an issued object whose COM owner still exists.
 
-**Figure F-176 — proposed provider objects over shared services.** Original dependency and ownership sketch; Mermaid source, not render-verified.
+**Figure F-176 — proposed provider objects over shared services.** Original dependency and ownership sketch;
 
 ```mermaid
 flowchart TD
@@ -991,7 +1053,24 @@ Retain independently identified environment lanes. Windows native ACE/Access and
 
 ## 38. Planned acceptance follows the physical and public effects
 
-All cases below are **planned and unexecuted**. They name observable families rather than pretending to be a complete generated corpus. R-WASM-1 and the six later-capability cards in A-02 supply exact conditions, fixtures, capture rules, dependencies and outcome choices. Reuse II-15's eventual common harness; T-COMPACT-1 remains the calibrated independent ordinary-write check, while crash cases compare the required native crash class. A refusal, missing path or mismatched outcome remains a failure in the applicable scope.
+**Deciding branches.** The [common terminology](book-record.md#terminology) applies to the selected browser and later-capability profiles. The following map identifies the existing branches for each consequential qualification.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–2 and 4: target domain, blocking execution and alternative composition | R-WASM-1/WASM-ABI/WASM-BOOT/WASM-ALT; I-FOUNDATION-1/FND-ABI/FND-ALLOC/FND-COPY and I-HOST-1/HOST-PORT. |
+| §§5–8: storage admission, requests, prefixes, failure and Close | R-WASM-1/WASM-DIRECT, WASM-OPEN, WASM-CREATE, WASM-SPILL, WASM-MAILBOX, WASM-PROGRESS, WASM-CANCEL, WASM-CALLER-LOSS, WASM-BROKER-LOSS and WASM-CLOSE. |
+| §9: reader-only protection and file identity | R-WASM-1/WASM-READERS/WASM-IDENTITY. |
+| §§10–12: memory, export, interruption and costs | R-WASM-1/WASM-MEMORY/WASM-IMPORT-EXPORT/WASM-CRASH/WASM-COST; R-PAR-1/PAR-ERROR/PAR-BUDGET/PAR-COST for helper or batch substitutions. |
+| §§13–15: codec, password and rekey profiles | R-ENC-1/ENC-PROFILE, ENC-PAGE, ENC-UPDATE, ENC-PASSWORD, ENC-REKEY, ENC-LIFE, ENC-FAIL and ENC-TEMP. |
+| §§16–18: link identity, pushdown and source outcomes | R-LINK-1/LINK-META, LINK-OPEN, LINK-RELINK, LINK-SCHEMA, LINK-IDENTITY, LINK-PUSHDOWN, LINK-UPDATE, LINK-TXN, LINK-SESSION, LINK-CANCEL and LINK-BROWSER. |
+| §§19–22: complex values, attachments, calculation and history | R-COMPLEX-1/CX-DESC, CX-READ, CX-HOLD, CX-EDIT, CX-ATT, CX-CALC, CX-HISTORY and CX-FAIL. |
+| §§23–26: relocation, protected content, destination publication and salvage | R-REBUILD-1/RB-CLEAN, RB-RELOC, RB-OPAQUE, RB-OPTIONS, RB-PUBLISH, RB-FAIL, RB-REPAIR and RB-NEGATIVE. |
+| §§27–30: OLE DB rowsets, buffers, lifetimes and consumers | R-OLEDB-1/OLE-ACT, OLE-PROP, OLE-ACCESS, OLE-BUFFER, OLE-FETCH, OLE-ROWLIFE, OLE-STREAM, OLE-PARAM, OLE-UPDATE, OLE-TXN, OLE-ERROR and OLE-MANAGED. |
+| §§31–35: Driver Manager, ODBC state, buffers, streaming and diagnostics | R-ODBC-1/ODBC-LOAD, ODBC-ABI, ODBC-STATE, ODBC-DESC, ODBC-ARRAY, ODBC-FETCH, ODBC-GETDATA, ODBC-NEEDDATA, ODBC-TXN, ODBC-CANCEL, ODBC-DIAG and ODBC-CLIENT. |
+
+Combined cases in §§36–37 retain each participating branch's scope; an accepted browser or codec lane does not qualify every combination.
+
+All cases below are **planned and unexecuted**. They name observable families rather than pretending to be a complete generated corpus. R-WASM-1 and the six later-capability cards in A-02 supply exact conditions, fixtures, capture rules, dependencies and outcome choices. Reuse II-15's eventual common harness; T-COMPACT-1 remains the calibrated independent ordinary-write check, while crash cases compare captured/reconstructed states through the same native openers. The closed per-write checks and precise crash acceptance are completed during implementation under PRD-07/08. A refusal, missing path or mismatched outcome remains a failure in the applicable scope.
 
 ### Browser execution and storage
 
@@ -1003,21 +1082,21 @@ All cases below are **planned and unexecuted**. They name observable families ra
 | T-PLAT-04 | Direct prepared handle reads a native header, TableDef, index and data page | Checked offsets, exact bytes and common decoders; no full-file load prerequisite. |
 | T-PLAT-05 | Blocking OpenDatabase/CreateDatabase names a previously unprepared admitted file | Owning broker completes asynchronous acquisition without relying on the blocked caller's event loop; actual returned DAO behavior matches. |
 | T-PLAT-06 | Query/cursor retention exhausts prepared temporary backing during a call | New admitted backing or a truthful resource outcome; no evaluator replay, hidden unbounded buffer or uncommitted main-file spill. |
-| T-PLAT-07 | Malformed mailbox lengths, offset overflow, unsupported operation and stale handle generation | Rejection precedes effect; live request/payload ownership remains exact. |
-| T-PLAT-08 | Late completion after session replacement and request-number wrap boundary | Incarnation-qualified completion cannot release or satisfy a newer request; uncertain old effects remain owned. |
-| T-PLAT-09 | Completion precedes wait, notification is omitted, or cancellation races publication | State predicate determines settlement; no lost wakeup, buffer reuse or inference that cancellation reversed a write. |
+| T-PLAT-07 | Malformed mailbox lengths, offset overflow, unsupported operation and stale input handle; verify the 128-byte field boundaries | Rejection precedes effect where the request is invalid; every response echoes the claimed session/request/input handle; the acquired-handle result is distinct. WASM-MAILBOX records exact ownership. |
+| T-PLAT-08 | Duplicate wake/continuation; constructed Done for an older request, session or handle; replacement and counter-exhaustion boundary | Stale publishers touch no newer response/arena; a mismatched Done requests Protocol failure, is never consumed or cleared to Idle, and publishes no frame. New session uses a fresh mailbox; uncertain old effects stay owned. |
+| T-PLAT-09 | Completion before wait, omitted notify, cancellation race, and matching Done before/after the supervisor records Failed | Predicates and exact echoes decide receipt adoption; observed failure takes priority over Done, the host result gate stays closed, and any late valid receipt serves residual cleanup only. No lost wakeup or invented rollback. |
 | T-PLAT-10 | Qualified prefix write versus an unqualified browser short count | Raw count and proved prefix remain distinct; only the former qualified case permits exact-suffix continuation. |
 | T-PLAT-11 | Exception during write/truncate/flush, including quota exhaustion | Retain operation, extent and possible-effect evidence; no invented no-change result from an exception or zeroed output. |
-| T-PLAT-12 | Caller dies while the broker is acquiring or writing | Broker-owned work and exclusion settle under the surviving owner; no automatic repeat of the database mutation. |
-| T-PLAT-13 | Broker is terminated at request claim, native call and result publication | Unknown I/O completion is not converted to terminal no-effect; affected session is retired/quarantined and mailbox ownership is resolved conservatively. |
-| T-PLAT-14 | UI timeout or reply loss after accepted action query | Original operation identity and outcome are retained while available; UI retry does not replay accepted effects. |
+| T-PLAT-12 | Caller dies while the broker is acquiring or writing | Surviving owners retain exact effects, results and late acquisitions; the supervisor revokes the cohort and separates known cleanup from uncertainty. Caller death alone releases no payload or lease and authorizes no replay. |
+| T-PLAT-13 | Broker kill at claim, primitive entry, completion and Done; no-error-event kill; observed error, failure request, watchdog expiry, slow/suspended controls | WASM-BROKER-LOSS records detector observation, Failed store, caller continuation, public outcome and storage/lease aftermath separately. Initial exit ends the cohort with no inner DAO/ADO return; outer host result reports session failure. The return-error alternative needs demonstrated owner transfer. No death, settlement or rollback inference follows from a timeout or termination request. |
+| T-PLAT-14 | UI timeout or reply loss after accepted action query; delayed old result reaches a retired host invocation | Retain original identity and known/unknown outcome; the host result gate rejects late success after failure. A UI retry starts no automatic replay of accepted effects. |
 | T-PLAT-15 | Memory growth, stale JS view and near-limit span arithmetic | Reacquire eligible views, preserve allocation ownership and reject invalid bounds before touching memory or storage. |
 | T-PLAT-16 | Joint pressure from VBA strings, page/history images, query state, mailbox and attachments | Peak reservations account for all owners; growth/temporary failure follows the declared operation outcome. |
 | T-PLAT-17 | Ordinary and dbForceOSFlush commits at every selected write/flush cut | Public acknowledgement, flush call and post-failure bytes are separate; compare the native survival class without claiming worker-kill proves power-loss durability. |
 | T-PLAT-18 | Two readers overlap, writer attempts between arrivals/releases, and a reader owner fails | Proven profile admits required readers and continuously excludes writers while protected inputs remain live. |
 | T-PLAT-19 | Alias path, removal/recreation, unauthorized same-origin writer and stale File snapshot | Identity/protection evidence is explicit; cooperative locks and locator equality are not promoted to universal native exclusion/incarnation. |
 | T-PLAT-20 | Import and separate export fail, truncate, close or lose a UI acknowledgement | OPFS database state, destination publication and export durability have separate receipts; source remains identifiable. |
-| T-PLAT-21 | Optional undo after a third/torn image, uncovered-page change or ambiguous identity/disarm | Exact whole-file predicate and eligibility are enforced; unqualified optional recovery stays disabled without weakening ACE-first parity. |
+| T-PLAT-21 — Retired | Optional-undo execution is removed by PRD-09. | ID reserved; ordinary failure/reopen coverage remains in R-TXN-1/FAIL-OWNER, R-CRASH-1/CRASH-FAILURE and R-WASM-1. |
 | T-PLAT-22 | No SAB deployment and optional JSPI prototype with nested callback/Close | Prestaged limitations remain visible; any alternative proves actual blocking/reentry/owner behavior before replacing D-WASM-1. |
 
 ### Encryption
@@ -1027,8 +1106,8 @@ All cases below are **planned and unexecuted**. They name observable families ra
 | T-PLAT-23 | Plain and native encrypted logical twins across admitted Jet/ACE families | Header/codec selection and complete rows/indexes agree; an Office container recipe is not assumed to be Access page encryption. |
 | T-PLAT-24 | Wrong, absent, empty and changed credentials; unavailable host credential service | Native error phase and number are captured; no cache reuse across database/key domains or guessed credential diagnosis. |
 | T-PLAT-25 | Same page number under distinct file keys, plus selected header exceptions | Correct stored/logical identity; complete intended encoded image retained separately from pinned plaintext. |
-| T-PLAT-26 | Password change with secured Jet metadata and untouched ordinary data | All evidenced metadata/SID consequences preserved; no header-only shortcut inferred from an API name. |
-| T-PLAT-27 | Short encrypted write, quota failure and interruption at each native phase | Stored-byte effects and whole-file crash class match; plaintext equality never validates damaged ciphertext or optional undo. |
+| T-PLAT-26 | Database-password change on an admitted default-Admin Jet file, plus secured-workgroup refusal controls | Capture the complete password/SID encoding closure while preserving decoded ownership/access-control payload, identities and access rights; no header-only shortcut or workgroup-security success. Unsupported secured admission receives counted `NotModelled.UserLevelSecurity`. |
+| T-PLAT-27 | Short encrypted write, quota failure and interruption at each native phase | Stored-byte effects enter the native opener comparison; plaintext equality never validates damaged ciphertext. Exact crash acceptance is completed during implementation. |
 | T-PLAT-28 | Plaintext scratch, temporary spill, history and diagnostics under failure/Close | Declared protection policy and retained key/allocator ownership; no accidental plaintext publication or unbounded decrypt copy. |
 | T-PLAT-29 | Separate-destination encryption change fails during creation or publication | Source survives; destination is independently accepted before promotion; no presumed in-place rekey atomicity. |
 
@@ -1050,7 +1129,7 @@ All cases below are **planned and unexecuted**. They name observable families ra
 | --- | --- | --- |
 | T-PLAT-37 | Native multivalue descriptor and separately captured child association | Correct catalog identity, foreign key and child rows; no guessed child table based on a visible name. |
 | T-PLAT-38 | Two parents, duplicate child values and child AutoNumber-like identifiers | Parent-value association and child identity remain distinct from public parent primary keys and row slots. |
-| T-PLAT-39 | Parent/child add, edit, delete and rollback at each physical phase | Completed outputs have the qualified row/index/map/LV closure and no orphan children; interrupted states match the qualified ACE crash class and exact observable transaction scope. |
+| T-PLAT-39 | Parent/child add, edit, delete and rollback at each physical phase | Completed outputs have the row/index/map/LV closure and no orphan children; interrupted images enter the same native opener comparison, with observable transaction scope retained. Exact crash acceptance is completed during implementation. |
 | T-PLAT-40 | Retained Field2/Recordset2 across parent movement, clone, Requery and Close | Native binding/identity/lifetime captured independently; convenience caching does not freeze the wrong child collection. |
 | T-PLAT-41 | Raw/deflated attachment wrapper, metadata and zero/large/malformed payload | Bounded decode with exact native wrapper preservation; file content is not confused with the entire stored LV. |
 | T-PLAT-42 | Calculated column dependency, Null, conversion error and update timing | Shared evaluator and native storage/timing policy; stored results or formulas are not fabricated from wrapper assumptions. |
@@ -1072,7 +1151,7 @@ All cases below are **planned and unexecuted**. They name observable families ra
 
 | Acceptance ID | Fixture / interference | Required evidence |
 | --- | --- | --- |
-| T-PLAT-51 | Actual native consumer and Framework/.NET 10 System.Data.OleDb clients | Genuine provider creation, requested properties and implementation identity; no dependency of initial CalcDb ADO on this provider. |
+| T-PLAT-51 | Actual native consumer and Framework/.NET 10 System.Data.OleDb clients | Genuine provider creation, requested properties and implementation identity. Keep the ADO object layer separable for later attachment without making this provider an initial dependency or expanding initial provider-string scope. |
 | T-PLAT-52 | Required/optional property conflicts, unsupported interface and consumer aggregation | Per-property/interface outcomes and lifetime follow the actual consumer contract. |
 | T-PLAT-53 | x64 accessor with status/length/value offsets, unaligned fields and Null/truncation | Checked binding arithmetic and exact DBTYPE/DBSTATUS/DBLENGTH behavior; cbRowSize is not invented as a GetData allocation bound. |
 | T-PLAT-54 | Multiple parameter sets, null parameters and deferred values | Correct set stride, direction, conversion, counts and partial outcomes over one common execution state. |
@@ -1091,12 +1170,13 @@ All cases below are **planned and unexecuted**. They name observable families ra
 | T-PLAT-62 | SQL_DATA_AT_EXEC, SQLParamData/SQLPutData sequencing and failure after a supplied chunk | Owned parameter stream, correct state transitions and no repeated external demand. |
 | T-PLAT-63 | SQLCancel races execution or another thread; later API reads diagnostics | Cancellation request disposition is distinct from operation settlement; target diagnostic lifetime and order retained. |
 | T-PLAT-64 | SQLEndTran over multiple connections with mixed success, plus close/disconnect failures | Per-connection receipts and actual Driver Manager behavior; no implicit two-phase commit or fabricated rollback. |
+| T-PLAT-65 | Create a previously absent database during a blocking call, then fail acquisition, page/flush transfer or reply publication | Shared synthesis produces the admitted native image and one opened DAO binding. Existing entries are never overwritten; partial/accepted/uncertain namespace and file effects remain owned, and export/reopen uses CAT-NEW/DAO-CREATE and WASM-CREATE/CRASH-NEW. |
 
 ## Constructed checks and evidence limits
 
-The original consistency checker passed **23 constructed checks with zero failures**. It checks the displayed memory-domain counterexample, page/mailbox ranges, memory budget, header bounds, page-parameter arithmetic, attachment wrapper, relocation and x64 provider/driver buffer arithmetic, together with small hypothetical ownership and streaming traces. Negative controls expose incorrect domains, stale-generation matching, unproved write-prefix continuation, bad extents and wrong buffer widths. These are constructed arithmetic and policy counterexamples; they do not execute the proposed CalcDb implementation, cryptographic primitives, a browser, a native ABI or ACE. The mailbox component enumerates 117,649 six-action traces in a deliberately small two-request model; this does not exhaust the actual host/browser protocol.
+The displayed memory-domain counterexample, page/mailbox ranges, memory budget, header bounds, page parameters, attachment wrapper, relocation and provider/driver buffer layouts are constructed witnesses. The ownership and streaming traces expose incorrect domains, stale-generation matching, unproved write-prefix continuation, bad extents and wrong buffer widths. They do not execute CalcDb, cryptographic primitives, a browser, a native ABI or ACE, and the small mailbox examples do not exhaust the host/browser protocol.
 
-All **64 T-PLAT acceptance families remain planned and unexecuted**. Actual portable CalcVBA calls, browser I/O and fault qualification, native encryption/complex/rebuild behavior, COM provider and Driver Manager consumers, managed runtime behavior and performance remain the work of the full research cards. The original checker has SHA-256 `2161c85c0a07ea6ce56ceb2fc3a26bd457d0af5986463c9dd046d281939a95c9`; its result records the checked draft hashes and explicit execution limits.
+The **65 T-PLAT IDs are retained: 64 active families remain planned and unexecuted, and T-PLAT-21 is retired** under PRD-09. Actual portable CalcVBA calls, browser I/O and fault qualification, native encryption/complex/rebuild behavior, COM provider and Driver Manager consumers, managed runtime behavior and performance remain the work of the full research cards.
 
 ## Sources and evidence notes
 
@@ -1104,7 +1184,7 @@ Exact sources, versions, inspected extents, hashes where available, licence insp
 
 The pinned Jackcess and Jackcess Encrypt material supplies labelled reference-format facts. Its exact inspected file headers and matching licences are recorded without a code port or blanket dependency/resource clearance. Public Web, Microsoft and runtime documents supply API facts, not native observations. No proprietary implementation was decompiled or disassembled, no excluded reference repository/source extract was consulted, and no source/sample code or Office binary was adopted. Proposed records, pseudocode and byte witnesses are original design and remain subject to the named experiments.
 
-[^root-authority]: [N, C, V, U, A, B] Supplied `calcdb-one-pager.md` (Draft 2), `CHARTER.md`, `calcvba-integration-note.md` (8115aa781, corrected by the user), `gpt6pro-book-prompt.md`, and user scope/crash/VARIANT/continuation corrections. Requirement/phase map and current decisions: [I-16](I-16-development.md) and [planning reference](00-stage0-plan.md); prior concrete mechanisms: [II-03](II-03-pager.md), [II-08](II-08-transactions.md), [II-09](II-09-locking.md) and [II-13](II-13-interop.md). These supply authority/design continuity, not native execution.
+[^root-authority]: [B-SCOPE-11, C, V, U-PRD-01-09, U-PRW-01-58, U-OWNER-ACE, A, B] [Scope and context](00-scope.md), §§S2–S7, governs platform integration, sharing, persistence, evidence and later capabilities. `CHARTER.md`, `calcvba-integration-note.md` (8115aa781), the assignment and owner decisions supply compatible detail. A-01's U-OWNER-ACE records the supplied ACEDAO.DLL **16.0.20527.20016** oracle identity. The requirement map and current decisions are in [I-16](I-16-development.md) and the [planning reference](00-stage0-plan.md); prior mechanisms are in II-03/08/09/13. These supply authority and design continuity, not native execution.
 
 [^root-basic-abi]: [S-WEB-WASM-BASIC-C-ABI] WebAssembly tool-conventions, [Basic C ABI](https://github.com/WebAssembly/tool-conventions/blob/main/BasicCABI.md), ABI version 1, live material inspected 2026-11-14: data-model/scalar and aggregate/call-convention passages. One documented convention, not proof of CalcVBA's target declaration. Factual use; no implementation or example adaptation.
 
@@ -1122,9 +1202,9 @@ The pinned Jackcess and Jackcess Encrypt material supplies labelled reference-fo
 
 [^wb-data]: [S-WEB-HTML-DATA] HTML Standard: Safe passing of structured data, [primary source](https://html.spec.whatwg.org/multipage/structured-data.html). Living Standard displayed update 2026-11-14; accessed 2026-11-14. SharedArrayBuffer serialization, cross-origin-isolation and same-agent-cluster restrictions; platform-object transfer declarations. No source/example implementation is adopted.
 
-[^wb-atomics]: [S-WEB-ECMA-ATOMICS] ECMAScript 2024: Atomics.wait and DoWait, [primary source](https://tc39.es/ecma262/2024/multipage/structured-data.html#sec-atomics.wait). Fixed ECMAScript 2024 edition; accessed 2026-11-14. Expected-value wait, shared atomic cell and notification/timeout results; proposed mailbox is original. No source/example implementation is adopted.
+[^wb-atomics]: [S-WEB-ECMA-ATOMICS] ECMAScript 2024: Atomics.wait and DoWait, [primary source](https://tc39.es/ecma262/2024/multipage/structured-data.html#sec-atomics.wait). Fixed ECMAScript 2024 edition; accessed 2026-11-14 and rechecked 2026-11-16. Expected-value wait, shared atomic cell and notification/timeout results; proposed mailbox is original. No source/example implementation is adopted.
 
-[^wb-workers]: [S-WEB-HTML-WORKERS] HTML Standard: Web workers, [primary source](https://html.spec.whatwg.org/multipage/workers.html). Living Standard displayed update 2026-11-14; accessed 2026-11-14. Worker event-loop/lifecycle and termination actions; queued tasks are not guaranteed cleanup. No source/example implementation is adopted.
+[^wb-workers]: [S-WEB-HTML-WORKERS] HTML Standard: Web workers, [primary source](https://html.spec.whatwg.org/multipage/workers.html). Living Standard displayed update 2026-11-14; accessed 2026-11-14 and rechecked 2026-11-16, §§10.2.4–10.2.6. Worker termination, runtime error reporting and the Worker interface; neither queued cleanup nor an I/O-settlement acknowledgement follows from termination. The lifecycle supervisor and failure exits are proposed host design. No source/example implementation is adopted.
 
 [^wb-picker]: [S-WEB-FILE-ACCESS] File System Access, [primary source](https://wicg.github.io/file-system-access/). Draft Community Group Report, 2025-10-10; accessed 2026-11-14. Local-file picker and permission request conditions, Window/transient activation; separate origin-private and user-visible file routes. No source/example implementation is adopted.
 
@@ -1263,3 +1343,7 @@ The pinned Jackcess and Jackcess Encrypt material supplies labelled reference-fo
 [^ad-usearrays]: [S-MS-ODBC-USEPARAMARRAYS] Microsoft, [Using Arrays of Parameters](https://learn.microsoft.com/en-us/sql/odbc/reference/develop-app/using-arrays-of-parameters?view=sql-server-ver17); accessed 2026-11-14. Parameter-set processed counts, error continuation, ignored inputs, data-at-execution token/current-row relationship and return-path caveats. Documentary facts only; target driver behavior has not been executed.
 
 [^ad-netparams10]: [S-MS-NET-OLEDB-PARAMETERS10] Microsoft, [OleDbCommand.Parameters Property — .NET 10 package-provided view](https://learn.microsoft.com/en-us/dotnet/api/system.data.oledb.oledbcommand.parameters?view=net-10.0-pp); accessed 2026-11-14. Positional text-parameter rule only; retrieved page also displayed an 11.0 prerelease package banner, which does not identify the installed .NET 10 client package. No sample code reused.
+
+[^scope-boundaries]: [U-PRD-01-09] `decisions.md`, PRD-03/04; [U-PRW-01-58] `work.md`, PRW-09/10/52/53, including retained database-password/encryption cases and MSPersist persistence; [B-SCOPE-11] [Scope and context](00-scope.md), §§S2 and S7. These constrain the later seams; native default-Admin password/codec and persistence behavior remains specified experiment work.
+
+[^owner-inputs]: [U-OWNER-RECOVERY] A-01 records D-UNDO-1's unchanged owner-supplied identity/full-read predicate, also stated in [I-08](I-08-transactions.md) and [II-08](II-08-transactions.md). [U-OWNER-NET] records the required installed .NET Framework 4.8-family and .NET 10 LTS client lanes. These are supplied scope inputs, not executed measurements.

@@ -1,12 +1,12 @@
 # II-10. Expressions, sandbox and CalcVBA functions
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
 **Requirement trace:** Primary RQ-SQL-07, RQ-SEM-01, RQ-VAL-02, RQ-EXPR-01, RQ-EXPR-02, RQ-EXPR-03 and RQ-CALL-03. Supporting RQ-SQL-01, RQ-SEM-02, RQ-SEM-03, RQ-VAL-01, RQ-VAL-03, RQ-TYPE-01, RQ-SIM-01, RQ-CALL-02, RQ-HOST-01, RQ-ORACLE-02, RQ-ORACLE-05, RQ-PERF-01 and RQ-PERF-02. I-16 owns the full scope map. II-02 supplies canonical values/ownership; II-04/05 native field/key mechanics; II-06 parameter/catalog identity; II-07/08 accepted edits and native persistence; II-09 protected inputs and work/reentry ownership. This chapter connects them through K-EXPR, K-VALUE, K-STRING, K-THREAD, K-ERROR, K-ADMISSION and K-PLAN.
 
 Prefer compact typed nodes and a resumable scalar policy over the shared semantic foundation. Preserve declared operand origins, runtime value tags and exact native field descriptors separately. Compile wildcard patterns with their diagnostic and comparison state; qualify any index range independently. Resolve host functions to owned identities and register each invocation before reentrant work. These mechanisms refine **D-EXPR-1 — Recommended** and **D-UDF-1 — Provisional**, without adding a second arithmetic engine or inventing existing CalcVBA exports.
 
-**Evidence boundary.** Microsoft references below establish documentary VBA, Access, Automation and NLS contracts, each within its stated scope. They do not provide an executed ACE expression trace. Native row/key examples reuse II-04/05's exact-pinned source-derived hypotheses at Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; all new byte/arithmetic/state witnesses are constructed. Cleared reports contribute concepts only. No Windows, ACE, CalcVBA, native ABI or reference encoder execution occurred. The initial oracle remains the user-reported ACEDAO.DLL **16.0.20527.20016**, with actual loaded identities to capture; .NET Framework 4.8-family and .NET 10 LTS remain separate client lanes. The assumed corrected shared value is the real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**. Figures are emitted Markdown tables/Mermaid source, not render-verified.[^authority]
+**Evidence boundary.** Microsoft references below establish documentary VBA, Access, Automation and NLS contracts, each within its stated scope. They do not provide an executed ACE expression trace. Native row/key examples reuse II-04/05's exact-pinned source-derived hypotheses at Jackcess commit `be0a2139b087a227d14cafd4ea231306a5a3a862`; all new byte/arithmetic/state witnesses are constructed. Cleared reports contribute concepts only. No Windows, ACE, CalcVBA, native ABI or reference encoder execution occurred. The initial oracle remains the user-reported ACEDAO.DLL **16.0.20527.20016**, with actual loaded identities to capture; .NET Framework 4.8-family and .NET 10 LTS remain separate client lanes. The shared value is the real platform Automation VARIANT/BSTR, **24-byte VARIANT on Windows x64**. Figures are rendered by the PDF build.[^authority]
 
 ## 1. Preferred evaluator and the boundary it owns
 
@@ -115,7 +115,7 @@ The lazy row cache is keyed by source identity, row/edit generation, descriptor 
 
 ## 5. The scalar operation needs a typed context, not another value representation
 
-The preferred implementation of **D-EXPR-1 — Recommended** is a small evaluator whose bound nodes call the shared CalcVBA conversion and function service. This develops **RQ-VAL-02**, **RQ-SEM-01**, **RQ-TYPE-01** and **RQ-SIM-01**. Every materialized semantic value remains a real platform Automation VARIANT, with real BSTR ownership. Windows x64 uses the corrected 24-byte layout from II-02. A node's source category, expected result shape and error site are metadata surrounding that value; they do not add a CalcDb tag or change a VARIANT's stride.
+The preferred implementation of **D-EXPR-1 — Recommended** is a small evaluator whose bound nodes call the shared CalcVBA conversion and function service. This develops **RQ-VAL-02**, **RQ-SEM-01**, **RQ-TYPE-01** and **RQ-SIM-01**. Every materialized semantic value remains a real platform Automation VARIANT, with real BSTR ownership. Windows x64 uses the 24-byte layout from II-02. A node's source category, expected result shape and error site are metadata surrounding that value; they do not add a CalcDb tag or change a VARIANT's stride.
 
 The distinction matters because a runtime tag does not describe the entire expression. VBA's documented comparison rules distinguish a declared numeric operand from a numeric value held in a Variant. Two Variant operands, one numeric and one textual, have a documented category ordering; a declared numeric operand paired with a convertible textual Variant instead selects a numeric comparison. These are different operations over potentially identical payloads.[^sc-compare] The query binder therefore supplies an **operand contract**: field/parameter/literal/function-result origin, declared database or language type where known, possible runtime tags, Null possibility and conversion context. R-EXPR-1 decides the corresponding Access query contract rather than assuming that every SQL field behaves like a VBA Variant variable.
 
@@ -308,7 +308,7 @@ The reference scalar form uses tree occurrences; structural interning can share 
 
 ## 12. A scalar kernel with owned inputs and failures
 
-The following pseudocode is a proposed service contract, not an existing CalcVBA API. It applies to one local policy segment after binding has selected an admitted descriptor and its scheduled operands have valid owners. Argument coercions that precede a later child are separate actions in the evaluator's resumable policy; this kernel never forces all child values to be produced before all coercions. Its descriptor records already-completed conversions and performs only the remaining local steps. Public ByRef/writeback behavior remains the method adapter's responsibility; the scalar kernel cannot remove aliases merely to simplify its implementation. Foreign object coercion or host calls leave this pure kernel and use the caller-thread continuation path.
+The following pseudocode is a proposed service contract, not an existing CalcVBA API. It applies to one local policy segment after binding has selected an admitted descriptor and its scheduled operands have valid owners. Argument coercions that precede a later child are separate actions in the evaluator's resumable policy; this kernel never forces all child values to be produced before all coercions. Its descriptor records already-completed conversions and performs only the remaining local steps. Public ByRef/writeback behavior remains the method adapter's responsibility; the scalar kernel cannot remove aliases merely to simplify its implementation. Foreign object coercion or host calls leave this pure kernel and use the owned synchronous invocation path in §§24–26. The retained COM reference determines delivery; the evaluator does not choose a provider thread.
 
 **Inputs:** descriptor, stable canonical operand borrows, immutable context and an operation budget. **Output:** one owned canonical value or one owned evaluation failure. **State:** initialized temporary owners and bounded conversion scratch. **Failures:** unsupported conversion, overflow, allocation failure, stale context or an evidenced language failure; no partially initialized result escapes. **Cost:** constant dispatch and fixed-width work for ordinary scalar operations, plus actual text/array/conversion cost; no per-node heap allocation is required for successful fixed-width values.
 
@@ -601,7 +601,7 @@ Producing a converted value is not an acceptance transition. In particular, a Va
 
 **D-UDF-1 remains Provisional.** Prefer an explicit, versioned host resolver and invocation adapter. Application.Eval demonstrates that an Access Application can evaluate expressions naming user functions and form controls; it does not document an arbitrary standalone ACE process locating every loaded VBA project. R-UDF-1 therefore compares those hosts before choosing any discovery mechanism. If native evidence requires discovery, replace the resolver behind the boundary below; keep its identity, ownership and invocation requirements. CalcDb does not execute the preserved modules in an Access front end. [^h-eval]
 
-The supplied integration note establishes a single-threaded CalcVBA runtime, a shared value/conversion/function library, caller-thread execution of VBA and a proposed portable COM layer. It supplies no runtime entrypoint, JIT calling convention or private function-object layout. The records and operations in this section are **proposed integration requirements**, not declarations of existing CalcVBA exports. The user's correction and II-02 apply throughout: values use the exact platform Automation VARIANT and real BSTR; Windows x64 VARIANT is 24 bytes. There is no private 16-byte semantic value in this design. [^h-integration]
+The shared value/conversion/function library and portable COM boundary remain integration inputs. PRD-02 makes CalcDb's threading independent of CalcVBA and any particular VBA host. Invoke the provider reference supplied to CalcDb; ordinary COM apartment rules determine where provider code runs. The records and operations below are **proposed integration requirements**, not existing CalcVBA exports or a private JIT calling convention. Values use the platform Automation VARIANT and real BSTR, including the 24-byte Windows x64 VARIANT. [^h-integration]
 
 A bound function node needs more than an interned name and an address. Prefer the following immutable metadata, owned by a registry generation:
 
@@ -618,6 +618,7 @@ FunctionDescriptor {
                                     # clock, random state, external/unknown effects
     policy_capability_identity
     resolver_provenance, portability_requirement
+    retained_provider_reference, provider_apartment_context
     retained_invoker_owner, retained_type_metadata
 }
 BoundFunction {
@@ -630,7 +631,7 @@ BoundFunction {
 
 Function identity is stable across aliases, not across replacement with a different implementation. The same name can denote different providers in different host scopes. A descriptor's definition generation changes when its implementation or effects change; its signature generation changes when parameter/default/result rules change. Name-resolution precedence among fields, builtins, project functions and qualified names belongs to the captured binding profile. A name missing from the function registry must not silently become a SQL parameter simply because the parser accepts an identifier in another position.
 
-The invoker owner retains the provider's executable code and runtime state. Retaining a descriptor through local ownership must not call a foreign AddRef under the registry latch. Prepare the foreign owner outside that latch, then install a locally retainable registry entry. Unregistration removes future resolution authority while active calls keep the exact entry they acquired. Reloading a project under the same display name cannot retarget a suspended call to new code.
+The invoker owner retains the provider reference, code and any published lifetime owner. Its apartment context records how that reference can be used; it is not a CalcVBA runtime-thread admission check. Retaining a descriptor through local ownership must not call a foreign AddRef under the registry latch. Prepare the foreign owner outside that latch, then install a locally retainable registry entry. Unregistration removes future resolution authority while active calls keep the exact entry they acquired. Reloading a project under the same display name cannot retarget a suspended call to new code.
 
 **RQ-EXPR-03 — query-level portability.** Each accepted bound expression and statement retains a `PortabilityRequirements` summary: required host/provider identities, the originating expression or saved-definition dependency, nonportable status, and any unresolved dynamic dependency. Union the resolved requirements of direct calls and nested saved-query/domain bindings; retain their provenance when a qualified physical transformation omits a node. An unresolved dynamic target is not evidence that the query is portable. Dynamic Eval or name resolution adds the resolved requirements before its existing invocation-admission point, without executing code merely to discover metadata. Rebinding replaces the derived summary from the newly accepted definitions and binding context; reopening reconstructs it from the stored definition and current context. Expose the summary in CalcDb diagnostics and compatibility metadata, without inventing native catalog fields or changing QueryDef SQL text.
 
@@ -642,7 +643,7 @@ Effect metadata is conservative authority for the optimizer, not a claim that a 
 
 Microsoft documents four sandbox settings: 0 disables sandboxing in both host categories; 1 applies it to Access; 2 applies it to non-Access programs; 3 applies it to both. Trust and sandbox restrictions are distinct. The reference includes Now and Rnd among permitted functions, while Randomize and CreateObject appear among functions causing errors in sandboxed engine expressions. It separately identifies blocked Access functions and object properties. These are documentary inputs, not observations of the selected ACE installation. [^h-sandbox]
 
-For **RQ-EXPR-01**, represent that distinction without changing machine configuration. An OracleContext records the actual engine identity, host kind, expression entry route, database trust/content state as observable, sandbox state as observable, locale and connection options. A CalcDb SandboxPolicy is an immutable value supplied through the approved host/configuration boundary. It identifies the compatibility profile and policy generation; it is not a request to edit HKLM, Trust Center or macro settings. Native experiments use already configured environments and record a missing environment as missing evidence.
+For **RQ-EXPR-01**, represent that distinction without changing machine configuration. An OracleContext records the actual engine identity, host kind, expression entry route, database trust/content state as observable, sandbox state as observable, locale and connection options. A CalcDb SandboxPolicy is an immutable value supplied through the approved host/configuration boundary. It identifies the compatibility profile and policy generation; it is not a request to edit HKLM, Trust Center or macro settings. A native run observes only its already configured sandbox mode. Other modes require separately preconfigured environments; a missing environment is missing evidence, not permission to change security settings during a run.
 
 **Figure F-92 — four separate checks determine whether a named function may run.** The branches are the proposed CalcDb binding/admission model.
 
@@ -685,11 +686,13 @@ For dispatch, keep logical source argument positions separate from DISPPARAMS st
 | ByRef parameter fed by an expression temporary | An owned temporary cell with the evidenced declared type | Observe allowed callee changes to the temporary; do not invent a table update. |
 | Two references to the same writable host variable | One retained cell/alias group and two references to it | Preserve alias behavior and qualified writeback order. |
 | Text read from a page | An admitted BSTR snapshot or a retained immutable source until BSTR materialization | The callback must survive Move, Requery, page eviction and Close. |
-| Array or object argument | Owned shape/elements or retained interface and caller context | Cleanup and any foreign Release remain outside internal latches. |
+| Array or object argument | Structurally captured elements or retained interface, with a valid COM reference/context | Element-copy reentry is checked before further source access; foreign cleanup remains outside internal latches. |
 
 A field reference in a query is not automatically a writable ByRef reference to its disk bytes. Even if the UDF declaration says ByRef, the query binder must establish whether ACE supplies a temporary, permits writeback to an expression variable, rejects the call or uses another evidenced rule. A genuine writable target requires an explicit retained lvalue owner and writeback receipt. Preserve alias groups when the call path exposes them. Copying each argument independently can change the result of a function that modifies one alias before reading another.
 
-VariantCopy makes owned BSTR/array copies and retains by-value interface pointers; its ByRef behavior is different. VariantCopyInd can obtain an indirect value snapshot, but that is not permission to erase required writeback. Both operations can fail. The foundation boundary must preflight or budget the copy, retain partially constructed values through their cleanup path and perform foreign reference operations in the caller context. [^h-copy][^h-copyind]
+VariantCopy makes owned BSTR/array copies and retains by-value interface pointers; its ByRef behavior is different. VariantCopyInd can obtain an indirect value snapshot, but cannot erase required writeback. Both can fail. Use II-02's `CaptureValueStructural` for ownership: `NoForeignCode` copies stable valid input without a foreign boundary; `SingleObjectAddRef` retains one captured interface pointer; `ElementwiseCallout` copies arrays or records with foreign element work one element at a time. The last branch needs retained backing, a safe element owner and actual shape/type/bounds revalidation after each callout. If those conditions cannot be established, refuse that copy with its explicit reason. Do not invent a source-generation service for caller memory. [^h-copy][^h-copyind]
+
+Preflight capacity and retain partial values under the InvocationAttempt. Foreign copies and cleanup use valid retained COM references outside internal latches. Revalidate the next engine action after reentry. An accepted AddRef, record copy or conversion is recorded once; a stale continuation neither repeats it nor recaptures the whole argument graph. The helper's structural branches do not change the signature's ByRef alias contract.
 
 The default query path uses independently owned input values for host calls. That is intentionally different from the fast builtin path, where a bounded encoded field view may remain pinned until a pure scalar conversion completes. The engine guarantees argument lifetime for the declared invocation interval. A callee needing a value afterwards must clone or retain it through the published contract; keeping an arbitrary raw argument pointer is not such a transfer. A callback can change the current row or close its source, so a live page pointer is unsuitable unless the adapter explicitly limits borrowing and the engine retains the source throughout that interval.
 
@@ -697,12 +700,14 @@ A returned ByRef value likewise cannot escape merely because its 24-byte wrapper
 
 ## 25. Register an InvocationAttempt before any callback can reenter
 
-Prefer a caller-owned InvocationAttempt for each **logical evaluation occurrence** that may enter external code. Its identity is operation incarnation, expression node, input occurrence and nested-call ordinal. The input occurrence is allocated by the evaluator; a bookmark alone is insufficient because the same row can legitimately be visited again. This identity prevents accidental replay during physical preparation. It does not promise one native UDF call per result row.
+Prefer a call-owned InvocationAttempt for each **logical evaluation occurrence** that may enter external code. Its identity is operation incarnation, expression node, input occurrence and nested-call ordinal. The input occurrence is allocated by the evaluator; a bookmark alone is insufficient because the same row can legitimately be visited again. This identity prevents accidental replay during physical preparation. It does not promise one native UDF call per result row.
 
 ```text
 InvocationAttempt {
     invocation_id, operation_owner, operation_incarnation
-    ancestor_invocation, caller_thread_and_runtime_owner
+    ancestor_invocation, call_context_owner
+    origin_thread_if_known, engine_entry_apartment
+    provider_reference_owner, provider_apartment_context
     bound_function_owner, descriptor_generation, policy_entry_receipt
     stable_input_owners[], argument_cells[], alias_groups[]
     result_owner, immediate_error_owner, writeback_receipts[]
@@ -712,9 +717,11 @@ InvocationAttempt {
 }
 ```
 
+The call context retains the provider reference and the COM apartment context in which it is valid. An origin-thread observation may be unknown after proxy delivery; it is diagnostic metadata, not a gate. CalcDb follows II-13's Apartment model, so a correctly marshaled call from another apartment reaches its owner STA. The provider can belong to a different apartment. COM delivers the synchronous provider call while the public caller remains blocked; CalcDb does not move execution according to a CalcVBA thread policy. Internal workers never enter the provider or perform its foreign reference operations. R-ACT-1/ACT-THREAD and R-UDF-1 observe these routes independently.[^h-threading]
+
 Reserve the attempt, empty result/error slots and minimum cleanup capacity before the first fallible retention. Arm its local guard immediately. Retain the active operation's admission and transfer the complete owned attempt into the operation registry exactly once. Close must count it before any resolver, conversion, AddRef or provider entry capable of reentry. A partly built frame is still work with an owner.
 
-Preparation retains the input cut and source owners already admitted at this evaluation point. Materialize each argument only at its position in the native demand/evaluation order, under the II-09 source certificate. Do not fetch a later argument's LV chain, evaluate a future child or expose its I/O/conversion error early merely to make a callback frame convenient. Retain an existing source/view owner for a later demand when qualified; if that future demand cannot survive reentry, apply the selected continuation failure rather than replaying an earlier effect. Release every internal latch before foreign entry. Release transient native read protection only when the selected native profile permits it; a logical edit grant may retain its independently required lifetime. “No internal latch across VBA” is not permission to discard a transaction's native lock.
+Preparation retains the input cut and source owners already admitted at this evaluation point. Materialize each argument only at its position in the native demand/evaluation order, under the II-09 source certificate. Do not fetch a later argument's LV chain, evaluate a future child or expose its I/O/conversion error early merely to make a callback frame convenient. Retain an existing source/view owner for a later demand when qualified; if that future demand cannot survive reentry, apply the selected continuation failure rather than replaying an earlier effect. Release every internal latch before foreign entry. Release transient native read protection only when the selected native profile permits it; a logical edit grant may retain its independently required lifetime. “No internal latch across a callout” is not permission to discard a transaction's native lock.
 
 The following is an implementation skeleton. All named adapter operations are requirements to implement, not existing CalcVBA APIs:
 
@@ -726,16 +733,17 @@ EvaluateHostCall(bound, input_occurrence, operation):
     prepare each argument/default only at its selected evaluation point
     after each possible preparation reentry, revalidate before the next semantic step
     outside all engine latches:
-        prepare retained invoker/runtime owner and initialized output storage
+        retain the supplied provider reference in its valid apartment context
+        prepare initialized output storage; retain each completed copy receipt
     with short policy/lifecycle metadata synchronization:
         validate operation, descriptor, scope and current admission
         claim exactly one entry permit for this attempt, or record denial
     if denied:
         settle owned preparation outside latches; return mapped outcome
-    outside all engine latches, on the recorded caller thread:
-        enter provider once using the retained descriptor and stable call frame
-        capture raw returned ownership and immediate error state
-    mark external entry completed; retain its result/error/effect receipt
+    outside all engine latches, using the retained provider reference:
+        request one invocation through ordinary COM; public caller remains blocked
+        capture returned ownership, immediate errors and available entry evidence
+    retain the call-return receipt and observed or uncertain provider effects
     for each selected result-conversion or writeback step:
         validate that step's target and continuation dependencies
         execute with its own retained owner and exact completion receipt
@@ -751,7 +759,7 @@ EvaluateHostCall(bound, input_occurrence, operation):
     after cleanup reentry, revalidate any still-pending semantic publication
 ```
 
-A failed preparation can release an interface that reenters. A failed result copy can leave an array or object needing cleanup. A provider can return an error after performing an external effect. These paths all stay attached to the registered attempt until their obligations settle. None becomes an unowned local variable after a generation check fails.
+A COM failure can occur before provider entry. Keep the invocation request, returned COM status and observed provider entry distinct. Unknown entry is neither zero calls nor proof of one completed call; retain that uncertainty without retrying the invocation. A failed preparation can release an interface that reenters. A failed result copy can leave an array or object needing cleanup. A provider can return an error after performing an external effect. These paths all stay attached to the registered attempt until their obligations settle. None becomes an unowned local variable after a generation check fails.
 
 Cancellation before external entry may skip that entry if the adapter can prove it has not happened. Cancellation after entry requests a public continuation decision; it does not turn a completed effect into “not called.” Do not promise to interrupt arbitrary VBA or to make its effects transactional. A provider fault must cross the published ABI through an owned failure boundary; no Rust unwind may cross a COM or host interface.
 
@@ -761,7 +769,7 @@ Cancellation before external entry may skip that entry if the adapter can prove 
 
 ```mermaid
 flowchart TD
-    A["Registered invocation owns inputs"] --> B["Caller enters retained provider"]
+    A["Registered invocation owns inputs"] --> B["Invoke retained provider reference"]
     B --> C["Callback reenters CalcDb"]
     C --> D["Move, edit, Requery or Close"]
     C --> E["Registry or policy change"]
@@ -854,13 +862,13 @@ This matters to ordinary record writes. A default using a clock function or a va
 
 ## 30. Implement the smallest host slice that can falsify the design
 
-The first I-HOST-1 slice should register one function with owned scalar/BSTR arguments, return one owned value, raise one structured error and reenter one database call. It needs an actual CalcVBA caller, signature metadata, exact value ABI, provider lifetime and runtime-thread ownership. It does not need complete DAO or a query optimizer. A thin test evaluator invokes the same BoundFunction and InvocationAttempt mechanisms later used by SELECT and other admitted host-function contexts. Defaults and field/table validation retain their restricted scalar admission; this prototype does not authorize a UDF there.
+The first I-HOST-1 slice should register one function with owned scalar/BSTR arguments, return one owned value, raise one structured error and reenter one database call. It needs a real provider route, signature metadata, exact value ABI and retained provider/context ownership. A controlled COM provider tests the boundary first; the actual CalcVBA client/provider route separately establishes integration. Its runtime policy does not define CalcDb's thread model. It does not need complete DAO or a query optimizer. A thin test evaluator invokes the same BoundFunction and InvocationAttempt mechanisms later used by SELECT and other admitted host-function contexts. Defaults and field/table validation retain their restricted scalar admission; this prototype does not authorize a UDF there.
 
 Next add optional/default arguments, ByRef temporaries and genuine aliases, arrays, object-valued ownership and cleanup reentry. Keep Windows COM invocation, a host-supplied direct adapter and the future portable stand-in as separately measured routes. The direct adapter may avoid dispatch overhead only through a published calling/ownership contract; it must not guess a Cranelift entrypoint or cast a private runtime object to a COM interface.
 
 Measure cold resolution/type-info work separately from warm calls. Warm metrics include descriptor/policy checks, argument coercions, copied BSTR/array bytes, reference operations, external entries, child-query reads and cleanup. A cached imported signature should eliminate repeated metadata queries; it must not eliminate the current-policy check. A builtin scalar function remains a shared-library call without an interpreter, host message or InvocationAttempt when its actual effects and ownership allow that simpler path.
 
-The decisive experiment is not merely that the returned number is correct. It must also establish the number and order of foreign entries, argument/result ownership after reentry, exact typed errors, absence of internal latches, caller-thread identity and valid surviving objects. Those results confirm or change **D-UDF-1** and **D-HOST-1**. They leave database operations on the same COM object model and shared native engine.
+The decisive experiment is not merely that the returned number is correct. It must also establish the number and order of foreign entries, argument/result ownership after reentry, exact typed errors, absence of internal latches, engine/provider apartment delivery and valid surviving objects. Distinguish the client issue thread from actual provider entry; record an unobservable native entry as unknown. Those results confirm or change **D-UDF-1** and **D-HOST-1**. They leave database operations on the same COM object model and shared native engine.
 
 ## 31. Rewrites need a proof about demand, errors and multiplicity
 
@@ -876,7 +884,7 @@ The first evaluator should perform binding, effect-free representation specializ
 | Reorder `And`/`Or` children | Shared logical/bitwise types, Nulls, effects and first-error/demand behavior all preserved. | Keep the accepted scalar schedule. |
 | Move a predicate before a join or another filter | Same row/null-extension/correlation domain and same failures/effects for rows no longer visited. | Leave at the existing operator boundary. |
 | Turn Like prefix into an index interval | Inclusion and diagnostic-demand proofs under exact mode/collation/key loss; residual retained when needed. | Scan the required domain with residual evaluation. |
-| Vectorize or use workers | Exact serial row/evaluation/error order, Double operations and caller-thread effects; bounded owned inputs. | Scalar caller execution. |
+| Vectorize or use workers | Exact serial row/evaluation/error order, Double operations and synchronous provider effects through retained COM references; bounded owned inputs. | Scalar caller execution. |
 
 Constant folding deserves separate success and error paths. `1 / 0` has no changing inputs, but evaluating it during preparation may expose an error even when no row would demand it under the selected native plan. A compiler can record the potential operation and its source span without executing it early. Conversely, some malformed expression or rejected capability may be an immediate bind-time error even with an empty table. Native captures distinguish syntax/admission failures from demanded evaluation failures; “defer everything” is no more universally correct than “fold everything.”
 
@@ -897,7 +905,7 @@ Record `tokens`, `bound_nodes`, `edges`, `bind_lookups`, dependency validations,
 | Short repeated DAO Find | Cache a context-bound expression; cached field coordinates; scalar residual over admitted cursor inputs. | Parse/cache lookup cost versus reuse; actual rows/index probes/decoded fields and native-equivalent positioning. |
 | Assignment/default/validation | Bound mutation descriptor; owned candidate cell; one receipt per accepted effect. | Incremental checks versus complete row checks, preserving observed failure order and phase. |
 | Bulk expression projection/filter | Reuse scalar frame/arena; decode only demanded fields; qualified constant patterns. | Dispatch share after decode/compare/BSTR cost; specialized/register or batch path with exact trace equivalence. |
-| CalcVBA callback | Bound stable handle, owned arguments, caller-thread attempt; no repeated discovery each row. | Boundary/copy costs and actual reentry behavior; no invented ABI or worker routing. |
+| Host-provider callback | Bound provider reference, owned arguments and call context; no repeated discovery each row. | Boundary/copy costs and actual reentry behavior; no invented ABI or worker routing. |
 | WASM | Same scalar semantics and bounded stacks/caches; explicit lengths and checked capacity. | Memory amplification, browser-storage demand and callback costs in the actual portable caller. |
 
 Do not retain one arena's maximum allocation forever after one enormous expression. Use budgeted capacity classes or release exceptional capacity at the owner boundary; measured shallow-expression scratch may be retained with a fixed cap. Constant-pattern and prepared-expression caches are byte-budgeted, including source strings, descriptors and diagnostic tables. In-flight executions retain immutable entries independently of cache eviction. A hash miss or eviction can trigger effect-free recompilation, never silently repeat a completed function invocation.
@@ -907,6 +915,17 @@ The implementation order is concrete. First publish the shared foundation's type
 Register lowering, fused operations, specialized text comparisons and bounded batches are later implementation choices within these work items, not new product phases or preconditions for shipping the first correct scalar path. Accept a change only when the relevant native differential and semantic trace remain equal and its measured total cost improves for the priority workload. Keep a scalar negative control to detect an optimization that is unused, changes demand, or moves work outside the measured call. II-11 will use these obligations to choose actual SQL operators.
 
 ## 33. Acceptance follows typed outcomes, demand order and owned continuations
+
+**Deciding branches.** The [common terminology](book-record.md#terminology) applies to the semantic, admission and continuation profiles. Qualification is scoped to the actual context in these existing branches.
+
+| Chapter rule | Deciding branch in A-02 |
+| --- | --- |
+| §§1–13: binding, scalar result types, demand, failure and builtin contracts | R-EXPR-1's Branches A–E, EXPR-BIND, EXPR-STAGE and EXPR-INVENTORY; I-FOUNDATION-1's scalar/text service contract outcomes for the shared representation/services; R-ERR-1/ERR-BASE/ERR-BIND for public errors. |
+| §§14–20: comparison, pattern grammar, matching and index ranges | R-EXPR-1/PAT-01..18; R-SORT-3/SORT-CHECK and LIKE-RANGE-01..06 for candidate completeness. |
+| §21: assignment, defaults and validation | R-EXPR-1/EXPR-MUTATION, R-CURSOR-1/CUR-EDIT and R-TXN-1/TXN-STMT. |
+| §§22–26 and 30: function resolution, sandbox, aliases, entry and reentry | R-EXPR-1/EXPR-SANDBOX; R-UDF-1/UDF-NAME, UDF-CONTEXT, UDF-SIGNATURE, UDF-BYREF, UDF-ENTRY, UDF-OWNERSHIP, UDF-EFFECT, UDF-REENTRY, UDF-CLOSE, UDF-ERROR and UDF-THREAD; I-HOST-1/HOST-META/HOST-ALIAS/HOST-ENTRY/HOST-REENTRY. |
+| §§27–29: domain visibility, recursive Eval and clock/random occurrences | R-EXPR-1/EXPR-DOMAIN, EXPR-EVAL and EXPR-RUNTIME; R-TXN-1/TXN-VIEW and R-SQL-1/SQL-DEMAND for child execution. |
+| §§31–32: rewrites, specialization and costs | R-EXPR-1/EXPR-STAGE, R-SQL-1/SQL-DEMAND and R-PAR-1/PAR-FOLD/PAR-ORDER/PAR-ERROR/PAR-EFFECT/PAR-COST. |
 
 The following **72 designed case families** define implementation acceptance for II-10. **D** requires a native differential capture in the relevant engine/host/context, followed by comparison with CalcDb. **C** is a constructed mechanism or fault-injection invariant. **D+C** requires both. These labels describe the evidence still to obtain; they are not pass marks or counts of executed tests. One row can expand into several function×type×context cases.
 
@@ -954,7 +973,7 @@ A differential record includes the loaded native identities, exact input tags/pa
 | T-EXPR-26 | D+C | First function argument is produced successfully but its required coercion fails; a later child would increment a trace counter. | The resumable policy can fail before demanding that later child when native order requires it. No all-children-first lowering changes the counter or error. |
 | T-EXPR-27 | D+C | An early callback precedes a not-yet-demanded Memo/LV or conversion that can fail; callback moves/requeries/closes its source. | No early read/conversion exposes the later failure. Retain a qualified existing source or take the captured continuation outcome without repeating the callback. |
 | T-EXPR-28 | C | Inject failure in frame registration/reservation, dependency validation, field load, primitive, conversion, output allocation and finalization. | Every path owns partial values and completed effects, stops later ordinary actions and settles/transfers cleanup; no partially initialized result or unregistered obligation escapes. |
-| T-EXPR-29 | C | Reenter from argument/result default-member conversion, each required writeback and foreign Release; invalidate the next target each time. | Revalidate after every boundary before the next dependent action. A single final generation check cannot permit an earlier stale writeback/publication. |
+| T-EXPR-29 | C | Reenter from argument/result default-member conversion, element-wise array/record copying, each required writeback and foreign Release; invalidate the next target or source shape each time. | Apply CaptureValueStructural by copy kind, retain each accepted foreign effect, and revalidate source safety and the next engine action. Refuse an unretainable source before unsafe traversal; no global graph-freeze assumption, stale publication or whole-copy retry. |
 | T-EXPR-30 | D+C | Raise a primary expression error, then fail or reenter while destroying an unselected value or clearing a result. | Retain primary and secondary outcomes separately, preserve qualified destruction order and avoid internal latches; root success remains provisional until required cleanup permits publication. |
 | T-EXPR-31 | D+C | Compare the scalar trace with constant folding, common-subexpression elimination, operand movement or register lowering on erroring/effectful expressions. | A substitution must preserve tags, demand/error phase, effects, multiplicity and public state. Equal final display values alone do not satisfy equivalence. |
 
@@ -1006,7 +1025,7 @@ A differential record includes the loaded native identities, exact input tags/pa
 | T-EXPR-63 | D | DSum over no rows, all-Null rows, mixed numeric subtypes, overflow, failing UDF and placement in an outer totals query. | Match subtype, error and evaluation/grouping timing; child scans retain the correct view and nested-function effects. Illegal aggregate nesting is distinguished from empty input. |
 | T-EXPR-64 | D+C | Nested Eval names a domain/UDF or denied capability; vary row-dependent text and exhaust accumulated parse/depth/byte/step budgets. | Child binding inherits scope and current authority without replenishing budget; unsupported entry routes remain explicit, and failure settles child values/cursors/grants. |
 | T-EXPR-65 | D+C | Interleave direct VBA and query/default/validation Now/Rnd calls, including omitted/zero/positive/negative Rnd arguments and errors between occurrences. | Determine actual state sharing and sampling counts. Accepted samples survive physical replan; new logical occurrences follow native sampling rather than one-per-query assumptions. |
-| T-EXPR-66 | D+C | Real CalcVBA callback with internal workers active; repeat through the applicable Windows/.NET and portable adapter lanes. | Entry, required conversion and foreign cleanup use the designated caller/runtime thread without internal latches. Actual ABI/version ownership is exercised; no guessed JIT/private export supplies success. |
+| T-EXPR-66 | D+C | Actual CalcVBA and other admitted provider routes with internal workers active; same-STA and correctly marshaled second-apartment callers, plus applicable portable routes. | The public caller remains blocked; CalcDb invokes the retained provider/reference context and ordinary COM determines delivery. Record issue, engine-entry and provider-entry contexts separately, with unknown native entry explicit. No internal worker performs provider/default-member/foreign-copy or foreign-reference cleanup work, no internal latch crosses a callout and accepted effects never replay. Actual ABI/provider ownership is exercised without a private runtime-thread policy. |
 
 **Costs, bounded caches and evidence completeness**
 
@@ -1016,18 +1035,18 @@ A differential record includes the loaded native identities, exact input tags/pa
 | T-EXPR-68 | C | One constant pattern over N rows; repeat with changed pattern/context and diagnostic-bearing programs. | Intended qualified reuse compiles once per reusable entry, with counted cache hits and real matching work; exact context changes cause appropriate recompilation without changing outcomes. |
 | T-EXPR-69 | C | A huge expression/pattern followed by many shallow operations; evict prepared entries during active evaluation. | Byte budgets include sources/descriptors/diagnostics; exceptional arena capacity is released/capped, while active owners survive eviction and cleanup remains possible. |
 | T-EXPR-70 | D+C | Cold and warm DAO Find, mutation validation, managed row loops and host calls measured at their actual public boundaries. | Report total work and parse/bind/copy/callback costs separately; no work shifted outside the measured call, unused fast path or warm-only loop receives unsupported performance credit. |
-| T-EXPR-71 | D+C | Scalar negative control versus register, vector, fused or worker candidate on adversarial numeric/text/error/effect fixtures. | Enable the candidate only with identical required typed/ordered traces and demonstrated total-cost improvement for its admitted workload; foreign code stays on its caller. |
+| T-EXPR-71 | D+C | Scalar negative control versus register, vector, fused or worker candidate on adversarial numeric/text/error/effect fixtures. | Enable the candidate only with identical required typed/ordered traces and demonstrated total-cost improvement for its admitted workload; provider work follows its retained COM reference and remains outside internal workers. |
 | T-EXPR-72 | C | Generate cases from every implemented function manifest row: arities, omitted positions, admitted types, boundaries and context/policy cells. | Report exactly which cells and native identities executed, which differ and which are unavailable. This matrix's row count and a passing ordinary-input example never stand in for function completeness. |
 
 Implementation completion for a required expression/context profile requires implemented descriptors, typed operations, demand/error schedules and ownership transitions, agreement on its applicable native differential and constructed cases, and semantic/cost evidence for enabled specializations. An unresolved mismatch or missing required native evidence leaves that profile's work open; wider function and sort-profile coverage is established by executed manifest cells, not inferred from these representative cases.
 
-**Current status:** this chapter supplies designs, documentary constraints and constructed witnesses. No ACE, Access, Windows COM, CalcVBA runtime or production CalcDb expression execution was performed for this chapter, and none of the 72 case families is claimed here as passed. Any separately reported constructed-witness execution establishes only its stated arithmetic/structural properties.
+**Current status:** this chapter supplies designs, documentary constraints and constructed witnesses. No ACE, Access, Windows COM, CalcVBA runtime or production CalcDb expression execution is reported, and none of the 72 case families is claimed here as passed. The constructed witnesses illustrate their stated arithmetic and structural properties.
 
 ## Sources and evidence notes
 
 Exact versions, read extents, permitted use and citation locations are in [A-01-sources.md](A-01-sources.md). Full R-EXPR-1/R-UDF-1 cards and the R-SORT-3/I-FOUNDATION-1/I-HOST-1 extensions are in [A-02-experiments.md](A-02-experiments.md). Designed acceptance families are not executed compatibility coverage.
 
-[^authority]: [N], [C], [V], [U], [A], [B] Authoritative supplied scope/integration material, approved assignment, user corrections and current record. Exact platform values, shared semantics, caller-thread callbacks, ACE-first crash parity and workload priority remain governing requirements.
+[^authority]: [B-SCOPE-11, C, V, A, B, U-PRD-01-09, U-PRW-01-58, U-OWNER-ACE, U-OWNER-NET] [Scope and context](00-scope.md), §§S3–S6, the final decisions and closed work list govern this chapter. A-01 records the initial DLL report and managed-client targets as owner inputs. PRD-02 governs COM delivery; PRW-43 states the current platform VARIANT/BSTR. No owner input is presented as a native experiment.
 
 [^r-concepts]: [L-FRANK-2, L-ASYNC-2, L-ASYNC-4, L-ASYNC-6] User-cleared `frankensqlite-report.stage1-part2.md` §5 and registry/cache/dispatch-counter lessons; `asupersync-report.stage1-part2.md`, `asupersync-report.stage1-part4.md`, `asupersync-report.stage1-part6.md` ownership/generation/evidence lessons. Concept input only, not requirements or source adaptation; no excluded repository/source accessed.
 
@@ -1129,7 +1148,7 @@ Exact versions, read extents, permitted use and citation locations are in [A-01-
 
 [^pat-pattern-error]: S-MS-PATTERN-ERROR93 — Microsoft, [Invalid pattern string (Error 93)](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/invalid-pattern-string-error-93), updated 2022-02-08; complete error description read 2026-11-13. Missing closing bracket is the documented example; ACE boundary projection remains an experiment.
 
-[^h-integration]: [V] Supplied calcvba-integration-note.md, 2026-11-12, tied to CalcVBA commit 8115aa781; read in full. The user's Part I review correction supersedes its 16-byte VARIANT statement. No CalcVBA implementation source or private ABI was inspected.
+[^h-integration]: [V, B-SCOPE-11, U-PRD-01-09, U-PRW-01-58] The supplied integration note contributes the shared foundation and host boundary. [Scope and context](00-scope.md), §§S3–S4, PRD-02 and PRW-43 state the current value and threading requirements. No CalcVBA implementation source or private ABI was inspected.
 
 [^h-sandbox]: [S-MS-SANDBOX] Microsoft, [Functions and properties in Access blocked by sandbox mode](https://support.microsoft.com/en-us/access/functions-and-properties-in-access-blocked-by-sandbox-mode), live reference accessed 2026-11-13; selected trust/mode descriptions and allowed/blocked tables. No policy-change procedure is adopted.
 
@@ -1162,3 +1181,5 @@ Exact versions, read extents, permitted use and citation locations are in [A-01-
 [^h-rnd]: [S-MS-RND] Microsoft, [Rnd](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/rnd-function), updated 2022-03-30; result subtype and argument/sequence behavior. No ACE per-row/per-statement evaluation or state-sharing claim.
 
 [^h-now]: [S-MS-NOW] Microsoft, [Now](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/now-function), updated 2021-09-13; Date result and system-clock basis. No query sampling-frequency claim.
+
+[^h-threading]: [U-PRD-01-09] PRD-02 selects the ACE Apartment model and provider-reference rule. [S-MS-COM-STA] Microsoft, [Single-Threaded Apartments](https://learn.microsoft.com/en-us/windows/win32/com/single-threaded-apartments), pointer marshaling, owner-apartment delivery and reentry sections, inspected 2026-11-16. Documentary COM facts only; the native probes remain unexecuted.

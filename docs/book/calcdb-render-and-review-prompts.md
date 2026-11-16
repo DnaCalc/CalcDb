@@ -1,18 +1,20 @@
 # The Book of CalcDb: PDF rendering and independent Claude review
 
-Book **v1.0** · Prepared 14 November 2026 · PDF and independent-review companion.
+Book **v1.1** · 2026-11-16 · PDF and independent-review companion.
 
-## 1. Is the book complete?
+## 1. Edition and evidence
 
-**Yes, as a reconciled design manuscript.** The current `book-record.md` records Part I and Part II as complete, with the reconciliation audit in `A-03-reconciliation-audit.md`. The v1.0 pack contains 38 book-content Markdown files plus this companion guide and `book-manifest.v1.0.json`: 39 Markdown files / 40 archive members in total. It is ready for typesetting and independent technical review.
+The v1.1 manuscript contains **39 book-content Markdown files plus this companion: 40 Markdown files**. The scope preamble, `00-scope.md`, follows the release record. A packaged edition also has `book-manifest.v1.1.json`; the manifest is an additional archive member, not a chapter. Use the supplied v1.1 sources as the baseline and read `00-book-release.md` for the version policy.
 
-Native/runtime acceptance remains planned. The book does not claim that ACE crash tracing, COM compatibility, browser feasibility or performance experiments have already passed. Its figures have been emitted as source/tables but have not yet been render-verified. Keep those distinctions in the typeset edition and the review.
+`A-03-reconciliation-audit.md` is the v1.1 author reconciliation. It records all 83 requirement outcomes, nine completion criteria, 23 review-named gaps, PRW dispositions and current counts, and retains the historical RC-01–14 before the v1.1 corrections. Challenge its stated gaps and limits as well as its covered designs; document completion does not establish native acceptance. The supplied `A-04-review.claude-fable-5.2.v1.0.md` remains the independent review of v1.0. It is a revision input, not a review of v1.1, and is not overwritten by the new review described here.
 
-Use `calcdb-book.v1.0.zip` and its `book-manifest.v1.0.json` as the frozen baseline. Read `00-book-release.md` for the document-version policy. Keep the original archive unchanged. The work below creates derived PDFs and a separate review appendix; it does not reopen the manuscript for automatic editing.
+Native/runtime experiments remain planned and unexecuted. Figures are rendered by the PDF build. The rendering report records the pages and assets actually inspected; a version update does not establish visual inspection, native acceptance or performance results.
+
+Preserve the original v1.1 archive and any supplied manifest unchanged. The tasks below create derived PDFs and a separate review appendix. They do not authorize automatic changes to the manuscript or reversion to the v1.0 pack.
 
 ## 2. Recommended sequence
 
-1. Preserve the v1.0 archive and extract a working copy.
+1. Preserve the v1.1 archive and extract a working copy.
 2. Run the rendering prompt below. It asks for a representative pilot, followed by the complete PDF and verification materials.
 3. Start an independent Claude Fable 5.2 review in a fresh session using the Markdown and governing inputs. Content review can run while the PDF is being prepared.
 4. Supply chapter PDFs or figure images for a separate visual pass. Keep technical findings and rendering observations distinct inside the same review appendix.
@@ -20,7 +22,7 @@ Use `calcdb-book.v1.0.zip` and its `book-manifest.v1.0.json` as the frozen basel
 
 ## 3. Rendering approach
 
-Prefer an existing maintained project build if one is supplied. Otherwise, my recommended fallback is **Pandoc with LuaLaTeX**, with Mermaid diagrams rendered to vector assets before typesetting. Pandoc supports PDF generation through LaTeX; its documented multi-file behavior requires deliberate handling of footnotes and links. `--file-scope` helps with repeated per-file identifiers but does not, by itself, solve cross-file links. [1]
+Prefer an existing maintained project build if one is supplied. Otherwise, the recommended fallback is **Pandoc with LuaLaTeX**, with Mermaid diagrams rendered to vector assets before typesetting. Pandoc supports PDF generation through LaTeX; its documented multi-file behavior requires deliberate handling of footnotes and links. `--file-scope` helps with repeated per-file identifiers but does not, by itself, solve cross-file links. [1]
 
 Mermaid CLI supports SVG, PNG and PDF output. Run any Markdown transformation on derived copies only. Pin a compatible tool version and inspect its current options rather than copying an old command line. [2] Multi-page tables can use LaTeX's `longtable`, with repeated headers and consistent column widths; exceptionally wide tables still need layout decisions. [3]
 
@@ -31,8 +33,8 @@ Use a readable single-column technical-book layout. The original page estimates 
 Give this prompt to an agent with filesystem access and the ability to run a PDF toolchain. Supply the archive or its extracted directory. Replace the input location if needed.
 
 ```text
-Render The Book of CalcDb, using the reconciled v1.0 sources from
-calcdb-book.v1.0.zip, into a professional, searchable PDF.
+Render The Book of CalcDb, using the v1.1 sources from
+calcdb-book.v1.1.zip, into a professional, searchable PDF.
 
 This is a rendering task. Treat all existing book and input files as
 read-only. Do not revise technical content, update book-record.md,
@@ -43,14 +45,17 @@ templates and generated assets only.
 
 INPUTS AND ORDER
 
-Read 00-book-release.md, book-manifest.v1.0.json, book-record.md and
-00-stage0-plan.md. Verify the actual archive contents against the manifest
-and record SHA-256 hashes before building. Use an explicit
-manifest, not a filename glob or the archive's incidental order.
+Read 00-book-release.md, 00-scope.md, book-manifest.v1.1.json,
+book-record.md and 00-stage0-plan.md. Verify the actual archive contents
+against the supplied manifest and record SHA-256 hashes before building.
+If no manifest is supplied, record that limitation and derive an explicit
+build inventory from the actual v1.1 files and the order below; do not
+claim a manifest comparison. Do not use a filename glob or the archive's
+incidental order as the reading order.
 
 Build one complete edition in this order:
-1. A generated title page and table of contents identifying Book v1.0,
-   followed by 00-book-release.md as release front matter.
+1. A generated title page and table of contents identifying Book v1.1,
+   followed by 00-book-release.md and 00-scope.md as release front matter.
 2. Part I: I-01 through I-16, in numeric chapter order.
 3. Part II: II-01 through II-16, in numeric chapter order.
 4. A-01-sources.md, A-02-experiments.md and
@@ -58,11 +63,13 @@ Build one complete edition in this order:
 5. Clearly labelled Project records back matter containing
    00-stage0-plan.md and book-record.md, unchanged.
 
-Account for all 38 book-content Markdown files listed by the manifest.
-The companion prompt guide and JSON manifest are build inputs, not book
-chapters; all 39 Markdown files must still match their manifest hashes. Do not include old archives,
-unrelated inputs or this rendering instruction guide as book chapters.
-Do not imply that planned experiments or unrendered figures have passed.
+Account for all 39 book-content Markdown files. The companion prompt
+guide and JSON manifest are build inputs, not book chapters; all 40
+Markdown files must match their supplied manifest hashes when that
+comparison is available. Do not include old archives, unrelated inputs or
+this guide as book chapters. Preserve the edition identity of historical
+audit and review material. Do not present v1.0 audit counts as v1.1 checks,
+planned experiments as results, or a PDF build as proof of visual review.
 
 BUILD
 
@@ -124,7 +131,7 @@ claim every page was checked at full resolution if only samples were.
 
 DELIVERABLES
 
-- The-Book-of-CalcDb.v1.0.pdf, with all canonical material accounted for.
+- The-Book-of-CalcDb.v1.1.pdf, with all canonical material accounted for.
 - A rerunnable build command/script, configuration, filters/templates,
   manifest, required assets and recorded tool/font versions.
 - A concise rendering report: actual page count, structural checks,
@@ -139,7 +146,7 @@ remaining task. Do not present an unchecked build as a finished edition.
 ### Prompt 2: resume rendering or fix the derived PDF
 
 ```text
-Continue the v1.0 PDF build from its existing manifest and rendering
+Continue the v1.1 PDF build from its existing manifest and rendering
 report. Keep every canonical source unchanged. Resolve the remaining
 layout, diagram, font, footnote or navigation problems in the build layer,
 rerender affected material and run the final full build. Repeat the checks
@@ -150,38 +157,38 @@ Deliver the completed PDF and the rerunnable build materials.
 
 ## 4. How to give the book to Claude Fable 5.2
 
-Anthropic officially identifies **Claude Fable 5.2** as `claude-fable-5-2`. [4] For this large multi-file task, I recommend a fresh **Claude Code** session in an isolated extracted review copy, with source files read-only and a separate writable output directory. Use the exact model ID rather than relying on an alias; the current Claude Code documentation describes provider-dependent alias behavior. [5]
+The intended independent reviewer is **Claude Fable 5.2**. Use a fresh Claude Code session in an isolated extracted review copy, with the sources read-only and a separate writable output directory. Verify the requested model's availability and exact identifier against the selected provider before starting. The model-configuration documentation describes exact identifiers, aliases and provider differences. [4][5]
 
-```sh
-claude --model claude-fable-5-2
-```
-
-Then run `/status` and record the selected model. If the chosen account/provider cannot serve that ID, resolve availability explicitly; do not silently review with a different model.
+Select the verified identifier with Claude Code's `--model` option. Record the actual model and provider exposed by the running session, including any change during the review. An alias or a requested command-line name alone is not evidence that the intended model served every step. If the account/provider cannot serve Fable 5.2, record that blocker rather than silently substituting another model.
 
 ### Inputs to provide
 
 | Input | Purpose |
 | --- | --- |
-| All 38 book-content files from the v1.0 manifest | The actual baseline, including A-01/A-02/A-03, release front matter, plan and record; this prompt guide is companion instruction material |
-| `gpt6pro-book-prompt.md` | Original assignment and completion criteria; authoring commands are not review write authority |
-| `calcdb-one-pager.md`, `CHARTER.md`, `calcvba-integration-note.md` | Governing scope/context, subject to later user corrections |
-| The approved corrections reproduced in Prompt 3 | Prevent superseded scope, ordering, crash or ABI assumptions from returning |
+| All 39 book-content files from the v1.1 manifest | The reviewed baseline, including `00-scope.md`, A-01/A-02/A-03, release front matter, plan and record; this guide is companion instruction material |
+| `gpt6pro-book-prompt.md` | Original assignment and completion criteria; its authoring commands are not review write authority |
+| `decisions.md` and `work.md` | Final PRD-01–09 decisions and the closed PRW-01–58 list, with PRW-37 dropped and the recorded PRW-52/53 owner adjustments |
+| `A-04-review.claude-fable-5.2.v1.0.md` | Historical v1.0 review and finding provenance; test whether the current manuscript resolves each relevant finding |
+| `CHARTER.md` and `calcvba-integration-note.md`, when supplied | Compatible context and integration input, subject to the final decisions and the book's current scope preamble |
+| The settled premises reproduced in Prompt 3 | Current scope, threading, crash, copy and source rules for the review |
 | `synthesis.md`, `frankensqlite-report.md`, `asupersync-report.md` and the nine cleared first-stage parts | Permitted concept input, when supplied; not requirements or ACE observations |
-| Rendered PDF/chapter PDFs or figure exports | Optional visual review, identified separately from manuscript review |
+| Rendered PDF/chapter PDFs or figure exports | Optional visual review, with the inspected edition and coverage recorded separately |
+
+The original scope source remains in A-01 as provenance. Use `00-scope.md`, sections S1–S7, for substantive scope references.
 
 The nine first-stage files are `frankensqlite-report.stage1-part1.md` through `frankensqlite-report.stage1-part3.md`, and `asupersync-report.stage1-part1.md` through `asupersync-report.stage1-part6.md`. Do not assume the book archive contains these original inputs. A missing permitted report must be recorded as a limitation, not replaced by excluded online source material.
 
-The author-side A-03 audit records completed checks and corrections; the independent reviewer must test its conclusions rather than treating them as proof. The reviewer writes A-04, leaving A-03 unchanged.
+A-03’s conclusions apply only to the edition and evidence it names. The independent reviewer checks the current v1.1 files and tests the audit’s applicable conclusions rather than treating an earlier edition’s result as current proof. The reviewer writes a separate v1.1 A-04 and leaves both A-03 and the historical v1.0 A-04 unchanged.
 
-Keep an untouched archive elsewhere. Use genuine read-only permissions or a read-only mount where practical, plus a before/after hash comparison. Give the reviewer a writable output location for `A-04-review.claude-fable-5.2.v1.0.md`. Temporary analysis files may live outside the source tree; the sole final review deliverable is that appendix.
+Keep an untouched archive elsewhere. Use genuine read-only permissions or a read-only mount where practical, plus a before/after hash comparison. Give the reviewer a writable output location for `A-04-review.claude-fable-5.2.v1.1.md`. Temporary analysis files may live outside the source tree; the sole final review deliverable is that appendix.
 
 ### If using claude.ai instead
 
 Create a fresh project, select Fable 5.2, and provide extracted files or clearly delimited text bundles. If a surface does not accept Markdown, make `.txt` copies with original filenames and start/end markers; leave the originals intact. Do not assume an uploaded ZIP has been extracted.
 
-The current upload documentation permits 20 files in a chat and distinguishes PDF processing: PDFs up to 100 pages receive visual analysis; 101–1,000-page PDFs receive text-only processing. Use chapter PDFs of at most 100 pages or separate images for a visual pass. [6] Paid Projects can use retrieval as content approaches the context limit; successful upload or retrieval is not proof of a complete read. Require the coverage table in the prompt. [7]
+Check the selected product's current upload, context and PDF-processing limits before choosing bundles or chapter PDFs. Supply images or page sets the selected surface can actually inspect for a visual pass. Project retrieval and a successful upload do not establish that every file or page was read; require the coverage table in the prompt. [6][7]
 
-The API currently documents a 1-million-token context for Fable 5.2 and a maximum of 600 PDF pages per request at that context size. [8][9] These are not promises that all book files, original inputs and accumulated review state fit together. Measure actual token/page counts when using the API, reserve room for analysis/output, and split work as needed. A file reference does not remove context limits. Exact limits should be checked again when the review is run.
+For an API review, check the chosen model, account and endpoint's current context and PDF limits, measure the actual inputs, and reserve room for analysis and output. A file reference does not remove context limits. Record any splitting, retrieval or visual-processing limitations in the review. [8][9]
 
 ## 5. Main review prompt
 
@@ -191,10 +198,10 @@ Copy the complete prompt below. It intentionally overrides the original author's
 
 ```text
 Conduct an independent technical review of The Book of CalcDb, baseline
-Book v1.0, using Claude Fable 5.2.
+Book v1.1, using Claude Fable 5.2.
 
 Your sole final deliverable is one new Markdown review appendix:
-A-04-review.claude-fable-5.2.v1.0.md
+A-04-review.claude-fable-5.2.v1.1.md
 
 WRITE AUTHORITY
 
@@ -217,85 +224,150 @@ integrity verification that you could not perform.
 
 BASELINE, AUTHORITY AND APPROVED CORRECTIONS
 
-Inventory the supplied files against book-manifest.v1.0.json and read
-00-book-release.md. Treat A-03-reconciliation-audit.md as the author's
-audit record to challenge independently, not as proof of correctness.
-Identify the exact v1.0 baseline, review date,
-available tools and actual selected model ID where exposed. Read the
-original assignment, scope/charter, integration note, current book record
-and supplied user corrections. Report missing inputs.
+Inventory the supplied files against book-manifest.v1.1.json, when present,
+and read 00-book-release.md and 00-scope.md. Record a missing manifest
+rather than inventing a comparison. Identify the exact v1.1 files, review
+date, available tools and actual selected model/provider where exposed.
+A-03-reconciliation-audit.md is the v1.1 author audit to challenge. Check
+its 83 requirement outcomes, nine criteria, 23 named-gap dispositions,
+PRW outcomes, counts and correction register. In particular, retain the
+Date/Time Extended gap, the ADO-ASYNC conflict and the stated limits on
+criteria 6 and 7 unless the reviewed evidence actually resolves them.
+A-04-review.claude-fable-5.2.v1.0.md remains the historical review input,
+not the output filename for this review.
 
-Authority: later explicit user corrections first; calcdb-one-pager.md as
-product scope; compatible CHARTER.md elaboration and corrected CalcVBA
-facts; the assignment as the book's evaluation standard; cleared concept
-reports as concept input only. The book's record and completion statement
-are not independent proof that its design is correct.
+Read the original assignment, current scope, compatible charter and
+integration note, book record, final decisions, closed work list and
+supplied owner corrections. Report missing inputs. Authority follows
+later explicit owner corrections and final PRD decisions; 00-scope.md
+states the book's scope. The assignment supplies the book's evaluation
+standard. Compatible charter/integration material elaborates that scope;
+cleared reports supply concepts only. Completion labels and audit records
+are claims to examine, not independent proof of design correctness.
+Do not reopen PRD-01–09 or add to the accepted PRW list.
 
 Apply these settled premises:
 
-1. Page-length guidance and the one-pager's suggested implementation order
-   are not prescriptive. DAO has priority; ADO may start alongside DAO.
-   Initial CalcDb ADO handles its ACE-style connection strings internally
-   and does not depend on the later external OLE DB provider.
+1. Page-length guidance and suggested implementation order are not
+   prescriptive. DAO has priority; ADO may start alongside DAO. Keep one
+   native file-format description, one ISAM, one evaluator and one
+   oracle/harness. Preserve initial Jet 4 MDB/ACE ACCDB, full applicable
+   DAO/ADO within the stated scope, Access SQL, COM and portable/browser
+   work. Do not introduce Jet 3, a server role or a private SQL dialect.
+   Preserve all 83 stable RQ identities and retired IDs without reuse.
 
-2. The intended product uses one native file-format description, one ISAM,
-   one evaluator and one oracle/harness. Preserve initial Jet 4 MDB/ACE
-   ACCDB, full applicable DAO/ADO, Access SQL, COM and portable/browser
-   scope. Preserve phase boundaries: initial lock steps are exclusion and
-   reader-only sharing; read-beside-ACE and shared writing are later steps.
-   Later encryption, links, complex fields/history, own Compact & Repair,
-   external OLE DB and ODBC remain later capabilities, with early research
-   and seams allowed. Preserve front-end objects without requiring their
-   execution; explicit host UDF execution is a separate obligation.
-   Do not introduce Jet 3, a server role or a private SQL dialect.
+2. Phase 1 includes full ACE in-process semantics. Each Workspace or
+   Connection is a distinct locker; concurrent private changes are
+   admitted. Conflicts follow ACE's page/record granularity and configured
+   finite retry-then-error behavior. Commit and rollback preserve other
+   lockers' accepted changes through fresh-base construction without
+   replaying user effects. External process scope starts with exclusion
+   correct in both orders and reader-only sharing; reading beside an ACE
+   writer and native shared writing are later capabilities. The source
+   needed by a registered old view must survive even before its first
+   acquisition of an affected page.
 
-3. The initial oracle is the user-reported ACEDAO.DLL 16.0.20527.20016 in
-   C:\Program Files\Microsoft Office\root\Office16\. Actual loaded engine,
-   Access/provider, caller and environment identities remain to capture.
-   Windows managed-client lanes are the installed .NET Framework 4.8
-   family and .NET 10 LTS. Do not move these fixed baselines merely because
-   other versions exist at review time.
+3. Later encryption, links, complex fields/history, CalcDb Compact &
+   Repair, external OLE DB and ODBC remain later capabilities; early
+   research and seams are allowed. Preserve front-end objects without
+   requiring their execution. Explicit host UDF execution is a separate
+   obligation. Keep II-16's external inputs and purposes without assigning
+   delivery owners, schedules, interim modes or platform scope splits.
 
-4. Shared interop values use the exact platform Automation VARIANT and
-   real BSTR; Windows x64 VARIANT is 24 bytes. CalcVBA's old private
-   16-byte form is being corrected. Assess the agreed corrected boundary,
-   not a newly invented compact value representation.
-   Portable COM must cover type information/GetIDsOfNames/Invoke,
-   IErrorInfo/EXCEPINFO, IEnumVARIANT, class factories, ADO connection
-   points/events, allocation, BSTR, VARIANT and SAFEARRAY behavior.
+4. Initial CalcDb ADO handles ACE database-provider strings internally
+   and remains independent of the later external OLE DB provider.
+   Connectionless Recordsets and Streams, implicit file/Stream persistence
+   and Provider=MSPersist are supported, including the MSPersist
+   Connection.Open/Execute form. Resolve the effective provider from all
+   applicable inputs. Other effective non-ACE database providers,
+   including omitted/default database providers, receive a named, counted
+   NotModelled.AdoProvider refusal; no system-ADO fallback is implied.
+   DNA Calc supplies the ADODB routing and per-add-in use inventory.
 
-5. After a CalcDb crash, ACE-first reopening must find a state no worse
-   than an ACE crash at the corresponding point, with the same applicable
-   commit-survival rules, dbForceOSFlush effects and needs-repair states.
-   Optional private undo supplements CalcDb-first recovery; it cannot
-   supply the ACE baseline promise. The recovery predicate is a full read:
-   under the specified identity/integrity/extent/eligibility conditions,
-   every uncovered page is unchanged and every covered page equals its
-   before-image or intended new image; otherwise discard. Do not add a
-   continuous-history/USN witness as a new requirement.
-   If complete native crash tracing is impossible, evaluate the concrete
-   bounded writer direction and operation/environment qualification conditions;
-   do not assume either universal release or indefinite design paralysis.
+5. MDB workgroup security is excluded. Keep unsecured/default-Admin
+   blank-password opening, preservation of access-control bytes, and
+   named, counted refusals for named logons, explicit workgroup files,
+   account/group changes and denied-permission operations. Retain
+   WITH OWNERACCESS OPTION for unsecured/default-Admin files; native
+   R-SQL-2/SQL-OWNERACCESS and R-CAT-1 observations decide its behavior.
+   T-OBJ-26 and T-SQL-77 remain retired; database password and encryption
+   work retain their own scope.
 
-6. Normal successful writes and interrupted crash states have different
-   acceptance obligations. Native repair cannot excuse a defective normal
-   output, while an evidenced ACE crash class may legitimately need repair.
-   Evaluate T-COMPACT-1's independent frozen raw/ACE/Access/Compact & Repair
-   branches and calibrated damaged controls, including silent repairs.
-   Success or absence of MSysCompactErrors alone is not proof of no repair.
+6. Initial exact Text-key orders are General, General–Legacy and the
+   applicable General97 variant in admitted formats. R-SORT-3/SORT-CHECK
+   and SORT-DERIVE decide the native profile and table evidence. Other
+   orders remain readable through full scans, with named, counted
+   refusals for unsupported indexed Text seeks and key writes. General97
+   does not admit Jet 3. A later order uses the same derivation procedure
+   when a real file needs it.
 
-7. Calls remain blocking; foreign/VBA work follows the caller-thread and
-   reentrancy rules, with no internal latch held across foreign code.
-   Owned background work must settle and stay within its budget. Parallel
-   work must preserve accepted serial rows, Double results, effects and
-   errors, and justify itself by measurement. Workload priority remains
-   DAO/VBA row loops, then bulk SQL, then WASM.
+7. The owner-reported initial engine is ACEDAO.DLL 16.0.20527.20016 in
+   C:\Program Files\Microsoft Office\root\Office16\. The separate
+   Office C2R x64 16.0.20527.20150 registration report is not that DLL
+   version. Capture actual loaded engine, Access/provider, caller and
+   environment identities in each native run. Keep the installed .NET
+   Framework 4.8-family and .NET 10 LTS as separate managed-client lanes.
+   A-01 records U-OWNER-ACE and U-OWNER-NET; do not replace these inputs
+   merely because other versions exist at review time.
 
-8. Native/runtime acceptance is planned, not executed. Constructed bytes,
-   arithmetic, models and dependency-graph checks are not ACE observations.
-   Figures in the v1.0 baseline were not render-verified. Retain the
-   distinction between requirements, decisions, provisional mechanisms,
-   documentary facts, hypotheses and experimental evidence.
+8. CalcVBA and CalcDb share the exact platform Automation VARIANT and
+   real BSTR; Windows x64 VARIANT is 24 bytes. Structural copy separates
+   by-value retention, permitted ByRef resolution and actual writeback.
+   Preserve accepted per-element callout order and source backing across
+   mutation/reentry without repeating an accepted AddRef or user effect.
+   Portable COM supplies consumed type information/GetIDsOfNames/Invoke,
+   IErrorInfo/EXCEPINFO, IEnumVARIANT, factories, ADO connection points,
+   allocation, BSTR, VARIANT and SAFEARRAY behavior. Native Windows and
+   portable layouts/services require their actual target evidence.
+
+9. Public object calls remain blocking. Windows classes follow ACE's
+   Apartment registration and ordinary COM delivery. The supplied
+   provider reference governs entry and cleanup; initiating, engine and
+   provider contexts are recorded separately. Do not impose a CalcVBA
+   thread model or make engine operation depend on a VBA interpreter.
+   No internal latch spans foreign code. Owned background work must
+   settle within its budget. Parallel work preserves accepted serial
+   rows, exact Double results, effects and errors, and earns admission
+   through evidence and measurement. Priority is DAO/VBA row loops,
+   then bulk SQL, then WASM.
+
+10. After a CalcDb crash, ACE-first reopening should find a state no worse
+    than an ACE crash at the corresponding point, with the same commit
+    survival, dbForceOSFlush and needs-repair behavior. The preferred
+    investigation records writes/flushes and contents, reconstructs cuts
+    offline and compares the same independent opener branches. PRD-07
+    leaves the method, exact classification, coverage, precise acceptance
+    and treatment of unresolved classes to implementation. Observation
+    tooling may include a kernel driver without proprietary decompilation.
+    The starting write candidate uses one final image per page per
+    publication unit; experiments decide ordering and timing, with
+    repeated-image programs retained as an alternative. A specification
+    or synthetic cut is not native crash evidence.
+
+11. D-UNDO-2 is an unplanned idea, reconsidered only if real write programs
+    reveal a useful recovery window. R-CRASH-2 and its retired tests and
+    figures are not active construction work. D-UNDO-1 retains ACE-first
+    parity and its conditional full-file recovery predicate: under the
+    stated identity/integrity/extent/eligibility conditions, every
+    uncovered page is unchanged and every covered page equals its
+    before-image or intended new image; otherwise discard. This owner
+    input is U-OWNER-RECOVERY. Do not add a continuous-history/USN witness.
+    Ordinary rollback, failure ownership, exhaustion and uncertain
+    effects remain active under R-TXN-1 and R-CRASH-1.
+
+12. Completed writes and interrupted states have different obligations.
+    T-COMPACT-1 relates each write kind to the structures it can damage,
+    the expected detecting checks and calibrated damaged controls. Keep
+    frozen raw, ACE-first, Access-first and Compact & Repair comparisons
+    on independent copies, including controls for silent repairs.
+    PRD-08 leaves the closed per-write check list and precise acceptance
+    to implementation. Ordinary corrupt outputs cannot pass because a
+    later opener repairs them; Compact & Repair success or absence of
+    MSysCompactErrors alone does not prove no repair. Native/runtime
+    experiments are planned and unexecuted. Figures are rendered by the
+    PDF build; visual-inspection claims require an actual coverage record.
+    Apply the book-record definitions of qualified and established, with
+    the deciding branch, selected context and recorded evidence limits.
 
 SOURCE BOUNDARIES
 
@@ -304,8 +376,12 @@ including the nine stage1-part files, as concept input only, never as
 requirements or ACE observations. Do not consult the projects' direct
 repositories, source, packages, mirrors, documentation or external extracts.
 If a cleared input is unavailable, record that gap and its impact instead
-of fetching an excluded substitute. Respect Jackcess's exact-material provenance/licensing and
-mdbtools facts-only use. Do not decompile or disassemble proprietary code.
+of fetching an excluded substitute. Respect Jackcess's exact-material provenance/licensing and mdbtools
+facts-only permission. A permission is not evidence that a source was
+consulted; use A-01's recorded read scope. U, U-V11-PLAN and U-V11-R2 are retired aliases;
+use the specific source and owner-input IDs recorded by A-01, including
+U-PRD-01-09, U-PRW-01-58 and L-REVIEW-F52-V10. Do not decompile or
+disassemble proprietary code.
 
 Use permitted primary sources for new factual verification. Cite exact
 URLs and inspected sections. Distinguish documentary facts, native
@@ -328,7 +404,11 @@ Read all Part I, then clusters of Part II with their relevant sources and
 experiment cards: storage/format/index/catalog/ISAM; transactions/locking;
 expressions/SQL/object models/interop; platforms/evidence/development.
 Cover all remaining A-01/A-02 material and the A-03 audit, then do a
-cross-book pass against the nine II-16 §32 criteria. Adapt the
+cross-book pass against the nine II-16 §32 criteria. Reassess the historical
+review's 23 named-gap RQs against the actual v1.1 mechanisms and evidence;
+retain the RQ-TYPE-01 Date/Time Extended gap where it remains unresolved.
+Do not infer closure from a feature name, unchanged stable ID or an old
+PASS label. Adapt the
 batch size as needed without losing coverage. Preserve state in this same
 appendix. If coverage is incomplete, label the review PARTIAL prominently
 and identify the exact next task. Do not issue an unqualified whole-book
@@ -350,17 +430,22 @@ cited sources; remaining issues with concrete next steps.
 
 Trace complete operations across chapters, including:
 - A retained DAO Field/BSTR through MoveNext, reentry and Close.
-- VARIANT copying, ByRef aliases, parameter capture and result publication.
+- Structural VARIANT copying, ByRef aliases, parameter capture, reentry
+  into later source elements and result publication.
 - An indexed update with relocation, long values, usage maps, catalog,
   transaction frames, rollback and every relevant persistence cut.
-- Reader admission, external ACE mutation, cache invalidation, fresh-image
-  rebase, first opener and optional recovery.
+- Two local lockers committing and rolling back in both orders, preserved
+  old pages not yet acquired by a registered reader, and fresh-base
+  publication without repeated effects.
+- Reader admission, external ACE mutation, cache invalidation, later
+  native shared-writing rebase and independent first-opener comparison.
 - UDF demand, action enumeration, spill/failure and exactly which effects
   are accepted or may be repeated.
 - Activation through VBA/.xll/managed/portable callers, events and final
   lifetime retirement.
-- Browser storage acquisition/spill, uncertain effects and caller/broker
-  failure ownership.
+- Browser storage acquisition/spill, model versus target-qualified exact
+  prefixes, sticky broker failure with or without a delivered event,
+  caller/supervisor ownership and the initial EndSession exit.
 
 Check concrete structures and pseudocode: bounds, units, widths, endian
 assumptions, page/row/reference identities, arithmetic in byte examples,
@@ -373,8 +458,10 @@ graphs, and accepted early slices from full-scope completion. Acyclicity
 alone does not prove a plan executable.
 
 An unrun experiment is not automatically a design defect. Assess whether
-the preferred provisional mechanism, fallback, deciding experiment,
-outcome branches and release condition are sufficient. Conversely, the labels
+the preferred provisional mechanism, fallback, deciding experiment and
+outcome branches give implementation a usable direction. Respect the
+PRD-07/08 implementation work on exact crash classification and completed-
+write acceptance; do not turn it into a newly invented review release gate. Conversely, the labels
 "provisional" and "measure ACE" do not fix an impossible predicate or
 an experiment that cannot distinguish the proposed alternatives.
 
@@ -384,7 +471,8 @@ Re-read the relevant complete sections and cross-references before
 retaining a candidate finding. Remove or reject candidates resolved
 elsewhere. Group repeated manifestations of the same underlying problem.
 
-Use stable IDs such as REV-CF52-001. Each substantive finding must include:
+Use stable finding IDs in a distinct v1.1 review namespace; do not reuse
+or relabel the historical v1.0 review IDs. Each substantive finding must include:
 - Title, severity and confidence, with severity independent of confidence.
 - Canonical filename, heading and algorithm/table/figure locator; relevant
   requirement, decision, contract and experiment/work IDs where applicable.
@@ -425,8 +513,8 @@ unchanged. Do not apply recommendations to the book.
 ### Prompt 4: continue the same review
 
 ```text
-Continue the independent v1.0 review from the coverage table and open
-cross-references in A-04-review.claude-fable-5.2.v1.0.md. Preserve the baseline,
+Continue the independent v1.1 review from the coverage table and open
+cross-references in A-04-review.claude-fable-5.2.v1.1.md. Preserve the baseline,
 approved corrections, source restrictions and appendix-only write rule.
 Read the next unreviewed material in full, update this same appendix, and
 continue the cross-book checks. Do not restart, create competing final
@@ -437,7 +525,7 @@ Retain the PARTIAL label until actual coverage supports removing it.
 ### Prompt 5: challenge the findings before final delivery
 
 ```text
-Perform the final challenge pass on A-04-review.claude-fable-5.2.v1.0.md.
+Perform the final challenge pass on A-04-review.claude-fable-5.2.v1.1.md.
 Re-read the complete source context behind every retained major or
 critical finding. Look for false positives caused by ignored corrections,
 provisional status, experiment conditions, cross-chapter resolutions or the
@@ -454,11 +542,11 @@ The strongest review supplies concrete counterexamples, names the exact mechanis
 
 A final appendix should state both manuscript coverage and external-source verification coverage. Reading every source-ledger row is not the same as checking every referenced document. Likewise, a PDF successfully opening is not evidence that its tables, diagrams and navigation are correct.
 
-No Claude review has been performed by this guide, and no PDF rendering has been run. The prompts are ready for those separate tasks.
+This guide specifies rendering and a new independent v1.1 review; it does not claim that either task has been executed. The historical v1.0 review remains a supplied input. Record actual build, inspection and review results in their own deliverables.
 
-## Primary documentation checked
+## Primary documentation
 
-Checked 14 November 2026. Product limits and CLI behavior can change.
+The Pandoc file-scope, Mermaid CLI output/transformation, longtable and Claude Code model-selection documentation below was checked on 16 November 2026 for the stated build and selection behavior. The other Claude pages are operational references to check when the review is run. This guide makes no fixed upload, context or PDF-page-limit claim; product availability and limits are recorded for the actual review environment.
 
 1. [Pandoc User's Guide: PDF creation and file scope](https://pandoc.org/MANUAL.html#option--file-scope).
 2. [Mermaid CLI: output and Markdown transformation](https://github.com/mermaid-js/mermaid-cli/blob/master/README.md).

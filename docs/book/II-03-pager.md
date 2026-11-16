@@ -1,10 +1,12 @@
 # II-03. VFS, pager and page cache
 
-Book **v1.0** · 2026-11-14 · [Release record](00-book-release.md).
+Book **v1.1** · 2026-11-16 · [Release record](00-book-release.md).
 
-The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. A write transaction owns separate mutable images. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
+The recommended implementation is a bounded pool of stable, immutable page images above buffered, explicitly positioned I/O. Each Workspace/Connection locker owns separate mutable images and accepted deltas; several such overlays may coexist. Native page references determine what to fetch; a visibility resolver determines which image may satisfy the fetch. The pager never writes an uncommitted image to the database merely to evict it. It executes the transaction coordinator's ordered native write program.
 
-This chapter makes **D-PAGER-1 — Recommended** concrete. The CLOCK/admission tuning remains provisional under the workload measurements in I-15; native write ordering remains **D-WRITE-1 — Provisional**, decided by R-FMT-2, R-TXN-1 and R-CRASH-1/2. Initial external admission remains I-09's provisional held-handle protocols, with R-LOCK-1/2 deciding compatibility. The chapter supplies mechanisms, not another definition of the shared contracts.
+This chapter makes **D-PAGER-1 — Recommended** concrete. The CLOCK/admission tuning remains provisional under the workload measurements in I-15; native write ordering remains **D-WRITE-1 — Provisional**, decided by R-FMT-2, R-TXN-1 and R-CRASH-1. Initial external admission remains I-09's provisional held-handle protocols, with R-LOCK-1/2 deciding compatibility. The chapter supplies mechanisms, not another definition of the shared contracts.
+
+Qualification uses the [common terminology](book-record.md#terminology). The native branches named with the transfer, source-preservation and publication rules below decide each backend/profile combination; cache bookkeeping alone does not establish that native behavior.
 
 **Requirement trace:** §§1–3 support RQ-PROD-03/04/05, RQ-FMT-01, RQ-VAL-03 and RQ-STORE-03; §§2–6 implement the pager portions of RQ-STORE-01/04/05, RQ-LOCK-01/02 and RQ-CONC-01/02; §§2.5 and 5 retain RQ-PROD-06, RQ-PORT-01 and RQ-LATE-01 seams; §§7–8 support RQ-SIM-01 and RQ-PERF-01/02. Full requirement ownership remains I-16. Transactions, row codecs and native locking receive their own detailed chapters.[^authority]
 
@@ -35,7 +37,7 @@ Three different interpretations of bytes +4 through +7 make the data-kind distin
 
 The cache stores the immutable image once. It does not key separate copies by “table,” “map” or “LVAL.” Interpretation is a checked view over that image. A failed request for an ordinary table page must not poison the cache against a later, correct request for the same bytes as a map-declaration page. Cache generic envelope results separately from contextual results such as “belongs to TableDef 9”; include descriptor identity in any memoized contextual validation.
 
-Page 0 also has a representation issue. The reference applies an XOR mask beginning at byte `0x18`; its first mask byte is `B5`. A constructed stored byte `A5` there becomes `10` in the decoded header and becomes `A5` again when encoded. Raw crash evidence and optional-undo fingerprints cover the stored bytes, including `A5`, not the decoded `10`. Keep raw/decoded tags explicit. Ordinary unencoded pages can use the same backing buffer for both views; a transformed header uses separate owned storage or a proven reversible transformation into a private output buffer. Never mask a pinned shared buffer in place.[^format][^channel]
+Page 0 also has a representation issue. The reference applies an XOR mask beginning at byte `0x18`; its first mask byte is `B5`. A constructed stored byte `A5` there becomes `10` in the decoded header and becomes `A5` again when encoded. Raw crash evidence and any future D-UNDO-1 eligibility fingerprints cover the stored bytes, including `A5`, not the decoded `10`. Keep raw/decoded tags explicit. Ordinary unencoded pages can use the same backing buffer for both views; a transformed header uses separate owned storage or a proven reversible transformation into a private output buffer. Never mask a pinned shared buffer in place.[^format][^channel]
 
 This header transformation is part of the basic format path. It does not admit the deferred encrypted-file capability. A nonidentity page codec has its own format/codec identity and output budget; unsupported encryption must be detected before a page is accepted as ordinary plaintext.
 
@@ -43,7 +45,7 @@ This header transformation is part of the basic format path. It does not admit t
 
 **Figure F-19 — constructed Jet 4 data-page envelope and insertion.** Numeric layout hypothesis backed by the named reference files; no ACE capture. Byte ranges are half-open except the inclusive offset pairs in the table. The record bodies are deliberately opaque here; II-04 supplies their column encoding.
 
-Let physical page 17 belong to TableDef page 9. Two slots point to record bodies of 16 and 24 bytes. The reference layout has a 14-byte fixed header, two-byte slots, a row count at +12 and a free-byte count at +2. Its maximum slot count is 255.[^format][^table]
+Let physical page 17 belong to TableDef page 9. Two slots point to record bodies of 16 and 24 bytes. The reference layout has a 14-byte fixed header, two-byte slots, a row count at +12 and a free-byte count at +2. Its reference writer stops at 255 slots. The reader uses the structural 256-slot bound from the one-byte row locator, with independent directory and extent checks (§3.3); R-FMT-2/FMT-SLOTS256 decides the native writer limit.[^format][^table]
 
 | Page offsets, hex | Initial bytes | Interpretation |
 | --- | --- | --- |
@@ -69,7 +71,7 @@ For the address calculation, append a fully prepared 20-byte record. The payload
 | New slot `[18,20)` | Previously free bytes | `C4 0F` |
 | New payload `[4036,4056)` | Previously free bytes | Exactly the row encoder's 20 output bytes |
 
-These are edits to a private image. They do not by themselves constitute a complete native insertion: the table count, relevant index entries and usage maps can require other changes. The coordinator may also require an intermediate page image or a different physical transfer granularity. The free bytes outside these regions, the old rows and the opaque header bytes remain copied from the original image.
+These are edits to a private image. They do not by themselves constitute a complete native insertion: the table count, relevant index entries and usage maps can require other changes. The starting program combines these changes into one final image per page per publication unit; native evidence may instead select repeated images or a different physical transfer granularity. The free bytes outside these regions, the old rows and the opaque header bytes remain copied from the original image.
 
 A slot is not simply a 16-bit offset. The inspected layout uses `0x1FFF` for the offset, `0x8000` for deletion and `0x4000` for overflow. For example, `D8 4F` is raw word `0x4FD8`, whose offset remains `0x0FD8` with overflow set. Its body can begin `02 23 01 00`: row 2 on page `0x000123 = 291`, whose file-page start is `0x00123000`. This is a one-byte row number followed by a three-byte little-endian page number; reading the four bytes as one page integer is wrong.[^table][^byteutil]
 
@@ -79,7 +81,7 @@ The reference describes bytes +8–+11 as a write stamp. That description is not
 
 ### 1.4 Usage-map rows and bitmap pages
 
-**Figure F-20 — map declarations and their physical backing.** Mermaid source emitted; not render-verified. The two map references can reach different rows of the same data page. The global free-map declaration is another data-page row, at page 1, row 0.[^channel][^maps]
+**Figure F-20 — map declarations and their physical backing.** The two map references can reach different rows of the same data page. The global free-map declaration is another data-page row, at page 1, row 0.[^channel][^maps]
 
 ```mermaid
 flowchart TD
@@ -149,6 +151,10 @@ TransferReceipt {
 
 A short transfer supplies a reusable exact completed prefix only when that backend result and adapter profile justify the prefix interpretation. Preserve the raw returned count separately. In particular, the browser File System Standard leaves write order and partial-write results underspecified: without stronger qualified evidence, a short write yields a failed/uncertain receipt with zero proved prefix and the whole attempted range as possible effects, rather than an exact-suffix retry.[^browser] A failed write may have an uncertain suffix or whole attempted range even if an API output variable happens to contain zero. The adapter must justify its stronger “no effect” classification from the actual result, not infer it from zero initialization. Requests return only after their native operation has settled. These receipts describe transfers, not transaction success or durability.
 
+R-CRASH-1/CRASH-PARTIAL tests this receipt distinction with constructed/model inputs; it does not prove an actual backend's prefix guarantee. The selected adapter needs its own documentary and controlled transfer evidence. Browser prefix claims use R-WASM-1/WASM-PROGRESS, alongside WASM-DIRECT, WASM-MAILBOX and WASM-CRASH for the route and fault context.
+
+The absence of a receipt is a different state. Browser broker loss, a mismatched generation or host revocation cannot manufacture `Failed` with a zero count and end the request's owners. Under II-14's initial failure exit the caller session is abandoned, with no return through `ReadFullPage` or the waiting DAO/ADO call. The host retains the exact pending request, immutable payload and possible effects; its outer invocation reports session failure. An alternative runtime may return an owned failure only after unresolved obligations have moved safely outside the unwind and affected file/cache/reload bindings are revoked. The ordinary receipt algorithm below is unchanged; it does not pretend to settle a lost native operation.
+
 ### 2.3 Reading exactly one existing page
 
 Read directly into a reserved, unpublished frame. Do not zero-fill an incomplete native page and publish it as valid data.
@@ -202,7 +208,7 @@ Cancellation requests `CancelIoEx` for that request, then still waits for the or
 
 Extend and truncate through an explicit extent operation. Prefer the supported `FileEndOfFileInfo` handle operation; a pointer-based fallback must serialize the seek/EOF pair with every pointer-sensitive user. Drain overlapping tail requests before shrinking. Windows documents undefined contents after extension: initialize every newly exposed native page before publishing references to it. A page of zeros would not by itself be a valid table, index or map page anyway. Extension/truncation failures have their own possible effects; they cannot be represented as a failed zero-byte page write.[^eof]
 
-A flush is another recorded operation on the owned handle. `FlushFileBuffers` requires the appropriate write access. The coordinator selects its placement and determines the public result; the VFS does not flush after every page, hide a failed flush during Close, or equate ordinary completion with `dbForceOSFlush` survival. R-CRASH-1/2 retain the native-build/filesystem/hardware qualification.[^flush][^commit]
+A flush is another recorded operation on the owned handle. `FlushFileBuffers` requires the appropriate write access. The coordinator selects its placement and determines the public result; the VFS does not flush after every page, hide a failed flush during Close, or equate ordinary completion with `dbForceOSFlush` survival. R-CRASH-1 retain the native-build/filesystem/hardware qualification.[^flush][^commit]
 
 ### 2.5 Linux and browser realization
 
@@ -210,7 +216,9 @@ The Linux adapter uses `pread`/`pwrite` with checked `off_t` conversion and no `
 
 This is a Linux mapping, not a claim that every POSIX or native filesystem has identical semantics. Its locking adapter must supply the required participation/exclusion model; an advisory lock cannot promise Windows-style denial against an arbitrary nonparticipating process. The page and receipt algorithms remain shared.
 
-For WASM, keep I-14's direct preopened OPFS sync-handle path and its dedicated owning broker for dynamic acquisition. Supply an explicit `at` offset, retain the backend count without promoting an unqualified short write to a proved prefix, and retain buffers until the exact request settles. II-14 supplies the direct/broker request protocol and the separately qualified reader-only route. Handle creation is asynchronous even though access-handle methods are synchronous. Browser flush is an underlying-storage operation with the specified platform limitations; neither `close()` nor a successful write establishes the selected ACE forced-flush class. R-WASM-1 determines admitted deployments and honest outcomes. No extra browser scheduler or COM transport is introduced here.[^browser]
+For WASM, keep I-14's direct preopened OPFS sync-handle path and its dedicated owning broker for dynamic acquisition. Supply an explicit `at` offset, retain the backend count without promoting an unqualified short write to a proved prefix, and retain buffers until the exact request settles. II-14 supplies the direct/broker request protocol and the reader-only route decided by R-WASM-1/WASM-READERS. Handle creation is asynchronous even though access-handle methods are synchronous. Browser flush is an underlying-storage operation with the specified platform limitations; neither `close()` nor a successful write establishes the selected ACE forced-flush class. R-WASM-1 determines admitted deployments and honest outcomes. No extra browser scheduler or COM transport is introduced here.[^browser]
+
+Before adopting a broker receipt, match its echoed session generation, request generation and input-handle slot/generation against the retained attempt in the same mailbox/session incarnation. Validate response bounds before copying, copy read bytes only into an unpublished frame, and recheck the session's failure state before adoption. A stale Done cannot supply a page, release the current request or reset its slot. A late publisher validates ownership before touching any response bytes; checking a generation afterward cannot repair a corrupted newer payload. Fresh sessions get fresh mailboxes. WASM-MAILBOX and T-PLAT-07–09 test both sides of this boundary, while WASM-BROKER-LOSS/T-PLAT-13 tests the initial failed-cohort exit and retained unknown effects.
 
 ## 3. Image identity, frame storage and pins
 
@@ -287,24 +295,29 @@ The following operation is a bounded *envelope* decoder. It deliberately does no
 CheckedSlot(pin, profile, role, row_index) -> SlotView | FormatFailure
     require pin exposes profile.page_size complete logical native bytes
     validate broad kind and role-specific data subtype
-    count = read_u16_le(pin.bytes, profile.row_count_offset)
-    require count <= profile.max_rows_per_data_page
-    require row_index < count
-    directory_end = checked_add(profile.slot_base, checked_multiply(2, count))
+    count = profile.read_data_slot_count(pin.bytes)
+    require count <= profile.reader_slot_capacity
+    require 0 <= row_index < count
+    directory_end = checked_add(profile.slot_base,
+                                checked_multiply(profile.slot_entry_bytes, count))
     require directory_end <= profile.page_size
-    raw = read_u16_le(pin.bytes, profile.slot_base + 2 * row_index)
+    raw = profile.read_data_slot_word(pin.bytes, row_index)
     start = raw & profile.row_offset_mask
     if row_index == 0:
         end = profile.page_size
     else:
-        prior = read_u16_le(pin.bytes, profile.slot_base + 2 * (row_index - 1))
+        prior = profile.read_data_slot_word(pin.bytes, row_index - 1)
         end = prior & profile.row_offset_mask
     require directory_end <= start <= end <= profile.page_size
     validate flag combination for role, or return a classified unknown case
     return SlotView(borrow pin, [start, end), flags=raw without offset bits)
 ```
 
-For the illustrated profile, `row_count_offset=12`, `slot_base=14`, `max_rows=255` and `row_offset_mask=0x1FFF`. Scalar little-endian loads must tolerate unaligned byte addresses; casting a file span to a host struct is not the decoder. The function performs O(1) reads and allocates no row buffer. Whole-page validation, where required, checks all slots in O(number of slots); its result can be cached on this immutable image. Contextual ownership and column validity remain separate checks.
+For the illustrated profile, `row_count_offset=12`, `slot_base=14`, `slot_entry_bytes=2` and `row_offset_mask=0x1FFF`. The generated scalar accessors take width, byte order and location from the same PageProfile rules as the emitter. `slot_locator_bits=8` gives `reader_slot_capacity=2^8=256`: slot numbers 0 through 255 are representable. The two-byte stored count can therefore be `00 01` without violating that structural bound. The provisional `writer_slot_limit=255` is a separate creator policy, taken from the inspected writer until R-FMT-2/FMT-SLOTS256 confirms or changes it. A count above 256 fails the locator-domain check; a count at or below 256 still needs valid directory, flags, body extents and contextual row interpretation.
+
+A constructed boundary page makes the distinction concrete. Give a 4096-byte ordinary page 256 three-byte Boolean-only bodies `01 00 01`. Its directory ends at `14+2×256=526`; the packed bodies start at `4096−3×256=3328`; its free count is `2802`, bytes `F2 0A`. Slot 0 starts at 4093 (`FD 0F`), slot 255 at 3328 (`00 0D`), and the stored count is `00 01`. The reader can safely obtain the last body through slot byte `FF`. This is a structural witness, not evidence that ACE creates or accepts that page. A count 257 would require an unrepresentable slot 256, even if its raw directory fitted inside the page.
+
+Scalar loads tolerate unaligned byte addresses; casting a file span to a host struct is not the decoder. The function performs O(1) reads and allocates no row buffer. Whole-page validation checks all slots in O(number of slots) where required; its result can be cached on this immutable image. Contextual ownership and column validity remain separate checks.
 
 A returned span borrows the pin; releasing or moving the enclosing guard ends that borrow. Following the overflow example copies the four-byte locator into a value, obtains the target page pin, checks the target row count, and only then obtains its body span. Preserve the original row identity separately from the physical target. A traversal tracks `(page,row)` pairs, not just pages, and has explicit hop/byte bounds; two distinct legitimate rows on the same page are not a cycle. Detailed overflow/LV end conditions and native errors belong to II-04/R-FMT-2.
 
@@ -319,45 +332,44 @@ A shared miss installs one bounded `LoadToken` for an `ImageId`. Waiters retain 
 ```text
 PinPage(pager, page_number, view, owner) -> PagePin | Failure
     target = resolve_visible_image_and_retain(page_number, view, owner)
-    repeat:
-        with cache_metadata_latch:
-            if target has Ready(frame) with matching image and slot generation:
-                acquire pin; mark reuse as appropriate
-                transfer target ownership to pin; return pin
-            if target has Loading(token):
-                attach bounded waiter; action = Wait(token)
-            else:
-                token = install_reserved_load_token(target)
-                action = Lead(token)
-
-        if action is Wait:
-            outcome = wait outside latch, with this waiter's cancellation
-            if cancelled or failed:
-                with cache_metadata_latch:
-                    detach waiter and release any installed handoff obligation exactly once
-                release target; return its terminal outcome
-            with cache_metadata_latch:
-                claim pin from token's retained completed image
-                detach waiter and release its handoff obligation
+    with cache_metadata_latch:
+        if target has Ready(frame) with matching image and slot generation:
+            acquire pin; mark reuse as appropriate
             transfer target ownership to pin; return pin
+        if target has Loading(token):
+            attach bounded waiter; action = Wait(token)
+        else:
+            token = install_reserved_load_token(target)
+            action = Lead(token)
 
-        reserve loading capacity and obtain an unpublished stable frame
-        acquire the target's source permit outside the cache latch
-        read the complete image from that native or spill source
-        settle source permit and all native request ownership
-        transform/check generic envelope without exposing partial bytes
+    if action is Wait:
+        outcome = wait outside latch, with this waiter's cancellation
+        if cancelled or failed:
+            with cache_metadata_latch:
+                detach waiter and release any installed handoff obligation exactly once
+            release target; return its terminal outcome
         with cache_metadata_latch:
-            validate token, target, file incarnation and slot generation
-            if any step failed or session disallows publication:
-                remove Loading binding only if it still names this exact token
-                complete this token with that failure; preserve any successor binding
-            else:
-                publish immutable Ready image
-                retain loader pin if still wanted
-                retain handoff reference until attached waiters claim or cancel
-                complete token successfully
-        wake waiters outside latch
-        settle all reservations/owners; return loader pin or terminal outcome
+            claim pin from token's retained completed image
+            detach waiter and release its handoff obligation
+        transfer target ownership to pin; return pin
+
+    reserve loading capacity and obtain an unpublished stable frame
+    acquire the target's source permit outside the cache latch
+    read the complete image from that native or spill source
+    settle source permit and all native request ownership
+    transform/check generic envelope without exposing partial bytes
+    with cache_metadata_latch:
+        validate token, target, file incarnation and slot generation
+        if any step failed or session disallows publication:
+            remove Loading binding only if it still names this exact token
+            complete this token with that failure; preserve any successor binding
+        else:
+            publish immutable Ready image
+            retain loader pin if still wanted
+            retain handoff reference until attached waiters claim or cancel
+            complete token successfully
+    wake waiters outside latch
+    settle all reservations/owners; return loader pin or terminal outcome
 ```
 
 Every exit after installing a token, including frame admission, source-permit acquisition, codec allocation and validation failure, completes that token and wakes its waiters. Token metadata is reserved before insertion. A frame bound is insufficient if pending-miss records or waiters can grow without accounting. The final revalidation prevents a late completion from publishing under a reused slot/session.
@@ -372,7 +384,7 @@ Checking a generation after a read detects a stale result but cannot turn a mixe
 
 A native-source permit is a logical lifetime obligation. Acquisition briefly checks `Readable` and the expected `native_source_image`, increments the page's active-load count, then releases the metadata latch before I/O. A spill-source permit instead retains an immutable spill record. These permits are distinct from the cache's short mutex and from the external admission lease.
 
-**Figure F-21 — preserving the old image before native overwrite.** Mermaid source emitted; not render-verified. Existing pins keep their own buffers; native loads must drain. The logical admission hold precedes preservation selection and can span I/O without holding a metadata latch.
+**Figure F-21 — preserving the old image before native overwrite.** Existing pins keep their own buffers; native loads must drain. The logical admission hold precedes preservation selection and can span I/O without holding a metadata latch.
 
 ```mermaid
 flowchart TD
@@ -393,13 +405,13 @@ flowchart TD
 
 Before selecting the preservation set or submitting any effect that can invalidate a native source, claim a logical `ViewAdmissionHold`. Selection and registration of a fresh required-current view use the same short visibility synchronization as this claim. Otherwise a reader can register the old current view after the writer selected its preservation set and require an image that was omitted. Already registered views and valid transfers/clones of their ownership continue; fresh selections retain a dependency on the exact attempt and wait or take the selected public continuation outside latches. This is local reader/writer coordination, not external exclusion of ACE.
 
-The writer retains its required input/private-read context before claiming the hold and reserves the hold's metadata before installation. With admission held, select the registered obligations and reserve preservation capacity outside latches, before freezing affected native sources in deterministic order. Drain active native reads and preserve every old image still required by pins, retained visibility owners, rollback scopes **or pending targets/load tokens**. A target may already be owned without holding a native read permit. Redirect it to complete retained frame/spill backing before overwriting; waiting until logical commit loses its old data. In a qualified external-writer mode, preservation also needs the native source role that protects those bytes.
+The writer retains its required input/private-read context before claiming the hold and reserves the hold's metadata before installation. With admission held, select the registered obligations and reserve preservation capacity outside latches, before freezing affected native sources in deterministic order. Drain active native reads and preserve every old image still required by pins, retained visibility owners, rollback scopes **or pending targets/load tokens**. A registered view may need a changed page it has never resolved or loaded; preserve that page from the view/history relation even when no pin or load token exists. A target may already be owned without holding a native read permit. Redirect it to complete retained frame/spill backing before overwriting; waiting until logical commit loses its old data. In an external-writer mode qualified by R-LOCK-3/READ-PATH/READ-SNAPSHOT and R-LOCK-4/WRITE-ORIGINAL, preservation also needs the native source role that protects those bytes.
 
-Reserving preservation capacity before the freeze avoids loaders holding all frames while waiting for a frozen page and the writer waiting for a frame to preserve it. The first implementation has one admitted writer, which simplifies this ordering. The writer must not wait on a pending load that needs the writer to unfreeze its source; its owned preservation transition instead adopts a completed image or uses the admitted preservation-read role to establish alternative backing. No metadata latch crosses a wait, I/O, callback or potentially reentrant destruction. The admission hold may span I/O, and its duration must be measured.
+Reserving preservation capacity before the freeze avoids loaders holding all frames while waiting for a frozen page and the writer waiting for a frame to preserve it. The active resolution attempt owns the per-file publication gate during this transition. Other lockers retain their private overlays; they do not own a second native overwrite sequence at the same time. The gate is not retained for their transaction lifetimes. The writer must not wait on a pending load that needs the writer to unfreeze its source; its owned preservation transition instead adopts a completed image or uses the admitted preservation-read role to establish alternative backing. No metadata latch crosses a wait, I/O, callback or potentially reentrant destruction. The admission hold may span I/O, and its duration must be measured.
 
 A coordinator-issued publication permit changes the affected current-image bindings together at II-08's selected logical or failure boundary. This short publication transition is distinct from the earlier admission hold and does not claim atomic or durable disk writes. Unchanged pages keep their existing image identities. The selected outcome releases or converts the hold; unresolved effects can retain restricted admission and the same resolution owner. The relationship to flush completion follows that outcome program rather than a hardcoded release point. An `Uncertain` native source does not become reloadable as an old or final new image merely because the cache has a copy.
 
-Failure before source detachment or native effects settles the private attempt and its hold according to the permitted unchanged state. Later failure retains its exact progress, source obligations and restrictions. Never reopen admission solely to let a destructor callback progress. Defer reentrant destruction to an owner-safe boundary or use the selected same-attempt continuation, without waiting for the current call or callback ancestor to unblock itself. Subsequent public operation policy remains the transaction coordinator's responsibility; II-09 specifies the admission/ownership mechanism.
+Failure before source detachment or native effects settles only this publication attempt and its hold according to the permitted unchanged state. Other lockers retain their overlays and grants. Later failure retains exact progress, source obligations and restrictions. On success, publish the selected bindings, release the view hold and publication gate, then drain deferred interface releases outside latches. A failure does not reopen uncertain sources to make a destructor callback progress. Subsequent public operation policy remains the transaction coordinator's responsibility; II-09 specifies the admission/ownership mechanism.
 
 ### 4.3 CLOCK and scan admission
 
@@ -428,11 +440,12 @@ Worst-case victim selection is O(R) probes for R candidates; the bounded sweep a
 
 ### 5.1 Compose all changes to one physical page
 
-The transaction overlay maps a `PageObject` to its current private revision. On first modification, copy the complete admitted native page so unknown bytes survive. For page 17, that is a 4096-byte copy before changing the free count, row count, slot and payload. For the two map declarations on page 33, both updates go through the same overlay entry.
+Each transaction overlay maps a `PageObject` to its current private revision and retains the accepted logical/structural deltas and base publication from which that revision was built. The overlay belongs to a `LockerId`, not to the FileSession or its single native handle. Different lockers may therefore have distinct private images of the same physical page when ACE's admitted record-level policy permits the underlying edits. On first modification, copy the complete admitted native page so unknown bytes survive. For page 17, that is a 4096-byte copy before changing the free count, row count, slot and payload. For the two map declarations on page 33, both updates go through the same overlay entry.
 
 ```text
 BeginPageEdit(transaction, page_object, scope) -> MutablePageLease | Failure
-    require transaction owns the admitted writer role
+    require transaction.locker owns the current logical edit/structural claims
+    require the mutation permit covers this page and the selected private-read base
     reserve necessary image, metadata and rollback-retention capacity
     input = retain and pin transaction's complete visible image for page_object
     retain the first-before image needed by scope, if not already retained
@@ -448,13 +461,15 @@ BeginPageEdit(transaction, page_object, scope) -> MutablePageLease | Failure
 
 The lease is short and exclusive. If establishing a new scope-before image retains the current input itself, freeze it and copy for the edit; that same backing cannot remain mutable. Uniqueness includes rollback/history owners, not just read pins. A private image exposed to a reader or sealed into the persistence program becomes immutable; another edit creates a revision unless uniqueness proves mutation safe. A nested statement scope keeps the earliest image required to undo that scope. Its existence does not imply that nested DAO commits are independently durable; II-08 owns those semantics.
 
+Publication never writes a stale complete overlay image solely because this call constructed it correctly. II-09 §23–§24 first rebuilds the publishing locker's final images over the latest committed base under the per-file publication gate. It preserves other lockers' committed bytes, applies only retained accepted deltas, and revalidates native conflicts without replaying semantic effects. On private rollback, remove this scope's deltas and rebuild its surviving outer overlay as needed; do not restore its old whole page to the native file or alter a sibling locker's overlay.
+
 The routine costs O(P) bytes on a required page copy, O(1) expected overlay lookup and explicit retained-image capacity. It allocates no per-field wrapper. Failure before binding leaves the previous overlay unchanged and releases its reservations. Mutation validation still checks the resulting page/record/map invariants before it can be sealed.
 
 ### 5.2 Spill the private workspace, not uncommitted native pages
 
 Use transaction-owned temporary storage for complete dirty/history images when their admitted RAM allowance is exhausted. A spill record contains transaction/scope identity, file/page/allocation/image identity, representation tag, payload length and an integrity field, followed by the complete bytes. The in-memory or spillable locator index has its own bound. A payload moving to disk does not make its metadata free.
 
-This storage is live workspace. It is not the Access database, a required recovery journal or a new native WAL. Restart does not replay it. Optional durable undo remains the separately specified feature in I-03/I-08. A private checksum here detects damaged workspace; it does not add a checksum field to a Jet page.
+This storage is live workspace. It is not the Access database, a required recovery journal or a new native WAL. Restart does not replay it. D-UNDO-2 is retired from planned work; its recorded idea does not supply live spill, local rollback or failure handling. A private checksum here detects damaged workspace; it does not add a checksum field to a Jet page.
 
 ```text
 SpillImage(image, spill_owner) -> SpillLocator | Failure
@@ -474,41 +489,35 @@ Separate charges cover resident clean/loading frames, dirty images, rollback his
 
 ## 6. Turning page revisions into native effects
 
-### 6.1 A concrete multi-page program
+### 6.1 A concrete one-final-image program and its fallback
 
-Extend the running example with an update on data page 17 that grows a long value and changes an index key. Use old LVAL page 31, new LVAL page 80, index leaf 44, TableDef page 9, and whichever declaration/bitmap pages actually hold their native maps. Assume page31 contains no other live LV rows and that its retirement is admitted by the selected native rule; otherwise retiring this value does not free the page. These page assignments are constructed; the actual allocator and native references supply them in a real file.
+Extend the running example with an update on data page 17 that grows a long value and changes an index key. Use old LVAL page 31, new LVAL page 80, index leaf 44, TableDef page 9, and the actual declaration/bitmap pages. Assume page 31 contains no other live LV rows and its retirement is admitted; otherwise this value's retirement does not free that page. These page assignments are constructed, not ACE captures.
 
-| Native object | Prepared images or effects | Why final dirty pages alone are insufficient |
-| --- | --- | --- |
-| New LVAL page 80 | Existing-free stored bytes, or physical ABSENT only if appended → initialized LVAL image | Preserve actual before bytes within the old extent; an append additionally requires an admitted extent transition before incoming references. |
-| Map declaration page 33 and/or bitmap page 40 | Before → allocation image → final free-space/release image | Distinct logical maps can share a physical page; intermediate revisions can be required. |
-| Index leaf 44 | Before → old-key-removed image → final new-key image | Removal and installation surround the row change in the provisional program. |
-| Data page 17 | Before → new row/LV-reference image | Old readers/rollback need the complete before-image independently of disk progress. |
-| TableDef/catalog pages | Changes only if this operation requires them | Counts/roots/descriptors publish after their referenced structures are valid. |
-| Old LVAL page 31 | Release only after it becomes unreachable | Reuse cannot precede removal of references and retained-image preservation. |
+The initial candidate is **CRASH-ORDER-DATA**: one final stored image per physical page in this publication unit, with data before indexes. Compose it over the latest committed base using II-09's local rebase. A physical map page can contain both an allocation and a release, so one final map image cannot necessarily satisfy every intuitive dependency between those individual bit changes. The candidate below places final existing maps after the row/index/catalog changes; the experiment also places them before. Neither is asserted to leave a clean graph at every crash cut.
 
-**Figure F-22 — phase-specific images of repeated native pages.** A constructed dependency table; no claim about ACE write ordinals or durability barriers. This instantiation uses an inline global free-map declaration on page 1 and the applicable, validated LVAL ownership bitmap on page 40, selected by this column's native descriptors. Every additional affected available-space/declaration page is expanded into its own program step. LVAL ownership can be column-specific; an absent or invalid column-map descriptor does not imply membership in the ordinary table data-owned map. II-04 gives the concrete metadata path.[^long][^table]
+**Figure F-22 — final images in a constructed LV/key publication unit.** The global free-map declaration is on page 1 and the validated LVAL ownership bitmap is on page 40. Expand every other affected map, descriptor or index page from the actual format closure. New pages are initialized before their first incoming reference. Existing-page order and its crash consequences remain provisional.
 
-| Step | Native page / image | Must follow | Constraint illustrated |
+| Candidate step | Native page / final image | Composed change | Deciding question |
 | --- | --- | --- | --- |
-| A | 80 / `L80.initialized` | Reservation; admitted extent operation only for append | Full native page initialized before incoming reference; existing-free and appended before states remain distinct. |
-| B1 | 1 / `G1.reserve80` | A | Clear page 80's global free bit. |
-| B2 | 40 / `M40.own80` | B1 | Set page 80's bit in that LVAL owner's map. |
-| C | 44 / `I44.old_key_removed` | B2 | Old index reference removed before the row change. |
-| D | 17 / `D17.new_row` | C | New LV locator and row payload installed. |
-| E | 44 / `I44.final` | D | Same leaf receives a distinct later image. |
-| F | Required TableDef/catalog image | E | Only operation-required descriptors/counts/roots change. |
-| G1 | 40 / `M40.release31` | F, or E if F is absent | Remove ownership after the old LV storage becomes unreachable. |
-| G2 | 1 / `G1.free31` | G1 | Set page 31's global free bit; defer actual reuse within the commit. |
-| H | Native resolution / requested flush effects | Applicable predecessors in the evidenced program | Logical, persistence and acknowledgement transitions remain explicit. |
+| A | 80 / `L80.final` | Complete new LVAL page; preserve real before bytes if inside the old extent, or record ABSENT for append. | Which initialized-target and extent states can survive interruption? |
+| D | 17 / `D17.final` | Replace the row payload and LV locator. | CRASH-ORDER-DATA places this before I; CRASH-ORDER-INDEX reverses them. |
+| I | 44 / `I44.final` | Remove the old key and install the new key in one complete final leaf image. | Does ACE parity require a distinct old-key-removed image instead? |
+| C | Required TableDef/catalog final images | Apply only required counts, roots and descriptors. | Which publication order is selected for each catalog operation? |
+| M1 | 40 / `M40.final` | Set ownership of 80 and clear ownership of 31 in one image. | Final-map-after versus final-map-before; neither is presumed safe. |
+| M2 | 1 / `G1.final` | Clear global free bit 80 and set free bit 31 in one image. | Which combined-map order or repeated fallback fits native outcomes? |
+| R | Permitted tail/marking/resolution/flush effects | Native effects only where the selected operation defines them. | Commit, requested force and acknowledgement remain distinct. |
 
-For a constructed global declaration whose row starts at `0x0FBB`, type 00 and base 0, page 80's free bit is at page-1 offset `0x0FBB+5+10 = 0x0FCA`, mask `01`; clear it in B1. In ownership bitmap page 40, set mask `01` at offset `4+10 = 0x0E` in B2. Later, page 31 uses mask `80`: clear it at bitmap offset 7 in G1, then set it at global-declaration offset `0x0FC3` in G2. The same page number has opposite membership meanings in the two maps. These byte calculations do not settle the native ordering; R-FMT-2/R-CRASH-1 confirm or change the proposed B1/B2 and G1/G2 sequence.
+For a global declaration row at `0x0FBB`, type 00 and base 0, page 80's free bit is at page-1 offset `0x0FCA`, mask `01`; clear it in `G1.final`. Page 31 uses offset `0x0FC3`, mask `80`; set it in the same final page. On ownership bitmap page 40, set mask `01` at offset `0x0E` and clear mask `80` at offset 7 in `M40.final`. Preserve all other bits from the fresh committed base. The global and owner maps give opposite meanings to the same page numbers. These calculations describe final bytes, not observed ACE ordering.[^long][^table]
 
-The format/transaction coordinator compiles this graph. The pager takes immutable image revisions and explicit effects:
+**CRASH-ORDER-INDEX** compares the same final images with I before D and the same explicit map-position alternatives. **CRASH-ORDER-REPEAT** retains the earlier compiler as a fallback: initialize 80; reserve its global/owner bits; remove the old key; change the row; install the new key; update required catalog pages; then release 31's owner/global bits. That branch writes distinct intermediate and final images of map and index pages. Use it only where the deciding evidence calls for those states, rather than treating extra writes as automatically safer.
+
+R-CRASH-1 compares the interrupted images through independent native openers. R-TXN-1's TXN-FLUSH-COMMIT, TXN-FLUSH-OP and TXN-FLUSH-BEHIND branches separately decide when the publication unit is submitted: outer commit, an implicit operation, or native-style write-behind. They do not change the fact that one unit's final image must preserve the newest committed neighboring changes. The precise crash classification and pass conditions are fixed during implementation under PRD-07.
+
+The pager accepts immutable stored-byte images and explicit effects:
 
 ```text
 NativeWrite {
-    operation_id, step_id, page_object, image_id
+    operation_id, publication_unit, step_id, page_object, image_id
     page_relative_span, absolute_range
     purpose: Initialize | Allocate | RemoveReference | RowPayload |
              InstallReference | Catalog | Free | NativeState
@@ -520,13 +529,11 @@ NativeBarrier {
 }
 ```
 
-Seal each logical phase image, then produce its encoded stored-byte image in private output storage before issuing native writes. Identity-codec pages can share the immutable backing; page 0 must reapply its selected header mask. The step's source bytes, receipts and optional-undo before/intended images all use the stored-byte domain. A complete page image is the unit of preparation, preservation and inspection. It is **not necessarily the physical write unit**. The preferred provisional start is full initialization for a new page and complete phase images for existing pages; emit a full-page transfer for an existing phase unless native format/crash evidence selects bounded spans. Keep the span-capable interface from the outset. For the insertion in §1.3, the candidate dirty spans are `[2,4)`, `[12,20)` and `[4036,4056)`; the middle span includes unchanged old slot bytes. Their physical starts are `0x11002`, `0x1100C` and `0x11FC4`. Selecting separate writes also selects new crash cuts, so it requires evidence rather than a byte-count optimization alone.
+A complete page image is the unit of preparation, preservation and inspection, not an atomic transfer guarantee. Seal and encode it privately before submission. Identity-codec pages may share immutable backing; page 0 reapplies its header mask. The starting transfer is a complete final page. Keep the span-capable interface so R-FMT-2/R-CRASH-1 can select native granularity, and retain distinct image identities when the repeated fallback is selected. A generic executor must not silently coalesce a chosen repeated program.
 
-II-08 expands these phases into concrete key, LV/map and stable-root programs, distinguishing build order, transfer completion and persistence dependencies. A page newly assigned to an object can still have real before bytes in the existing file; allocation status never makes those bytes ABSENT.
+For §1.3's insertion, candidate dirty spans are `[2,4)`, `[12,20)` and `[4036,4056)` at file offsets `0x11002`, `0x1100C` and `0x11FC4`. Separate span writes create additional cuts and therefore require their own comparison; fewer transferred bytes do not establish a better crash outcome. Initial full-page transfers are equally provisional.
 
-This preferred full-page starting candidate is provisional, not a claim of atomicity or a promise to reproduce ACE with 4096-byte writes. R-FMT-2/R-CRASH-1 can require a different span order, repeated overwrite or flush boundary. Conversely, assuming small changed spans are safer is also unsupported. Preserve every required intermediate image of page 33 or 44; sorting a set of dirty page numbers or writing only their final images loses the dependency program.
-
-Any needs-repair/in-progress marking is a `NativeState` effect only after its real field and meaning are evidenced. Do not assign that role to page-17 bytes +8–+11, an unused header byte or a CalcDb-private flag. If the trace identifies no universal commit word, the program has none. Extent growth, truncation, map publication and byte writes remain separate effects; last-step tail truncation requires its own native crash evidence.
+Any needs-repair/in-progress marking is a `NativeState` effect only after its real field and meaning are established by R-CRASH-1/CRASH-PROGRAM. Do not assign that role to page-17 bytes +8–+11, an unused header byte or a CalcDb-private flag. If the operation has no universal commit word, the program has none. Extent growth and truncation remain separate effects. II-08 owns the complete writer alternatives and resolution programs.
 
 ### 6.2 Exact effects, uncertainty and publication
 
@@ -558,13 +565,13 @@ For page `0x1234`, suppose 1536 bytes complete and the following request fails w
 
 Ordinary commit, forced-flush completion, public acknowledgement and the earliest survival frontier remain separate events. In-memory publication needs the coordinator's permit at the evidenced boundary; a page-write helper cannot decide it. A later flush error must not erase an earlier native commit-survival fact. The implementation preserves this distinction even when a public surface ultimately exposes only one error code.[^commit][^flush]
 
-### 6.3 Optional undo remains optional
+### 6.3 Baseline recovery and the retired optional-undo idea
 
-I-03 and I-08 contain the identical authoritative recovery predicate: same file identity and eligible record; full-file read under exclusion; every uncovered page unchanged; every covered page equal to its before-image or intended new image; compatible extents; otherwise discard before recovery writes. II-03 does not introduce a different fingerprint scope.
+D-UNDO-2 is retired from planned work. No pager slice implements its codec, lifecycle or recovery writes. D-UNDO-1 remains the ACE-first crash baseline and preserves the conditional eligibility rule if optional undo is reconsidered: same file identity, a full recovery read, every uncovered page unchanged, and every covered page equal to its complete before-image or intended new image, with compatible extents; otherwise discard. Stored-byte domains, not decoded header bytes, would govern that check.
 
-The pager supplies stored-byte images and complete effect/extent receipts to that optional feature. A legitimate interruption at an intermediate map or index image can fail the before-or-final-image test, as can the partial write above. That conservative rejection is allowed; do not broaden the predicate to accept arbitrary intermediate images. Durable disarming must precede the earliest evidenced native survival frontier. If that cannot be established for an operation/backend without altering ordinary/forced survival classes, leave undo disabled there.
+Live spill and scope-before images are ordinary transaction resources. They support local rollback, preserved readers and uncertain-effect handling without making restart replay depend on a private file. A partial page write can leave a third image; neither RAM copies nor a surviving spill record proves which native state exists.
 
-ACE-first safety never depends on this file or on private spill. If complete ACE write tracing proves unavailable, the writer still develops as the bounded exclusive native writer already selected in I-08: complete CalcDb cut exploration, bracketed ACE interruptions, preserved native images and independent ACE/Access/Compact & Repair first-openers. Qualify the cases actually supported; unknown cases remain explicit. Missing tracing does not authorize a new recovery format or a claim that final-file equality proves crash parity.
+The preferred crash investigation records native writes/flushes with contents, reconstructs candidate images offline, and sends ACE-derived and CalcDb cut images through the same ACE, Access and Compact & Repair openers. It may use low-level observation/control tooling without proprietary decompilation. Exact classification is ambitious. If tracing is incomplete, continue that investigation with explicit limits; implementation settles the attainable coverage, pass conditions and treatment of unresolved write classes. Final-file equality alone does not prove crash parity.
 
 ## 7. Cost model tied to native access patterns
 
@@ -594,11 +601,11 @@ Let P be the selected page size; R the number of resident clean/current frames; 
 
 with shared frames counted once, plus directory/token/overlay/locator metadata and allocator overhead. A retained pin is not an extra P-byte allocation, but it can prevent reclamation of P bytes. Report both owned capacity and unreclaimable residency.
 
-For a row insertion that touches k distinct existing physical pages, first-write copies can approach `k×P`, plus preserved revisions for statement rollback, old readers or repeated native phases. Editing two map rows on the same physical page contributes one current private page, not two independent copies. An appended page has an ABSENT physical before-state rather than native before bytes; a page newly allocated from existing free space has real stored before bytes, retained wherever preservation, rollback or optional-undo obligations require them. A deleted page can still need historical bytes. Complete images may spill, but the index and all simultaneously required workspace must fit the admitted bound.
+For a row insertion that touches k distinct existing physical pages, first-write copies can approach `k×P`, plus preserved revisions for statement rollback, old readers or repeated native phases. Editing two map rows on the same physical page contributes one current private page, not two independent copies. An appended page has an ABSENT physical before-state rather than native before bytes; a page newly allocated from existing free space has real stored before bytes, retained wherever preservation or rollback obligations require them. A deleted page can still need historical bytes. Complete images may spill, but the index and all simultaneously required workspace must fit the admitted bound.
 
 Expected directory lookup is O(1) with the chosen hash map; a page read/copy is O(P); a checked slot is O(1); full slot validation is O(slot count); CLOCK can take O(R) probes; and a native-reference walk is proportional to its actual checked hops and payload. A sequential scan's I/O count depends on ownership-map fragmentation and cache residency, not merely total file length. None of these expressions is a benchmark result.
 
-The first measurements compare retained cursor pins against repinning, scan admission against uniform admission, full-page versus qualified span writes, and page-at-a-time versus qualified contiguous-run reads. Optimize DAO row loops first when the results conflict with bulk throughput, then consider the tighter WASM memory case. A change must preserve the same accepted rows, errors, effects and crash classes before its cost improvement is relevant.
+The first measurements compare retained cursor pins against repinning, scan admission against uniform admission, full-page versus span writes supported by the actual adapter's transfer evidence, and page-at-a-time versus contiguous-run reads checked through R-PAR-1/PAR-ERROR/PAR-COST. CRASH-PARTIAL tests the receipt model; it supplies no native prefix guarantee. Browser transfer and cost claims use R-WASM-1/WASM-PROGRESS/WASM-DIRECT/WASM-COST. Optimize DAO row loops first when the results conflict with bulk throughput, then consider the tighter WASM memory case. A change must preserve the same accepted rows, errors and effects, with crash outcomes assessed under the implementation-defined R-CRASH-1/CRASH-RELATION method, before its cost improvement is relevant.
 
 ## 8. Implementation slices and discriminating checks
 
@@ -608,35 +615,37 @@ W-PROBE's basic native open/identity/read/lock facilities precede the correspond
 | --- | --- | --- |
 | Positioned adapter | Checked addresses, owned requests, exact progress, extent/flush receipts | Immediate/pending/short/EOF/error/cancel/Close traces settle once; no seek-pointer interference. |
 | Read cache | Stable frame blocks, sparse directory, typed image identities, pins | Native header/data/map fixtures read correctly; concurrent misses and eviction conserve ownership. |
-| Private overlay | Composed page edits, scope-before images, immutable sealing and spill | Page-17/header/slot bytes and shared map-row edits survive rollback/pressure; no native write occurs merely on eviction. |
-| Coherence | Source permits, freeze/drain/detach and atomic binding publication | A reader obtains a complete selected image before, during and after native overwrite. |
-| Native program executor | Phase images, dependency steps, range writes and separate barriers | Every actual effect is recorded; uncertainty stops ordinary program advancement; repeated map/index images remain distinct. |
-| Browser realization | Direct/broker ownership and bounded rendezvous | R-WASM-1 verifies real acquisition, caller blocking, buffer settlement and declared persistence limitations. |
+| Private overlay | Independent locker overlays, accepted deltas, scope-before images, immutable sealing and spill | Page-17/header/slot and map-row edits survive private rollback/pressure; sibling changes survive, and eviction performs no native write. |
+| Coherence | Source permits, early old-image preservation, freeze/drain/detach and binding publication | Before the first W-05 overwrite, every registered reader can still obtain its selected changed page, including one not yet requested or loaded. |
+| Native program executor | One-final-image candidate, evidence-selected repeated fallback, ranges and separate barriers | Every effect is recorded; uncertainty stops advancement; selected final images preserve fresh-base deltas and repeated fallback images remain distinct. |
+| Browser realization | Direct/broker ownership, exact generation echoes and bounded rendezvous | R-WASM-1/WASM-MAILBOX and WASM-BROKER-LOSS verify acquisition, failure detection/exit and retained request ownership; T-PLAT-07–09/12–14 share the pager's stale-frame and uncertain-effect controls. |
 
 These are slices of the existing work items, not new research dependencies. The deterministic checks below exercise the production pager/adapter state machines. They are designed here; they have not run against a CalcDb implementation or the selected ACE build.
 
 | Check | Fixture and injected event | Required observation |
 | --- | --- | --- |
 | T-PAGER-01 | Page 17's two-row envelope, third-row insertion and overflow locator from §1 | Exact extents, little-endian fields, free count and target address match; no out-of-bounds span. |
-| T-PAGER-02 | Slot offset `0x1FFF`, count 256, truncated slot array or reversed extents | Bounded classified rejection before dereferencing or allocating from untrusted counts; original bytes retained for diagnostics. |
+| T-PAGER-02 | The structurally valid 256-slot page in §3.3; then count 257, offset `0x1FFF`, truncated directory and reversed extents | Count 256 reaches slot 255 without a writer-limit rejection; malformed cases fail before unsafe access/allocation. FMT-SLOTS256 separately selects ACE acceptance and the writer limit; diagnostic bytes stay intact. |
 | T-PAGER-03 | Ownership and free-space declarations on page 33; inline and referenced bitmap forms | Each map uses its own meaning/locator; both row edits compose into one physical image. |
 | T-PAGER-04 | Two misses for image D17.0; reversed worker scheduling | One shared load, independent pins, bounded token/waiter metadata and a handoff reference until claims finish. |
 | T-PAGER-05 | Leader cancels; another waiter stays; then all waiters cancel in another run | Needed read survives one cancellation; every native request settles; no abandoned token or premature buffer reuse. |
 | T-PAGER-06 | Read 1024, 2048, 1024 bytes; repeat with prefix then EOF/error | Full frame publishes once in the first case; incomplete page never publishes or inherits a recycled frame's tail. |
-| T-PAGER-07 | Immediate success, pending completion, cancellation losing to success and Close while pending | One completion owner; file lease/frame/request remain alive until terminal settlement. |
+| T-PAGER-07 | Immediate success, pending completion, cancellation losing to success, Close while pending; browser broker loss with no exact receipt | One completion owner. Ordinary return needs terminal settlement; the initial browser failure exit abandons the caller and retains unknown effects under host ownership, without a fabricated receipt or premature frame/payload reuse. |
 | T-PAGER-08 | Writer freezes page 17 while an active read and a not-yet-permitted target load exist | Active load drains; pending target gets retained old source; no mixed page, self-wait or preservation-capacity deadlock. |
-| T-PAGER-09 | Pin old page 17; free/reuse native page 17 as an index | Old pin stays the old image; new lookup uses a new allocation/image identity; stale slot completion cannot publish. |
+| T-PAGER-09 | Pin old page 17; free/reuse native page 17 as an index; inject an older browser session/request/handle response | Old pin stays the old image; new lookup uses a new allocation/image identity. Stale frame or mailbox completion cannot publish, release a newer owner or reset its request slot; observed session failure wins over a matching late Done. |
 | T-PAGER-10 | All frames pinned, including the requester's current page | CLOCK terminates; admission has an explicit outcome; no live pin eviction, uncommitted writeback or infinite self-wait. |
 | T-PAGER-11 | Spill disk fills after a prefix; later load has a damaged integrity field | Resident authoritative image survives failed spill; damaged spill never supplies a page pin. |
-| T-PAGER-12 | Map page and leaf page each have two mandatory phase revisions | Neither final-image coalescing nor page-number sorting removes predecessor edges. |
+| T-PAGER-12 | Same LV/key closure under one-final-image candidates and selected repeated fallback | Candidate composes each map/leaf once; fallback retains its distinct revisions and predecessor edges; executor does not change the selected program. |
 | T-PAGER-13 | Native span completes 1536 bytes then fails; separate flush/extent failure | Exact progress and possible effects retained; native source uncertain; no semantic retry or invented rollback success. |
 | T-PAGER-14 | Masked page-0 example and raw before-image capture | `A5` stored/`10` decoded domains stay distinct; fingerprint and write encoder use the correct bytes. |
 | T-PAGER-15 | Long scan competes with a hot TableDef/root/current row, then prefetch owner closes | Bounded residency and useful hit-rate/probe counters; no retained stack context or late publication into a closed session. |
 | T-PAGER-16 | Two initial reader processes plus a late native writer, both open orders | Real R-LOCK-2 execution confirms exclusion; simulator correctness alone is insufficient. |
+| T-PAGER-17 | Two local lockers own separate overlays of page 17; one commits and the other commits or rolls back | Fresh-base rebase preserves both admitted deltas; rollback removes only its own scope; page/record conflicts follow TXN-LOCAL. |
+| T-PAGER-18 | Registered view has not requested a changed page when first publication starts | Old source is preserved before overwrite despite no pin/target/load token; later resolution returns its selected image. |
 
 Check conservation of frame capacity, pins, target owners, handoff references, request owners, tokens, spill records and open leases after each trace, including every failure branch. Record page number, image identity, request range and actual state transition so reduction can preserve the causal race. Error-number and public object-state comparisons remain the DAO/ADO harness's responsibility; these internal checks do not redefine them.
 
-The examples' byte arithmetic and source constants were checked while drafting. That limited check is not an executed storage engine test. No native ACE, Access, Windows adapter, .NET, CalcVBA or browser result is reported here.
+The examples state constructed byte relationships and source-derived constants. They do not report an executed storage engine test. No native ACE, Access, Windows adapter, .NET, CalcVBA or browser result is reported here.
 
 ### 8.1 What changes the provisional mechanisms
 
@@ -644,7 +653,7 @@ The examples' byte arithmetic and source constants were checked while drafting. 
 | --- | --- |
 | R-FMT-1/2 | Confirm page geometry, subtype/slot/map rules and preservation fields against native fixtures; add a distinct descriptor rule when actual formats differ. Never patch decoder constants from a DLL build label alone. |
 | R-LOCK-1/2 | Confirm held-handle exclusion and reader-only stability; if nominal native readers require different rights, replace admission with the evidenced protocol before relaxing denial. |
-| R-TXN-1 and R-CRASH-1/2 | Confirm or change phase order, span granularity, marker meaning, barriers and survival/acknowledgement boundaries; keep bounded writer development if tracing remains incomplete. |
+| R-TXN-1 and R-CRASH-1 | TXN-LOCAL selects local conflict/visibility/rebase cases; ordering and timing branches compare final-image candidates with the repeated fallback. Exact crash coverage and pass conditions are settled during implementation. |
 | R-CURSOR-1/R-DAO-1 | Determine which cursor/operation owners actually retain old images and when they may advance views; cache pins do not select a new isolation policy. |
 | R-WASM-1 | Confirm real dedicated-worker/broker capabilities and failure settlement; expose unsupported durability rather than equating browser flush with ACE. |
 | I-15 workload method | Retain simple CLOCK and bounded scan admission unless measured DAO/bulk/WASM costs justify another policy; compare working set, lookups, copies, I/O and contention, not elapsed time alone. |
@@ -655,7 +664,7 @@ Full experiment conditions and outcome branches remain in [A-02-experiments.md](
 
 The following references identify facts and cleared concepts; the chosen cache structures, receipts and algorithms are proposed CalcDb design. The Jackcess material is pinned for this chapter and is not treated as an ACE crash oracle. No excluded repository, proprietary disassembly or mdbtools implementation was used.
 
-[^authority]: [N], [U], [A], [B] Authoritative supplied scope, user corrections and concrete-mechanics steering, book assignment and current continuation record. No change to initial/later product scope.
+[^authority]: [B-SCOPE-11], [U-PRD-01-09], [U-PRW-01-58], [A], [B] [Scope and context](00-scope.md), §§S1, S4–S6, final owner decisions, accepted revision work, assignment and current record. Local ACE concurrency is initial scope; external stages 3–4 remain later.
 [^provenance]: [S-JACK-FMT], [S-JACK-TYPES], [S-JACK-CHANNEL], [S-JACK-TABLE], [S-JACK-MAP], [S-JACK-LONG], [S-JACK-BYTEUTIL] Jackcess, selected files at commit `be0a2139b087a227d14cafd4ea231306a5a3a862`, retrieved 2026-11-13. Exact individual SHA256 values and inspected passages are recorded in A-01; all seven file headers checked as Apache-2.0. Earlier live-xref readings remain separately identified.
 [^format]: [S-JACK-FMT] Jackcess, [JetFormat.java, pinned source](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/JetFormat.java): format detection, Jet4 geometry/offset methods and inspected ACE-family inheritance. Reference facts, not selected-build execution.
 [^types]: [S-JACK-TYPES] Jackcess, [PageTypes.java, pinned source](https://github.com/jahlborn/jackcess/blob/be0a2139b087a227d14cafd4ea231306a5a3a862/src/main/java/com/healthmarketscience/jackcess/impl/PageTypes.java): page-kind constants.
@@ -675,7 +684,7 @@ The following references identify facts and cleared concepts; the chosen cache s
 [^cancel]: [S-MS-CANCELIOEX] Microsoft, [CancelIoEx](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex), updated 2021-10-13; cancellation request versus terminal completion; read 2026-11-13.
 [^eof]: [S-MS-SET-FILE-INFO], [S-MS-EOF-INFO], [S-MS-SET-EOF] Microsoft, [SetFileInformationByHandle](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle), [FILE_END_OF_FILE_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_end_of_file_info), and [SetEndOfFile](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setendoffile), extent operations and undefined extension content; read 2026-11-13.
 [^flush]: [S-MS-FLUSH] Microsoft, [FlushFileBuffers](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers), updated 2021-10-13; read 2026-11-13. These documented OS semantics do not themselves establish ACE crash parity.
-[^commit]: [S-MS-TXN] Microsoft, [Workspace.CommitTrans](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-committrans-method-dao), updated 2022-03-18; ordinary/forced-flush distinction. The user's crash requirement and R-CRASH-1/2 select the actual compatibility comparison.
+[^commit]: [S-MS-TXN] Microsoft, [Workspace.CommitTrans](https://learn.microsoft.com/en-us/office/client-developer/access/desktop-database-reference/workspace-committrans-method-dao), updated 2022-03-18; ordinary/forced-flush distinction. The user's crash requirement and R-CRASH-1 select the actual compatibility comparison.
 [^linux-pread]: [S-LINUX-PREAD] Linux man-pages 6.19, [pread/pwrite](https://man7.org/linux/man-pages/man2/pread.2.html), dated 2026-02-08, read 2026-11-13; positioned I/O and O_APPEND qualification. Direct Open Group pages were unavailable; this is explicitly Linux evidence.
 [^linux-read]: [S-LINUX-READ] Linux man-pages 6.19, [read](https://man7.org/linux/man-pages/man2/read.2.html), dated 2026-02-08, read 2026-11-13; progress, EOF and interruption.
 [^linux-write]: [S-LINUX-WRITE] Linux man-pages 6.19, [write](https://man7.org/linux/man-pages/man2/write.2.html), dated 2026-02-08, read 2026-11-13; short transfers and error effects.
