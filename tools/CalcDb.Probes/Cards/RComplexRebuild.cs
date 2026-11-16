@@ -69,7 +69,7 @@ public sealed class RComplexRebuild : ICard
         "SELECT COUNT(*) AS K FROM Keep",
     ];
 
-    private static (string, string)[] RichFixtures => [("main", Fx("rb-rich-accdb")), ("mdb", Fx("rb-rich-mdb"))];
+    private static (string, string)[] RichFixtures => [("main", Fx("rb-rich2-accdb")), ("mdb", Fx("rb-rich2-mdb"))];
 
     public IEnumerable<Probe> Probes()
     {
@@ -149,7 +149,7 @@ public sealed class RComplexRebuild : ICard
         // ------------------------------------------------------------------ R-REBUILD-1 fixtures
         foreach (string ext in new[] { "accdb", "mdb" })
         {
-            yield return Create("rb-rich-" + ext, Rb("RB-CLEAN", "RB-RELOC", "RB-OPAQUE"), ext,
+            yield return Create("rb-rich2-" + ext, Rb("RB-CLEAN", "RB-RELOC", "RB-OPAQUE"), ext,
                 "ordinary rows, repeated equal values, long values and several indexes: Parent (AutoNumber key, unique Code, Name, Memo of 20,000 and 5,000 characters, Currency, Date, Yes/No; 20 rows, c20 deleted and reinserted), " +
                 "Child (AutoNumber key, foreign key to Parent, indexed Val, a 5,000-byte Long Binary on row 1; 64 rows then IDs above 50 deleted so that the counter exceeds the maximum key), " +
                 "W (64 rows of six TEXT(255); row 32 grown to 1,500 characters by an update so that it overflows), index IX_Parent_Name_Born, saved queries QParam (PARAMETERS) and QJoin, " +
@@ -721,7 +721,7 @@ public sealed class RComplexRebuild : ICard
                 }
                 p.Modules("after-close").Files("after-close", keep: true);
             })
-        { Fixtures = [("main", Fx("rb-rich-accdb"))] };
+        { Fixtures = [("main", Fx("rb-rich2-accdb"))] };
 
         yield return new Probe(Card, "publish-held-inproc", Rb("RB-PUBLISH", "RB-NEGATIVE"),
             "CompactDatabase while the source is held in the same process: by a shared read/write Database, by an exclusive Database, by an exclusive read-only Database; while the destination is held by a shared Database; and while a native handle holds the source " +
@@ -744,10 +744,10 @@ public sealed class RComplexRebuild : ICard
                     .NativeOpen("n3", "work:dst.accdb", Win.GenericRead, Win.ShareNone).Compact("native-dst", A.In(), A.Out("dst.accdb")).NativeClose("n3");
                 p.Modules("after-close").Files("after-close");
             })
-        { Fixtures = [("main", Fx("rb-rich-accdb"))] };
+        { Fixtures = [("main", Fx("rb-rich2-accdb"))] };
 
         {
-            (string Role, string Ext, string Fixture)[] formats = [("main", "accdb", Fx("rb-rich-accdb")), ("mdb", "mdb", Fx("rb-rich-mdb"))];
+            (string Role, string Ext, string Fixture)[] formats = [("main", "accdb", Fx("rb-rich2-accdb")), ("mdb", "mdb", Fx("rb-rich2-mdb"))];
             (string Name, bool Exclusive, bool ReadOnly)[] states = [("shared-rw", false, false), ("excl-rw", true, false), ("excl-ro", true, true), ("shared-ro", false, true)];
             yield return new Probe(Card, "publish-held-xproc", Rb("RB-PUBLISH", "RB-NEGATIVE"),
                 "Two processes. Process b opens the source with DAO OpenDatabase in each of four states (shared read/write, exclusive read/write, exclusive read-only, shared read-only), for the rich ACCDB and then the rich MDB; " +
@@ -808,7 +808,7 @@ public sealed class RComplexRebuild : ICard
                     .Compact("n8", A.In(), A.Out("n8.accdb"), A.Str(Dao.LangGeneral), A.I4(1024))
                     .Modules("after-close").Files("after-close");
             })
-        { Fixtures = [("main", Fx("rb-rich-accdb"))] };
+        { Fixtures = [("main", Fx("rb-rich2-accdb"))] };
 
         yield return new Probe(Card, "repair-clean-control", Rb("RB-REPAIR", "RB-NEGATIVE", "T-COMPACT-1"),
             "DBEngine.RepairDatabase on clean copies of the rich ACCDB and MDB fixtures (the only DAO repair entry point): return, errors, file images before and after (kept), and the public state and rows of the repaired file; MSysCompactErrors is read.",
@@ -857,17 +857,17 @@ public sealed class RComplexRebuild : ICard
     private static void RichBody(P p)
     {
         string[] names = ["a", "ch", "c", "d", "ll", "l", "m", "\u00e4", "z", "\u00f6", "same", "same", "same", "b", "e", "f", "g", "h", "i", "j"];
-        p.Sql("CREATE TABLE Parent (ID COUNTER CONSTRAINT PK_Parent PRIMARY KEY, Code TEXT(20) CONSTRAINT UX_Parent_Code UNIQUE, Name TEXT(50), Note MEMO, Amount CURRENCY, Born DATETIME, Flag YESNO)")
+        p.Sql("CREATE TABLE Parent (ID COUNTER CONSTRAINT PK_Parent PRIMARY KEY, Code TEXT(20) CONSTRAINT UX_Parent_Code UNIQUE, Name TEXT(50), [Note] MEMO, Amount CURRENCY, Born DATETIME, Flag YESNO)")
             .Sql("CREATE TABLE Child (ID COUNTER CONSTRAINT PK_Child PRIMARY KEY, ParentID LONG, Val TEXT(30), Blob LONGBINARY)")
             .Sql("CREATE TABLE W (ID COUNTER CONSTRAINT PK_W PRIMARY KEY, A1 TEXT(255), A2 TEXT(255), A3 TEXT(255), A4 TEXT(255), A5 TEXT(255), A6 TEXT(255))")
             .Sql("ALTER TABLE Child ADD CONSTRAINT FK_Child_Parent FOREIGN KEY (ParentID) REFERENCES Parent (ID)")
             .Sql("CREATE INDEX IX_Parent_Name_Born ON Parent (Name, Born DESC)").Sql("CREATE INDEX IX_Child_Val ON Child (Val)");
         for (int i = 0; i < names.Length; i++)
         {
-            p.Sql($"INSERT INTO Parent (Code, Name, Note, Amount, Born, Flag) VALUES ('c{i + 1}', '{names[i]}', 'short {i + 1}', {i + 1}.25, #2024-01-{i + 1:D2}#, {(i % 2 == 0 ? "True" : "False")})");
+            p.Sql($"INSERT INTO Parent (Code, Name, [Note], Amount, Born, Flag) VALUES ('c{i + 1}', '{names[i]}', 'short {i + 1}', {i + 1}.25, #2024-01-{i + 1:D2}#, {(i % 2 == 0 ? "True" : "False")})");
         }
-        p.Sql($"UPDATE Parent SET Note = '{new string('m', 20000)}' WHERE Code = 'c1'").Sql($"UPDATE Parent SET Note = '{new string('n', 5000)}' WHERE Code = 'c2'")
-            .Sql("DELETE FROM Parent WHERE Code = 'c20'").Sql("INSERT INTO Parent (Code, Name, Note, Amount, Born, Flag) VALUES ('c20', 'j', 'again', 20.25, #2024-01-20#, True)")
+        p.Sql($"UPDATE Parent SET [Note] = '{new string('m', 20000)}' WHERE Code = 'c1'").Sql($"UPDATE Parent SET [Note] = '{new string('n', 5000)}' WHERE Code = 'c2'")
+            .Sql("DELETE FROM Parent WHERE Code = 'c20'").Sql("INSERT INTO Parent (Code, Name, [Note], Amount, Born, Flag) VALUES ('c20', 'j', 'again', 20.25, #2024-01-20#, True)")
             .OpenRs("crs", "db", "Child", Dao.OpenTable).GetBind("cfl", "crs", "Fields").Item("cpid", "cfl", A.Str("ParentID")).Item("cval", "cfl", A.Str("Val")).Item("cblob", "cfl", A.Str("Blob"))
             .Call("crs", "AddNew").Put("cpid", "Value", A.I4(1)).Put("cval", "Value", A.Str("blob")).Put("cblob", "Value", A.Bytes([.. Enumerable.Range(0, 5000).Select(i => (byte)(i * 7))])).Call("crs", "Update")
             .Release("cpid").Release("cval").Release("cblob").Release("cfl").Call("crs", "Close").Release("crs")

@@ -20,9 +20,9 @@ public sealed class RStrAdoAct : ICard
 
     private static readonly string StrAccdb = Card + "-str-accdb";
     private static readonly string StrMdb = Card + "-str-mdb";
-    // "-ado3-accdb": ado and ado2 lost tables K and J to DAO DDL limits (DECIMAL; REFERENCES in any form, 3292);
-    // Decimal now comes from CreateField and the relationship from CreateRelation.
-    private static readonly string AdoAccdb = Card + "-ado3-accdb";
+    // "-ado4-accdb": ado lost K to DECIMAL in DAO DDL (3292), so Decimal now comes from CreateField; ado2 and ado3
+    // lost J to its unbracketed column name Note (3292; evidence/r-ddl-limits), now [Note].
+    private static readonly string AdoAccdb = Card + "-ado4-accdb";
 
     private static readonly string[] StrRefs = ["R-STRING-1", "D-STRING-1", "II-02"];
 
@@ -92,7 +92,7 @@ public sealed class RStrAdoAct : ICard
             StrTable, StrCompressedTable);
         yield return Creation("str-mdb", "mdb", Dao.Version40, [.. StrRefs, "R-ADO-1"],
             "the same S and C tables and rows as str-accdb, in the Jet 4 MDB format", StrTable, StrCompressedTable);
-        yield return Creation("ado3-accdb", "accdb", Dao.Version120, ["R-ADO-1", "D-OBJECT-1"],
+        yield return Creation("ado4-accdb", "accdb", Dao.Version120, ["R-ADO-1", "D-OBJECT-1"],
             "R-ADO-1 fixture set: K(ID COUNTER primary key, Code TEXT(10) unique, Long, Double, Currency, Decimal, Date, Text, Memo, LongBinary) with four rows " +
             "including a Null row and an empty-text row; J with a foreign key to K and two rows; D(N LONG) with ten rows; saved queries QParam (one Text parameter) and QEmpty",
             AdoFixture, null);
@@ -165,7 +165,7 @@ public sealed class RStrAdoAct : ICard
             .GetBind("rkf", "rk", "Fields").Item("rkb", "rkf", A.I4(0))
             .Call("rk", "Edit").Put("rkb", "Value", A.Bytes(0x00, 0x01, 0x02, 0xff, 0x00)).Call("rk", "Update")
             .Release("rkb").Release("rkf").Call("rk", "Close").Release("rk")
-            .Call("db", "Execute", A.Str("CREATE TABLE J (ID LONG CONSTRAINT PK_J PRIMARY KEY, KID LONG, Note TEXT(20))"))
+            .Call("db", "Execute", A.Str("CREATE TABLE J (ID LONG CONSTRAINT PK_J PRIMARY KEY, KID LONG, [Note] TEXT(20))"))
             .AddRelation("FK_J_K", "K", "J", "ID", "KID")
             .Call("db", "Execute", A.Str("INSERT INTO J VALUES (1, 1, 'j1')"))
             .Call("db", "Execute", A.Str("INSERT INTO J VALUES (2, 1, 'j2')"))

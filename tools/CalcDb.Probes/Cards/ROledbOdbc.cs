@@ -25,8 +25,9 @@ public sealed class ROledbOdbc : ICard
     private const string Ace = "Microsoft.ACE.OLEDB.12.0";
     private const int Wait = 60000;
 
-    private static readonly string Accdb = Card + "-accdb";
-    private static readonly string Mdb = Card + "-mdb";
+    // "v2": the first fixtures lost table Child to its unbracketed column name Note (3292; evidence/r-ddl-limits).
+    private static readonly string Accdb = Card + "-v2-accdb";
+    private static readonly string Mdb = Card + "-v2-mdb";
 
     /// <summary>ADO constants (values from the ADO type library, inventoried by r-str-ado-act/ado-describe).</summary>
     private static class Ado
@@ -85,8 +86,8 @@ public sealed class ROledbOdbc : ICard
 
     private static IEnumerable<Probe> Creations()
     {
-        yield return Creation("accdb", "accdb", Dao.Version120);
-        yield return Creation("mdb", "mdb", Dao.Version40);
+        yield return Creation("v2-accdb", "accdb", Dao.Version120);
+        yield return Creation("v2-mdb", "mdb", Dao.Version40);
     }
 
     private static Probe Creation(string name, string ext, int version)
@@ -138,7 +139,7 @@ public sealed class ROledbOdbc : ICard
                 {
                     p.Call("db", "Execute", A.Str("INSERT INTO Seq (V) SELECT V + 1 FROM Seq"));
                 }
-                p.Call("db", "Execute", A.Str("CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, TID LONG CONSTRAINT FK_Child_Items REFERENCES Items (ID), Note TEXT(20))"))
+                p.Call("db", "Execute", A.Str("CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, TID LONG CONSTRAINT FK_Child_Items REFERENCES Items (ID), [Note] TEXT(20))"))
                     .Call("db", "Execute", A.Str("INSERT INTO Child VALUES (1, 1, 'c1')"))
                     .Call("db", "Execute", A.Str("INSERT INTO Child VALUES (2, 1, 'c2')"))
                     .Call("db", "Execute", A.Str("CREATE TABLE Req (ID LONG CONSTRAINT PK_Req PRIMARY KEY, R TEXT(5) NOT NULL, V LONG)"))

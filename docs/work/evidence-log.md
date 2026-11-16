@@ -35,6 +35,19 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
   reads (3112), `MSysObjects` included; one Database property refuses `Value` (3251).
 - Open: byte-level interpretation of the kept images is W-04/description-inspector work.
 
+### DAO DDL limits seen while building fixtures (R-CAT-1 CAT-D, R-SQL-2 SQL-ACT-DDL)
+`evidence/r-ddl-limits`, one element varied per statement, each on a fresh database, ACCDB and MDB alike:
+- Refused with 3292 (`0x800A0CDC`, syntax error in field definition): `DECIMAL(18,4)`, plain `DECIMAL`, and a column
+  named `Note` unless bracketed (`[Note]` is accepted).
+- Refused with 3290 (`0x800A0CDA`): `TEXT(255) WITH COMPRESSION`.
+- Accepted: column-level `CONSTRAINT … REFERENCES`, table-level `FOREIGN KEY … REFERENCES`, `ALTER TABLE … ADD
+  CONSTRAINT … FOREIGN KEY`, and column-level `CONSTRAINT … UNIQUE`.
+- Fixtures that hit these refusals are partly empty, and the records of probes that used them answer
+  questions about missing tables. They are superseded by renamed fixtures where fixed tonight: r-expr-1 main → main2;
+  r-str-ado-act ado, ado2, ado3 → ado4; r-fmt-2-pres-1 pres, pres2, pres3 → pres4; r-oledb-odbc → v2; r-cplx-rebuild
+  rb-rich → rb-rich2. An earlier commit message (69bb72ee) said DAO DDL refuses REFERENCES in every form; that was
+  wrong, and the discriminator above corrects it.
+
 ### R-LOCK-1/2 (native_open_probe, native_reader_probe)
 - Two-process mode built tonight (participants with barriers, W-PROBE native driver). First observation:
   DAO exclusive read/write in one process makes another process's DAO shared read-only open fail with

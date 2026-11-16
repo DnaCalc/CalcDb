@@ -15,9 +15,9 @@ public sealed class RFmt2Preserve1 : ICard
     private const string Card = "r-fmt-2-pres-1";
     private const string WorldAccdb = Card + "-world-accdb";
     private const string WorldMdb = Card + "-world-mdb";
-    // "-pres3-accdb": pres and pres2 lost table Child to REFERENCES clauses, which DAO DDL refuses in both the
-    // column-level and the table-level form (3292); the relationship is now created through DAO CreateRelation.
-    private const string PresAccdb = Card + "-pres3-accdb";
+    // "-pres4-accdb": pres, pres2 and pres3 lost table Child because its unbracketed column name Note is refused
+    // by DAO DDL (3292; evidence/r-ddl-limits), not because of REFERENCES. The column is now [Note].
+    private const string PresAccdb = Card + "-pres4-accdb";
 
     private const string Images = " Images: 'before' (the fixture copy as given), then one kept image of the closed file after each step; every step opens the database read/write, makes one mutation and closes it.";
 
@@ -25,7 +25,7 @@ public sealed class RFmt2Preserve1 : ICard
     {
         yield return Fixture("world-accdb", "accdb", Dao.Version120, preserve: false);
         yield return Fixture("world-mdb", "mdb", Dao.Version40, preserve: false);
-        yield return Fixture("pres3-accdb", "accdb", Dao.Version120, preserve: true);
+        yield return Fixture("pres4-accdb", "accdb", Dao.Version120, preserve: true);
         foreach (Probe p in Fmt2())
         {
             yield return p;
@@ -135,9 +135,9 @@ public sealed class RFmt2Preserve1 : ICard
             "CREATE TABLE Parent (ID LONG CONSTRAINT PK_Parent PRIMARY KEY, Nm TEXT(20))",
             "INSERT INTO Parent (ID, Nm) VALUES (1, 'p1')",
             "INSERT INTO Parent (ID, Nm) VALUES (2, 'p2')",
-            "CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, PID LONG, Note TEXT(20))");
+            "CREATE TABLE Child (ID LONG CONSTRAINT PK_Child PRIMARY KEY, PID LONG, [Note] TEXT(20))");
         p.AddRelation("FK_Child_Parent", "Parent", "Child", "ID", "PID");
-        Exec(p, "INSERT INTO Child (ID, PID, Note) VALUES (1, 1, 'c1')");
+        Exec(p, "INSERT INTO Child (ID, PID, [Note]) VALUES (1, 1, 'c1')");
         p.CallBind("q1", "db", "CreateQueryDef", A.Str("QSel"), A.Str("SELECT ID, A, N FROM T WHERE ID < 10 ORDER BY ID;"))
             .CallBind("q2", "db", "CreateQueryDef", A.Str("QParam"), A.Str("PARAMETERS pId Long; SELECT * FROM T WHERE ID = pId;"))
             .CallBind("q3", "db", "CreateQueryDef", A.Str("QAct"), A.Str("UPDATE T SET B = B WHERE ID < 0;"))
@@ -371,7 +371,7 @@ public sealed class RFmt2Preserve1 : ICard
                 p.GetBind("wss", "eng", "Workspaces").Item("ws", "wss", A.I4(0)).Release("wss");
                 PublicView(p, "v0", A.In());
                 RunStep(p, "rollback", s => s.Call("ws", "BeginTrans").Call("db", "Execute", A.Str("UPDATE T SET B = 222 WHERE ID = 2"), A.I4(Dao.FailOnError)).Call("ws", "Rollback"));
-                RunStep(p, "fk-violation", s => Sql(s, "INSERT INTO Child (ID, PID, Note) VALUES (2, 99, 'orphan')"));
+                RunStep(p, "fk-violation", s => Sql(s, "INSERT INTO Child (ID, PID, [Note]) VALUES (2, 99, 'orphan')"));
                 RunStep(p, "unique-violation", s => Sql(s, "INSERT INTO T (ID, A) VALUES (60, 10)"));
                 PublicView(p, "v1", A.In());
                 End(p);

@@ -178,7 +178,8 @@ public sealed class P
 
     /// <summary>
     /// Create a relationship through DAO (Database.CreateRelation, Relation.CreateField with ForeignName,
-    /// Relations.Append): DAO DDL refuses both column- and table-level REFERENCES clauses (3292).
+    /// Relations.Append). DAO DDL accepts REFERENCES in column-level, table-level and ALTER TABLE form
+    /// (evidence/r-ddl-limits); this is the object-model route to the same relationship.
     /// </summary>
     public P AddRelation(string name, string table, string foreignTable, string field, string foreignField, int attributes = 0, string db = "db") =>
         CallBind("rel", db, "CreateRelation", A.Str(name), A.Str(table), A.Str(foreignTable), A.I4(attributes))
