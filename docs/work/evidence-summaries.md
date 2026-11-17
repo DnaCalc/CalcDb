@@ -1225,3 +1225,684 @@ Scope: process termination only, with the OS and cache alive (`TerminateProcess`
 - The 1.5 s wait before freezing is a single timing sample. Whether the unwritten implicit-update, LV-replace and bulk-insert state could still reach the file later is untested. The fact that `Execute` returned without the data being on disk by 1.5 s is a single observation per format.
 - Process-kill points are untested for map-capacity transitions and splits, multi-file or nested Workspaces, concurrent lockers, rollback, and a kill during commit. The kill occurs only at API call boundaries, not between internal writes.
 - The 64-byte lock-file bytes were not compared between probes (only hashes). The lock file's content with the exclusive writer was not observable (no file).
+
+### r-str-ado-act
+
+Observations come from the newest fixture generation (`ado4`, tooling 8a24599e) where one exists. Probes without an `ado*` fixture (`ado-describe`, `ado-provider-non-ace`, `ado-stream`, `act-*`, `str-*`) have a single record from tooling 61edefeb+dirty. Engine identity: ACEDAO.DLL, ACEOLEDB.DLL and ACEES.DLL are 16.0.20527.20196 and ACEERR.DLL is 16.0.20527.20016. The book's initial oracle is 16.0.20527.20016, so those builds differ. Records carry no msado15.dll file version.
+
+**Observed**
+
+*R-STRING-1*
+- Read by ordinal (`str-ordinal-accdb`, `str-ordinal-mdb`): the value text and per-value BSTR byte lengths are identical in the MDB and ACCDB runs, and between the DAO-written `S` and ADO-written compressed `C` tables. Row-by-row T/M byte lengths:
+
+| Row | T | M |
+| --- | --- | --- |
+| 1 | `""`: VT_BSTR, 0 | `""`: VT_BSTR, 0 |
+| 2 | VT_NULL | VT_NULL |
+| 3 (`a\0b`) | 6 | 6 |
+| 4 (`\0`) | 2 | 2 |
+| 5 | 8 (`abc\0`) | 16002 (4000+NUL+4000 units) |
+| 6 | 10 | 20 |
+| 7 | 510 | 10000 |
+| 8 (`Bä€`) | 510 | 18000 |
+| 9 (U+1D11E) | 508 (254 units) | 4000 |
+| 10 | 8 | 140000 |
+| 11 | 32 | 6 (`\0\0\0`) |
+
+- Retained and fresh Field objects return identical values on all 11 rows (`str-named-retained`): `Fields("T")` against `Fields(1)`, and retained `M` against fresh `Fields("M")`. Repeated T and M reads agree on every row.
+- Projection width and duplicated columns do not change returned values (`str-projection`). `M` in `SELECT M` equals `M` in the 9-column query, and `M AS M2` equals `M` on all rows.
+  - Engine values, with positions counted in UTF-16 units:
+    - Row 3: Len(T)=3, InStr(T,Chr(0))=2.
+    - Row 4: 1 and 1.
+    - Row 5: Len(T)=4, Len(M)=8001, Mid(M,3999,4)="nn\0n", InStr=4.
+    - Row 9: Len(T)=254, Len(M)=2000.
+    - Row 10: Len(M)=70000, Mid(M,3999,4)="8901".
+    - Row 11: Len(T)=16, Len(M)=3, InStr=0.
+  - Row 2: `T & ''` returns `""` while T is Null. LT, LM, MM and NT are Null.
+- Revisiting rows (`str-revisit`):
+  - Re-finding row 10 returns the same T and M.
+  - `FindFirst "InStr(T, Chr(0)) > 0"` lands on ID 3 and `FindNext` on ID 4, both with NoMatch=0.
+  - `FindPrevious "Len(M) > 1000"` from ID 10 lands on ID 9.
+  - AbsolutePosition after `MoveFirst` on ID 1 is 0; after `MoveLast` on ID 11 it is 10.
+- Retained Field state (`str-after-eof-close`):
+  - At EOF, `Value` returns 0x800A0BCD "No current record." for T and M.
+  - After `MoveFirst`, both read normally.
+  - After `Recordset.Close`, `Value`, `Name` and `Fields.Count` return 0x800A0D5C "Object invalid or no longer set." `MoveFirst` on the closed recordset returns 0x800A0D5C.
+- `Field.FieldSize` is refused on all 9 snapshot calls, T included, with 0x800A0CB3 (`str-memo-chunks`). `GetChunk` on Text field T returns 0x800A0CBB "Invalid field data type."
+  - On Memo, `GetChunk` offset and size are in characters. Row 5: (7999,5) returns "nn", (8000,4) returns "n", (1000000,4) returns `""`. A Null Memo returns VT_NULL.
+- Edits (`str-edit-requery`):
+  - T=`x\0y\0` and M=6000 `e`+NUL survive Update and Requery. A fresh snapshot gives Len(T)=4, Len(M)=6001.
+  - A 256-unit T assignment returns 0x800A0C5B. `Update` then succeeds with EditMode 0.
+  - `CancelUpdate` returns 0x800A0BCC and T keeps its old value.
+  - T=Null with M=`""` stores Null and `""`.
+- Schema change (`str-schema-change`):
+  - `ALTER TABLE S ADD COLUMN X` while a dynaset on S is open returns 0x800A0C8B (`Errors(0).Number` 3211).
+  - The retained T Field still reads after `MoveNext` and `Requery`. `Fields.Count` is 2.
+  - After the recordset is closed, the same ALTER succeeds. `Errors.Count` is still 1 with Number 3211 after that successful ALTER.
+  - `UPDATE X = Left(T,10)` stores `a\0b` (LX=3), `\0` (1) and `abc\0` (4).
+- ADO read of the same rows (`str-ado-read`, Mode=Read, server forward-only):
+  - Value tags and text equal the DAO text for both `S` and `C`.
+  - ActualSize equals the DAO byte lengths (0, 6, 2, 8, 16002, … and 4 for ID).
+  - `GetString(clip, -1, "|", "\n", "<null>")` renders both row 1 (`""`) and row 2 (Null) as `<null>`. NUL is kept in rows 3, 4, 5 and 11.
+
+*ADO-ASYNC* (`ado-async`)
+- `Connection.Execute(..., adCmdText|adAsyncExecute)` on a 10^7-row cross join returns a Recordset at once. Immediately after, `cn.State`=5 and `ra.State`=4, which is a pending-execution state.
+- `cn.Cancel()` returns hr 0. Then `cn.State`=1, `ra.State`=1, `EOF`=0 and `Value`=10000000, so the query was not aborted.
+- Client-cursor `Recordset.Open(..., adAsyncFetch)` returns `State`=1 and `RecordCount`=1 immediately. `Cancel` returns hr 0.
+
+*ADO-CONN / ADO-PROPS / ADO-PROVIDER*
+- A fresh Connection reports `Provider`="MSDASQL", `Mode`=0, `CursorLocation`=2, `CommandTimeout`=30, `ConnectionTimeout`=15, `Version`="10.0", `IsolationLevel`=4096 (`ado-open-provider-property`).
+- After `Properties` has been read, `cn.Provider = "Microsoft.ACE.OLEDB.12.0"` returns 0x800A0C94 "Supplied provider is different from the one already in use." `Provider()` then returns "MSDASQL.1". Whether the `Provider()` read or the `Properties()` read triggers this is not separated. Setting Provider first, as in `ado-async`, works.
+- `Open` after that returns ODBC 0x80004005 "Data source name too long". Reading the retained `Data Source` wrapper after the failed `Open` returns 0x800A0D5C.
+- Accepted ACE forms (`ado-open-alt-orders`, `ado-connstring-keys`):
+  - `ConnectionString="Provider=…;Mode=Read"` then `Open()`.
+  - `Provider` property then `Open(path)`.
+  - A duplicated Provider key with whitespace around `Mode = Read`.
+  - A quoted `Provider="…";Mode='Read'`. The `Provider()` getter returns the value with its quotes (`"Microsoft.ACE.OLEDB.12.0"`) before `Open` and without them after.
+  - `Jet OLEDB:Database Password=` empty.
+  - After `Open`, `ConnectionString` is expanded to `User ID=Admin;Data Source=…;Jet OLEDB:Engine Type=6;…`.
+- Refusals: unknown key `CalcDbUnknownOption=1` returns 0x80004005 "Could not find installable ISAM." A string with Provider and Mode but no Data Source returns 0x80040E4D "Authentication failed." The connection is then closed and `Provider()` returns "MSDASQL".
+- Non-ACE (`ado-provider-non-ace`):
+  - A string with `Provider=MSDASQL` and one with Data Source only, where `Provider()` already returns "MSDASQL", both reach the ODBC driver manager and fail with 0x80004005 IM002 "Data source name not found…".
+  - `Open()` with no string behaves the same.
+  - Each leaves `State`=0, and `Errors.Count`=1 with Number -2147467259 and SQLState "IM002".
+
+*ADO-RESULTS / ADO-CURSOR / ADO-SESSION*
+- `Connection.Execute` (`ado-execute-results`):
+  - `SELECT 1 AS A; SELECT 2 AS B` returns 0x80040E14 "Characters found after end of SQL statement."
+  - With `adExecuteNoRecords` (129), `Execute` returns a null interface pointer.
+  - A Recordset from `QEmpty` or `WHERE 1=0` has `State`=1, BOF and EOF both true, and 10 fields.
+- Action statements (`ado-execute-action`):
+  - UPDATE, INSERT and DELETE return a Recordset with `State`=0 or a null pointer.
+  - `SELECT @@IDENTITY` returns 5.
+  - Deleting a parent row that has related rows returns 0x80004005, SQLState 3200.
+- Effective cursor against requested (`ado-rs-cursors`, Mode=1). Effective `LockType` was 1 in every row of this list.
+  - Server forward-only, keyset and dynamic requests all give effective `CursorType` 0, with `RecordCount` -1 and `MoveLast` returning 0x80040E24 "Rowset does not support fetching backward."
+  - Server static gives type 3 with `RecordCount` 4 and `MoveLast` works.
+  - Client static with batch-optimistic lock gives type 3, `LockType` 4 and `RecordCount` 4.
+  - Client forward-only gives type 3.
+  - Server keyset on table `K` via `adCmdTable` or `adCmdTableDirect` gives type 1.
+- Session (`ado-session`):
+  - Three objects on one Connection share `ActiveConnection`.
+  - `cn.Close` leaves `rs1`/`rs2`/`rs3`, the retained ActiveConnection and `cmd` at `State`=0, and `cmd.ActiveConnection` returns a null pointer.
+  - A second Connection stays open, and a bad statement on it records its own error (SQLState "3000").
+- Errors (`ado-errors`):
+  - Misspelled SQL, a missing table and a missing column return 0x80040E14, 0x80040E37 and 0x80040E10.
+  - `Recordset.Open "SELECT FROM WHERE"` returns 0x80040E14.
+
+*ADO-PARAM / ADO-EDIT / ADO-BATCH / ADO-TXN / ADO-VIEW / ADO-SCHEMA / ADO-BULK / ADO-STREAM / ADO-PERSIST*
+- Parameters (`ado-params`):
+  - Saved query `QParam` with `adCmdStoredProc`: `Parameters.Count`=0 before and after `Refresh`. `Execute` returns 0x80040E10 "Too few parameters. Expected 1."
+  - `SELECT … WHERE Code = ? OR Code = ?`: `Refresh` gives Count=2 (adVarWChar-sized 510, Precision 255, Empty value). Two Appends make Count=4 and `Execute` returns 0x80040E10 "Parameter ?_1 has no default value."
+- Edit (`ado-edit`, server keyset, optimistic):
+  - A value assigned and then `MoveNext` posts the edit (`EditMode` 0 afterwards, "moved" persisted).
+  - `CancelUpdate` restores the old value.
+  - `AddNew` plus `Update` gives ID 5.
+  - `Field.UnderlyingValue` returns 0x800A0CB3 "Current provider does not support refreshing underlying values." both before and after `Update`.
+- Batch (`ado-batch`, client cursor, batch-optimistic):
+  - Three staged changes: row 1 T→b1, row 2 Code→a1 (a unique-key duplicate), row 3 T→b3.
+  - `UpdateBatch(adAffectAll)` returns 0x80004005 (duplicate key). Afterwards the source holds b1 and b3, and row 2 is unchanged.
+  - Statuses read back: row 2 = 2, the others = 8.
+  - After `Filter(adFilterConflictingRecords)`, `RecordCount`=0.
+- Transactions (`ado-txn`):
+  - `BeginTrans` returns 1 and then 2. Inner rollback and outer commit leave "t1".
+  - A third `CommitTrans` or `RollbackTrans` returns 0x8004D00E.
+  - `IsolationLevel=1048576` is accepted. The next `BeginTrans` returns 0x8004D008 "Neither the isolation level nor a strengthening of it is supported." The following UPDATE autocommits and is visible on a second connection.
+- View (`ado-view`, client static):
+  - Filter `T LIKE 'a*'` and `'a%'` both give `RecordCount` 1.
+  - `Find "ID = 3"` and `"Code LIKE 'b*'"` both land on b3.
+  - `Find "ID = = 3"` returns 0x800A0BB9 with the position unchanged.
+  - A Clone starts at `AbsolutePosition` 1 with `Filter` 0 and `Sort` `""`. After the parent is filtered to 1 row, the clone still has `RecordCount` 4. `Bookmark` returns VT_R8 on both parent and clone.
+- Schema (`ado-schema`): `OpenSchema` ids 20, 4, 12, 27, 16, 23, 22 succeed. Id 9999 returns 0x800A0BB9. Restrictions `Empty` and `Null` on id 20 are accepted.
+- Bulk (`ado-bulk`):
+  - `GetRows(-1)` returns a 2-D VT_ARRAY|VT_VARIANT with bounds 0+4 × 0+4. `GetRows(2,1,"T")` also succeeds. Element values are not captured.
+  - `GetString` with `|`, `\n` and `<null>` renders Null as `<null>`.
+  - Default `GetString(adClipString)` is tab-delimited with rows run together.
+- Stream (`ado-stream`):
+  - A Unicode `WriteText` of "a b€𝄞" gives `Position`=`Size`=14. Binary `Read` returns `fffe` plus UTF-16 LE.
+  - `ReadText` after `Charset="utf-8"` returns 0x80070057, and `SaveToFile` then writes 17 bytes.
+  - `SetEOS` at position 0 gives `Size`=0.
+  - After `Close`, `Size` and `ReadText` return 0x800A0E78.
+  - Switching a binary stream with data to text returns 0x800A0C93 while `Position` is not 0; after `Position`=0 it succeeds. Reading the 3-byte binary stream `410042` as Unicode returns "A".
+- Persist (`ado-persist`, MSPersist):
+  - ADTG files are 985 B (`k.adtg`) and 1005 B (`k-pending.adtg`). The XML file is 3430 B.
+  - Reopening both from file (`adCmdFile`, client, batch) keeps `Status`=2 on row 1, `Value`="pending", `OriginalValue`="alpha", `RecordCount`=4 and `ActiveConnection` null. Both reopened files read back identical value tags: I4, BSTR, R8, CY, DATE, UI1 array and Null.
+  - `Provider="MSPersist"` gives `Provider()`="MSPersist.1". `Recordset.Open(file, conn)` and `Connection.Execute(file)` both return 4 rows.
+  - The Decimal column `N` returns VT_DECIMAL with scale 0, sign 0 and lo64 12884901888 (=3·2^32) for a1. It returns 0 for b3 and b4. ADO reports `N` as Precision 38, NumericScale 0, DefinedSize 19.
+
+*R-ACT-1*
+- `DAO.DBEngine.120` returns `_DBEngine` {00000021…} from ACEDAO.DLL (registered "apartment"), `Version`="16.0" (`act-dao120`).
+- ADODB classes (`act-ado-classes`): `Connection` is Apartment (`_Connection` {00001550…}, `Version` "10.0"); `Recordset` is Both ({00001556…}); `Command` is Both ({986761E8-7269-4890-AA65-AD7C03697A6D}); `Stream` is Apartment ({00001565…}). Type library ADODB 6.1, 120 types (`ado-describe`).
+- Two `DAO.DBEngine.120` creations return the same object identity label (`u1`), and `Workspaces` is shared. After `e1.CreateWorkspace` and `Append`, both report Count=2. An `OpenDatabase` error 3024 (0x800A0BD0) appears in both `Errors` collections (`act-two-engines`).
+
+**Probe or fixture defects**
+- `create-ado`, `create-ado2` and `create-ado3` lost tables to DAO DDL refusals. Evidence: 0x800A0CDC "Syntax error in field definition." (DECIMAL; `Note` column) followed by 0x800A0C78 "Could not find output table 'K'."; `create-ado3` also gets 0x800A0BC3 on `rels.Append`. Every `ado-*` record from those generations is invalid for table content. `create-ado4` succeeds (`N` via `CreateField`, `[Note]` bracketed).
+- `ado-open-provider-property`: reading `Properties` on a fresh Connection pins MSDASQL, so the probe never inventories ACE. Its `Open` failure is ODBC, not ACE, and the probe is order-confounded.
+- `ado-execute-results`, `ado-rs-cursors`, `ado-view`, `ado-params` and `ado-session` set `cn.Mode`=1 (read), and their UPDATE and LockType results are confounded. `ado-execute-results` returns 0x80004005 "Operation must use an updateable query." for UPDATE.
+- The `ado-params` Refresh-then-Append sequence double-counts parameters, so its `?_1` failure says nothing about named mapping.
+- `ado-bulk` `GetRows` stores only array bounds ("not yet captured element-wise"). `show` also does not render the type-library `type` event of `ado-describe` (JSON only).
+- `ado-execute-results` and `ado-params` leave `r4`/`r5`/`r6` unbound after an error, and the dependent steps are skipped (notes "Target … is not bound").
+- Fixture-state sharing is not controlled in `ado-view`/`ado-edit`: `ado-edit` read back `n6` as ID 5 on a mutated copy.
+- The `ado-provider-missing-names` probe is defined but has no retained record.
+- In `str-memo-chunks`, `FieldSize` is refused on snapshots. Whether that is a snapshot limit or a probe-choice limit is unknown.
+
+**Revisit**
+- ADO events are not probed at all: `ado-async` has no sink, and ADO-EVENT, ADO-REENTRY and ADO-PARAM-EVENT are uncovered. `ado-async` also records no elapsed time.
+- Uncovered ADO branches: ADO-DISCONNECT, ADO-RECORD, ADO-RESYNC, ADO-BATCH-SCOPE, ADO-PROPS wrapper-after-Close/Refresh, and ADO-PERSIST ADTG byte parsing against MS-ADTG and malformed or truncated files. ADO-BOOK and ADO-SCHEMA restriction positions are only partly covered.
+- ADO-CURSOR must be re-run with a writable Mode before effective Lock/Supports can be trusted.
+- The decimal `lo64=3·2^32` result needs a byte-level or overlay check against the ADO and capture layouts.
+- R-STRING-1 has no allocation, pin or timing measurements, no inbound odd-byte BSTR, no ByRef, no SAFEARRAY or Decimal boundary, and no large-value allocation-failure case. ACCDB covers named/retained, revisit, memo, edit and schema probes; MDB has only the ordinal pass.
+- R-ACT-1: ACT-THREAD, ACT-CLSID, ACT-FACTORY, ACT-AGGREGATE, ACT-RETAIN, ACT-UNLOAD, ACT-XLL and ACT-MANAGED have no records, and there are no CalcDb-side comparisons. Only a same-STA `act-two-engines` (the ENGINE-IDENTITY seed) exists.
+
+### r-fmt-2-pres-1
+
+Basis: 52 retained records, one attempt (`a1`) each. All R-FMT-2 probes ran on `world-accdb` (one generation). Every R-PRESERVE-1 probe has two records; only the `pres4-accdb` ones are used, and the `pres3` ones are stale (see Defects). Typed readbacks, HRESULT/EXCEPINFO and file size/hash per step are read. Page-level byte images are not in `show` output and were not interpreted.
+
+**Observed: R-FMT-2**
+
+- **Boolean / Null**
+  - `bool-ladder`: `UPDATE T SET Y = True` (ID 2) and `= False` (ID 1) read back -1 and 0.
+  - `bool-ladder`: `UPDATE T SET Y = Null` (ID 3, was -1) returned success and read back `VT_BOOL 0`. An insert omitting Y stored `VT_BOOL 0` for row 50.
+  - `var-null-empty-ladder`: `UPDATE T SET N = ''` succeeded and read back `BSTR ""`. No step was refused. Only the end state is read back, so V's intermediate states are known from file hashes only.
+- **Scalar boundaries** (`scalar-admission`, `Sc` via recordset `Value`)
+  - Refused with `0x800A0D5D` "Data type conversion error": Byte 256 and -1; Integer 32768; Currency string "922337203685477.5808"; GUID unbraced string; GUID as 16-byte array.
+  - Read back as written: Byte 255; Integer -32768 and 32767; Long min; Single 1E-45, NaN, Infinity; Double -0, 5E-324, NaN, Infinity; Currency 922337203685477.5807.
+  - Currency strings "0.00005" → 0 and "0.00015" → 0.0002.
+  - Dates -1.5, -1, -0.5, 0 and 1.500000001 read back unchanged; 2958466 accepted.
+  - Braced GUID string read back as `"{guid {00112233-4455-6677-8899-AABBCCDDEEFF}}"`.
+  - Refused rows still ended up as rows with only ID set (`AddNew` then `Update`).
+  - All three Decimal (`Fm`) writes were refused with `0x800A0EAF` "Scaling of decimal value resulted in data truncation" ("12345678901234.5678", "-0.0001", `VT_CY 1.5`).
+- **Extended date/time** (`scalar-admission`, `Fx` read back as `VT_BSTR`)
+  - "0001-01-01 00:00:00.0000001" → `"01/01/0001 00:00:00.0000001"`; "9999-12-31 23:59:59.9999999" → `"12/31/9999 23:59:59.9999999"`.
+  - "2024-01-02 03:04:05.12345675" (8 digits): `Value` returned hr 0 but the row read back `VT_NULL`.
+- **Text grammar** (`text-grammar`, recordset)
+  - Read back unchanged: "wide €", "mixed ab€cd", the surrogate pair (𝄞), embedded NUL ("a\0b", bytes confirmed), leading U+FEFF (bytes `ef bb bf` confirmed), and 50 narrow or 50 wide characters.
+  - 51 narrow characters refused with `0x800A0C5B` "field is too small".
+  - The two memos (4000 chars, one with € at each end) read back non-null.
+  - Lone high/low surrogate rows read back as `VT_BSTR` with no text in `show`; the units are not verified.
+  - `alt-drop-ladder`: SQL `UPDATE Alt SET A = 'a-longer-value-than-before'` (25 chars, `A TEXT(20)`) was not refused and read back `"a-longer-value-than-"` (20 chars).
+- **Historical row coordinates** (`alt-drop-ladder`, `alt-append-ladder`)
+  - After dropping B and D, old rows read back as ID, A, C with values intact; a new row 99 (`'new'`, 777) was added.
+  - After adding E, F and G and moving E to `OrdinalPosition` 0, old rows read back `NULL, ID, A, B, C, D, NULL, BOOL 0`. The appended Yes/No column reads False, not Null, for old rows.
+- **Failed / generated** (`failed-ladder`, `dbFailOnError`)
+  - Duplicate unique key refused with `0x800A0BCE`; validation with `0x800A0CF4` "P must be positive"; Null in NOT NULL with `0x800A0CF2` "You must enter a value in the 'Fv.Q' field".
+  - Valid insert omitting P read back P = 1.
+  - File image: `before` → `after-duplicate-unique` changed (same 503808 B). The following two refusals left the hash identical to it.
+- **Transactions** (`txn-ladder`)
+  - After `CommitTrans`: `T.B` of ID 1 reads 111. The `Rollback` and the nested inner-commit/outer-rollback steps left the hash equal to `after-commit`, and rows 2 and 3 unchanged.
+- **Overflow / deletion**
+  - `grow-ladder`: Dense `LEN(C)` row 3: 1 → 20, row 4: 1 → 255. File size stayed 503808 B in both steps. `mdb-grow-relocate`: row 4 1 → 255, size stayed 413696 B.
+  - `del-reuse-ladder`: after `DELETE T ID 20`, T no longer lists ID 20 and DistinctCount (`PK_T`, `UX_T_A`) is 40 → 41 after the reinsert (ID 500). G went 5 → 1 rows after delete-all plus one insert. Sizes were constant at 503808 B for all four steps.
+- **Map growth and file size** (file size per step; no page analysis)
+  - `ins-data-ladder` (G, 520-byte rows): +4096 B at insert 102 and +4096 B at insert 105. Inserts 101, 103, 104 and 106 added no size.
+  - `sl-ladder`: size unchanged to 255 rows, +4096 B at 256 rows, unchanged at 257. Count reads 257. The row delete and the reinsert changed the hash but not the size.
+  - `ix-append-ladder`: +8192 B at insert 603; the earlier four inserts (599–602) added none. `ix-low-ladder`: `append-599-602` 0 growth; first single insert after it (-1) +8192 B.
+  - `ix-append-ladder` and `ix-low-ladder` read DistinctCount of `PK_IxL` equal to row count: 604 and 607.
+  - `idx-key-ladder`: `IX_Ix_W` DistinctCount 30 → 33 (low, mid, high keys new; duplicate "k100" not counted); `PK_Ix` 30 → 34.
+  - `upd-indexed-value`: `IX_T_N` 36, `PK_T` 40, `UX_T_A` 40 before and after the key replacements.
+- **Short root** (`shortroot-append-text`, `shortroot-grow-old`)
+  - `ALTER TABLE Bo ADD COLUMN Tx` changed the hash, not the size. Old row 31 then took a 100-char Tx (`"ttt…"`); all other rows read Null, and the three Boolean columns of old rows are unchanged. Size stayed 503808 B in both probes.
+- **LV form** (typed values read back; `FieldSize` for memos is 2 × char count, for OLE exact bytes)
+  - `lv-ole-small-ladder`: 63–66 B inserts read back; no size change.
+  - `lv-ole-page-ladder`: 4075 +8192 B, 4076 +8192, 4077 +8192, 4080 +8192, 4081 +8192, 9000 +12288.
+  - `mdb-lv-ole-page-ladder`: +4096, +8192, +8192, +8192, +8192, +12288 in the same order.
+  - `lv-memo-ladder`: memo 62 chars = FieldSize 124, 64 = 128, 66 = 132; 2040 × "€" = 4080; 4078 = 8156; 4082 = 8164. Sizes: first memo +4096 B, next two 0; 4078 +12288; 4082 +12288; wide +8192.
+  - `lv-transition-ladder`: grow 50→5000 +8192, shrink 5000→50 0, grow →9000 +4096, shrink 9000→5000 0. Typed values read back correct.
+  - `lv-chain-ladder`: same-size replace +20480 B; grow to 13000 +8192; shrink to 100 and set Null 0. Row 7 reads Null/Null at the end.
+  - `lv-delete-reuse-ladder`: file size constant (503808 B) through delete row 12, insert 100 B, delete chain row 5, insert 9000 B; rows 20 and 22 read back.
+
+**Observed: R-PRESERVE-1 (pres4, ACE DAO catalog view before vs. after)**
+
+- `pres-noop`: read-write open/close with no statement: hash and size identical to `before` (548864 B), and the two views are identical.
+- `pres-row-edit`, `pres-grow-relocate`: the hash changes; the whole DAO catalog view is identical before and after, including every `LastUpdated`.
+- `pres-lv-delete-retire`: only `Lv` RecordCount 13 → 12 changes. `pres-ins-pressure`: only `Dense` RecordCount 14 → 414; size 548864 → 1368064 B.
+- `pres-lv-replace-chain`: size +12288 B; view identical.
+- `pres-property-ladder`: size constant; each of the four edits is visible in the view, no other property changes, and `T.LastUpdated` is unchanged. QueryDef `QSel` and `QParam` (over `T`) list `T`'s `CalcDbUnknown` and `Description` in their own `Properties`, and show the new value; `QAct` and `QJoin` do not.
+- `pres-catalog-ladder`: `CREATE INDEX` +4096 B. Only `G.LastUpdated` changed (add/drop column); `T.LastUpdated` did not. `CREATE TABLE NewT` gave +12288 B, `TableDefs` 21 → 22, a `Containers` document `NewT`, and `MSysACEs` RecordCount 78 → 80, `MSysObjects` 39 → 40.
+- `pres-rename-referenced`: `Relation.Table` changes `Parent` → `Parent2` (`FK_Child_Parent`; `ForeignTable` stays `Child`). The `Name`, `LastUpdated` and `Containers` document names of `Parent2` and `T2` change. Saved-query SQL and QueryDef dates are unchanged: `QJoin` still `FROM Parent INNER JOIN Child`; `QSel`, `QParam`, `QAct` still reference `T`. `QSel` and `QParam` `Properties.Count` 16 → 14. `tdfs.Item("T")` → `0x800A0CC1` after the rename.
+- `pres-txn-failed-ladder`: `Rollback` leaves the hash equal to `before`. The FK-violation insert (`0x800A0C81`, "related record is required in table 'Parent'") and the unique-key insert (`0x800A0BCE`) each changed the hash, size constant; the view is unchanged.
+- `pres-compact`: `CompactDatabase` leaves the source hash unchanged. The compacted file is 548864 B (same size, different hash). Differences in the public view: `Database.Name`, and later `LastUpdated` for `Child` and `Parent` and their `Containers` documents; all else equal.
+- All `pres-*` views: `SELECT … MSysObjects`, `MSysRelationships`, `MSysQueries` refused with `0x800A0C28` "no read permission". `Connection` (`0x800A0CB3`), `ConflictTable` and `ReplicaFilter` (`0x800A0BD8`) values are refused too; that is why each record is ReturnedFailure.
+
+**Probe or fixture defects**
+
+- `create-pres-accdb`, `-pres2-`, `-pres3-`: `Note` unbracketed, `0x800A0CDC`; `INSERT INTO Child` `0x800A0C3E`; pres3 also `rels.Append` `0x800A0BC3` (listed by `fixtures --failed-only`). The pres3 `pres-*` records (`pres-catalog-ladder.8691d34a88`, `-compact.f6b1949a7e`, `-grow-relocate.e1fb501d03`, `-ins-pressure.658120f10c`, `-lv-delete-retire.300837de11`, `-lv-replace-chain.a42b9ffb92`, `-noop.3939c33a88`, `-property-ladder.02a9fe217c`, `-rename-referenced.6930dd6892`, `-row-edit.ad4cd234ef`, `-txn-failed-ladder.a373618570`) are superseded and not used.
+- `create-world-mdb`: `ALTER TABLE Sc ADD COLUMN Fx DATETIME2` refused with `0x800A0BB9` (so `Sc` in the MDB fixture lacks `Fx`). No retained MDB probe uses `Sc`.
+- `Fm` Decimal is appended with `CreateField(name, 20)` without Precision or Scale (`tools/CalcDb.Probes/Cards/RFmt2Preserve1.cs`, "The Decimal scalar" block); the stored precision/scale is not read. The refusals of all three Decimal writes therefore do not map the card's precision/scale endpoints.
+- `scalar-admission` labels date 2958466 "out-of-range", but it is accepted as the upper endpoint; the overflow side is not probed.
+- `var-null-empty-ladder` description says one attempt is refused; none was.
+- ReturnedFailure on the `pres-*`, `scalar-admission`, `text-grammar` and `failed-ladder` records comes from ACE refusals the probes ask for or from read-refusal in the catalog view. Probes still counted as failed by status.
+
+**Revisit**
+
+- Interpretation of page images is outstanding; this section states file size and hash only. The byte-level questions (FMT-SLOTS256 slot count at 255/256, LV forms at 63/64/65 and 4075–4081, short-root repacking, DistinctCount word, +8192 B at 603rd index entry) need the inspector.
+- Not probed: calculated wrappers; AutoNumber/GUID generation, reseed, CancelUpdate; LV malformed/stream; map-declaration/ownership transitions; II-05 deletion, high keys and tails, aliases, retirement, statistics under rollback or failed Update; row-mask boundaries (Alt has 5 columns); NUMERIC bytes and sign forms; negative-zero Decimal; Fx scale/precision reread.
+- Not probed: unreadable `MSys*` via SQL means no catalog-row comparison, only DAO projections. No Access-created forms, reports, macros, modules; unknown properties are DAO-created. No repair-marked Compact & Repair copy, no Name AutoCorrect.
+- Open: why did the first failed insert (`failed-ladder`) change the hash while the next two did not, and why did both failed inserts in `pres-txn-failed-ladder` do so? Not yet explained by this card's captures.
+- Single attempt per probe; hashes not shown to be stable under rerun.
+
+### r-oledb-odbc
+Basis: the newest (v2) record of each probe (39 probes with v2 records, plus `act-describe-companion-libraries` and `odbc-path-free-connections`, which have one record only). All answers are from ADO 10.0 (msado15) over `Microsoft.ACE.OLEDB.12.0`, ACE 16.0.20527.20196, on .NET 11 x64 STA. Probes run through ADO only. No ODBC connection succeeded.
+
+**Observed**
+- **OLE-ACT:**
+  - `act-provider-identity`: the loaded module is `ACEOLEDB.DLL`, with `mso.dll`, `ACECORE.DLL` and `ACEWSTR.DLL`. `ACEES.DLL` and `ACEERR.DLL` appear by `after-close` (`act-describe-adodb`).
+  - After Open, the provider reports Provider Name `MSJETOLEDB40.DLL`, version `04.00.8015`, friendly name "Microsoft OLE DB Provider for Jet", DBMS `MS Jet` `04.00.0000`, OLE DB Version `02.10`.
+  - Before Open those named properties do not exist (`0x800A0CC1`).
+  - Active Sessions stays 128 with one or two connections open, and after one closes.
+  - `act-services-variants`: OLE DB Services -1, -2, -4, -5 and 0 all open, and client static and server keyset Recordsets both give RecordCount 5. For -5 and 0 the property "OLE DB Services" does not exist after Open.
+  - `act-describe-companion-libraries`: ADOX.Catalog creates (`msadox.dll`); `JRO.JetEngine` fails with `0x80040154`.
+- **OLE-PROP:**
+  - `prop-connection-inventory`: 31 connection properties before Open, 101 after. Engine Type is 6 for ACCDB and 5 for MDB. After Open: Isolation Levels 4096, Isolation Retention 9, Transaction DDL 16, Multiple Results 0.
+  - `prop-modes`, default Mode is 16:
+    - Mode 1 opens, and UPDATE fails `0x80004005` "Operation must use an updateable query." (SQLState 3073, native -198839259).
+    - Modes 3, 16 and 19 open and UPDATE works.
+    - Modes 2, 5, 11 and 15 fail Open with `0x80040E21`.
+    - A second Mode 19 connection opens alongside each.
+  - `prop-jet-options`:
+    - Locking Mode 1/0, Global Partial Bulk Ops 2 and Encrypt Database True are accepted and read back.
+    - `Jet OLEDB:Transaction Commit Mode=1` in the connection string fails "Could not find installable ISAM."
+    - Engine Type=5 on the ACCDB reads back 6.
+    - Database Password `wrongpw` opens with State 1.
+    - An absent System database path is accepted.
+  - `prop-rowset-requests` (request → effective): forward-only/read-only → 0/1; keyset/optimistic → 1/3; dynamic/pessimistic → keyset/pessimistic; forward-only/batch-optimistic → keyset/4; forward-only/pessimistic → keyset/2; client static/batch → 3/4. CmdTableDirect keyset opens. Connection Errors count is 0 for all eight.
+  - `prop-command-set-execute`:
+    - Setting Maximum Rows (attr 513), Immobile Rows or Literal Bookmarks fails `0x80040E21` "Read-only property value was not set."
+    - Bookmarkable=True makes the cursor static (type 3); Others' Changes Visible=True makes it keyset. Both persist on the Command.
+    - All 10 Executes fetch 32 rows.
+    - An unknown property name gives `0x800A0CC1`.
+- **OLE-ACCESS:** `access-prepared-deferred`: with Prepared False or True, `SELEC bad` fails at Execute with `0x80040E14`, and a missing table with `0x80040E37`. Parameters.Count reads 0 without error for the missing table and 1 for `?`. Execute of `?` fails `0x80040E10` "Parameter ?_1 has no default value." Re-execution after a text change works.
+- **OLE-BUFFER:** `buffer-typed-server` and `-client`:
+  - ADO types: ID 3, Code/Txt 202, Dt 7, M 203 (size 536870910), B 205 (1073741823), Bin 204 (16), Y 11, Sh 2, Bt 17, Sg 4, G 72, N 131 (precision 38, scale 0).
+  - Server cursor: Byte reads `VT_I2`, memo `ActualSize` 24000 for 12000 characters, Bin is zero-padded to 16 bytes, GUID reads as a braced string.
+  - Client cursor: Byte reads `VT_UI1`. Only the column-property sets differ (BASECATALOGNAME, BASESCHEMANAME, KEYCOLUMN, RELATIONCONDITIONS, CALCULATIONINFO, OPTIMIZE added; ISCASESENSITIVE and COLLATINGSEQUENCE dropped).
+  - Empty binary reads `VT_NULL`, empty text `""`.
+  - `schema-columns`: ORDINAL_POSITION and COLUMN_FLAGS are declared type 19 but delivered as `VT_R8`. Items DATA_TYPE: B and Bin 128, Code/Txt/M 130, N 131. ACCDB and MDB Items rows are equal; the compressed `Cmp` columns carry the same flags (106/234).
+- **OLE-FETCH:**
+  - `fetch-batches`, forward-only: CacheSize 1 and -1 accepted, 0/2/3/40 refused `0x800A0BB9`; GetRows(0) → `0x800A0C93`; EOF read → `0x80040E24` "Rowset does not support fetching backward."
+  - `fetch-batches`, keyset: CacheSize 2, 3, 40 and -1 accepted, 0 refused. GetRows(1) → AbsolutePosition 2, GetRows(2) → 4, GetRows(100) → EOF True with position -3; RecordCount 32.
+  - `fetch-moves`, forward-only: MovePrevious → `0x800A0C93`; Move(-1) and MoveLast → `0x80040E24`; MoveFirst after three MoveNext returns ID 1.
+  - `fetch-moves`, keyset: Move(5) → ID 7, Move(100) → EOF with position -3, MovePrevious from EOF → ID 32, MovePrevious at first row → BOF with position -2, a further MovePrevious → `0x800A0BCD`.
+- **OLE-ROWLIFE:** `rowlife-clone-delete-requery`:
+  - After Delete, Status 262144 and reading the field gives `0x80040E23`.
+  - Resync gives `0x800A0CB3`.
+  - After Requery the retained Field gives `0x800A0D5C` "Object is no longer valid."
+  - The clone keeps reading ID 4 after the original Recordset closes.
+  - `stream-record-from-row`: `Record.Open(Recordset)` gives `0x800A0CB3`; Stream.Open on the closed Record gives `0x800A0E78`; Record.Open on the connection gives `0x800A0E7D`.
+- **OLE-STREAM:**
+  - `stream-getchunk`: forward-only 3/3/3/1 then `VT_NULL`; then Field.Value → `0x8000FFFF`. Client static gives the same chunks and a Value of 10 bytes. GetChunk 0 or -1 → `0x800A0BB9`; 65536 returns all 12000 bytes.
+  - `stream-appendchunk`:
+    - 3+4 bytes store 7 bytes.
+    - AppendChunk(2) onto an existing 10-byte value stores 2 bytes (replace, not append).
+    - AppendChunk on Text(50) → `0x800A0C93`.
+    - A cancelled AddNew still consumes an AutoNumber (ID 7 missing).
+    - AddNew+AppendChunk then MoveNext without Update stores the row.
+    - An empty AppendChunk stores `VT_NULL`.
+- **OLE-PARAM:**
+  - `param-derived`: stored queries via adCmdStoredProc show Parameters.Count 0, and Refresh gives 0.
+  - Text `?` markers derive as Name `?`, Type 202, Size 510, input. `PARAMETERS pX Long, pY Text(5)` derives pX Type 3 Size 4 and pY Type 202 Size 255.
+  - `param-order-binding`: stored-query parameters set by name fail `0x800A0CC1`, and Execute fails `0x80040E10` "Too few parameters. Expected 5." (SQLState 3061).
+  - Binding of `?` markers is by position. NamedParameters=True does not change that.
+  - In the `PARAMETERS` form, appending pA before pB fails `0x80004005` "Unspecified error"; appending in declaration order runs.
+  - `param-types-insert`: ic0 (typical values) and ic1 (all Null but Code) execute. "abc" or a 60-character text fails at CreateParameter (`0x800A0D5D`); Double 3e9 fails at CreateParameter (`0x8002000A` "Out of present range.").
+  - `param-edge`: Output, InputOutput and ReturnValue directions on a `?` command fail `0x80040E21`.
+- **OLE-UPDATE:**
+  - `update-errors`:
+    - "abc" for a Long fails at field assignment with `0x80020005`; 3e9 fails with `0x8002000A`.
+    - A text that is too long fails at assignment with `0x80040E21` (SQLState 3163).
+    - Unique conflict fails at Update, Status 4096 (SQLState 3022).
+    - Delete of a referenced row fails (3200).
+    - Missing required value gives Status 131072 (3314), and the CHECK gives 131072 (3316).
+  - `update-optimistic-conflict`:
+    - A stale Update fails `0x80040E21` (SQLState 3197, Status 16).
+    - After CancelUpdate the Value reads `B-value`.
+    - On the deleted row the field assignment fails `0x80004005` (3197), and a later read gives `0x80040E23` "Record is deleted." (3167).
+  - `update-pessimistic-lock`: B's UPDATE of rows 1 and 3 while A edits row 1 fails `0x80004005` "Could not update; currently locked." (SQLState 3218, native -72156238). B's SELECT still reads `alpha`. B's UPDATE of row 1 succeeds after A's Update. B's UPDATE of row 2 fails while A edits row 2 and succeeds after CancelUpdate. A's Errors count is 0.
+  - `update-others-visible`: B's UPDATE/INSERT/DELETE all returned success, yet A's four Recordsets (keyset, static, dynamic, client static) show the old values and 5 rows, also after Requery.
+- **OLE-TXN:**
+  - `txn-held-rows`:
+    - BeginTrans returns 1.
+    - Held keyset, forward-only and client static Recordsets stay State 1 and readable across commit and rollback.
+    - Preserve on Commit is True for all three; Preserve on Abort is False for the two server Recordsets and True for client static.
+    - With Attributes 393216, a transaction stays open after commit or rollback, and Close fails `0x800A0CAE`.
+    - The property named "Isolation Level" does not exist.
+  - `txn-ddl-rollback`: CREATE TABLE, INSERT and ALTER TABLE all roll back (field count 17→16; later SELECT → `0x80040E37`). Commit keeps them.
+  - `txn-two-process`: a second process's UPDATE of rows 1 and 3 fails `0x80004005` "Could not update; currently locked." (SQLState 3218) while an uncommitted transaction exists. Its reads show neither A's update nor A's new row, and still show `alpha` after A commits.
+- **OLE-ERROR:**
+  - `error-record-channels`: each failure leaves exactly one Errors entry, never accumulating, with SQLState, native error and help context set. `SELECT NoSuch FROM Items` gives `0x80040E10` "No value given for one or more required parameters." with SQLState "". `SELECT 1/0` succeeds.
+  - `error-retained-lifetime`: a retained Error keeps its Number, Description and SQLState after Clear, Command release, Close and collection release.
+  - `error-open-failures`: an absent file gives `0x80004005` (SQLState 3024). No Data Source gives `0x80040E4D` "Authentication failed." (source "Provider"). Excel/Text extended properties give SQLState 3274 and 3044. User ID/Password gives `0x80040E4D` (3028). Setting Mode 99 gives `0x800A0C93`, and Open then uses 16.
+  - `error-ado-origin`: ADO-raised errors leave Errors count 0; a provider error gives count 1.
+  - `schema-keys-indexes`: ConstraintTableUsage (7) → `0x800A0CB3`.
+  - `schema-procedures-views`: ProcedureParameters, ProcedureColumns, ViewColumnUsage and ViewTableUsage → `0x800A0CB3`.
+  - `schema-others`: every other schema value tried except 6 and 19 → `0x800A0CB3`; 9999 and -1 → `0x800A0BB9`.
+  - `schema-tables`: QParam, QMulti and QAction are procedures only; QSel and QEmpty are views and procedure-less.
+- **OLE-MANAGED:** not covered.
+- **ODBC-LOAD (only connection attempts):**
+  - `odbc-path-free-connections`: all 7 MSDASQL/ODBC attempts fail.
+  - No Dbq gives `0x80040E4E` "Operation was canceled."
+  - Unknown driver name, `(*.mdb)`-only driver name and unknown DSN give `0x80004005` "[ODBC Driver Manager] Data source name not found…".
+  - A nonexistent Dbq gives "'(unknown)' is not a valid path".
+  - `ACEODBC.DLL` 16.0.20527.20196 loads after the first attempt.
+  - Errors count is 0 in every case.
+- All other ODBC arms: no records.
+
+**Probe or fixture defects**
+- `create-v2-*`: `Items.N` (type 20) refuses "3.125" and "-0.0001" (`0x80020009` / `0x800A0EAF`), so N is Null in IDs 1 and 4. v1 records lost table `Child` (`0x80040E37` in `access-ordinals`) and are not used.
+- `access-ordinals`: `Code AS Dup, Code AS Dup` is refused `0x80040E14`, so all 16 ordinal arms (o1–o16) never ran.
+- `param-derived`, `param-order-binding` (a), `param-edge`: stored queries expose no parameters, so the QMulti/QParam/QAction arms only show "Too few parameters". The Null/'a1'/'b3' and QAction-effect arms are unexercised.
+- `param-order-binding` (c): the two values match no row (b3 has L=0), so an empty result cannot discriminate bindings.
+- `param-types-insert`: ic2–ic4 fail in `CreateParameter`, so provider-side conversion is untested. Decimal values print as bare `VT_DECIMAL`.
+- `fetch-batches`: the GetRows SAFEARRAY is "not yet captured element-wise", so rows returned per call are unknown.
+- `stream-getchunk`: the interleaved B/M loop returns 4096 bytes and about 5000 characters four times. The B pattern repeats every 256 bytes, so the offset is not shown.
+- `error-open-failures`: Mode 15 (exclusive) is refused even for a lone connection, so the first-exclusive/second-shared conflict is untested.
+- `schema-others`: restrictions were passed as scalars (`VT_I4 0`, `"Items"`) and refused `0x800A0CB3`. ADO documents Criteria as an array, so restriction handling is untested.
+- `update-others-visible`: no independent reader checks that B's writes reached the file.
+- `act-services-variants`: five services run in one process, so module counts only grow.
+- Module identification covers only 17–24 of 154–164 modules, so `odbc32`/`msdasql` are not identified. `act-describe-adodb` renders no type-library inventory in `show` (its JSON is about 1.7 MB and was not read).
+- `odbc-path-free-connections`: attempt o1 has no Dbq and returned "Operation was canceled." The record does not say whether a driver prompt appeared. Check against the private-desktop rule.
+
+**Revisit**
+- Why B still reads `alpha` after A commits in `txn-two-process`, and why A sees nothing after Requery in `update-others-visible`. Both need an independent reader or a fresh connection.
+- Capture the GetRows array contents; make the long-value chunk loop distinguishable (non-periodic data).
+- Rerun the stored-query parameter arms with parameters set from the card text, the QMulti name-order arm, and the Mode-15 exclusive conflict.
+- Retry schema restrictions as Variant arrays; the DECIMAL fixture value needs a form ACE accepts.
+- Uncovered: OLE-MANAGED (Framework and .NET 10 clients), raw IAccessor/DBBINDING and 48-byte buffer layouts, HROW ownership, DBTYPE_IUNKNOWN callbacks, multi-set stride, raw IErrorRecords, aggregation.
+- Uncovered: every ODBC arm past connection attempts (ABI, state, descriptors, arrays, GetData, need-data, transactions, cancel, diagnostics, clients). Needs a Dbq path and a native consumer; no ODBC connection has succeeded.
+
+### r-cplx-rebuild
+
+Based on the newest fixture generation: `rb-rich2-*`, and `cx-*` as created. The `rb-rich-*` runs (`compact-rich.5c48684077`, `options-*.35e7b9a59f`/`.5d659a295e`/`.66d4807485`, `compact-counters.61bfd63dd1`, `publish-*.811bd87497`/`.f4eff7bcaf`/`.0463aad159`, `repair-clean-control.da5d3ae332`, `negative-open-and-compact.011d613735`) are superseded and not used. All "same"/"differs" comparisons below are on enumerated public state, not on bytes.
+
+**Observed**
+
+*CX-DESC*
+- `read-cx-mv-text`: `Tags` Field2 is Type 109, Size 4, Attributes 1, `IsComplex` -1, 24 properties. Its child recordset has one field `Value`: Type 10, Size 255, SourceTable `T.Tags`. `MSysComplexColumns` `TableDef.RecordCount` is 1.
+- All fixture reads (`read-cx-*`, `desc-rename-drop`, `compact-complex-fixtures`): `SELECT` on `MSysComplexColumns` or `MSysObjects` returns 0x800A0C28 "no read permission". No association rows were captured.
+- `read-cx-attach`: `Att` is Type 101. The child fields are `FileData` 11, `FileFlags` 4, `FileName` 10, `FileTimeStamp` 8, `FileType` 10 and `FileURL` 12, all with SourceTable `T.Att`.
+- `desc-rename-drop`: all accepted, with the group still readable under the new names:
+  - rename `Tags`→`Tags2`
+  - rename table `T`→`T2`
+  - append MV Long `Extra`
+  - `ALTER TABLE … DROP COLUMN` on `Extra`, then on `Tags2` (which held data)
+  - `DROP TABLE`
+
+*CX-READ*
+- `read-cx-mv-text`:
+  - The child recordset is Type 2 with `RecordCount` 1 before `MoveLast` and 2 after. After `MoveLast`, `AbsolutePosition` is 1.
+  - `ParentRecordset().Name` is the parent's SQL text.
+  - Group order is alpha, beta. p3 and the filler rows give `RecordCount` 0 with BOF and EOF true. p5 (deleted) gives 0x800A0BCD.
+- `read-cx-sql-surface`:
+  - `SELECT Tags` returns VT_DISPATCH, Type 109.
+  - `Tags.Value` joins p1 as beta, then alpha. p3 gives Null.
+  - `Tags.Value = 'alpha'` matches p1 and p2.
+  - `GROUP BY Tags.Value`: Null 94, alpha 2, beta 1, same 1, six 1.
+  - `Att.FileFlags`, `FileTimeStamp` and `FileURL` are all VT_NULL.
+  - `COUNT(Att.FileName)` is 5.
+- `read-cx-ado`:
+  - The `Tags` column is Type 203 with value "alpha;beta", Attributes 234. Binding `Field.Value` as a child recordset fails (no object).
+  - `Tags.Value` rows are Type 202, and p1 again gives beta then alpha.
+  - The `Att` column is Type 203, "att-page.txt;att-small.txt".
+  - ADO join order for p2 is small then page. DAO join order is page then small.
+- `read-cx-attach`:
+  - `FileData` through DAO is a wrapper: `14000000 01000000 04000000 "txt\0"` (UTF-16, 20 bytes) followed by the content.
+  - `FieldSize` is 25 for "hello" and 20020 for the 20,000-byte file. `SaveToFile` writes 5 B and 20000 B (the unwrapped content).
+  - The second DWORD is 1 in all four wrappers captured: p1, p2 (both) and p4 (the noise file).
+- `read-cx-types`: only `MByte` has a complex field. Type 102, Size 4. Children are Type 2 `VT_UI1` 1 and 255. p2 gives 0 rows.
+
+*CX-HOLD*
+- `hold-surfaces-parent-movement`, `hold-parent-requery-delete-close`:
+  - After a parent `MoveNext`, `Requery`, `Delete` or INSERT, the held child and its clone fail on `RecordCount`, BOF, EOF, Bookmark and `Close` with 0x800A0D5C "Object invalid or no longer set". `Fields()` still returns an object, but `Count` on it fails with the same code.
+  - `c1.ParentRecordset` fails with 0x800A0C93.
+  - Re-reading `ft.Value()` gives a fresh child: p2 has 1 row, p3 has 0 rows with Bookmark 0x800A0BCD, and p1 again has "alpha" with Bookmark `00030000`.
+  - The held child stays invalid after the parent moves back to p1.
+- `hold-parent-requery-delete-close`: parent `Delete` of p1 (with a held child) succeeded. The recreated p1 has 0 children.
+- `hold-release-orders`:
+  - (b) Close of the parent and Database, then the held child: `RecordCount`, Bookmark and `Close` give 0x800A0D5C.
+  - (c) Releasing Database and parent with no `Close`: the held child stays readable (count 1, "alpha").
+  - (d) Closing child, parent, then Database: no failures.
+
+*CX-EDIT*
+- `edit-child-admission`:
+  - Child `AddNew` or `Edit` without a parent `Edit` gives 0x800A0F0C. The following `Value`, `Update` and `CancelUpdate` give 0x800A0BCC.
+  - Under parent `Edit`, a 300-char value (put 0x800A0C5B), a Null value, a `Byte()` value (put 0x800A0D5D) and no value each end with `Update` 0x800A0BF2 (3058).
+  - After parent `CancelUpdate`, the held child gives 0x800A0D5C.
+- `edit-parent-update-vs-cancel`: child `Update` under parent `Edit` succeeds (count 3). The held child is invalid after the parent `Update` or `CancelUpdate`. p1 then holds "new-update" (3 rows). p2 does not hold "new-cancel" (1 row).
+- `edit-child-edit-delete`: child `Edit`, `Update` and `Delete` under parent `Edit` succeed (result: "changed", 1 row). With no parent `Edit`, child `Edit` gives 0x800A0F0C, but child `Delete` succeeds (p4 group → 0 rows).
+- `edit-parent-addnew-counter`: `AddNew` reads ID 100, 101 and 102 for p7, p8 and p9. The `CancelUpdate`d p8 consumed 101. Saved IDs are 100 and 102. A child `AddNew`/`Update` under the unsaved parent persisted ("n1").
+- `create-cx-mv-text`, `att-load-variants`: a duplicate multivalue value is refused with 0x800A0EEC. The case-only name pairs `ext.TXT` and `ext.ZIP` were refused (the second of each pair) while `ext.zip` (same bytes) was accepted. `ext.JPG` was refused as well (it has the same name as `ext.jpg` apart from case).
+
+*CX-ATT*
+- `att-load-variants`:
+  - Empty file gives a 20-byte wrapper only.
+  - File with no extension gives wrapper `0e000000 01000000 01000000 0000` (14 B), `FileType` "".
+  - The 9,000-byte patterned content gives `FileData` of 9020 B, with `FileFlags` Null.
+  - Read order is not load order.
+- `att-replace-remove`:
+  - `LoadFromFile` plus `FileName`="renamed.dat" gives `FileData` of 5020 B. Its wrapper extension is still "bin", while `FileType` is "dat".
+  - Assigning raw `FileData` bytes (`010203`) gives 0x800A0BB9. The row still saves with `FileData` Null and `FileName` "bytes.bin".
+  - Deleting both p2 attachments under parent `Edit` works (0 rows left).
+- `att-file-failures`:
+  - `SaveToFile` onto an existing file gives 0x800A0EFF (3839). That file is unchanged.
+  - `LoadFromFile` of a missing file gives 0x800A0BD0 (3024).
+  - `SaveToFile` on the child of an empty group gives 0x800A0BCD (3021).
+
+*CX-CALC*
+- `create-cx-calc`: appending `DateAdd("d",1,[D])`, `CCur([A])*1.1` or `Now()` is refused with 0x800A0F13. Seven calculated fields were created.
+- `calc-source-data-change`:
+  - A held Field read the new `C_long` (200) right after `Execute UPDATE`, without `Requery`.
+  - `UPDATE`/`INSERT` that overflow are admitted: A=2147483647, D=9999-12-31, A=0.
+  - Reading then gives `C_long` 0x800A0006 "Overflow" and `C_div` 0x800A000B "Division by zero". With A=0, `C_long` is 0.
+  - Null A gives `C_text` "-x" and `C_iif` "null".
+- `calc-schema-change`:
+  - Setting `Field.Expression` on an existing calculated field gives 0x800A0C77.
+  - Renaming A→A2 is accepted. The dependants keep "[A]…". `SELECT *` then fails with 0x800A0F2B.
+  - `ALTER COLUMN B` then fails with 0x800A0ED7. `DROP COLUMN D` and `DROP COLUMN C_text` succeed.
+- `calc-admission`, query side only: `Eval` and `NoSuchFunction` give 0x800A0C0D. `[X]+1` gives 0x800A0C1F. `CLng('abc')` gives 0x800A0D88 at the value read. `DLookup` returns VT_BSTR "10".
+
+*CX-HISTORY*
+- `history-append-cancel-rollback`: on an ordinary Memo (`AppendOnly` False at start), `Edit`/`Update` gives "r1", `CancelUpdate` leaves it, and `Rollback` leaves it. `CommitTrans` gives "t3".
+- `history-toggle-delete`: setting `AppendOnly` True is accepted and reads back -1. After that, `UPDATE`, `DELETE` of ID 2 and re-`INSERT` (new ID 4) all succeed.
+
+*RB-CLEAN / RB-RELOC / RB-OPAQUE*
+- `compact-rich`, `compact-fmt1-features`, `compact-bloat-repeated`:
+  - Compaction output is the same size as the source (ACCDB 315392 B, MDB 221184 B; all `r-fmt-1` fixtures except one).
+  - Rows of Parent, Child, W and the user-table enumeration are identical to the source.
+  - The only property differences are `LastUpdated` on two tables.
+  - One exception: fixture `a-wide` grew from 196608 B to 294912 B.
+  - Bloat: ACCDB 4444160 B→368640 B, MDB 4349952 B→274432 B. Sizes were stable over generations 1 to 3. Content stayed N=40, MaxId=40, L=80000, Keep=3.
+- `compact-counters`: source `Child` (MAX 50) inserts at ID 65 (`@@IDENTITY` and MAX). The compacted copy inserts at 51, in both ACCDB and MDB.
+- `compact-complex-fixtures`: same-format compaction of `cx-mv-text`, `cx-types`, `cx-attach`, `cx-calc` and `cx-history` succeeded with the same size and the same group, row and export results (`export-attsame.bin` 5 B, hash prefix 2cf24dba5fb0).
+
+*RB-OPTIONS*
+- `compact-complex-fixtures`: to Jet4 (`dbVersion40`), `cx-mv-text`, `cx-types`, `cx-attach` and `cx-calc` give 0x800A0EEA "uses attachments or multi-valued lookup fields". `cx-calc` has no such fields. `cx-history` succeeds (98304 B).
+- `options-version`:
+  - ACCDB to 128, 256 and 64 gives Version 12.0, 14.0 and 4.0.
+  - ACCDB→64 drops `MSysComplexColumns` and has `MSysACEs` 28 vs 48.
+  - MDB→64 is identical to the source. MDB→128 gives Version 12.0 and adds `MSysCompactError` (4 fields, 1 row) and `MSysComplexColumns`.
+  - MDB→256 gives 0x800A0F4A "collating sequence not supported with the specified file format".
+- `options-collation`:
+  - Outputs give `CollatingOrder` 1033, 1034 and 1053.
+  - Swedish orders ä, ö after z. The Spanish output is identical to General.
+- `options-encrypt-password`:
+  - ACCDB with `dbEncrypt` gives 0x800A0BB9 (3001).
+  - `;pwd=` in DstLocale produces a file that opens only with the password (else 0x800A0BD7 "Not a valid password"), with Version 14.0.
+  - Compacting it back with the password only as SrcLocale gives an output that still fails to open without a password.
+  - MDB `dbEncrypt` and `dbDecrypt` succeed. All opened outputs have the same rows.
+
+*RB-PUBLISH*
+- `publish-existing-and-aliases`: an existing destination, destination equal to the source, and an existing alias give 3204 "Database already exists". The source and existing files are unchanged. The `\\?\` source gives 3043 "network access was interrupted". Upper-case, slash and dot spellings of the source work.
+- `publish-held-inproc`: source held by a shared Database gives 3704. Held exclusive, exclusive read-only, or by a native handle (read/write or read) gives 3045. No output file in any case. A destination held by a Database gives 3204.
+- `publish-held-xproc` (participant `b` holds, `a` compacts): ACCDB shared read/write and shared read-only holders give 3704. ACCDB exclusive holders give 3045. All four MDB states give 3045. `b`'s own opens succeed.
+
+*RB-NEGATIVE*
+- `negative-open-and-compact`: a missing source gives 3024. A text file or an empty file gives 3343, for both open and compact. A missing or wrong password gives 3031. An invalid locale gives 3228, with no output. Undefined option bit 1024 gave no error and produced an output file.
+- `DBEngine.Errors` is not cleared on success (stale 3343, 3228, 3204 and 3420 entries seen after successful calls).
+
+*RB-REPAIR*
+- `repair-clean-control`: `RepairDatabase` on clean ACCDB and MDB returns 0x800A0CB3 (3251). The files are unchanged.
+
+**Probe or fixture defects**
+- `create-cx-types`: only `MByte` received `V`. For the other seven kinds, `TableDefs.Item("M<Kind>")` returned 0x800A0CC1 right after the DDL, consistent with a stale TableDefs collection (no `Refresh`). The same defect is in `calc-admission` (`N1`–`N16`, so no calculated column was ever appended; table-side admission is only `N0` = `Now()`).
+- `create-cx-history`: `CreateProperty("AppendOnly")` gave 0x800A0D27 (already exists), so the fixture never had `AppendOnly` True.
+- Every `ColumnHistory(...)` read gives 0x800A0C0D (not a function in this SQL). No history content was read.
+- The `MSysCompactErrors` queries use the plural name. The table that exists (MDB→128 output) is `MSysCompactError`, so its rows were never read.
+- `edit-workspace-transactions`: `Rollback` and `CommitTrans` after `BeginTrans` gave 0x800A0BDA, and the held `c2` was invalidated earlier. The "tx-commit" step is not exercised. The same `Workspaces(0)` rolled back correctly in `history-append-cancel-rollback`.
+- `att-replace-remove`: p1's delete used a child invalidated by the earlier parent `Update` (0x800A0D5C). That deletion did not happen.
+- `att-file-failures`: the last two steps (database file as `LoadFromFile` source and as `SaveToFile` destination) hit 0x800A0D5C on a stale handle.
+- `options-collation`: the strings (`ch`, `ll`) do not separate Spanish traditional from General.
+- `compact-fmt1-features` and the rich enumerations: `TableDef.RecordCount` and `Indexes` on system tables give 0x800A0BD8 and 0x800A0C26 (enumeration noise).
+
+**Revisit**
+- Complex-column association evidence (`MSysComplexColumns` rows) is unreadable through DAO SQL. It needs R-FMT-1 raw reads.
+- Retry the `cx-types` fixture with a TableDefs refresh. Redo the table-side `calc-admission` matrix.
+- Reproduce the history probes with an `AppendOnly`-True fixture and a working history reader.
+- Resolve what `Rollback` and `CommitTrans` do to child edits.
+- Redo the `att-replace-remove` p1 delete and the two `att-file-failures` steps with re-acquired objects.
+- Open: whether 0x800A0EEA for `cx-calc` is calculated-field related.
+- Uncovered:
+  - CX-FAIL and RB-FAIL (resource and I/O failure).
+  - RB-REPAIR on damaged files.
+  - RB-OPAQUE (stored front-end objects) and the Access Compact & Repair lane.
+  - Compressed attachments, since every wrapper captured has the second DWORD 1.
+  - Page and relocation tracking (no byte-level evidence in this card).
+
+### r-lock-perm
+
+Scope: 10 records (5 `accdb-*`, 5 `mdb-*`), one fixture generation, all attempt `a1`. `fixtures --failed-only` lists none for this card. Environment: ACEDAO.DLL 16.0.20527.20196, x64, .NET 11 STA. Every call below is `DBEngine.OpenDatabase(path, Options=Exclusive, ReadOnly)`. "Shared rw" is (0,0), "shared ro" is (0,-1), "excl rw" is (-1,0), "excl ro" is (-1,-1). The table has one keyed table `T` and the probe reads `SELECT COUNT(*) FROM T` = 2048. ACCDB and MDB gave the same answers in every probe, with `.laccdb` and `.ldb` as the lock file. Several probes end as `ReturnedFailure`, which is ACE error answers, not harness failure.
+
+**Observed**
+
+*EX-PERM / RO-PERM: database file read-only attribute, no lock file* (`*-db-readonly-all-modes`)
+- Shared rw: error 3051 (0x800A0BEB) "…cannot open or write to the file… already opened exclusively by another user, or you need permission to view and write its data". No lock file appears.
+- Shared ro: opens. `Updatable()` is False and the count is 2048. A 64-byte lock file (sha 1f4a82a98356) exists while open and is gone after Close.
+- Excl rw: 3051, same as shared rw.
+- Excl ro: opens, `Updatable()` False, count 2048. No lock file appears at any point.
+- Each Errors collection read after a successful open still shows 3051, left over from the earlier failed open.
+
+*Read-only attribute on both database and existing 64-byte lock file* (`*-db-and-lockfile-readonly`)
+- Shared rw: 3051.
+- Shared ro: 3050 (0x800A0BEA) "Could not lock file." This differs from the database-only case, where shared ro opened.
+- The lock file stays 64 bytes with its pre-open hash f5a5fd42d16a (harness-written) throughout.
+- Only the two shared modes were probed (`RLockPerm.cs:41`).
+
+*Read-only attribute on the lock file only, database writable* (`*-readonly-lockfile-all-modes`)
+- Shared rw: 3051. Shared ro: 3050.
+- Excl rw: opens, `Updatable()` -1. The database file is not readable by the harness during the open (IOException 0x80070020).
+- Excl ro: opens, `Updatable()` False.
+- The lock file keeps hash f5a5fd42d16a through every open and after Close.
+- Errors still shows 3050 after both successful exclusive opens, left over from the shared-ro failure.
+
+*Stale lock file, 64 bytes harness-written, writable* (`*-stale-lockfile-all-modes`)
+- All four modes open: shared rw, shared ro, excl rw and excl ro all return a Database. This is the only `ReturnedSuccess` record.
+- The lock file's content hash changes from f5a5fd42d16a to 1f4a82a98356 during the shared opens, and the file is absent after each Close.
+- With the exclusive opens the lock file is absent: it was gone before the excl rw open and was not recreated.
+
+*RO-PAIR: both readers read-only attribute, in two processes* (`*-readonly-db-two-readers`)
+- A opens shared ro and holds a recordset; the lock file is 64 bytes. B opens shared ro, reads 2048 and `Updatable()` is False. The lock file is 128 bytes (sha 98f5debeb353) and stays 128 bytes after B closes, while A is still open.
+- While A is open, B's shared rw returns 3051.
+- While A is open, B's excl ro opens, reads 2048 and `Updatable()` is False. B's Errors then still shows 3051, left over from the shared-rw failure.
+- A reads 2048 again after B is done. After A closes, the lock file is absent.
+- No exclusive read/write attempt from B. No third reader.
+
+**Probe or fixture defects**
+- In `*-db-and-lockfile-readonly`, the last `after-close` lock-file capture failed with IOException 0x80070050 "artifacts\lockfile_after-close_… already exists" (step 40, both formats). This is an artifact-name collision, not an ACE answer, so the final lock-file state of those two records is unread. This is a harness defect, since the identical `after-close` key is written twice. Evidence: the `files[after-close]` lines at steps 38 and 40.
+- In `*-db-and-lockfile-readonly` the excl rw and excl ro modes were never probed (`Modes.Where(m => !m.Exclusive)`, `RLockPerm.cs:41`). The "database and lock file both read-only" row is therefore incomplete.
+- `files[open-excl-rw]` in the lock-file and stale probes shows "unread: IOException 0x80070020". That is the harness's own read being denied while ACE holds the file, not a defect.
+- Errors-collection reads after a successful call return the earlier failure's entry (3050 or 3051). Any "error after success" in these records is stale carry-over, not an answer to the call it follows.
+
+**Revisit**
+- Excl ro admitted beside an existing shared-ro reader (`*-readonly-db-two-readers`). The book says an incompatible exclusive request must still be refused (RO-PAIR), so this contradicts R-LOCK-2's expectation for that mode.
+- The database is not tested with attribute read-only plus an ACL or read-only/non-creatable folder. Both the read-only-folder and absent-lock-file-with-folder-denied cases are uncovered, so creation/deletion requirements (RO-PERM) are only partly answered.
+- No writer participant. RO-LATE (writer denied through reader handoff, order both ways), RO-REOPEN and RO-FAIL are not run. All opens come from ACE/DAO. The record holds no native access/share of the handles, no CalcDb probe lane, no Access UI or ADO lane. R-LOCK-1 EX-OPEN (both orders, probe), EX-DEFAULT, EX-CREATE, EX-ALIAS, EX-PROBE, EX-RACE, EX-PUBLIC, EX-AUTH, EX-MAP, EX-LIFE and EX-RANGE are not covered.
+- ACE's 64-byte and 128-byte lock-file contents are retained only as hashes; the raw owner fields are not interpreted. The relation of the 3050 versus 3051 split to ACE's lock-file access needs a native-access observation (W-PROBE) before any claim.
+- Why a read-only lock file makes shared ro fail (3050) but not the exclusive modes is not established from these records alone.
+
+### r-ddl-limits
+
+One generation only (`a1`); there are no ado/ado2/… generations on this card. 20 records, 10 statements × {ACCDB, MDB}. Each statement runs by `db.Execute` through DAO.DBEngine.120 (ACEDAO 16.0.20527.20196) on a fresh `CreateDatabase`, which already holds P(ID LONG PK) and P2(ID LONG PK, PID LONG). Each record then lists TableDefs, their fields and types, and `Relations.Count`. Every record is capture=Complete.
+
+**Observed**
+
+CAT-D / SQL-ACT-DDL: refusals (`Execute` hr=0x80020009, `DBEngine.Errors` Count 1, Source "DAO.Database")
+- Unbracketed field name `Note` is refused on both formats: scode 0x800A0CDC, error 3292 "Syntax error in field definition." (`accdb-note-column`, `mdb-note-column`). Table C is absent afterwards.
+- `[Note]` in the same position succeeds on both formats, Errors Count 0. The field is listed as "Note", Type 10 (`accdb-note-bracketed`, `mdb-note-bracketed`).
+- `V DECIMAL(18,4)` and bare `V DECIMAL` are both refused on both formats, with the same 0x800A0CDC / 3292 (`accdb-decimal`, `accdb-decimal-plain`, `mdb-decimal`, `mdb-decimal-plain`). Table C is absent afterwards.
+- `T TEXT(255) WITH COMPRESSION` is refused on both formats: scode 0x800A0CDA, error 3290 "Syntax error in CREATE TABLE statement." (`accdb-compression`, `mdb-compression`). Table C is absent afterwards.
+- In all refused cases TableDefs lists only the system tables plus P and P2, and `Relations.Count` is 0.
+
+CAT-D: relationships
+- Column-level `PID LONG CONSTRAINT FK_C REFERENCES P (ID)` succeeds on both formats: Errors Count 0, `Relations.Count` 1 (`accdb-fk-column-level`, `mdb-fk-column-level`). C has ID/PID (Type 4) and Txt (Type 10).
+- Table-level `CONSTRAINT FK_C FOREIGN KEY (PID) REFERENCES P (ID)` in CREATE TABLE succeeds on both formats: Errors Count 0, `Relations.Count` 1, same fields (`accdb-fk-table-level`, `mdb-fk-table-level`).
+- `ALTER TABLE P2 ADD CONSTRAINT FK_P2 FOREIGN KEY (PID) REFERENCES P (ID)` succeeds on both formats: Errors Count 0, `Relations.Count` 1 (`accdb-fk-alter`, `mdb-fk-alter`).
+- So `REFERENCES` is not refused. Only column-level and table-level FK in CREATE TABLE and ALTER ADD CONSTRAINT were exercised.
+
+SQL-ACT-DDL: accepted controls
+- `plain`: `ID LONG PK, PID LONG, Txt TEXT(20)` succeeds on both formats. Txt has Type 10 (`accdb-plain`, `mdb-plain`).
+- Column-level `Code TEXT(10) CONSTRAINT UX_C UNIQUE` succeeds on both formats, with Code as Type 10 (`accdb-unique-column-level`, `mdb-unique-column-level`).
+
+File and catalog observations
+- Final TableDefs counts (accdb / mdb): refused cases 7 / 6, successful CREATE TABLE cases 8 / 7, `fk-alter` 7 / 6. Per count, ACCDB has one more system table than MDB (MSysComplexColumns is listed in ACCDB). I filtered the MSys rows out of my extract, so this is from the counts and one record's listing, not a full check of every record.
+- `scratch.*` sizes at close, ACCDB: refused cases 196608 B, `plain` 208896, `note-bracketed` 208896, `unique-column-level` 212992, `fk-alter` 204800, FK in CREATE TABLE 217088.
+- `scratch.*` sizes at close, MDB: refused cases 102400 B, `plain` 114688, `note-bracketed` 114688, `unique-column-level` 118784, `fk-alter` 110592, FK in CREATE TABLE 122880.
+
+**Probe or fixture defects**
+- None found. Every statement ran on its own fresh database, so no refusal masked another. The error-3290 / 3292 refusals are answers to the statements, not fixture failures.
+- The probe reads `DBEngine.Errors` after `Execute` and lists fields only by Name and Type. It does not read Field attributes, so Decimal (Type 20) and text-compression state could not be seen even where creation succeeded.
+
+**Revisit**
+- Not inspected: the relationship catalog object, `Relation.Attributes`, MSysRelationships rows, reciprocal indexes, and physical-tree ownership (the CAT-D requirement). The probes list only `Relations.Count`; the retained `scratch.*` files may hold the rest.
+- Uncovered CAT-D branches: duplicate names, invalid definitions, cascades, SetNull, NoIndex, multi-column and self-references, existing violating rows, rename and drop with held readers, transactions and rollback.
+- Uncovered SQL-ACT-DDL branches: ALTER COLUMN/DROP, CREATE/DROP INDEX, CHECK, VIEW/PROCEDURE, and TEMPORARY.
+- Untested: whether DECIMAL or a column named `Note` can be created by another route (`CreateField` / `CreateTableDef`, ADO/OLEDB). That DDL refusal was only observed through DAO `Execute`.
+- Only the exact tokens tried are covered: `Note`, `DECIMAL` and `DECIMAL(18,4)`, and `WITH COMPRESSION` on TEXT(255). Other reserved words, other DECIMAL forms and other compression placements are untested.
+- Not read: how the refusal message differs between the 3290 and 3292 cases beyond the text above.
+
+### r-crash-requery
+
+Five records, one generation (`a1`), all on fixture `r-cat-1-accdb-queries` (sha256 prefix `d53c7ee6e0f1`, 241664 B). Environment: DAO.DBEngine.120, ACEDAO.DLL 16.0.20527.20196, native-idispatch/x64, invoke LCID 1033. The three records for `Requery(QueryDef)` have no capture (`execution=Uncertain`, `capture=Incomplete`), so `calcdb-oracle show` prints only "record has no capture". I read their manifest and retention note from the JSON instead.
+
+**Observed** (card branches R-ORACLE-1 / OR-REENTRY; R-CURSOR-1 CUR-LIFE Requery, the card-source ID given by the probe's `Refs`; R-CAT-1)
+
+Setup common to all probes: `OpenDatabase(path, False, True)`. `QueryDefs.Item("QParam")`, then `Parameters.Item("pId")` and `Item("pName")`. `pId.Value = VT_I4 1` and `pName.Value = VT_BSTR "zzz"`. `qd.OpenRecordset(VT_I4 2)` returns a `Recordset2` (dynaset).
+
+- **Read to EOF, no Requery** (`open-read`, `ReturnedSuccess`, `Capture=Complete`, exit 0). All calls returned `hr=0`:
+  - The first `rs.EOF` is `VT_BOOL 0`.
+  - `Fields.Count` is `VT_I2 2`.
+  - `Field[0].Value` is `VT_I4 1` and `Field[1].Value` is `VT_BSTR "a"`.
+  - After `MoveNext`, `rs.EOF` is `VT_BOOL -1`.
+  - `eng.Errors.Count` is `VT_I2 0`.
+  - `rs.Close` and `db.Close` return `hr=0`, and the file is unchanged before and after (same size and hash prefix).
+- **`Recordset.Requery()` with no argument** (`requery-plain`, `ReturnedSuccess`, exit 0):
+  - `rs.Requery()` returns `hr=0x00000000` as `VT_EMPTY`.
+  - The second read is identical to the first: one row (`VT_I4 1`, `VT_BSTR "a"`), then `EOF=-1`.
+  - `rs.Fields()` after Requery returns the same capture object id (u9) as before it. The two Field3 objects fetched afterwards are new ids (u12, u13).
+  - `Errors.Count` is 0 and the file is unchanged.
+- **`Requery(QueryDef)`** — three probes, one outcome:
+  - `requery-same-qd`: `Requery(qd)` with the originating QueryDef. Last native call entered: `rs.Requery`, seq 26, path 14.
+  - `requery-other-qd`: `Requery(qd2)` with a second `QueryDefs.Item("QParam")` instance whose pId is 2. Last call entered: `rs.Requery`, seq 30, path 18.
+  - `param-then-requery-qd`: pId set to 2 on the same QueryDef, then `Requery(qd)`. Last call entered: `rs.Requery`, seq 27, path 15.
+  - In all three, the worker exited with `0xC0000005` (`exitCode -1073741819`, `timedOut=false`, `killed=false`, `exitObserved=true`) and no receipt was returned. No HRESULT or EXCEPINFO exists for this call in any record.
+  - Their retention notes say a scratch check through the DAO PIA (vtable) got `RPC_E_SERVERFAULT` from the same call. That check is not a retained record.
+
+**Probe or fixture defects**
+
+- None found. The fixture has no failed creation calls: all five inputs are the same R-CAT-1 accdb, and all rows and `QParam` lookups succeeded.
+- The `Requery(QueryDef)` probes lack the observation that matters for the card. They have no capture, and the crash gives no ACE error answer or result for the parameter-value, new-QueryDef or population questions.
+- In `requery-other-qd`, `pName` on the second QueryDef is not set; only `pId` is. This is by design per its description, but it confounds that probe: the three probes crash identically, so it cannot be separated from the others here.
+- Each record ends with `modules[deliberate-truncation] complete=False ... buffer smaller than module list`. It looks like a deliberate recorder check; I did not verify it against the probe code.
+- `eng.Errors.Count` was read only in the two successful runs. It is unobserved in the crashing runs.
+
+**Revisit**
+
+- Whether `Requery(QueryDef)` crashes only through IDispatch or also through other callers (PIA vtable, ADO). The `RPC_E_SERVERFAULT` observation sits only in the retention note.
+- Which argument forms of `Requery` are safe: none beyond the no-argument form was observed to return.
+- The R-CURSOR-1 CUR-LIFE items still have no record:
+  - bookmark validity, child-object identity, parameter values and current position after Requery;
+  - the effect of changing a parameter before a no-argument `Requery()`. Only the QueryDef-argument form was probed with changed parameters, and it crashed;
+  - `LastModified` before and after Requery, population, and clones.
+- The `Requery()` read is one row: the same row as before, with pId = 1 and pName = "zzz". Whether `Requery()` re-evaluates parameters is unobserved; no probe changes pId before a no-argument `Requery()`.
+- The card source says CUR-LIFE should compare Requery on table/dynaset/snapshot/forward-only. Only dynaset (`OpenRecordset(2)`) was run.
+- Whether the crash seen here is the same one that originally ended the `r-cat-1/parameter-values` worker: the probe docs say so, but I checked no other card's record.
+- No file-state or lock effects were retained for the crashing runs: no after-crash file state, and the `rs`/`db` objects were never closed there.
+
