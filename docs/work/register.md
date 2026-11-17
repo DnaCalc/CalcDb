@@ -4,7 +4,8 @@ The dependency and status register The Plan §5 calls for. The book is the speci
 and the dependency authority: each row names a slice of the construction index
 ([II-16 §24](../book/II-16-development.md#24-external-inputs-and-the-construction-index)) or a
 research card branch ([A-02](../book/A-02-experiments.md)), and its `depends on` column copies
-the book's start inputs. CodeAlta tasks coordinate execution and have no dependency field;
+the book's start inputs. CodeAlta work items (here, tasks in its Work items tab) coordinate execution and have no
+dependency field;
 they are named here by short id. Evidence and code are the traceability material; this
 register only points to them. Update a row when its status changes; do not copy book prose.
 
@@ -25,41 +26,118 @@ done, listed) · `ready` (all prerequisites done) · `blocked` (waiting on the n
 | 5. `.accdb` index rebuilt from retained evidence and queried | done | `calcdb-evidence-index build/verify/query` |
 | 6. Review the workflow and try one improvement | partial: first review done and one change tried; its effect is measured next session | [process-log.md](process-log.md) |
 
-## Foundations and the first DAO read (II-16 §§14–15, F-216)
+## Construction slices (II-16 §24): dependencies, priority and status
 
-| Slice or card branch | Size | Depends on | Status | Task | Code / evidence |
-| --- | --- | --- | --- | --- | --- |
-| W-01/capture-core | M | — | partial: OR-IDENT, OR-SEAL and OR-JOB admission/conflict done; OR-WIRE scalars and BSTR done; OR-OBS for one lane | `npmg` `pvz8` `9fkt` `b8sx` `tdt9` | `src/CalcDb.Evidence`, `src/CalcDb.Oracle.*` |
-| R-ORACLE-1 OR-IDENT | — | W-01/capture-core | done for the `native-idispatch/x64` lane | — | `ModuleObserver.cs`, `evidence/r-oracle-1` |
-| R-ORACLE-1 OR-JOB | — | W-01/capture-core | partial: submit/query/conflict, receipts, requested and mid-call kills of real workers (Terminated, Uncertain), abandoned attempts sealed NotStarted/Uncertain after a liveness check; transport loss not exercised | `npmg` | `JobStore.cs`, `Sealer.cs`, `evidence/r-crash-1-*` |
-| R-ORACLE-1 OR-WIRE | — | W-01/capture-core | partial: scalar, BSTR and UI1 arrays; full scalar fixture missing | `pvz8` | `Dispatch.cs`, `Values.cs` |
-| R-ORACLE-1 OR-OBS | — | W-01/capture-core | partial: raw IDispatch lane; VBA and managed lanes missing (managed lanes: DAO PIA from `ExcelDna.Interop.Dao`, checked working on .NET 11) | `9fkt` | `Dispatch.cs` |
-| R-ORACLE-1 OR-OWN, OR-DESKTOP | — | W-01/capture-core | partial: owned workers on a private desktop with a window guard (visible windows recorded, none dismissed); no UI Automation dialog handling, no Office UI route | `b8sx` | `OwnedWorker.cs`, `PrivateDesktop.cs`, `evidence/r-wire/opt-opendatabase` |
-| R-ORACLE-1 OR-REUSE | — | OR-JOB | not started | `tdt9` | — |
-| R-ORACLE-1 OR-SEAL | — | W-01/capture-core | done for synthetic corruption cases | — | `Sealer.cs`, tests |
-| R-ORACLE-1 OR-FREEZE | — | W-01/capture-core | partial: database and lock-file images kept by another process before any opener (process-kill model) | — | `evidence/r-crash-1-*`, `evidence/r-txn-flush` |
-| R-ORACLE-1 OR-REENTRY, OR-REPAIR (T-COMPACT-1) | — | W-01/capture-core | not started (DAO CompactDatabase/RepairDatabase lanes captured in r-cplx-rebuild; no damaged controls) | — | — |
-| W-01/corpus-comparison | M | W-01/capture-core | ready (no task yet) | — | — |
-| W-PROBE/basic-native-effects (R-LOCK-1 EX-*, R-LOCK-2 RO-PAIR/RO-ACTUAL) | S | W-01/capture-core | partial: native CreateFile driver and two/three-process probes for EX-OPEN, EX-DEFAULT, EX-PUBLIC, EX-PROBE, EX-ALIAS, EX-LIFE, EX-PERM (attributes), RO-PAIR, RO-LATE, RO-INPROC, RO-PERM (attributes); EX-CREATE, EX-RACE, EX-AUTH, EX-MAP, EX-RANGE, ACLs not started | — | `evidence/r-lock-1-2`, `evidence/r-lock-perm` |
-| W-PROBE/crash-observation-control (R-CRASH-1) | M | W-01/capture-core, W-PROBE/basic-native-effects | partial: process-termination control (kill between calls, mid-call, at measured times after return) with frozen images and ACE-first/Compact-first openers; the recording route (writes and flushes), reconstruction and power-loss models not started | — | `evidence/r-crash-1-kill`, `evidence/r-crash-1-midcall`, `evidence/r-txn-flush` |
-| W-02/target-declarations (I-FOUNDATION-1, I-HOST-1, R-ACT-1 ACT-META/ABI/DECL) | S | — | ready (no task yet) | — | — |
-| W-02/native-declarations-values | S | W-02/target-declarations | blocked | — | — |
-| W-02/shared-scalar-services | M | W-02/native-declarations-values | blocked | — | — |
-| W-03/cache-algorithms | M | — (common source/I/O contracts) | ready | — | — |
-| W-03/positioned-native | M | W-PROBE/basic-native-effects | blocked | — | — |
-| W-03/read-cache | M | W-03/positioned-native, W-03/cache-algorithms | blocked | — | — |
-| W-04/description-inspector (R-FMT-1, R-FMT-2 FMT-SLOTS256) | M | W-01/corpus-comparison | blocked (no task yet) | — | — |
-| W-04/row-catalog-algorithms | L | W-04/description-inspector, W-03/cache-algorithms | blocked | — | — |
-| W-04/rows-catalog-read | L | W-04/row-catalog-algorithms, W-03/read-cache | blocked | — | — |
-| W-04/cursor-algorithms | M | W-04/row-catalog-algorithms | blocked | — | — |
-| W-04/table-cursor | M | W-04/rows-catalog-read, W-04/cursor-algorithms, W-02/native-declarations-values | blocked | — | — |
-| W-08/factory-host-core (R-ACT-1, I-HOST-1) | M | W-02/native-declarations-values, W-01/capture-core | blocked | — | — |
-| **W-08/native-read**: first joined goal | M | W-08/factory-host-core, W-04/table-cursor | blocked | — | — |
-| W-01/dao-cost (R-STRING-1) | M | W-01/corpus-comparison, W-08/native-read | blocked | — | — |
+All 81 slice rows of the construction index, one CodeAlta work item (a task) each, kept in the Work items tab's
+Backlog until it is started. **Start inputs** and **completion adds** copy
+the index's implementation inputs; the index's conditional inputs (the table under F-222) apply to the selected case
+and are not repeated here. **Level** is the slice's depth in that graph (start and completion inputs). **Priority**
+follows II-16 §14 and the README: P1 the first DAO read path (F-216); P2 the rest of the initial native DAO, SQL and
+object work, ADO alongside DAO; P3 portable and browser delivery; P4 later packages (W-11, W-12, W-L*). A slice is
+**ready** when each start input is done or usable; **usable** means the delivered part is what its consumers need,
+with the slice's own remaining branches listed.
+
+| Pri | Level | Slice | Size, phase | Start inputs | Completion adds | Status | Work item |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | 0 | W-01/capture-core | M, continuous | — | — | partial, usable as a start input: OR-IDENT, OR-SEAL, OR-JOB admission/conflict/kills, OR-WIRE scalars/BSTR/arrays, OR-OBS raw lane, OR-OWN/OR-DESKTOP with dialog handling (branch table below) | `psgk` |
+| P1 | 0 | W-03/cache-algorithms | M, initial | — | — | ready | `56s6` |
+| P1 | 0 | W-02/target-declarations | S, initial | — | — | partial, usable as a start input: windows-x64 declaration published (`TargetDeclarations.WindowsX64`) and checked against oleaut32 (`WindowsX64DeclarationTests`); open: FND-ABI with CalcVBA's shared declaration through a real caller, wasm32 (P3) | `bxj6` |
+| P1 | 1 | W-01/corpus-comparison | M, continuous | W-01/capture-core | — | ready | `dmxj` |
+| P1 | 1 | W-02/native-declarations-values | S, initial | W-02/target-declarations | — | partial, usable as a start input: `CalcDb.Foundation.Windows` ownership states, exact BSTR, DECIMAL overlay, nonzero/multidimensional SAFEARRAYs, failed-clear obligations, CaptureValueStructural (T-INT-34..36/38..41, 22 tests); open: T-INT-37 ByRef lvalues through real invocation (W-08 call adapters), FND-CONCUR, managed projections of T-INT-25 | `b8jm` |
+| P1 | 1 | W-PROBE/basic-native-effects | S, continuous | W-01/capture-core | — | partial, usable as a start input: EX-OPEN, EX-DEFAULT, EX-PUBLIC, EX-PROBE, EX-ALIAS, EX-LIFE, EX-PERM (attributes), RO-PAIR, RO-LATE, RO-INPROC, RO-PERM; EX-CREATE, EX-RACE, EX-AUTH, EX-MAP, EX-RANGE, ACLs not started | `tr3k` |
+| P1 | 2 | W-03/positioned-native | M, initial | W-PROBE/basic-native-effects | — | ready | `v5sb` |
+| P1 | 2 | W-04/description-inspector | M, initial | W-01/corpus-comparison | — | not started | `8q5g` |
+| P1 | 2 | W-08/factory-host-core | M, initial | W-01/capture-core, W-02/native-declarations-values | — | ready | `wdtr` |
+| P1 | 3 | W-03/read-cache | M, initial | W-03/positioned-native, W-03/cache-algorithms | — | not started | `kncn` |
+| P1 | 3 | W-04/row-catalog-algorithms | L, initial | W-03/cache-algorithms, W-04/description-inspector | — | not started | `x4cx` |
+| P1 | 4 | W-04/rows-catalog-read | L, initial | W-03/read-cache, W-04/row-catalog-algorithms | — | not started | `7djx` |
+| P1 | 4 | W-04/cursor-algorithms | M, initial | W-04/row-catalog-algorithms | — | not started | `w98c` |
+| P1 | 5 | W-04/table-cursor | M, initial | W-02/native-declarations-values, W-04/rows-catalog-read, W-04/cursor-algorithms | — | not started | `bnj6` |
+| P1 | 6 | W-08/native-read | M, initial | W-04/table-cursor, W-08/factory-host-core | — | not started | `thhj` |
+| P1 | 7 | W-01/dao-cost | M, continuous | W-01/corpus-comparison, W-08/native-read | — | not started | `kmxv` |
+| P2 | 1 | W-03/private-images-coherence | M, initial | W-03/cache-algorithms | — | not started | `gcvf` |
+| P2 | 2 | W-02/shared-scalar-services | M, initial | W-02/native-declarations-values | — | ready | `685w` |
+| P2 | 2 | W-PROBE/crash-observation-control | M, continuous | W-01/capture-core, W-PROBE/basic-native-effects | — | partial: process-termination control, sampling recorder, ETW write/flush recorder (r-etw-rec); reconstruction and power-loss models not started | `jmf6` |
+| P2 | 2 | W-03/native-program-executor | M, initial | W-03/private-images-coherence | — | not started | `bfsh` |
+| P2 | 2 | W-01/reduction | M, continuous | W-01/corpus-comparison | — | not started | `n764` |
+| P2 | 3 | W-01/production-effects | M, continuous | W-01/corpus-comparison | W-03/positioned-native | not started | `p4gv` |
+| P2 | 3 | W-04/weight-tables-per-sort-order | L per order, initial | W-04/description-inspector | — | not started | `73vf` |
+| P2 | 3 | W-06/restricted-scalar | M, initial | W-02/shared-scalar-services | — | not started | `x866` |
+| P2 | 3 | W-09/construction-policy | M, initial | W-02/native-declarations-values, W-08/factory-host-core | — | not started | `gw6c` |
+| P2 | 4 | W-06/host-extension | M, initial | W-06/restricted-scalar, W-08/factory-host-core | — | not started | `ggw2` |
+| P2 | 6 | W-04/key-navigation | M, initial | W-04/table-cursor | — | not started | `g95d` |
+| P2 | 6 | W-05/edit-frames | M, initial | W-03/private-images-coherence, W-04/table-cursor, W-06/restricted-scalar | — | not started | `7htc` |
+| P2 | 6 | W-06/parser-binder-scan | M, initial | W-04/table-cursor, W-06/restricted-scalar | — | not started | `7tp3` |
+| P2 | 6 | W-10/native-readers-only | M, initial | W-03/positioned-native, W-04/table-cursor | — | not started | `57nn` |
+| P2 | 7 | W-04/private-codecs | M, initial | W-04/rows-catalog-read, W-04/key-navigation | — | not started | `jqv9` |
+| P2 | 7 | W-06/relational-spill | L, initial | W-06/parser-binder-scan | — | not started | `693m` |
+| P2 | 7 | W-09/native-read-query | M, initial | W-04/table-cursor, W-06/parser-binder-scan, W-09/construction-policy | — | not started | `7k56` |
+| P2 | 7 | W-08/activation-route-matrix | M, initial | W-08/factory-host-core | W-08/native-read | not started | `6w9p` |
+| P2 | 8 | W-05/local-lockers-rebase | M, initial | W-03/private-images-coherence, W-04/private-codecs, W-05/edit-frames | — | not started | `68jn` |
+| P2 | 8 | W-06/measured-specialization | M, initial; optional enhancement | W-01/production-effects, W-01/dao-cost, W-06/relational-spill | — | not started | `grhc` |
+| P2 | 8 | W-07/new-database-image | L, initial | W-03/positioned-native, W-03/native-program-executor, W-04/rows-catalog-read, W-04/weight-tables-per-sort-order, W-04/private-codecs | — | not started | `537t` |
+| P2 | 9 | W-05/same-width-mutation | M, initial | W-03/native-program-executor, W-04/private-codecs, W-05/local-lockers-rebase, W-08/native-read | — | not started | `mpvx` |
+| P2 | 10 | W-05/growth-structural-closure | L, initial | W-05/same-width-mutation | — | not started | `zfrp` |
+| P2 | 10 | W-08/same-width-edit | M, initial | W-05/same-width-mutation, W-08/native-read | — | not started | `q4c4` |
+| P2 | 10 | W-09/immediate-edit | M, initial | W-05/same-width-mutation, W-09/native-read-query | — | not started | `2qbr` |
+| P2 | 11 | W-05/resolution-live-rollback | L, initial | W-05/edit-frames, W-05/same-width-mutation | W-05/growth-structural-closure | not started | `wqzr` |
+| P2 | 12 | W-07/native-metadata-write | M, initial | W-04/rows-catalog-read, W-05/same-width-mutation | W-05/resolution-live-rollback | not started | `42cd` |
+| P2 | 12 | W-07/actions | L, initial | W-05/same-width-mutation, W-06/parser-binder-scan | W-05/resolution-live-rollback | not started | `tc26` |
+| P2 | 12 | W-10/inprocess-visibility | L, initial | W-03/private-images-coherence, W-05/local-lockers-rebase, W-05/resolution-live-rollback, W-08/native-read | — | not started | `jk44` |
+| P2 | 12 | W-08/edit-transaction-breadth | M, initial | W-08/same-width-edit | W-05/resolution-live-rollback | not started | `wbd6` |
+| P2 | 13 | W-07/saved-definition | M, initial | W-04/rows-catalog-read, W-04/weight-tables-per-sort-order, W-05/same-width-mutation, W-06/parser-binder-scan, W-07/native-metadata-write | W-05/resolution-live-rollback | not started | `zsfm` |
+| P2 | 13 | W-09/edit-client-batch | L, initial | W-09/native-read-query | W-05/resolution-live-rollback, W-07/actions, W-09/immediate-edit | not started | `wzq4` |
+| P2 | 14 | W-07/ddl-full-coverage | L, initial | W-06/parser-binder-scan, W-07/native-metadata-write | W-06/relational-spill, W-07/saved-definition, W-07/actions | not started | `qkrw` |
+| P2 | 15 | W-08/dao-inventory | L, initial | W-08/factory-host-core | W-02/portable-services, W-06/host-extension, W-07/new-database-image, W-07/ddl-full-coverage, W-08/portable-caller, W-08/activation-route-matrix, W-08/edit-transaction-breadth | not started | `v8qw` |
+| P2 | 15 | W-09/events-persistence-inventory | L, initial | W-09/construction-policy | W-02/portable-services, W-07/ddl-full-coverage, W-09/edit-client-batch, W-08/activation-route-matrix, W-08/browser-dynamic-path | not started | `prfx` |
+| P3 | 1 | W-02/portable-domain | M, initial | W-02/target-declarations | — | ready | `9c5z` |
+| P3 | 2 | W-02/portable-services | M, initial | W-02/portable-domain | — | not started | `xchk` |
+| P3 | 2 | W-03/browser-storage | M, initial | W-02/portable-domain | — | not started | `gp7d` |
+| P3 | 2 | W-08/portable-caller | M, initial | W-02/portable-domain | — | not started | `69q3` |
+| P3 | 3 | W-03/browser-read-cache | M, initial | W-03/cache-algorithms, W-03/browser-storage | — | not started | `g424` |
+| P3 | 3 | W-10/browser-readers-only | M, initial | W-03/browser-storage, W-08/portable-caller | — | not started | `mdjx` |
+| P3 | 3 | W-08/browser-dynamic-path | M, initial | W-03/browser-storage, W-08/portable-caller | — | not started | `pr9k` |
+| P3 | 5 | W-04/browser-reader-cursor | M, initial | W-02/portable-domain, W-03/browser-read-cache, W-04/row-catalog-algorithms, W-04/cursor-algorithms | — | not started | `3j6z` |
+| P3 | 15 | W-08/browser-query-write | L, initial | W-08/browser-dynamic-path | W-02/portable-services, W-05/resolution-live-rollback, W-06/relational-spill, W-07/new-database-image, W-07/ddl-full-coverage | not started | `stzj` |
+| P4 | 0 | W-L6/manager-handles-descriptors | M, later | — | — | not started | `qpjx` |
+| P4 | 5 | W-L1/native-codec-read | M, later | W-03/positioned-native, W-04/rows-catalog-read | — | not started | `v6r7` |
+| P4 | 6 | W-L2/native-link-read | M, later | W-03/positioned-native, W-04/rows-catalog-read, W-04/table-cursor | — | not started | `4v8b` |
+| P4 | 6 | W-L5/factory-rowset | M, later | W-02/native-declarations-values, W-04/table-cursor | — | not started | `mzxs` |
+| P4 | 7 | W-L3/association-core | M, later | W-04/rows-catalog-read, W-04/key-navigation | — | not started | `x5rr` |
+| P4 | 7 | W-L4/ownership-survey | M, later | W-04/rows-catalog-read, W-04/key-navigation | — | not started | `qm24` |
+| P4 | 7 | W-L6/bound-query-streams | M, later | W-06/parser-binder-scan, W-L6/manager-handles-descriptors | — | not started | `nn75` |
+| P4 | 8 | W-L3/dao-child-interface | M, later | W-08/native-read, W-L3/association-core | — | not started | `wspp` |
+| P4 | 8 | W-L3/ado-child-interface | M, later | W-09/native-read-query, W-L3/association-core | — | not started | `q777` |
+| P4 | 12 | W-L1/phase-codec-write | L, later | W-05/same-width-mutation, W-L1/native-codec-read | W-05/resolution-live-rollback | not started | `f78w` |
+| P4 | 12 | W-L2/pushdown-source-outcomes | L, later | W-06/parser-binder-scan, W-L2/native-link-read | W-05/resolution-live-rollback | not started | `r66q` |
+| P4 | 12 | W-L3/child-calculated-history | L, later | W-05/same-width-mutation, W-06/restricted-scalar, W-L3/association-core | W-05/resolution-live-rollback | not started | `4zrh` |
+| P4 | 12 | W-L5/commands-updates-consumers | L, later | W-06/parser-binder-scan, W-L5/factory-rowset | W-05/resolution-live-rollback | not started | `wqqp` |
+| P4 | 13 | W-11/external-coherent-read | L, later | W-10/native-readers-only, W-10/inprocess-visibility | — | not started | `q4mx` |
+| P4 | 13 | W-L4/destination-publication | L, later | W-05/resolution-live-rollback, W-07/native-metadata-write, W-L4/ownership-survey | — | not started | `93nx` |
+| P4 | 13 | W-L6/mutation-transaction-cancel | M, later | W-05/resolution-live-rollback, W-07/actions, W-L6/bound-query-streams | — | not started | `p2bs` |
+| P4 | 13 | W-L1/credential-conversion | L, later | W-L1/phase-codec-write | — | not started | `mw5h` |
+| P4 | 13 | W-L2/relink-metadata | M, later | W-07/native-metadata-write, W-L2/native-link-read | W-05/resolution-live-rollback | not started | `2jjv` |
+| P4 | 14 | W-12/local-shared-write | L, later | W-05/local-lockers-rebase, W-05/resolution-live-rollback, W-11/external-coherent-read | — | not started | `bknx` |
+| P4 | 14 | W-L4/conservative-repair | L, later | W-L4/destination-publication | — | not started | `v3pj` |
+| P4 | 15 | W-12/network-feature-combinations | L, later | W-12/local-shared-write | — | not started | `w45w` |
+
+### W-01/capture-core branches (R-ORACLE-1)
+
+| Branch | Status | Work item | Code / evidence |
+| --- | --- | --- | --- |
+| R-ORACLE-1 OR-IDENT | done for the `native-idispatch/x64` lane | — | `ModuleObserver.cs`, `evidence/r-oracle-1` |
+| R-ORACLE-1 OR-JOB | partial: submit/query/conflict, receipts, requested and mid-call kills of real workers (Terminated, Uncertain), abandoned attempts sealed NotStarted/Uncertain after a liveness check; transport loss not exercised | `npmg` | `JobStore.cs`, `Sealer.cs`, `evidence/r-crash-1-*` |
+| R-ORACLE-1 OR-WIRE | partial: scalar, BSTR and UI1 arrays; full scalar fixture missing | `pvz8` | `Dispatch.cs`, `Values.cs` |
+| R-ORACLE-1 OR-OBS | partial: raw IDispatch lane; VBA and managed lanes missing (managed lanes: DAO PIA from `ExcelDna.Interop.Dao`, checked working on .NET 11) | `9fkt` | `Dispatch.cs` |
+| R-ORACLE-1 OR-OWN, OR-DESKTOP | partial: owned workers on a private desktop with a window guard; owned Access host claimed by window handle; dialogs described and answered by UI Automation under a question's policy; the Access host runs on the main desktop by owner instruction until moved | `b8sx` | `OwnedWorker.cs`, `PrivateDesktop.cs`, `src/CalcDb.Oracle.Dialogs`, `evidence/r-access-host`, `evidence/r-access-dialog` |
+| R-ORACLE-1 OR-REUSE | not started | `tdt9` | — |
+| R-ORACLE-1 OR-SEAL | done for synthetic corruption cases | — | `Sealer.cs`, tests |
+| R-ORACLE-1 OR-FREEZE | partial: database and lock-file images kept by another process before any opener (process-kill model) | — | `evidence/r-crash-1-*`, `evidence/r-txn-flush` |
+| R-ORACLE-1 OR-REENTRY, OR-REPAIR (T-COMPACT-1) | not started (DAO CompactDatabase/RepairDatabase lanes captured in r-cplx-rebuild; no damaged controls) | — | — |
 
 ## Oracle service (approved 2026-11-17, [oracle-service.md](oracle-service.md); D-ORACLE-1)
 
-| Step | Depends on | Status | Task |
+| Step | Depends on | Status | Work item |
 | --- | --- | --- | --- |
 | 1. Long-lived worker protocol, reset and prehistory | W-01/capture-core | ready | `tdt9` |
 | 2. Windows broker: queue, batcher, answer cache, pool, logs, status | step 1 | blocked | — |
@@ -68,8 +146,6 @@ done, listed) · `ready` (all prerequisites done) · `blocked` (waiting on the n
 | 5. Private-desktop launcher and guard for every start path | — | partial: the owned-attempt runner has both; the broker, pooled workers and Office processes do not exist yet | `b8sx` |
 | 6. Continuous leakage checks (OR-REUSE) | steps 1–2 | blocked | `tdt9` |
 
-Later rows (W-05 to W-12, browser and later packages) enter this register when one of their
-start inputs becomes `ready`; until then the construction index is their record.
 
 ## Native observation graph (II-16 §25, F-223): evidence retained
 
