@@ -161,6 +161,9 @@ public sealed record ArrayValue(int ElementVt, IReadOnlyList<ArrayBound> Bounds)
     public string? Bytes { get; init; }
 
     public IReadOnlyList<CapturedValue>? Elements { get; init; }
+
+    /// <summary>How <see cref="Elements"/> is ordered, for example "dim1-fastest" (the first dimension varies fastest).</summary>
+    public string? ElementOrder { get; init; }
 }
 
 public sealed record ArrayBound(int LowerBound, long Count);

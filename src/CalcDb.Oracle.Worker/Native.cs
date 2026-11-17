@@ -125,6 +125,9 @@ internal static unsafe partial class Native
     public static partial int SafeArrayAccessData(nint psa, out nint data);
 
     [LibraryImport("oleaut32.dll")]
+    public static partial int SafeArrayGetElement(nint psa, int* indices, void* value);
+
+    [LibraryImport("oleaut32.dll")]
     public static partial int SafeArrayUnaccessData(nint psa);
 
     [LibraryImport("kernel32.dll")]

@@ -218,6 +218,30 @@ public sealed class P
         return this;
     }
 
+    /// <summary>
+    /// The light opening: file state, DBEngine and one module identity after activation. Use with
+    /// <see cref="FinishLite"/> when a card has many probes on one lane; OR-IDENT still holds, because every
+    /// capture identifies its loaded modules at least once.
+    /// </summary>
+    public P EngineLite()
+    {
+        Files("before-open");
+        Create();
+        Modules("after-create");
+        return this;
+    }
+
+    /// <summary>The light closing: close named objects and record the files, with no further module snapshot.</summary>
+    public P FinishLite(params string[] close)
+    {
+        foreach (string name in close)
+        {
+            Call(name, "Close");
+        }
+        Files("after-close");
+        return this;
+    }
+
     /// <summary><c>Set db = eng.OpenDatabase(path, exclusive, readOnly)</c> on the input with this role.</summary>
     public P OpenDb(string bind = "db", string role = "main", bool exclusive = false, bool readOnly = true) =>
         CallBind(bind, "eng", "OpenDatabase", A.In(role), A.Bool(exclusive), A.Bool(readOnly));

@@ -250,7 +250,7 @@ internal sealed unsafe class Dispatch
         }
     }
 
-    private static CapturedValue CaptureArray(int vt, nint psa)
+    private CapturedValue CaptureArray(int vt, nint psa)
     {
         if (psa == 0)
         {
@@ -275,10 +275,79 @@ internal sealed unsafe class Dispatch
                 return new CapturedValue { Vt = vt, VtName = CapturedValue.NameOf(vt), Array = new ArrayValue(elementVt, bounds) { Bytes = hex } };
             }
         }
-        return CapturedValue.Refused(vt, $"SAFEARRAY of VARTYPE {elementVt} with {dims} dimension(s) is not yet captured element-wise.") with
+        return CaptureElements(vt, psa, elementVt, bounds);
+    }
+
+    private static readonly HashSet<int> ScalarElementTypes = [2, 3, 4, 5, 6, 7, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23];
+
+    /// <summary>
+    /// Element-wise capture of a SAFEARRAY of VARIANT, BSTR or a scalar type, in any number of dimensions, the
+    /// first dimension varying fastest. SafeArrayGetElement returns a copy, which is captured and then freed.
+    /// At most 20,000 elements; a larger array is a named refusal that keeps its bounds.
+    /// </summary>
+    private CapturedValue CaptureElements(int vt, nint psa, ushort elementVt, List<ArrayBound> bounds)
+    {
+        long total = bounds.Aggregate(1L, (n, b) => n * b.Count);
+        if (!(elementVt == 12 || elementVt == 8 || ScalarElementTypes.Contains(elementVt)) || total > 20000 || bounds.Count == 0)
         {
-            Array = new ArrayValue(elementVt, bounds),
-        };
+            return CapturedValue.Refused(vt, $"SAFEARRAY of VARTYPE {elementVt} with {bounds.Count} dimension(s) and {total} element(s) is not captured element-wise.") with
+            {
+                Array = new ArrayValue(elementVt, bounds),
+            };
+        }
+        var elements = new List<CapturedValue>((int)total);
+        int dims = bounds.Count;
+        int[] index = bounds.Select(b => b.LowerBound).ToArray();
+        int* rg = stackalloc int[dims];
+        byte* buffer = stackalloc byte[16];
+        for (long n = 0; n < total; n++)
+        {
+            // Observed (GetRows smoke test): SafeArrayGetElement takes indices in the order of SafeArrayGetLBound's
+            // dimension numbers, dimension 1 first.
+            for (int d = 0; d < dims; d++)
+            {
+                rg[d] = index[d];
+            }
+            Variant element = default;
+            int hr;
+            if (elementVt == 12)
+            {
+                hr = Native.SafeArrayGetElement(psa, rg, &element);
+                elements.Add(hr < 0 ? CapturedValue.Refused(0, "SafeArrayGetElement " + Native.Hr(hr)) : CaptureValue(&element));
+                if (hr >= 0)
+                {
+                    _ = Native.VariantClear(&element);
+                }
+            }
+            else
+            {
+                new Span<byte>(buffer, 16).Clear();
+                hr = Native.SafeArrayGetElement(psa, rg, buffer);
+                if (hr < 0)
+                {
+                    elements.Add(CapturedValue.Refused(elementVt, "SafeArrayGetElement " + Native.Hr(hr)));
+                }
+                else
+                {
+                    element.Vt = elementVt;
+                    element.I8 = *(long*)buffer;
+                    elements.Add(CaptureValue(&element));
+                    if (elementVt == 8)
+                    {
+                        Native.SysFreeString(element.Ptr);
+                    }
+                }
+            }
+            for (int d = 0; d < dims; d++)
+            {
+                if (++index[d] < bounds[d].LowerBound + bounds[d].Count)
+                {
+                    break;
+                }
+                index[d] = bounds[d].LowerBound;
+            }
+        }
+        return new CapturedValue { Vt = vt, VtName = CapturedValue.NameOf(vt), Array = new ArrayValue(elementVt, bounds) { Elements = elements, ElementOrder = "dim1-fastest" } };
     }
 
     private static ExcepInfoObservation CaptureExcepInfo(ref ExcepInfo excep, bool allowDeferredFill)
