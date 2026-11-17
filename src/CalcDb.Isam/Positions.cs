@@ -79,6 +79,21 @@ public sealed class PositionState<T> where T : struct
     /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS).</summary>
     public void FindFailed() => NoMatch = true;
 
+    /// <summary>
+    /// Position directly on an occurrence the caller has validated (a bookmark). NoMatch is left unchanged: what
+    /// bookmark assignment does to it has not been observed (R-CURSOR-1 CUR-ID).
+    /// </summary>
+    public bool Seek(T occurrence)
+    {
+        if (Tag == PositionTag.Empty)
+        {
+            return false;
+        }
+        Tag = PositionTag.At;
+        Current = occurrence;
+        return true;
+    }
+
     public MoveOutcome MoveFirst()
     {
         if (ForwardOnly)
