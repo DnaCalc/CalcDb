@@ -51,11 +51,15 @@ stateDiagram-v2
   existing job; anything else is a conflict before any worker starts. `run` on a sealed job
   reports the existing manifest; a new attempt needs `--new-attempt` and gets fresh input
   copies. Nothing is ever replayed to resolve an uncertain attempt.
-- **Ownership (OR-OWN).** The runner starts the worker itself, keeps its process handle,
-  puts it in a kill-on-close Job Object, and only then writes the admission line
+- **Ownership (OR-OWN).** The runner starts the worker itself, suspended, on the private
+  desktop `WinSta0\CalcDbOracle` (OR-DESKTOP), keeps its process handle, puts it in a
+  kill-on-close Job Object, resumes it, and only then writes the admission line
   (`ADMIT <attempt> <generation>`) to its stdin. The worker writes its started receipt
   after admission and before its first native call, so "no started receipt" means no native
-  call ran (`NotStarted`). Timeout kills only that owned process tree and waits for its exit.
+  call ran (`NotStarted`). Timeout kills only that owned process and waits for its exit.
+- **Window guard (OR-DESKTOP).** While workers run, the runner samples their visible top-level
+  windows every 200 ms, on the owner's desktop (must stay none) and on the private desktop, and
+  records them in the owner report. Any such window is a seal problem. Nothing is dismissed.
 - **Sealing (OR-SEAL, T-EVID-03).** [`Sealer`](../../src/CalcDb.Evidence/Sealer.cs) checks
   receipt identities and generations (stale receipts are rejected), the capture digest
   against the returned receipt, every artifact's length and SHA-256, worker capture errors,
@@ -123,8 +127,10 @@ long-lived ACE workers, and this runner as its tier for owned experiments, is in
   `Boolean` where the raw lane keeps `VT_BOOL -1`, `String` where it keeps exact BSTR bytes,
   and a `COMException` with HResult `0x800A0BC3` where the raw lane sees Invoke `0x80020009`
   plus EXCEPINFO.
-- No Office UI: DAO alone shows no windows, so OR-DESKTOP (private desktop, UI Automation
-  dialog handling) is not yet needed or qualified; Access-host routes stay unavailable until it is.
+- DAO alone can show UI: `DBEngine.OpenDatabase(Empty)` opens the ODBC Select Data Source
+  dialog (evidence log, night of 2026-11-17). The private desktop and the window guard are in
+  place; UI Automation dialog handling is not, so a dialog ends its attempt at the deadline.
+  Access-host routes stay unavailable until dialog handling is qualified.
 - OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and
   OR-REPAIR are not yet exercised against the real worker; the sealing rules they rely on
   are covered by synthetic tests that qualify the harness only.

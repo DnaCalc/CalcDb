@@ -91,6 +91,14 @@ public static class Sealer
         {
             problems.Add("The owned worker exceeded its timeout and was terminated.");
         }
+        foreach (string window in owner.WindowsOnPrivateDesktop ?? [])
+        {
+            problems.Add("Window of the owned worker on the private desktop (OR-DESKTOP): " + window);
+        }
+        foreach (string window in owner.WindowsOnUserDesktop ?? [])
+        {
+            problems.Add("CONDUCT: window of the owned worker on the owner's desktop (OR-DESKTOP guard): " + window);
+        }
         return (execution, captureSha);
     }
 

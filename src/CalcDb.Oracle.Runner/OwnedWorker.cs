@@ -11,7 +11,8 @@ namespace CalcDb.Oracle.Runner;
 /// retained process handle plus a Windows Job Object with kill-on-close, assigned before any worker is
 /// admitted: each worker blocks on its admission line until then, so no native call runs outside ownership.
 /// All participants are owned before the first is admitted. Only processes this runner started are waited on
-/// or terminated; at the deadline the remaining ones are killed and waited for.
+/// or terminated; at the deadline the remaining ones are killed and waited for. Workers run on the private
+/// desktop (OR-DESKTOP, <see cref="PrivateDesktop"/>), and their visible windows are recorded while they run.
 /// </summary>
 internal static partial class OwnedWorker
 {
@@ -28,80 +29,104 @@ internal static partial class OwnedWorker
     private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
     {
         using var job = JobObject.CreateKillOnClose();
-        var started = new List<(string Participant, Process? Process, string Ownership, string? Error)>();
+        var started = new List<Started>();
         foreach (string participant in participants)
         {
-            var start = new ProcessStartInfo(workerPath)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                WorkingDirectory = attemptDir,
-            };
-            start.ArgumentList.Add(attemptDir);
-            if (participant != "a")
-            {
-                start.ArgumentList.Add(participant);
-            }
+            List<string> args = participant == "a" ? [attemptDir] : [attemptDir, participant];
+            string log = Path.Combine(attemptDir, participant == "a" ? "worker.log" : $"worker.{participant}.log");
             try
             {
-                Process process = Process.Start(start) ?? throw new Win32Exception("Process.Start returned null.");
-                string ownership = job.TryAssign(process.Handle, out int error)
+                // OR-DESKTOP: created suspended on the private desktop, owned by the job, then resumed. It still
+                // blocks on its admission line, so no native call runs before every participant is owned.
+                PrivateDesktop.Launched process = PrivateDesktop.StartSuspended(workerPath, args, attemptDir, log);
+                string ownership = job.TryAssign(process.Process, out int error)
                     ? "retained process handle + job object (kill on close)"
                     : $"retained process handle (job assignment failed: {error})";
-                started.Add((participant, process, ownership, null));
+                process.Resume();
+                started.Add(new Started(participant, process, ownership, null));
             }
             catch (Win32Exception ex)
             {
-                started.Add((participant, null, "none", ex.Message));
+                started.Add(new Started(participant, null, "none", ex.Message));
             }
         }
 
         onAdmitted();
-        foreach ((string participant, Process? process, _, _) in started)
+        foreach (Started s in started)
         {
-            if (process is not null)
+            if (s.Process is not null)
             {
-                process.StandardInput.WriteLine($"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration} {participant}");
-                process.StandardInput.Close();
+                s.Process.WriteLine($"ADMIT {attempt.AttemptId} {attempt.WorkerGeneration} {s.Participant}");
             }
         }
 
+        // Wait for all workers, sampling the guard every 200 ms: owned windows on the owner's desktop (which
+        // must stay none) and on the private desktop (a dialog, recorded as evidence). Nothing is dismissed.
         var deadline = Stopwatch.StartNew();
-        var reports = new List<OwnerReport>();
-        foreach ((string participant, Process? process, string ownership, string? error) in started)
+        var pids = started.Where(s => s.Process is not null).Select(s => s.Process!.ProcessId).ToHashSet();
+        var onUser = new Dictionary<int, SortedSet<string>>();
+        var onPrivate = new Dictionary<int, SortedSet<string>>();
+        var live = started.Where(s => s.Process is not null).ToList();
+        while (live.Count > 0 && deadline.Elapsed < timeout)
         {
-            if (process is null)
+            (List<string> user, List<string> priv) = PrivateDesktop.WindowsOf(pids);
+            Collect(user, onUser);
+            Collect(priv, onPrivate);
+            live.RemoveAll(s => s.Process!.Wait(TimeSpan.Zero));
+            if (live.Count > 0)
             {
-                reports.Add(new OwnerReport { Participant = participant, Ownership = ownership, LaunchError = error });
-                continue;
-            }
-            using (process)
-            {
-                TimeSpan left = timeout - deadline.Elapsed;
-                bool exited = process.WaitForExit(left > TimeSpan.Zero ? left : TimeSpan.Zero);
-                bool killed = false;
-                if (!exited)
-                {
-                    process.Kill(entireProcessTree: true);
-                    killed = true;
-                    // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
-                    process.WaitForExit();
-                }
-                reports.Add(new OwnerReport
-                {
-                    Participant = participant,
-                    Launched = true,
-                    ProcessId = process.Id,
-                    Ownership = ownership,
-                    ExitCode = process.ExitCode,
-                    TimedOut = !exited,
-                    Killed = killed,
-                    ExitObserved = true,
-                });
+                _ = live[0].Process!.Wait(TimeSpan.FromMilliseconds(200));
             }
         }
+
+        var reports = new List<OwnerReport>();
+        foreach (Started s in started)
+        {
+            if (s.Process is null)
+            {
+                reports.Add(new OwnerReport { Participant = s.Participant, Ownership = s.Ownership, LaunchError = s.Error, Desktop = "WinSta0\\" + PrivateDesktop.Name });
+                continue;
+            }
+            using PrivateDesktop.Launched process = s.Process;
+            bool exited = process.Wait(TimeSpan.Zero);
+            if (!exited)
+            {
+                process.Terminate(1);
+                // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
+                _ = process.Wait(Timeout.InfiniteTimeSpan);
+            }
+            reports.Add(new OwnerReport
+            {
+                Participant = s.Participant,
+                Launched = true,
+                ProcessId = process.ProcessId,
+                Ownership = s.Ownership,
+                ExitCode = process.ExitCode,
+                TimedOut = !exited,
+                Killed = !exited,
+                ExitObserved = true,
+                Desktop = "WinSta0\\" + PrivateDesktop.Name,
+                WindowsOnUserDesktop = onUser.TryGetValue(process.ProcessId, out var u) ? [.. u] : [],
+                WindowsOnPrivateDesktop = onPrivate.TryGetValue(process.ProcessId, out var p) ? [.. p] : [],
+            });
+        }
         return reports;
+    }
+
+    private sealed record Started(string Participant, PrivateDesktop.Launched? Process, string Ownership, string? Error);
+
+    private static void Collect(List<string> windows, Dictionary<int, SortedSet<string>> into)
+    {
+        foreach (string w in windows)
+        {
+            // "pid <n> class ..." as written by PrivateDesktop.Note.
+            int pid = int.Parse(w.AsSpan(4, w.IndexOf(' ', 4) - 4), System.Globalization.CultureInfo.InvariantCulture);
+            if (!into.TryGetValue(pid, out var set))
+            {
+                into[pid] = set = new SortedSet<string>(StringComparer.Ordinal);
+            }
+            _ = set.Add(w);
+        }
     }
 
     [SupportedOSPlatform("windows")]

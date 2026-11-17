@@ -96,6 +96,15 @@ public sealed record OwnerReport
     public bool ExitObserved { get; init; }
 
     public string? LaunchError { get; init; }
+
+    /// <summary>OR-DESKTOP: the desktop the worker ran on (<c>WinSta0\CalcDbOracle</c>), or null for an older runner.</summary>
+    public string? Desktop { get; init; }
+
+    /// <summary>OR-DESKTOP guard: top-level windows of owned workers seen on the owner's desktop. Must stay empty.</summary>
+    public IReadOnlyList<string>? WindowsOnUserDesktop { get; init; }
+
+    /// <summary>Top-level windows of owned workers seen on the private desktop (for example a modal dialog), sampled while it ran.</summary>
+    public IReadOnlyList<string>? WindowsOnPrivateDesktop { get; init; }
 }
 
 /// <summary>
