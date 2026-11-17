@@ -12,6 +12,7 @@ register only points to them. Update a row when its status changes; do not copy 
 done, listed) · `ready` (all prerequisites done) · `blocked` (waiting on the named row) ·
 `not started`. A status says what is built or observed. An ACE behaviour is qualified only by a note in
 [qualified.md](qualified.md), under the rule of The Plan §8.1.
+[qualification-report.md](qualification-report.md) gives the status of every card branch and construction slice.
 
 ## Milestone: W-01 / R-ORACLE-1 first result (The Plan §6)
 

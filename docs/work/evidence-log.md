@@ -23,22 +23,17 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
 > assumption that DAO-only probes show no UI was wrong. Since 04:24 every worker runs on a private desktop, and
 > a guard records any owned window on the owner's desktop (see the R-ORACLE-1 OR-DESKTOP entry below).
 
-### A lone U+FEFF in Text and Memo reads back empty (R-STRING-1, OR-WIRE) — `evidence/r-text-fffe`, 4 records
-The evidence-index check found five call results whose display text came back empty from the index. Their bytes are
-`fffe`, little-endian, so the code unit is U+FEFF (the byte-order mark), not U+FFFE. An earlier version of this entry,
-and commit a3d5809a, misread them as U+FFFE.
+### A leading U+FEFF in Text and Memo is dropped (R-STRING-1, OR-WIRE) — `evidence/r-text-fffe`, `evidence/r-q-wire/feff-*`
+The evidence-index check found five call results whose display text came back empty from the index: values that are
+exactly U+FEFF (bytes `fffe`, little-endian; commit a3d5809a misread them as U+FFFE). The designed probes, through the
+raw lane, in ACCDB and MDB, TEXT and MEMO, by DAO put, SQL literal, parameter and ADO:
+- A leading U+FEFF is dropped: `"\uFEFF"` reads back `""` and `"\uFEFFab"` reads back `"ab"`. Trailing and inner U+FEFF are
+  kept (`"ab\uFEFF"`, `"a\uFEFFb"`). Before Update, the field's own `Value` returns what was put.
+- U+FFFE, U+FFFF and U+FFFD are kept in every position asked.
+- Open: why a 101-unit value with a leading U+FEFF behaved differently (values between 3 and 101 units are not asked);
+  the stored bytes (W-04). The qualification note is in qualified.md.
 
-The designed probe writes, to TEXT(255) and MEMO, by DAO put and by SQL literal, in ACCDB and MDB: U+FFFE alone,
-leading, trailing, inside and doubled; U+FFFF alone and inside; U+FEFF alone; U+FFFD alone; and `ab`. After
-reopening, read through the raw lane:
-- U+FEFF alone reads back as `""` with `Len` 0, in both columns, all four routes. Before Update, the field's own
-  `Value` returned the U+FEFF just put.
-- U+FFFE alone, leading, trailing and inside are kept unchanged, with the expected `Len`; U+FFFE reads as `AscW` −2.
-- The U+FFFF, U+FFFD and doubled rows are recorded but not yet read.
-- Not asked: U+FEFF with other characters, so whether ACE drops only a value that is exactly U+FEFF, or every
-  leading U+FEFF, is open.
-
-The index is an ACE table too, so it lost the same values. Its display text now escapes U+FEFF; the exact bytes were
+The index is an ACE table too, so it lost the same values. Its display text escapes U+FEFF; the exact bytes were
 always kept in `ResultBytes`.
 
 ### The night in numbers
@@ -135,14 +130,13 @@ incomplete attempts are retained as `Uncertain`, with their lifecycle trace:
 ### Wave 5: R-PAR-1 serial baseline and deferred-branch sweeps — 233 questions, all complete
 `evidence/r-par-1`, `r-def-cursor-dao`, `r-def-expr-sql`, `r-def-cat-txn`, all on the private desktop with no window
 recorded. Digests with their probe defects are in evidence-summaries.md. Findings checked against the records:
-- **PAR-FOLD, Double sums depend on the table, not on the query's order** (`fold-double-large-groups`). FL holds
-  group 1 as 2^53 then 4096 ones, group 2 as 4096 ones then 2^53, and group 3 as 2^53, 4096 ones, then -2^53, inserted
-  in that order. `Sum(d)` gives `9007199254740992`, `9007199254745088` and `0`. These values are consistent with a
-  sequential binary64 sum in insertion order. FLI is the same rows copied by `INSERT … SELECT … ORDER BY id`, with
-  indexes on g and d. Its group 3 gives `1360` (groups 1 and 2 are equal). A derived-table `ORDER BY` did not change
-  any FL sum (`fold-double-large-reordered`). FG holds 4096 groups of `[2^53, 1, -2^53]`, interleaved: 1164 groups
-  sum to 1 and the rest to 0. FGI, the same rows with an index on g, gives 0 for every group (`fold-double-many-groups`).
-  Which physical order ACE folds in is not shown by these records.
+- **PAR-FOLD, Double sums follow the order rows reach the aggregate** (`fold-double-large-groups`, `r-q-expr-sql/fold-*`).
+  FL holds group 3 as 2^53, 4096 ones, then -2^53, inserted in that order, and `Sum(d)` gives `0`; groups 1 and 2 give
+  `9007199254740992` and `9007199254745088`. Every result is a sequential binary64 sum in the table's scan order:
+  recomputed offline from the retained scan orders, it matches in all 11 tables of the follow-up. Only an index on g
+  maintained while the rows are inserted changes the order of equal-key runs, and so the sum: FLI gave `1360` in wave 5
+  and a rebuilt FLI gave `584`. A derived-table `ORDER BY` changes nothing. The order of rows inside equal-key runs of a
+  maintained index is the open part, not the arithmetic.
 - **Currency aggregates overflow at OpenRecordset** (error 6, `0x800A0006`, `fold-currency-sum-groups`): `Sum(c)`
   over values near the Currency limits fails at open, not at the read. `Sum(CDbl(c))` returns a Double.
 - **Decimal aggregates** (`fold-decimal-*`, on the `DECIMAL(28,4)` column of `fold2`): Sum keeps scale 4, while Avg

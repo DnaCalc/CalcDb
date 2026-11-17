@@ -169,3 +169,29 @@ glyph. The designed probe showed the real behaviour (a lone U+FEFF reads back em
 carefully. Changes: `show` prints invisible and unprintable code units as `\uXXXX`, and the index tool gained
 `--evidence DIR`, so a check of one folder takes seconds instead of an hour. Rule: decode bytes with their stated
 order, and read the designed probe before naming the behaviour.
+
+## 2026-11-17 midday · the qualification round
+
+**Work observed.** Six Sonnet agents classified 467 branch rows, drafted notes, designed 271 follow-up probes, and
+after the run turned about 126 follow-ups into qualified behaviour; 238 notes in qualified.md and a slice-by-slice
+report. The machine crashed during the first phase.
+
+**What worked.**
+- *Resuming child sessions instead of restarting them.* After the crash the six agents had written nothing, but their
+  sessions kept what they had read; one message each resumed them. The same sessions then did the second phase with
+  their context intact.
+- *Agents write files, return a summary.* No result was lost to size this time.
+- *Mechanical classification first, judgement second.* Joining the branch statuses to the construction index showed
+  that "the worst branch wins" marks every slice blocked. It made the real question visible: whether a troublesome
+  remainder concerns a slice's first scope. It also showed that most T rows are missing capabilities of our own worker.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| A retention note written from the probe names ("kill") instead of the records | Six records said participant b killed a; a had ended itself | Re-retained before commit. Rule: read the exit code before writing a note |
+| Status cells with suffixes such as "(was F)" | The first classification counted them as F | Parse the leading status only |
+| Counts in the report taken from memory | Two summary numbers were wrong (12 for 15 corrections, 140 for 126) | Corrected; take numbers from the outputs |
+
+**Next candidates.** The worker operations in the report's table (`IEnumVARIANT`, ByRef and named arguments, raw
+activation, an event sink, pause points): small, and they turn many T rows into F.
