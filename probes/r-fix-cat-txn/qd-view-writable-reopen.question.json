@@ -1,0 +1,1063 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cat-txn/qd-view-writable-reopen",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-Q"
+  ],
+  "description": "Repairs r-cat-1b/qd-view-*: the reopen for the Updatable read was read-only (OpenDatabase(path, 0, -1)), so reopened QueryDef.Updatable (0) could not be compared with the writable creation handle (-1). On a writable copy of r-cat-1b-base, nine QueryDefs are created (select with an expression column, update, delete, append, make-table, crosstab, UNION ALL, DDL, parameterized select); for each the held QueryDef's Name, Type, ReturnsRecords and Updatable are read. The Database is closed and reopened WRITABLE and the same four members are read on QueryDefs.Item of each name. (The pass-through shape is left out: it needs an ODBC connect string.)",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-base.accdb",
+      "sha256": "c875186a30d15756bfd03332da860ad60a9f6e14c470d0cf585e5617d8ae08a3",
+      "length": 221184,
+      "provenance": "r-cat-1b.create-base.a1bfa3fb28.a1 qk1-a1bfa3fb28c46982675dd3b0f6fee66e4f6b4ad4062147bf84f2b7bf04e7cbf1 output:r-cat-1b-base.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSel"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A, B * 2 AS Twice FROM T WHERE B > 5 ORDER BY ID;"
+        }
+      ],
+      "bind": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpd"
+        },
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET B = B + 1 WHERE ID > 0;"
+        }
+      ],
+      "bind": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        },
+        {
+          "type": "bstr",
+          "text": "DELETE FROM W WHERE ID > 100;"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QApp"
+        },
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W (ID, A) SELECT ID + 100, A FROM T;"
+        }
+      ],
+      "bind": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QMake"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A INTO TNew FROM T;"
+        }
+      ],
+      "bind": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QXtab"
+        },
+        {
+          "type": "bstr",
+          "text": "TRANSFORM Sum(B) AS SB SELECT A FROM T GROUP BY A PIVOT ID;"
+        }
+      ],
+      "bind": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUni"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, A FROM T UNION ALL SELECT ID, A FROM W;"
+        }
+      ],
+      "bind": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDdl"
+        },
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Z (ID LONG);"
+        }
+      ],
+      "bind": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pId Long, pName Text ( 20 ); SELECT ID, A FROM T WHERE ID = pId OR A = pName;"
+        }
+      ],
+      "bind": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r0_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r0_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSel"
+        }
+      ],
+      "bind": "r0"
+    },
+    {
+      "op": "release",
+      "target": "r0_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r0",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r0",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r0"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r1_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r1_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpd"
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "release",
+      "target": "r1_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "release",
+      "target": "r2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r3_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r3_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QApp"
+        }
+      ],
+      "bind": "r3"
+    },
+    {
+      "op": "release",
+      "target": "r3_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r3"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r4_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r4_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QMake"
+        }
+      ],
+      "bind": "r4"
+    },
+    {
+      "op": "release",
+      "target": "r4_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r4",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r4",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r4"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r5_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r5_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QXtab"
+        }
+      ],
+      "bind": "r5"
+    },
+    {
+      "op": "release",
+      "target": "r5_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r5",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r5",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r5"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r6_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r6_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUni"
+        }
+      ],
+      "bind": "r6"
+    },
+    {
+      "op": "release",
+      "target": "r6_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r6",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r6",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r6",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r6"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r7_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r7_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDdl"
+        }
+      ],
+      "bind": "r7"
+    },
+    {
+      "op": "release",
+      "target": "r7_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r7",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r7",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r7",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r7",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r7"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "r8_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r8_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "r8"
+    },
+    {
+      "op": "release",
+      "target": "r8_c"
+    },
+    {
+      "op": "invoke",
+      "target": "r8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r8",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r8",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r8",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r8"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,1106 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cursor-dao/field-metadata-rw",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "R-DAO-1",
+    "D-CURSOR-1",
+    "CUR-PROV",
+    "DAO-PROP",
+    "DAO-COLL"
+  ],
+  "description": "Repairs r-def-cursor-dao/prov-alias-fields-metadata, query-field-metadata-aggregates, query-field-metadata-expressions, recordset-field-properties: the fixture was opened read-only, so DataUpdatable read False for every field. On a writable Database: a dynaset over \"SELECT ID, N AS N1, N AS N2, N + 1 AS Np, S & 'x' AS Sx, T.S FROM T WHERE ID <= 3 ORDER BY ID\": Updatable, and for each field by its own call Name, Type, Size, Attributes, DataUpdatable, SourceTable, SourceField, Required and OrdinalPosition; every row. A snapshot over \"SELECT Count(*) AS Cn, Count(S) AS Cs, Sum(N) AS Sn, Avg(N) AS An, Min(S) AS Ms, Max(D) AS Md, Min(Fl) AS Mf FROM T\" and one over \"SELECT N + 1 AS A1, N * 1.5 AS A2, S & 'x' AS A3, IIf(N > 20, 'a', 'b') AS A4, CInt(N) AS A5, CDbl(N) AS A6, Format(D, 'yyyy') AS A7, Now() AS A8, Null AS A9, True AS A10, 'lit' AS A11, 7 AS A12, 7.5 AS A13, #1/1/2020# AS A14 FROM T WHERE ID = 1\": for each field by its own call the wide member list (the nine above plus CollatingOrder, AllowZeroLength, ValidationRule, ValidationText, DefaultValue, CollectionIndex, ForeignName, Expression, ValidateOnSet); the row. For a Field of a dynaset over T (N), of a join (PA.V) and an expression Field (N + 1 AS Np): Properties Count, and each Property's Name, Type, Inherited and Value. Nothing is written. Asks the per-field origin, type and updatability of aliases, expressions, aggregates and join fields on a writable open. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N AS N1, N AS N2, N + 1 AS Np, S & 'x' AS Sx, T.S FROM T WHERE ID <= 3 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfs",
+      "bind": "mf",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "pr",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "pr",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS Cn, Count(S) AS Cs, Sum(N) AS Sn, Avg(N) AS An, Min(S) AS Ms, Max(D) AS Md, Min(Fl) AS Mf FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfs",
+      "bind": "mf",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollatingOrder",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationText",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollectionIndex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ForeignName",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidateOnSet",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfs"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT N + 1 AS A1, N * 1.5 AS A2, S & 'x' AS A3, IIf(N > 20, 'a', 'b') AS A4, CInt(N) AS A5, CDbl(N) AS A6, Format(D, 'yyyy') AS A7, Now() AS A8, Null AS A9, True AS A10, 'lit' AS A11, 7 AS A12, 7.5 AS A13, #1/1/2020# AS A14 FROM T WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfs",
+      "bind": "mf",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollatingOrder",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationText",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollectionIndex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ForeignName",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidateOnSet",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfs"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "pf"
+    },
+    {
+      "op": "invoke",
+      "target": "pf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pps"
+    },
+    {
+      "op": "invoke",
+      "target": "pps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pps",
+      "bind": "pp",
+      "maxItems": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "pps"
+    },
+    {
+      "op": "release",
+      "target": "pf"
+    },
+    {
+      "op": "release",
+      "target": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT PA.ID, PA.V FROM PA INNER JOIN CH ON PA.ID = CH.PID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "pf"
+    },
+    {
+      "op": "invoke",
+      "target": "pf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pps"
+    },
+    {
+      "op": "invoke",
+      "target": "pps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pps",
+      "bind": "pp",
+      "maxItems": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "pps"
+    },
+    {
+      "op": "release",
+      "target": "pf"
+    },
+    {
+      "op": "release",
+      "target": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT N + 1 AS Np FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Np"
+        }
+      ],
+      "bind": "pf"
+    },
+    {
+      "op": "invoke",
+      "target": "pf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pps"
+    },
+    {
+      "op": "invoke",
+      "target": "pps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pps",
+      "bind": "pp",
+      "maxItems": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "pps"
+    },
+    {
+      "op": "release",
+      "target": "pf"
+    },
+    {
+      "op": "release",
+      "target": "pfs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

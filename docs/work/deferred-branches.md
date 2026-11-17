@@ -765,3 +765,106 @@ Run order, and things to check:
 - **R-REBUILD-1 RB-REPAIR on damaged copies and RB-FAIL:** need single-defect byte writes or fault injection. Only the clean-copy repair control exists.
 - **R-REBUILD-1 RB-PUBLISH (volumes, host replacement), RB-OPAQUE (forms, reports, modules), RB-NEGATIVE secured-workgroup refusal:** paths are limited to `A.In`/`A.Out`. Stored front-end objects need Access, and workgroup files are forbidden.
 - **Access Compact & Repair lane and Access-first/ACE-first/Compact-first open orders (all cards):** need the Access application or UI (OR-DESKTOP task `b8sx`).
+
+## Wave 6: probe defects not repaired
+
+Defects named in evidence-summaries.md that the repair cards could not fix within the probe rules, with the reason.
+
+### R-ORACLE-1 OR-WIRE, R-STRING-1, R-ADO-1 (repairs, r-fix-wire-ado)
+**Not repaired:**
+- **r-wire/opt-opendatabase, the Name = Empty, Null and Missing variants (3 of 18).** They open the modal ODBC dialog. The other 15 are one probe each (`opt-opendatabase-*`).
+- **r-wire/expr-decimal-fields and r-ado-1b/fields-meta-expressions (the CDec cells).** ACE refuses `CDec(...)` in SQL with 0x800A0C03 and 0x80040E14. That is an ACE answer, not a probe defect, so the CDec expressions are not re-asked. Decimal-valued expressions over DECIMAL columns replace them in `create-fdec-*` and `fields-meta-decimal-expressions`. That is a different route to the same question, not an identical one.
+- **r-wire/expr-literal-tags (the `&H` hex literals).** ACE refuses them with a syntax error (0x800A0C03). That is an answer, and each literal already ran on its own snapshot.
+- **r-wire/create-sql, the cells with no SQL literal.** There is no SQL literal for NaN, infinities, odd-byte BSTRs or the 8,001-byte Memo. Only the cells that were never attempted are added (long Memo, FBin and FOle hex literals).
+- **r-wire/create-dao FDec cells written as BSTR with a fractional part ("1.5", "1.50", "-0.00").** BSTR conversion depends on locale 7177. The DAO put route uses VT_CY, R8 and I4, plus BSTR integer text only. The cells `1.5`, `-0.0001`, `12345678901234.5678` and `0.1` are written by SQL literal. The 28-digit fractional and 29-digit cells cannot fit DECIMAL(18,4), so they are left out.
+- **r-ado-1b/conn-datasource-spellings (`\\?\C:\...`).** The worker's `Spell("extended")` prefixes the attempt-relative path (`Path.Combine(_attemptDir, "inputs", ...)`), so the probe cannot ask the absolute-path form. The worker must apply `Path.GetFullPath` before spelling. No `Arg` in `Builder.cs` carries an absolute path.
+- **r-ado-1b/conn-open-async-connect.** The early `State = 2` is a design conflict (D-CALL-1), not a probe defect.
+- **r-str-ado-act/ado-provider-missing-names.** It is switched off by `MissingNameRoutes` (ACT-MISSING). Its absent-provider lookups need the owner's isolated environment.
+- **r-str-ado-act/ado-view.** It is read-only, so the Mode = 1 confound reaches only UPDATE and lock results, which it does not ask. Each attempt uses its own fixture copy. I found no probe-side fault to repair.
+- **r-str-ado-act/ado-execute-results, the `NextRecordset` step.** ACE refuses the compound statement, so no recordset exists to call it on. Asking it elsewhere would be a new question.
+- **Capture and `show` limits.** `ado-describe`'s type-library event and the DECIMAL words and array elements in `calcdb-oracle show` are tool defects, not probe defects.
+- **Revisit items that are new questions, not repairs.** ADO events, ADO-DISCONNECT, ADO-RECORD, ADO-RESYNC, ADO-PERSIST ADTG byte parsing, `ado-async` timing, nonzero lower-bound arrays, `VT_BYREF` and non-I2/I4 integer tags, and the R-ACT-1 gaps.
+
+### R-FMT-1, R-FMT-2, R-PRESERVE-1, R-SORT-3 (repairs, r-fix-fmt-sort)
+`AllOps` is declared but unused; it compiles with no warning but can be deleted.
+
+- **`r-fmt-1/read-*` (all 52):** these end ReturnedFailure because `ReadBack` enumerates the system tables (3110, 3112, 3251). The user-table data was captured in full, and the repair is a user-table-only view. The new read-backs use `TableView`, but only for the fixtures repaired here. Re-reading all 52 frozen fixtures would need 52 more probes, which does not fit the 30–50 size.
+- **`r-fmt-1`: binary array contents and the `{guid {...}}` wrapper:** these are `show` display questions, not defects in our probes.
+- **`r-fmt-1/create-*-decimal` and `r-fmt-2-pres-1/scalar-admission`: BSTR text such as "12345678901234.5678" and "-0.0001":** I did not re-ask these as BSTR puts, because the conversion depends on locale 7177. They are asked as SQL literals, VT_CY, VT_I4 and BSTR integer text.
+- **`r-fmt-2-pres-1/pres-*`: ReturnedFailure on all eleven:** this comes from the asked MSys* refusals (3112) and from the `Connection`, `ConflictTable` and `ReplicaFilter` Value refusals while enumerating properties. These are the engine's answers. Removing them would drop observations, and the worker has no conditional to skip one property.
+- **`r-fmt-2-pres-1/create-world-mdb`: `Sc.Fx` DATETIME2 refused (0x800A0BB9):** no retained MDB probe uses `Sc`, so there was nothing to repair.
+- **`r-fmt-2b`: weak `DistinctCount` statistic:** it is the only public index read-back, and no public alternative exists within these rules.
+- **`r-fmt-2b` and `r-fmt-2-pres-1` Revisit items that are new questions, not defects:**
+  - Random AutoNumber.
+  - A native MDB `Fx`/`Au` world.
+  - The memo and OLE hash non-determinism.
+- **`r-sort-3`: intermediate images of `create-keys`, `create-nums`, `create-derive` and the other corpus stages (U, W, C, DG):** only the T, TS and T2S stages are repaired, in `sort3-stages-*`. Every other stage needs a close and reopen per step.
+- **`r-sort-3b`: intermediate images of `create-lg`, `create-lu`, `create-nulls`, `create-mix` and `create-memo`:** only the four image probes (`image-build-order-a`, `-b`, `image-failed-unique`, `image-drop-rebuild`) are repaired. The same close and reopen per step is needed elsewhere.
+- **`r-sort-3b`: `nulls-walk-compound` and `nulls-walk-single` walking NR8, and the IX4/UX6 walks:** they are repaired only by isolation. `sort3b-existing-nulls-isolated` reads index metadata after each build and walks only the non-unique IGNORE NULL build. `sort3b-nulls-refusals` walks only indexes that are built before the rows. The original `nulls-walk-*` probes are not rerun.
+- **`r-sort-3` and `r-sort-3b` `show` display (lone surrogate, NUL, U+2028 and CR/LF rows):** this is a viewer limitation, not a probe defect.
+- **`r-sort-3b` Revisit items that are new questions:**
+  - T versus T0 LIKE varied one factor at a time.
+  - Cyrillic and German phonebook values.
+  - The Length510 and General97 branches.
+- **`r-sort-3` `seek-*` ReturnedFailure and the cited-versus-loaded engine build (20016 vs 20196):** these are ACE answers and a documentation mismatch, not probe defects.
+
+### R-CURSOR-1, R-DAO-1, R-ERR-1 (repairs, r-fix-cursor-dao)
+
+- **r-cursor-1 `pages-*`, `create-pages`, and `id-relocation`: page emptiness and row relocation.** Nothing observable through DAO shows that pages are empty or that a row body moved. A file-page inspector would be needed. The repair only separates storage order from key order (`pages-traverse-storage-order`).
+- **r-cursor-1b `requery-parameter-query`: access violation inside `Recordset.Requery`.** It belongs to the crash cards. Re-running it risks crashing the worker again, and I cannot make it safe.
+- **r-dao-1-err-1 `ado-recordset-warning-runtime`: no provider warning was induced.** I know of no ACE OLE DB call that publishes one, and inventing one would be a new question.
+- **r-dao-1-err-1 and r-dao-1b `manifest-*` "blank steps" in `show`, and the `show` GetRows rendering.** These are `calcdb-oracle` tooling, not probe defects.
+- **r-dao-1b `coll-newenum-get`: `_NewEnum` read by name returns 0x800A0CB3 on all 15 collections.** A real enumeration needs DISPID -4 or an `IEnumVARIANT` operation, which the worker and builder do not have. `Each` (Count, then Item(i)) already covers the collection walk.
+- **r-err-1b `fn-sqr-negative` and `ovf-clng-read`: later steps hit unbound targets; `lock-native-sharenone-open` logs a native close of a handle that never opened.** This is worker and logger noise. The calls that failed were observed and nothing is lost.
+- **r-def-cursor-dao `field-value-trio-during-edit` and `field-value-trio-other-writer`: `OriginalValue` and `VisibleValue` give 3251 in every state on a native table.** They could only differ on a linked or ODBC source, which is excluded.
+- **r-def-cursor-dao `open-dynamic-and-option-matrix`: about 11 dependent calls answer "Target not bound" after each refused open.** The refusals themselves were captured. The dependent calls are recorded as skipped, which is not a probe fault.
+- **`option-flags-rw` omits Options 64, 1024 and 2048.** They were refused 3001 in the original, so there is nothing to repair there. They are left out because their purpose is ODBC.
+- **`option-flags-rw` and `open-argument-shapes-rw` use one writable copy each, not one copy per variant.** Nothing is written and every recordset is closed before the next opens. A copy per variant is not available under one role, because the runner copies every input to `inputs/<FileName>`.
+- **`seek-arguments-from-two-starts` does not repeat the no-Index and dynaset Seek refusals.** They were clean (3019 and 3251) and are not defects.
+
+### R-EXPR-1, R-SQL-1, R-SQL-2, R-SQL-3, R-PAR-1 (repairs, r-fix-expr-sql)
+
+- **r-expr-1/a-null-empty-error-literals, a-optional-arguments and the r-expr-1b Branch A and D inputs:** `CVErr` and `Nz` are undefined in DAO-only ACE (0x800A0C0D). That is an ACE answer, and no real Error value can be made without an Access-hosted route.
+- **r-expr-1b/conv-\* and inv-\*, r-par-1/fold-currency-argument-forms (CDec 3075):** an ACE answer, so not repaired. The one discriminating probe is `cdec-argument-forms`, since no probe asked CDec by argument form.
+- **r-expr-1b/sandbox-array-functions:** every expression that contains `Array(...)` is left out under your rule. The Split-based forms are asked instead.
+- **r-expr-1b IifNest/SwitchPairs/ChooseMany limits, Branch E eager-argument discriminators, Branch D consumers:** bracketing a limit or adding discriminators is a new question, not a repair of a defect.
+- **r-expr-1/mut-validation-rules rules `1/0` and `CVErr(5)`:** `1/0` was answered (3802) and `CVErr` is undefined.
+- **r-def-expr-sql/expr-clnglng-clngptr and expr-clnglng-mdb:** `CLngLng` and `CLngPtr` are undefined, which is an ACE answer.
+- **r-def-expr-sql/str-\*:** these belong to R-STRING-1, which is not one of your cards. That covers the odd-byte rows refused by the DAO Field put (0x800A0E76), `Asc` on empty or Null values, the Memo-typed parameter and `Nz` in `str-memo-versus-text-expressions`.
+- **r-def-expr-sql/ddl-fk-actions, the spelled `ON DELETE` / `ON UPDATE` clauses:** ACE refuses them in `ALTER`, which is an ACE answer. The repair covers cascade only, through relation Attributes 0, 256, 4096 and 4352. SET NULL, NO ACTION, SET DEFAULT and RESTRICT have no DAO attribute.
+- **r-sql-1 on MDB (union-types Decimal arms, NB BIGINT):** no MDB fixture is made. BIGINT refused in MDB (3001) is an ACE answer.
+- **r-sql-1 Precision 1033 and DecimalPlaces 3270:** ACE answers. `DecimalPlaces` is never read, and `Precision` and `Scale` are read after `MoveFirst`.
+- **r-sql-2-3/dr-long-values:** DISTINCTROW returned the physical-row count for identical and for differing rows. I found no read-only, no-UI design that separates content comparison from physical-row identity or from Memo truncation at 255 characters, so I left it.
+- **r-sql-2-3/act-ddl-columns-indexes and act-ddl-objects:** stale `RecordsAffected` after DDL is not re-asked on its own. The repairs read it only after DML, under the marker. The ANSI-92/ADO route for CHECK, VIEW and PROCEDURE is a different route, so I did not repair it.
+- **r-sql-13b/join-limit-tables, remaining cases:** the nest forms of 33, 34 and 50 tables are not re-asked, and neither are intermediate nest sizes. Each would sit beside the 32-table nest that timed out. The attempt timeout is a runner setting, and `Probe` has no field for it.
+- **r-sql-13b/agg-stat-argument-types, TB row 3 Yes/No Null:** a Yes/No column stores Null as False, which is an ACE answer.
+- **r-sql-13b/memo-distinct-scope (DISTINCT over Memo, 3163):** an ACE answer.
+- **r-sql-13b unexplained behaviours:** the whole-query refusal of `JOIN ... AND`, the zero-row `PIVOT IN (1.0, 1)` and `Parameters.Count` failing at 255 are unexplained ACE behaviours, not probe defects.
+- **r-par-1/other err-\* and fold-\* probes that read Errors once:** only err-where-evaluation-order and err-aggregate-and-groups are repaired, because they are the two the summary cites.
+- **r-par-1 tooling items (`show` cuts arrays at 24 elements, `Precision` reading 1033 on Long fields):** a runner display limit and an ACE value, not probe defects.
+### R-CAT-1, R-TXN-1, R-LOCK-3, R-LOCK-4, R-ENC-1, R-LINK-1, R-COMPLEX-1, R-REBUILD-1 (repairs, r-fix-cat-txn)
+
+- **MSys reads** (`r-cat-1` msys-queries, msys-queries-compacted, msys-add-objects, id-reuse, order-variants, recreate-table, names, `catalog-*` rows; `r-cplx-rebuild` complex-column association rows): DAO refuses them to the default Admin with 3112. This needs raw-file capture.
+- **`r-cat-1/parameter-values`:** it asks `Recordset.Requery(QueryDef)`, which crashes ACE.
+- **`r-cat-1/mdb-empty` description line:** it is a documentation slip, not a probe defect.
+- **Pass-through shapes** (`r-cat-1b` qd-view-passthrough, the QPass part of qd-members-builtin, qd-passthrough-saved-run, qd-passthrough-option-adhoc): they need an ODBC connect string, which is forbidden. They are left out of the writable-reopen repairs.
+- **`r-cat-1b` document-properties and containers-*:** `Permissions` always raises 0x800A0D1E on an unsecured file, and secured-workgroup checks are out of scope.
+- **`r-cat-1b` Revisit items:** the persisted `Type()` after `qd.SQL(put)` would be a new question.
+- **Stale-Errors repairs left out for size:** qd-returnsrecords-put, qd-execute-param-action, rel-parent-delete-by-attributes, rel-parent-key-update-by-attributes and field-validation-effect. The fix is the same before-and-after Errors pair used in `qd-create-invalid-sql-errors` and `rel-orphan-insert-errors`.
+- **`r-txn-1/local-option-retry`:** the record has no per-call timestamps. That is the harness, not the probe.
+- **`r-txn-1/nest-exhaustion` levels 6 and 7:** writes there raise 3003. That is the ACE answer, repeated in `r-txn-1b`, so a write cannot separate capacity from statement failure.
+- **`r-txn-1/local-two-rows-a-commit-b-commit` and `local-dao-ado-two-rows`:** the same Wide rows 1 and 64 repair is written only for b-commit-a-rollback.
+- **`r-txn-1b` CommitTrans with I4 1 as the outer commit:** a new question, not a defect.
+- **`r-lock-3-4-txn` stale reads other than `txn-view-readers`:** txn-nest-observed, txn-multi-two-files, read-role-edit-existing-readers, read-path-index-moved, read-path-lv-replace, read-id-delete-reinsert and read-snapshot-cursor-kinds. They are fixable with the pause-plus-Idle pattern but were left out for size.
+- **Other `r-lock-3-4-txn` probes left out for size:** write-original-same-row, write-original-same-row-mdb and write-original-changed-then-restored (the pattern is a final read after a pause), and write-timing-release-boundaries (the pattern is a held-lock check before each release).
+- **`r-lock-3-4-txn/txn-local-xproc-conflict-settings`:** the record holds no per-call timings. That is the harness.
+- **`r-lock-3-4-txn/read-schema-held-descriptors`:** the fixture has no `IX_U1`, and the DDL refusal 3262 is an ACE answer.
+- **`r-enc-link/meta-source-absent`:** the probe layer has no way to delete a source file.
+- **Other `r-enc-link` link probes** (link-credentials, relink-refresh-unchanged with its missing control, relink-to-second-version where both sources define `IX_SRC_D`, txn-local-and-link, session-two-workspaces, meta-read-through-link): they share the stored-link defect. Only update, schema-change and bad-targets are repaired.
+- **`r-enc-link` accdb-enc fixture:** it cannot be created, since `dbEncrypt` on ACCDB is refused (3001). `profile-unprotected` is repaired without that role.
+- **`r-def-cat-txn/link-mdb-host-accdb-source`:** the dependents are consequences of the refused Append (3845), which is an ACE answer.
+- **`r-def-cat-txn` decrypt step** (dbVersion120 plus dbDecrypt on its own): not written for size. `enc-accdb-compact-encrypt-130` and `enc-accdb-compact-password-route` are.
+- **`r-def-cat-txn` cx-ddl-complex-keywords** (why `LONG MULTIVALUE` gave a plain Long) and **txn-close-original…** (more level-ending causes): both are new questions.
+- **`r-cplx-rebuild` history-append-cancel-rollback and history-toggle-delete:** they read `ColumnHistory(...)`, which is not a function of this SQL (0x800A0C0D). Only the `AppendOnly` fixture is repaired.
+- **`r-cplx-rebuild` compact-fmt1-features and rich enumerations:** the system-table noise is a set of refusals, and it was left out for size.
+- **`edit-workspace-transactions`:** only the child-only and with-parent-update variants are written, not a CommitTrans variant.

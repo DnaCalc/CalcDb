@@ -1,0 +1,268 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-expr-sql/join-limit-nest-32",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B"
+  ],
+  "description": "Repairs r-sql-13b/join-limit-tables: the 32-table nest timed out and lost the other cases. Asks whether a nest of parenthesized INNER JOINs of 32 aliases of the one-row table One joined on ID is accepted, and at which phase, opened directly as the only statement of its probe so that nothing else is lost if the attempt times out. Fixture r-fix-expr-sql-expr is opened read-only through DAO.DBEngine.120; each recordset reads Name, Type and Value of every field. Each statement is preceded by a marker (a DROP TABLE of a table that does not exist, which always fails), so DBEngine.Errors read after the statement shows that statement's own failure or the marker's, never an older one. Where Field Precision and Scale are read, the recordset is first positioned on its first row (MoveFirst) and DecimalPlaces is not read.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fix-expr-sql-expr.accdb",
+      "sha256": "14e62bb80b399f2f7110153e276e8f44d3c244e57506f40dacf1d6ffd3fe9bbf",
+      "length": 274432,
+      "provenance": "r-fix-expr-sql.create-expr.c8d1bb3d9a.a1 qk1-c8d1bb3d9a4b461313a539723977a41b18e6596647dab054f6836a81c66c2eb0 output:r-fix-expr-sql-expr.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RfixNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT t1.ID FROM ((((((((((((((((((((((((((((((One AS t1 INNER JOIN One AS t2 ON t1.ID = t2.ID) INNER JOIN One AS t3 ON t1.ID = t3.ID) INNER JOIN One AS t4 ON t1.ID = t4.ID) INNER JOIN One AS t5 ON t1.ID = t5.ID) INNER JOIN One AS t6 ON t1.ID = t6.ID) INNER JOIN One AS t7 ON t1.ID = t7.ID) INNER JOIN One AS t8 ON t1.ID = t8.ID) INNER JOIN One AS t9 ON t1.ID = t9.ID) INNER JOIN One AS t10 ON t1.ID = t10.ID) INNER JOIN One AS t11 ON t1.ID = t11.ID) INNER JOIN One AS t12 ON t1.ID = t12.ID) INNER JOIN One AS t13 ON t1.ID = t13.ID) INNER JOIN One AS t14 ON t1.ID = t14.ID) INNER JOIN One AS t15 ON t1.ID = t15.ID) INNER JOIN One AS t16 ON t1.ID = t16.ID) INNER JOIN One AS t17 ON t1.ID = t17.ID) INNER JOIN One AS t18 ON t1.ID = t18.ID) INNER JOIN One AS t19 ON t1.ID = t19.ID) INNER JOIN One AS t20 ON t1.ID = t20.ID) INNER JOIN One AS t21 ON t1.ID = t21.ID) INNER JOIN One AS t22 ON t1.ID = t22.ID) INNER JOIN One AS t23 ON t1.ID = t23.ID) INNER JOIN One AS t24 ON t1.ID = t24.ID) INNER JOIN One AS t25 ON t1.ID = t25.ID) INNER JOIN One AS t26 ON t1.ID = t26.ID) INNER JOIN One AS t27 ON t1.ID = t27.ID) INNER JOIN One AS t28 ON t1.ID = t28.ID) INNER JOIN One AS t29 ON t1.ID = t29.ID) INNER JOIN One AS t30 ON t1.ID = t30.ID) INNER JOIN One AS t31 ON t1.ID = t31.ID) INNER JOIN One AS t32 ON t1.ID = t32.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs0",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs0f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs0f",
+          "bind": "rs0x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs0f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

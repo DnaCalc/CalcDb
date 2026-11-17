@@ -1,0 +1,5134 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cat-txn/create-cx-types-accdb",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-DESC",
+    "CX-READ"
+  ],
+  "description": "Repairs r-cplx-rebuild/create-cx-types: only MByte received V, because TableDefs.Item('M<Kind>') returned 3265 right after the DDL on a TableDefs collection that was not refreshed. Fixture r-fix-cat-txn-cx-types-accdb (ACCDB): eight tables M<Kind>(ID COUNTER primary key, Name) each with one multi-valued field V created through CreateField with dbComplexByte 102, Integer 103, Long 104, Single 105, Double 106, GUID 107, Decimal 108 and Text 109, TableDefs refreshed before each lookup (DBEngine.Errors after each Append); parent p1 with two typed child values (Decimal values as VT_CY, so no BSTR conversion depends on the locale), parent p2 with none. The Database is closed and reopened read-only and the group of p1 and of p2 of each table is read.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-fix-cat-txn-cx-types-accdb.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MByte (ID COUNTER CONSTRAINT PK_MByte PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskByte"
+    },
+    {
+      "op": "invoke",
+      "target": "tskByte",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskByte",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MByte"
+        }
+      ],
+      "bind": "tdkByte"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkByte",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 102
+        }
+      ],
+      "bind": "fnkByte"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkByte",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkByte"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkByte",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkByte"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkByte"
+    },
+    {
+      "op": "release",
+      "target": "tfkByte"
+    },
+    {
+      "op": "release",
+      "target": "tdkByte"
+    },
+    {
+      "op": "release",
+      "target": "tskByte"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MByte (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MByte (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MByte WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "ui1",
+          "value": 255
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MInteger (ID COUNTER CONSTRAINT PK_MInteger PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskInteger"
+    },
+    {
+      "op": "invoke",
+      "target": "tskInteger",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskInteger",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MInteger"
+        }
+      ],
+      "bind": "tdkInteger"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkInteger",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 103
+        }
+      ],
+      "bind": "fnkInteger"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkInteger",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkInteger"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkInteger",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkInteger"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkInteger"
+    },
+    {
+      "op": "release",
+      "target": "tfkInteger"
+    },
+    {
+      "op": "release",
+      "target": "tdkInteger"
+    },
+    {
+      "op": "release",
+      "target": "tskInteger"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MInteger (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MInteger (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MInteger WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i2",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i2",
+          "value": 32767
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MLong (ID COUNTER CONSTRAINT PK_MLong PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskLong"
+    },
+    {
+      "op": "invoke",
+      "target": "tskLong",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskLong",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MLong"
+        }
+      ],
+      "bind": "tdkLong"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkLong",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 104
+        }
+      ],
+      "bind": "fnkLong"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkLong",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkLong"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkLong",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkLong"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkLong"
+    },
+    {
+      "op": "release",
+      "target": "tfkLong"
+    },
+    {
+      "op": "release",
+      "target": "tdkLong"
+    },
+    {
+      "op": "release",
+      "target": "tskLong"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MLong (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MLong (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MLong WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2147483647
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MSingle (ID COUNTER CONSTRAINT PK_MSingle PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "tskSingle",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskSingle",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSingle"
+        }
+      ],
+      "bind": "tdkSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkSingle",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 105
+        }
+      ],
+      "bind": "fnkSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkSingle",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkSingle",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkSingle"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkSingle"
+    },
+    {
+      "op": "release",
+      "target": "tfkSingle"
+    },
+    {
+      "op": "release",
+      "target": "tdkSingle"
+    },
+    {
+      "op": "release",
+      "target": "tskSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MSingle (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MSingle (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSingle WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3fc00000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "80000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MDouble (ID COUNTER CONSTRAINT PK_MDouble PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "tskDouble",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskDouble",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MDouble"
+        }
+      ],
+      "bind": "tdkDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkDouble",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 106
+        }
+      ],
+      "bind": "fnkDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkDouble",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkDouble",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkDouble"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkDouble"
+    },
+    {
+      "op": "release",
+      "target": "tfkDouble"
+    },
+    {
+      "op": "release",
+      "target": "tdkDouble"
+    },
+    {
+      "op": "release",
+      "target": "tskDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MDouble (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MDouble (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDouble WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3fb999999999999a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "7e37e43c8800759c"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MGuid (ID COUNTER CONSTRAINT PK_MGuid PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskGuid"
+    },
+    {
+      "op": "invoke",
+      "target": "tskGuid",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskGuid",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MGuid"
+        }
+      ],
+      "bind": "tdkGuid"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkGuid",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 107
+        }
+      ],
+      "bind": "fnkGuid"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkGuid",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkGuid"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkGuid",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkGuid"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkGuid"
+    },
+    {
+      "op": "release",
+      "target": "tfkGuid"
+    },
+    {
+      "op": "release",
+      "target": "tdkGuid"
+    },
+    {
+      "op": "release",
+      "target": "tskGuid"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MGuid (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MGuid (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MGuid WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "{00112233-4455-6677-8899-AABBCCDDEEFF}"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "{FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MDecimal (ID COUNTER CONSTRAINT PK_MDecimal PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskDecimal"
+    },
+    {
+      "op": "invoke",
+      "target": "tskDecimal",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskDecimal",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MDecimal"
+        }
+      ],
+      "bind": "tdkDecimal"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkDecimal",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 108
+        }
+      ],
+      "bind": "fnkDecimal"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkDecimal",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkDecimal"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkDecimal",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkDecimal"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkDecimal"
+    },
+    {
+      "op": "release",
+      "target": "tfkDecimal"
+    },
+    {
+      "op": "release",
+      "target": "tdkDecimal"
+    },
+    {
+      "op": "release",
+      "target": "tskDecimal"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MDecimal (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MDecimal (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDecimal WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 123456789
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MText (ID COUNTER CONSTRAINT PK_MText PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tskText"
+    },
+    {
+      "op": "invoke",
+      "target": "tskText",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tskText",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MText"
+        }
+      ],
+      "bind": "tdkText"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkText",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        },
+        {
+          "type": "i4",
+          "value": 109
+        }
+      ],
+      "bind": "fnkText"
+    },
+    {
+      "op": "invoke",
+      "target": "tdkText",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfkText"
+    },
+    {
+      "op": "invoke",
+      "target": "tfkText",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fnkText"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fnkText"
+    },
+    {
+      "op": "release",
+      "target": "tfkText"
+    },
+    {
+      "op": "release",
+      "target": "tdkText"
+    },
+    {
+      "op": "release",
+      "target": "tskText"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MText (Name) VALUES ('p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MText (Name) VALUES ('p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MText WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "alpha"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Bä€"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-fix-cat-txn-cx-types-accdb.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MByte WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfByte1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcByte1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghByte1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghByte1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghByte1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghByte1"
+    },
+    {
+      "op": "release",
+      "target": "gcByte1"
+    },
+    {
+      "op": "release",
+      "target": "gfByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpByte1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MByte WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfByte2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcByte2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghByte2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghByte2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghByte2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghByte2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghByte2"
+    },
+    {
+      "op": "release",
+      "target": "gcByte2"
+    },
+    {
+      "op": "release",
+      "target": "gfByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpByte2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpByte2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MInteger WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfInteger1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcInteger1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghInteger1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghInteger1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghInteger1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghInteger1"
+    },
+    {
+      "op": "release",
+      "target": "gcInteger1"
+    },
+    {
+      "op": "release",
+      "target": "gfInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpInteger1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MInteger WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfInteger2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcInteger2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghInteger2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghInteger2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghInteger2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghInteger2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghInteger2"
+    },
+    {
+      "op": "release",
+      "target": "gcInteger2"
+    },
+    {
+      "op": "release",
+      "target": "gfInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpInteger2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpInteger2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MLong WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfLong1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcLong1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghLong1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghLong1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghLong1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghLong1"
+    },
+    {
+      "op": "release",
+      "target": "gcLong1"
+    },
+    {
+      "op": "release",
+      "target": "gfLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpLong1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MLong WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfLong2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcLong2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghLong2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghLong2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghLong2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghLong2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghLong2"
+    },
+    {
+      "op": "release",
+      "target": "gcLong2"
+    },
+    {
+      "op": "release",
+      "target": "gfLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpLong2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpLong2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSingle WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfSingle1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcSingle1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghSingle1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghSingle1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghSingle1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghSingle1"
+    },
+    {
+      "op": "release",
+      "target": "gcSingle1"
+    },
+    {
+      "op": "release",
+      "target": "gfSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpSingle1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MSingle WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfSingle2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcSingle2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghSingle2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghSingle2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghSingle2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghSingle2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghSingle2"
+    },
+    {
+      "op": "release",
+      "target": "gcSingle2"
+    },
+    {
+      "op": "release",
+      "target": "gfSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpSingle2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpSingle2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDouble WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDouble1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDouble1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDouble1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDouble1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDouble1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDouble1"
+    },
+    {
+      "op": "release",
+      "target": "gcDouble1"
+    },
+    {
+      "op": "release",
+      "target": "gfDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDouble1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDouble WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDouble2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDouble2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDouble2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDouble2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDouble2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDouble2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDouble2"
+    },
+    {
+      "op": "release",
+      "target": "gcDouble2"
+    },
+    {
+      "op": "release",
+      "target": "gfDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDouble2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDouble2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MGuid WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfGuid1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcGuid1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghGuid1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghGuid1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghGuid1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghGuid1"
+    },
+    {
+      "op": "release",
+      "target": "gcGuid1"
+    },
+    {
+      "op": "release",
+      "target": "gfGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpGuid1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MGuid WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfGuid2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcGuid2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghGuid2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghGuid2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghGuid2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghGuid2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghGuid2"
+    },
+    {
+      "op": "release",
+      "target": "gcGuid2"
+    },
+    {
+      "op": "release",
+      "target": "gfGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpGuid2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpGuid2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDecimal WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDecimal1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDecimal1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDecimal1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDecimal1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDecimal1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDecimal1"
+    },
+    {
+      "op": "release",
+      "target": "gcDecimal1"
+    },
+    {
+      "op": "release",
+      "target": "gfDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDecimal1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MDecimal WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfDecimal2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcDecimal2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghDecimal2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghDecimal2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghDecimal2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghDecimal2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghDecimal2"
+    },
+    {
+      "op": "release",
+      "target": "gcDecimal2"
+    },
+    {
+      "op": "release",
+      "target": "gfDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpDecimal2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpDecimal2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MText WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gfText1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gcText1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghText1"
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghText1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghText1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghText1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghText1"
+    },
+    {
+      "op": "release",
+      "target": "gcText1"
+    },
+    {
+      "op": "release",
+      "target": "gfText1"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpText1"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM MText WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gfText2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "gcText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gcText2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghText2"
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghText2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghText2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghText2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghText2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghText2"
+    },
+    {
+      "op": "release",
+      "target": "gcText2"
+    },
+    {
+      "op": "release",
+      "target": "gfText2"
+    },
+    {
+      "op": "invoke",
+      "target": "gpText2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpText2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

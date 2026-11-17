@@ -1,0 +1,1510 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cat-txn/ddl-relation-querydef-property-rollback-refresh",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-DDL"
+  ],
+  "description": "Repairs r-txn-1/ddl-relation-querydef-property-rollback: the Catalog helper refreshed TableDefs, Relations and QueryDefs but not Properties, so the same-handle property count of 12 after Rollback may be a stale collection, and its Connection value read (3251) polluted Errors. On r-txn-1-a-accdb: BeginTrans; ALTER TABLE C DROP CONSTRAINT FK_C_T; CreateQueryDef QNew; QInsMid.SQL = 'SELECT * FROM S;'; Database.CreateProperty TxnProbe (dbText) appended to Properties; the catalog with the Database Properties (Properties refreshed; names and types, and TxnProbe's value by name); DBEngine.Errors right before and after Rollback; the same catalog; close; the same catalog through a fresh Workspace.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-txn-1-a-accdb.accdb",
+      "sha256": "f7231a9c03dc37d275873d9e37b12b27b272064cb4e81c5bd82f05b3d64faa0b",
+      "length": 290816,
+      "provenance": "r-txn-1.create-a-accdb.5e9fb1e569.a1 qk1-5e9fb1e5696c40d67416cce0fa11fde9223e58d9d611aa76722e05593accf38b output:r-txn-1-a-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE C DROP CONSTRAINT FK_C_T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QNew"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T;"
+        }
+      ],
+      "bind": "qn"
+    },
+    {
+      "op": "release",
+      "target": "qn"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QInsMid"
+        }
+      ],
+      "bind": "qm"
+    },
+    {
+      "op": "invoke",
+      "target": "qm",
+      "member": "SQL",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM S;"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qm"
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TxnProbe"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "added inside a transaction"
+        }
+      ],
+      "bind": "prop"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "props"
+    },
+    {
+      "op": "invoke",
+      "target": "props",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "prop"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "prop"
+    },
+    {
+      "op": "release",
+      "target": "props"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tl_cin"
+    },
+    {
+      "op": "invoke",
+      "target": "tl_cin",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tl_cin",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tl_cin",
+      "bind": "tli_cin",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tli_cin",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tli_cin",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tl_cin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "crin"
+    },
+    {
+      "op": "invoke",
+      "target": "crin",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "crin",
+      "bind": "criin",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "criin",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criin",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criin",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criin",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "crin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cqin"
+    },
+    {
+      "op": "invoke",
+      "target": "cqin",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "cqin",
+      "bind": "cqiin",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cqiin",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cqiin",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cqin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsinC"
+    },
+    {
+      "op": "invoke",
+      "target": "tsinC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tsinC",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ],
+      "bind": "tdinC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdinC",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fsinC"
+    },
+    {
+      "op": "invoke",
+      "target": "fsinC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "fsinC",
+      "bind": "fiinC",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fiinC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fiinC",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fiinC",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fsinC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdinC",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "xsinC"
+    },
+    {
+      "op": "invoke",
+      "target": "xsinC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "xsinC",
+      "bind": "xiinC",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "xiinC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xiinC",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xiinC",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xiinC",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "xsinC"
+    },
+    {
+      "op": "release",
+      "target": "tdinC"
+    },
+    {
+      "op": "release",
+      "target": "tsinC"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pn_in"
+    },
+    {
+      "op": "invoke",
+      "target": "pn_in",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn_in",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pn_in",
+      "bind": "pni_in",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pni_in",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pni_in",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pn_in"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_in"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_in",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TxnProbe"
+        }
+      ],
+      "bind": "rpi_in"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_in"
+    },
+    {
+      "op": "release",
+      "target": "rp_in"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tl_crb"
+    },
+    {
+      "op": "invoke",
+      "target": "tl_crb",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tl_crb",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tl_crb",
+      "bind": "tli_crb",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tli_crb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tli_crb",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tl_crb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "crrb"
+    },
+    {
+      "op": "invoke",
+      "target": "crrb",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "crrb",
+      "bind": "crirb",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "crirb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "crirb",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "crirb",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "crirb",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "crrb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cqrb"
+    },
+    {
+      "op": "invoke",
+      "target": "cqrb",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "cqrb",
+      "bind": "cqirb",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cqirb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cqirb",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cqrb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "tsrbC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tsrbC",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ],
+      "bind": "tdrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdrbC",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fsrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "fsrbC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "fsrbC",
+      "bind": "firbC",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "firbC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "firbC",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "firbC",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fsrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdrbC",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "xsrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "xsrbC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "xsrbC",
+      "bind": "xirbC",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "xirbC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xirbC",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xirbC",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xirbC",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "xsrbC"
+    },
+    {
+      "op": "release",
+      "target": "tdrbC"
+    },
+    {
+      "op": "release",
+      "target": "tsrbC"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pn_rb"
+    },
+    {
+      "op": "invoke",
+      "target": "pn_rb",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn_rb",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pn_rb",
+      "bind": "pni_rb",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pni_rb",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pni_rb",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pn_rb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_rb"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_rb",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TxnProbe"
+        }
+      ],
+      "bind": "rpi_rb"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_rb",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_rb",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_rb"
+    },
+    {
+      "op": "release",
+      "target": "rp_rb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "verify"
+        },
+        {
+          "type": "bstr",
+          "text": "admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "wsv"
+    },
+    {
+      "op": "invoke",
+      "target": "wsv",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbv"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tl_cv"
+    },
+    {
+      "op": "invoke",
+      "target": "tl_cv",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tl_cv",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tl_cv",
+      "bind": "tli_cv",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tli_cv",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tli_cv",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tl_cv"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "crv"
+    },
+    {
+      "op": "invoke",
+      "target": "crv",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "crv",
+      "bind": "criv",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "criv",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criv",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criv",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "criv",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "crv"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cqv"
+    },
+    {
+      "op": "invoke",
+      "target": "cqv",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "cqv",
+      "bind": "cqiv",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cqiv",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cqiv",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cqv"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsvC"
+    },
+    {
+      "op": "invoke",
+      "target": "tsvC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tsvC",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ],
+      "bind": "tdvC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdvC",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fsvC"
+    },
+    {
+      "op": "invoke",
+      "target": "fsvC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "fsvC",
+      "bind": "fivC",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fivC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fivC",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fivC",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fsvC"
+    },
+    {
+      "op": "invoke",
+      "target": "tdvC",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "xsvC"
+    },
+    {
+      "op": "invoke",
+      "target": "xsvC",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "xsvC",
+      "bind": "xivC",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "xivC",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xivC",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xivC",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "xivC",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "xsvC"
+    },
+    {
+      "op": "release",
+      "target": "tdvC"
+    },
+    {
+      "op": "release",
+      "target": "tsvC"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pn_v"
+    },
+    {
+      "op": "invoke",
+      "target": "pn_v",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn_v",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "pn_v",
+      "bind": "pni_v",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pni_v",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pni_v",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pn_v"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_v"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_v",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TxnProbe"
+        }
+      ],
+      "bind": "rpi_v"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_v",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_v",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_v"
+    },
+    {
+      "op": "release",
+      "target": "rp_v"
+    },
+    {
+      "op": "invoke",
+      "target": "dbv",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wsv",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbv"
+    },
+    {
+      "op": "release",
+      "target": "wsv"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

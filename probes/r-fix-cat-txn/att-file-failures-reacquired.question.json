@@ -1,0 +1,1395 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cat-txn/att-file-failures-reacquired",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-ATT"
+  ],
+  "description": "Repairs r-cplx-rebuild/att-file-failures: the last two steps (the database file as LoadFromFile source and as SaveToFile destination) hit 3420 on a stale handle. On a writable r-cplx-rebuild-cx-attach, each step uses a FRESHLY acquired recordset, child recordset and FileData field of p1 (p3 for the empty group): SaveToFile to a new work file; SaveToFile onto an existing work file (written by ADODB.Stream); under parent Edit a child AddNew and LoadFromFile of a source that does not exist, Update, CancelUpdate; SaveToFile on the child of the empty group p3; under parent Edit a child AddNew and LoadFromFile whose source is the open database file itself, Update, CancelUpdate; SaveToFile whose destination is the open database file. DBEngine.Errors right after each failing call and the file states after each step; the group of p1 is read at the end.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cplx-rebuild-cx-attach.accdb",
+      "sha256": "971cacdd54cbb1bad8f9a18b022f5e0949d442fee63430a3165e9ddef5e61485",
+      "length": 249856,
+      "provenance": "r-cplx-rebuild.create-cx-attach.43d2bea5ba.a1 qk1-43d2bea5ba4b1236fc5fb3152598f711b98273da962a657d25358e1677705a96 output:r-cplx-rebuild-cx-attach.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "mkexistsbin"
+    },
+    {
+      "op": "invoke",
+      "target": "mkexistsbin",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mkexistsbin",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mkexistsbin",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "7072652d6578697374696e67"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mkexistsbin",
+      "member": "SaveToFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "exists.bin"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mkexistsbin",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mkexistsbin"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs1"
+    },
+    {
+      "op": "invoke",
+      "target": "rs1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls1"
+    },
+    {
+      "op": "invoke",
+      "target": "ls1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "ts1"
+    },
+    {
+      "op": "invoke",
+      "target": "ts1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs1"
+    },
+    {
+      "op": "invoke",
+      "target": "cs1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs1"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileData"
+        }
+      ],
+      "bind": "ds1"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileName"
+        }
+      ],
+      "bind": "ns1"
+    },
+    {
+      "op": "invoke",
+      "target": "ds1",
+      "member": "SaveToFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "out-new.bin"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "s1",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "ds1",
+      "member": "SaveToFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "exists.bin"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "s2",
+      "keep": false
+    },
+    {
+      "op": "release",
+      "target": "ds1"
+    },
+    {
+      "op": "release",
+      "target": "ns1"
+    },
+    {
+      "op": "release",
+      "target": "cfs1"
+    },
+    {
+      "op": "invoke",
+      "target": "cs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cs1"
+    },
+    {
+      "op": "release",
+      "target": "ts1"
+    },
+    {
+      "op": "release",
+      "target": "ls1"
+    },
+    {
+      "op": "invoke",
+      "target": "rs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs3"
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls3"
+    },
+    {
+      "op": "invoke",
+      "target": "ls3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "ts3"
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ts3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs3"
+    },
+    {
+      "op": "invoke",
+      "target": "cs3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs3"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileData"
+        }
+      ],
+      "bind": "ds3"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileName"
+        }
+      ],
+      "bind": "ns3"
+    },
+    {
+      "op": "invoke",
+      "target": "cs3",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ds3",
+      "member": "LoadFromFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "absent.bin"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs3",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs3",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "s3",
+      "keep": false
+    },
+    {
+      "op": "release",
+      "target": "ds3"
+    },
+    {
+      "op": "release",
+      "target": "ns3"
+    },
+    {
+      "op": "release",
+      "target": "cfs3"
+    },
+    {
+      "op": "invoke",
+      "target": "cs3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cs3"
+    },
+    {
+      "op": "release",
+      "target": "ts3"
+    },
+    {
+      "op": "release",
+      "target": "ls3"
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p3'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs4"
+    },
+    {
+      "op": "invoke",
+      "target": "rs4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls4"
+    },
+    {
+      "op": "invoke",
+      "target": "ls4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "ts4"
+    },
+    {
+      "op": "invoke",
+      "target": "ts4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs4"
+    },
+    {
+      "op": "invoke",
+      "target": "cs4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs4"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileData"
+        }
+      ],
+      "bind": "ds4"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileName"
+        }
+      ],
+      "bind": "ns4"
+    },
+    {
+      "op": "invoke",
+      "target": "ds4",
+      "member": "SaveToFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "out-eof.bin"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "s4",
+      "keep": false
+    },
+    {
+      "op": "release",
+      "target": "ds4"
+    },
+    {
+      "op": "release",
+      "target": "ns4"
+    },
+    {
+      "op": "release",
+      "target": "cfs4"
+    },
+    {
+      "op": "invoke",
+      "target": "cs4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cs4"
+    },
+    {
+      "op": "release",
+      "target": "ts4"
+    },
+    {
+      "op": "release",
+      "target": "ls4"
+    },
+    {
+      "op": "invoke",
+      "target": "rs4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs5"
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls5"
+    },
+    {
+      "op": "invoke",
+      "target": "ls5",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "ts5"
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ts5",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs5"
+    },
+    {
+      "op": "invoke",
+      "target": "cs5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs5"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs5",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileData"
+        }
+      ],
+      "bind": "ds5"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs5",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileName"
+        }
+      ],
+      "bind": "ns5"
+    },
+    {
+      "op": "invoke",
+      "target": "cs5",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ds5",
+      "member": "LoadFromFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs5",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs5",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "s5",
+      "keep": false
+    },
+    {
+      "op": "release",
+      "target": "ds5"
+    },
+    {
+      "op": "release",
+      "target": "ns5"
+    },
+    {
+      "op": "release",
+      "target": "cfs5"
+    },
+    {
+      "op": "invoke",
+      "target": "cs5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cs5"
+    },
+    {
+      "op": "release",
+      "target": "ts5"
+    },
+    {
+      "op": "release",
+      "target": "ls5"
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs6"
+    },
+    {
+      "op": "invoke",
+      "target": "rs6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls6"
+    },
+    {
+      "op": "invoke",
+      "target": "ls6",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "ts6"
+    },
+    {
+      "op": "invoke",
+      "target": "ts6",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs6"
+    },
+    {
+      "op": "invoke",
+      "target": "cs6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs6"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs6",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileData"
+        }
+      ],
+      "bind": "ds6"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs6",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FileName"
+        }
+      ],
+      "bind": "ns6"
+    },
+    {
+      "op": "invoke",
+      "target": "ds6",
+      "member": "SaveToFile",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "s6",
+      "keep": true
+    },
+    {
+      "op": "release",
+      "target": "ds6"
+    },
+    {
+      "op": "release",
+      "target": "ns6"
+    },
+    {
+      "op": "release",
+      "target": "cfs6"
+    },
+    {
+      "op": "invoke",
+      "target": "cs6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cs6"
+    },
+    {
+      "op": "release",
+      "target": "ts6"
+    },
+    {
+      "op": "release",
+      "target": "ls6"
+    },
+    {
+      "op": "invoke",
+      "target": "rs6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "gpend"
+    },
+    {
+      "op": "invoke",
+      "target": "gpend",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gfend"
+    },
+    {
+      "op": "invoke",
+      "target": "gfend",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Att"
+        }
+      ],
+      "bind": "gcend"
+    },
+    {
+      "op": "invoke",
+      "target": "gcend",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ghend"
+    },
+    {
+      "op": "invoke",
+      "target": "ghend",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghend",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghend",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "ghend",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ghend",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 12,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ghend",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ghend",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ghend",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ghend"
+    },
+    {
+      "op": "release",
+      "target": "gcend"
+    },
+    {
+      "op": "release",
+      "target": "gfend"
+    },
+    {
+      "op": "invoke",
+      "target": "gpend",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gpend"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

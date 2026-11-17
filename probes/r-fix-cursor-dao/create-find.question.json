@@ -1,0 +1,300 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fix-cursor-dao/create-find",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "R-DAO-1",
+    "D-CURSOR-1",
+    "R-CURSOR-1",
+    "CUR-POS"
+  ],
+  "description": "Repair fixture r-fix-cursor-dao-find: FU(ID LONG primary key PK_FU, N LONG, S TEXT(20), Q TEXT(20), P TEXT(20)) and FI with the same columns and rows plus a nonunique index IX_FI_S (S); eight rows each (N 10,20,30,40,40,50,60,70; S alpha, beta, O'Brien, a\"b, abc, ABC, abd, Null; Q x, Null, x, Null, y, Null, x, y; P the plain values p1-p8); FU has no index except its key. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, dbVersion120) and Database.Execute DDL and DML; the closed file is kept.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-fix-cursor-dao-find.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FU (ID LONG CONSTRAINT PK_FU PRIMARY KEY, N LONG, S TEXT(20), Q TEXT(20), P TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FI (ID LONG CONSTRAINT PK_FI PRIMARY KEY, N LONG, S TEXT(20), Q TEXT(20), P TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FI_S ON FI (S)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (1, 10, 'alpha', 'x', 'p1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (1, 10, 'alpha', 'x', 'p1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (2, 20, 'beta', Null, 'p2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (2, 20, 'beta', Null, 'p2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (3, 30, 'O''Brien', 'x', 'p3')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (3, 30, 'O''Brien', 'x', 'p3')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (4, 40, 'a\"b', Null, 'p4')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (4, 40, 'a\"b', Null, 'p4')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (5, 40, 'abc', 'y', 'p5')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (5, 40, 'abc', 'y', 'p5')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (6, 50, 'ABC', Null, 'p6')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (6, 50, 'ABC', Null, 'p6')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (7, 60, 'abd', 'x', 'p7')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (7, 60, 'abd', 'x', 'p7')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FU (ID, N, S, Q, P) VALUES (8, 70, Null, 'y', 'p8')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FI (ID, N, S, Q, P) VALUES (8, 70, Null, 'y', 'p8')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
