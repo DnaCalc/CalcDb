@@ -34,17 +34,26 @@ internal static class Program
         }
 
         // --evidence DIR indexes one part of the evidence (for a quick check); the default is all of evidence/.
-        IReadOnlyList<Table> tables = Derive(Option("evidence") is { } part ? Path.GetFullPath(part) : evidence, repo);
+        IReadOnlyList<Table> Tables() => Derive(Option("evidence") is { } part ? Path.GetFullPath(part) : evidence, repo);
         switch (command)
         {
             case "build":
-                Build(Option("out") ?? defaultDb, tables);
+                Build(Option("out") ?? defaultDb, Tables());
                 return 0;
             case "verify":
-                return Verify(Option("db") ?? defaultDb, Option("table") is { } only ? [.. tables.Where(t => t.Name == only)] : tables);
+                return Verify(Option("db") ?? defaultDb, Option("table") is { } only ? [.. Tables().Where(t => t.Name == only)] : Tables());
             case "query":
-                Query(Option("db") ?? defaultDb, Option("sql") ?? throw new ArgumentException("--sql is required."));
-                return 0;
+                // query reads the built index only; it never derives from the JSON.
+                try
+                {
+                    Query(Option("db") ?? defaultDb, Option("sql") ?? throw new ArgumentException("--sql is required."));
+                    return 0;
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    Console.Error.WriteLine($"query refused: 0x{ex.HResult:X8} {ex.Message}");
+                    return 1;
+                }
             default:
                 Console.Error.WriteLine("usage: calcdb-evidence-index build|verify|query [--out|--db FILE] [--sql TEXT]");
                 return 2;
