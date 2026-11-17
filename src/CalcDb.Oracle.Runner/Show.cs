@@ -43,7 +43,7 @@ internal static class Show
 
     /// <summary>
     /// The capture's events. A type event shows its library and type count; <paramref name="typeName"/> lists that type's
-    /// members (and its dual interface's vtable view) wherever it appears.
+    /// members (and its dual interface's vtable view) wherever it appears; "*" lists every type on one line each.
     /// </summary>
     public static string Render(CaptureManifest? manifest, Capture capture, bool allModules, string? typeName = null)
     {
@@ -127,6 +127,13 @@ internal static class Show
                     break;
                 case TypeEvent t:
                     sb.AppendLine($"types {t.Target}: {(t.Library is { } lib ? $"library {lib.Name} {lib.Guid} {lib.Major}.{lib.Minor} lcid {lib.Lcid}, " : "")}{t.Types.Count} types{(t.Errors.Count == 0 ? "" : ", errors: " + string.Join("; ", t.Errors))}");
+                    if (typeName == "*")
+                    {
+                        foreach (TypeView v in t.Types)
+                        {
+                            sb.AppendLine($"{"",22}{v.Name} {v.Guid} kind {v.TypeKind} flags 0x{v.TypeFlags:X} functions {v.Functions.Count} variables {v.Variables.Count}{(v.DualInterface is { } d ? $" dual vtable {d.VtableBytes}B" : "")} implements {string.Join(", ", v.Implements)}");
+                        }
+                    }
                     foreach (TypeView v in t.Types.Where(v => typeName is not null && string.Equals(v.Name, typeName, StringComparison.OrdinalIgnoreCase)))
                     {
                         TypeMembers(sb, v);

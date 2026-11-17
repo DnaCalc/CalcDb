@@ -235,7 +235,7 @@ internal static unsafe class DualEntries
     [UnmanagedCallersOnly]
     public static uint Release(nint self) => ComObject.Recover<ComObject>(self).Release();
 
-    /// <summary>No type information yet (II-13 §11 is W-08/activation-route-matrix's ACT-META/ACT-DECL work): count 0.</summary>
+    /// <summary>One type information: the dispatch view of the object's interface in CalcDb's type library.</summary>
     [UnmanagedCallersOnly]
     private static int GetTypeInfoCount(nint self, uint* count)
     {
@@ -243,18 +243,30 @@ internal static unsafe class DualEntries
         {
             return HResults.E_POINTER;
         }
-        *count = 0;
+        *count = 1;
         return HResults.S_OK;
     }
 
     [UnmanagedCallersOnly]
     private static int GetTypeInfo(nint self, uint index, uint lcid, nint* typeInfo)
     {
-        if (typeInfo is not null)
+        if (typeInfo is null)
         {
-            *typeInfo = 0;
+            return HResults.E_POINTER;
         }
-        return unchecked((int)0x8002000B); // DISP_E_BADINDEX: there is no type information to index
+        *typeInfo = 0;
+        if (index != 0)
+        {
+            return unchecked((int)0x8002000B); // DISP_E_BADINDEX
+        }
+        try
+        {
+            return TypeLibrary.TypeInfoOf(ComObject.Recover<DispatchObject>(self).Declaration, typeInfo);
+        }
+        catch (Exception)
+        {
+            return HResults.E_UNEXPECTED;
+        }
     }
 
     [UnmanagedCallersOnly]

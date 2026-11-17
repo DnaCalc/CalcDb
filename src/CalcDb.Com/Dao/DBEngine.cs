@@ -25,7 +25,7 @@ internal sealed unsafe class DBEngineObject : DispatchObject
     /// <summary>DBEngine.Version on the reference build (r-dao-1-err-1/manifest-library: "16.0").</summary>
     public const string AceVersion = "16.0";
 
-    private static readonly InterfaceDecl Decl = Declarations.Dao.DBEngine;
+    private static readonly InterfaceDecl Decl = DaoTypes.DBEngine;
     private static readonly MemberDecl VersionGet = Decl.Member("Version", InvokeKind.PropertyGet);
     private static readonly nint Vtable = DualEntries.Build(Decl, (VersionGet, (nint)(delegate* unmanaged<nint, nint*, int>)&VersionEntry));
 

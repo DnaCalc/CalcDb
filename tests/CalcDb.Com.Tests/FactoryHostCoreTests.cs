@@ -71,6 +71,18 @@ public sealed unsafe class FactoryHostCoreTests
         Assert.Equal("16.0", Marshal.PtrToStringBSTR(text));
         Marshal.FreeBSTR(text);
 
+        // Type information is CalcDb's own, from the captured declarations: the dispatch view of _DBEngine, dual, whose
+        // interface view has the captured 304-byte vtable (II-13 §2, ACT-DECL).
+        Assert.Equal(0, TypeInfo(engine, out nint typeInfo));
+        Assert.Equal(("_DBEngine", IidDBEngine, 4, 56), Describe(typeInfo));
+        nint dualRef = 0;
+        uint href = 0;
+        Assert.Equal(0, ((delegate* unmanaged<nint, int, uint*, int>)Vtable(typeInfo)[8])(typeInfo, -1, &href)); // GetRefTypeOfImplType(-1)
+        Assert.Equal(0, ((delegate* unmanaged<nint, uint, nint*, int>)Vtable(typeInfo)[14])(typeInfo, href, &dualRef)); // GetRefTypeInfo
+        Assert.Equal(("_DBEngine", IidDBEngine, 3, 304), Describe(dualRef));
+        Release(dualRef);
+        Release(typeInfo);
+
         // One controlling identity and a fixed interface set (T-INT-04, T-OBJ-04, ACT-CLSID refusals).
         Assert.Equal(0, QueryInterface(engine, IidIUnknown, out nint unknown1));
         Assert.Equal(0, QueryInterface(dual, IidIUnknown, out nint unknown2));
@@ -249,6 +261,30 @@ public sealed unsafe class FactoryHostCoreTests
         string text = Marshal.PtrToStringBSTR(result.Pointer);
         Marshal.FreeBSTR(result.Pointer);
         return text;
+    }
+
+    private static int TypeInfo(nint dispatch, out nint typeInfo)
+    {
+        nint ti = 0;
+        int hr = ((delegate* unmanaged<nint, uint, uint, nint*, int>)Vtable(dispatch)[4])(dispatch, 0, 0x0409, &ti);
+        typeInfo = ti;
+        return hr;
+    }
+
+    /// <summary>Name, GUID, TYPEKIND and vtable bytes of a type information (GetDocumentation, GetTypeAttr).</summary>
+    private static (string Name, Guid Guid, int Kind, int VtableBytes) Describe(nint typeInfo)
+    {
+        nint attr = 0;
+        Assert.Equal(0, ((delegate* unmanaged<nint, nint*, int>)Vtable(typeInfo)[3])(typeInfo, &attr));
+        Guid guid = *(Guid*)attr;
+        int kind = *(int*)(attr + 44); // TYPEATTR x64: typekind at 44, cbSizeVft at 54
+        int vtable = *(ushort*)(attr + 54);
+        ((delegate* unmanaged<nint, nint, void>)Vtable(typeInfo)[19])(typeInfo, attr); // ReleaseTypeAttr
+        nint name = 0;
+        Assert.Equal(0, ((delegate* unmanaged<nint, int, nint*, nint*, uint*, nint*, int>)Vtable(typeInfo)[12])(typeInfo, -1, &name, null, null, null));
+        string text = Marshal.PtrToStringBSTR(name);
+        Marshal.FreeBSTR(name);
+        return (text, guid, kind, vtable);
     }
 
     private static void FreeExcepInfo(ExcepInfo info)

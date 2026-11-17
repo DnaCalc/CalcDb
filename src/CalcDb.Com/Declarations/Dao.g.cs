@@ -6,9 +6,77 @@ using System.Runtime.InteropServices;
 
 namespace CalcDb.Com.Declarations;
 
-internal static unsafe partial class Dao
+#pragma warning disable CA1707, IDE1006
+internal static unsafe partial class DaoTypes
 {
-    public static readonly InterfaceDecl DBEngine = new("_DBEngine", new Guid("00000021-0000-0010-8000-00AA006D2EA4"), 304,
+    public static readonly InterfaceDecl DAO = new("_DAO", new Guid("0000000A-0000-0010-8000-00AA006D2EA4"), 64, "IDispatch", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+    ],
+    [
+        new(10, "Properties", (InvokeKind)2, 56, 0x0, "VT_HRESULT", [new("ppprops", "PTR PTR USERDEFINED Properties", 0xA)]),
+    ], &Fill_DAO);
+
+    public static readonly InterfaceDecl Properties = new("Properties", new Guid("00000029-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Property", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppprop", "PTR PTR USERDEFINED Property", 0xA)]),
+    ], &Fill_Properties);
+
+    public static readonly InterfaceDecl DynaCollection = new("_DynaCollection", new Guid("000000A2-0000-0010-8000-00AA006D2EA4"), 96, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+    ],
+    [
+        new(1610809344, "Append", (InvokeKind)1, 80, 0x0, "VT_HRESULT", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1)]),
+    ], &Fill_DynaCollection);
+
+    public static readonly InterfaceDecl Collection = new("_Collection", new Guid("000000A0-0000-0010-8000-00AA006D2EA4"), 80, "IDispatch", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+    ],
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, 0x0, "VT_HRESULT", [new("c", "PTR VT_I2", 0xA)]),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, 0x1, "VT_HRESULT", [new("ppunk", "PTR VT_UNKNOWN", 0xA)]),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, 0x0, "VT_HRESULT", []),
+    ], &Fill_Collection);
+
+    public static readonly InterfaceDecl Property = new("Property", new Guid("00000027-0000-0010-8000-00AA006D2EA4"), 120, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(0, "Value", (InvokeKind)2, 64, "VT_VARIANT", []),
+        new(0, "Value", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809346, "Name", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809346, "Name", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "Type", (InvokeKind)2, 96, "VT_I2", []),
+        new(1610809348, "Type", (InvokeKind)4, 104, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809350, "Inherited", (InvokeKind)2, 112, "VT_BOOL", []),
+    ],
+    [
+        new(0, "Value", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pval", "PTR VT_VARIANT", 0xA)]),
+        new(0, "Value", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pval", "VT_VARIANT", 0x1)]),
+        new(1610809346, "Name", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809346, "Name", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809348, "Type", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("ptype", "PTR VT_I2", 0xA)]),
+        new(1610809348, "Type", (InvokeKind)4, 104, 0x0, "VT_HRESULT", [new("ptype", "VT_I2", 0x1)]),
+        new(1610809350, "Inherited", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+    ], &Fill_Property);
+
+    public static readonly InterfaceDecl DBEngine = new("_DBEngine", new Guid("00000021-0000-0010-8000-00AA006D2EA4"), 304, "_DAO", 0x10C0, 0x11C0,
     [
         new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
         new(1610809344, "Version", (InvokeKind)2, 64, "VT_BSTR", []),
@@ -29,7 +97,7 @@ internal static unsafe partial class Dao
         new(1610809359, "CreateDatabase", (InvokeKind)1, 184, "PTR USERDEFINED Database", [new("Name", "VT_BSTR", 0x1), new("Locale", "VT_BSTR", 0x1), new("Option", "VT_VARIANT", 0x11)]),
         new(1610809360, "FreeLocks", (InvokeKind)1, 192, "VT_VOID", []),
         new(1610809361, "BeginTrans", (InvokeKind)1, 200, "VT_VOID", []),
-        new(1610809362, "CommitTrans", (InvokeKind)1, 208, "VT_VOID", [new("Option", "VT_I4", 0x31)]),
+        new(1610809362, "CommitTrans", (InvokeKind)1, 208, "VT_VOID", [new("Option", "VT_I4", 0x31, new(3, 0L, null, null))]),
         new(1610809363, "Rollback", (InvokeKind)1, 216, "VT_VOID", []),
         new(1610809364, "SetDefaultWorkspace", (InvokeKind)1, 224, "VT_VOID", [new("Name", "VT_BSTR", 0x1), new("Password", "VT_BSTR", 0x1)]),
         new(1610809365, "SetDataAccessOption", (InvokeKind)1, 232, "VT_VOID", [new("Option", "VT_I2", 0x1), new("Value", "VT_VARIANT", 0x1)]),
@@ -41,7 +109,1406 @@ internal static unsafe partial class Dao
         new(1610809371, "DefaultType", (InvokeKind)2, 280, "VT_I4", []),
         new(1610809371, "DefaultType", (InvokeKind)4, 288, "VT_VOID", [new("", "VT_I4", 0x1)]),
         new(1610809373, "SetOption", (InvokeKind)1, 296, "VT_VOID", [new("Option", "VT_I4", 0x1), new("Value", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(1610809344, "Version", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "IniPath", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "IniPath", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809347, "DefaultUser", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "DefaultPassword", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "LoginTimeout", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809349, "LoginTimeout", (InvokeKind)4, 112, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(0, "Workspaces", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("ppworks", "PTR PTR USERDEFINED Workspaces", 0xA)]),
+        new(1610809352, "Errors", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pperrs", "PTR PTR USERDEFINED Errors", 0xA)]),
+        new(1610809353, "Idle", (InvokeKind)1, 136, 0x0, "VT_HRESULT", [new("Action", "VT_VARIANT", 0x11)]),
+        new(1610809354, "CompactDatabase", (InvokeKind)1, 144, 0x0, "VT_HRESULT", [new("SrcName", "VT_BSTR", 0x1), new("DstName", "VT_BSTR", 0x1), new("DstLocale", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("SrcLocale", "VT_VARIANT", 0x11)]),
+        new(1610809355, "RepairDatabase", (InvokeKind)1, 152, 0x40, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1)]),
+        new(1610809356, "RegisterDatabase", (InvokeKind)1, 160, 0x0, "VT_HRESULT", [new("Dsn", "VT_BSTR", 0x1), new("Driver", "VT_BSTR", 0x1), new("Silent", "VT_BOOL", 0x1), new("Attributes", "VT_BSTR", 0x1)]),
+        new(1610809357, "_30_CreateWorkspace", (InvokeKind)1, 168, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("UserName", "VT_BSTR", 0x1), new("Password", "VT_BSTR", 0x1), new("ppwrk", "PTR PTR USERDEFINED Workspace", 0xA)]),
+        new(1610809358, "OpenDatabase", (InvokeKind)1, 176, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11), new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(1610809359, "CreateDatabase", (InvokeKind)1, 184, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Locale", "VT_BSTR", 0x1), new("Option", "VT_VARIANT", 0x11), new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(1610809360, "FreeLocks", (InvokeKind)1, 192, 0x1, "VT_HRESULT", []),
+        new(1610809361, "BeginTrans", (InvokeKind)1, 200, 0x0, "VT_HRESULT", []),
+        new(1610809362, "CommitTrans", (InvokeKind)1, 208, 0x0, "VT_HRESULT", [new("Option", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(1610809363, "Rollback", (InvokeKind)1, 216, 0x0, "VT_HRESULT", []),
+        new(1610809364, "SetDefaultWorkspace", (InvokeKind)1, 224, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Password", "VT_BSTR", 0x1)]),
+        new(1610809365, "SetDataAccessOption", (InvokeKind)1, 232, 0x1, "VT_HRESULT", [new("Option", "VT_I2", 0x1), new("Value", "VT_VARIANT", 0x1)]),
+        new(1610809366, "ISAMStats", (InvokeKind)1, 240, 0x40, "VT_HRESULT", [new("StatNum", "VT_I4", 0x1), new("Reset", "VT_VARIANT", 0x11), new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809367, "SystemDB", (InvokeKind)2, 248, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809367, "SystemDB", (InvokeKind)4, 256, 0x40, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809369, "CreateWorkspace", (InvokeKind)1, 264, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("UserName", "VT_BSTR", 0x1), new("Password", "VT_BSTR", 0x1), new("UseType", "VT_VARIANT", 0x11), new("ppwrk", "PTR PTR USERDEFINED Workspace", 0xA)]),
+        new(1610809370, "OpenConnection", (InvokeKind)1, 272, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11), new("ppconn", "PTR PTR USERDEFINED Connection", 0xA)]),
+        new(1610809371, "DefaultType", (InvokeKind)2, 280, 0x0, "VT_HRESULT", [new("Option", "PTR VT_I4", 0xA)]),
+        new(1610809371, "DefaultType", (InvokeKind)4, 288, 0x0, "VT_HRESULT", [new("Option", "VT_I4", 0x1)]),
+        new(1610809373, "SetOption", (InvokeKind)1, 296, 0x0, "VT_HRESULT", [new("Option", "VT_I4", 0x1), new("Value", "VT_VARIANT", 0x1)]),
     ], &Fill_DBEngine);
+
+    public static readonly InterfaceDecl Workspaces = new("Workspaces", new Guid("0000003B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Workspace", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppwrk", "PTR PTR USERDEFINED Workspace", 0xA)]),
+    ], &Fill_Workspaces);
+
+    public static readonly InterfaceDecl Workspace = new("Workspace", new Guid("00000039-0000-0010-8000-00AA006D2EA4"), 272, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809344, "Name", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809346, "UserName", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809347, "_30_UserName", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "_30_Password", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "IsolateODBCTrans", (InvokeKind)2, 104, "VT_I2", []),
+        new(1610809349, "IsolateODBCTrans", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(0, "Databases", (InvokeKind)2, 120, "PTR USERDEFINED Databases", []),
+        new(1610809352, "Users", (InvokeKind)2, 128, "PTR USERDEFINED Users", []),
+        new(1610809353, "Groups", (InvokeKind)2, 136, "PTR USERDEFINED Groups", []),
+        new(1610809354, "BeginTrans", (InvokeKind)1, 144, "VT_VOID", []),
+        new(1610809355, "CommitTrans", (InvokeKind)1, 152, "VT_VOID", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(1610809356, "Close", (InvokeKind)1, 160, "VT_VOID", []),
+        new(1610809357, "Rollback", (InvokeKind)1, 168, "VT_VOID", []),
+        new(1610809358, "OpenDatabase", (InvokeKind)1, 176, "PTR USERDEFINED Database", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11)]),
+        new(1610809359, "CreateDatabase", (InvokeKind)1, 184, "PTR USERDEFINED Database", [new("Name", "VT_BSTR", 0x1), new("Connect", "VT_BSTR", 0x1), new("Option", "VT_VARIANT", 0x11)]),
+        new(1610809360, "CreateUser", (InvokeKind)1, 192, "PTR USERDEFINED User", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("Password", "VT_VARIANT", 0x11)]),
+        new(1610809361, "CreateGroup", (InvokeKind)1, 200, "PTR USERDEFINED Group", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11)]),
+        new(1610809362, "OpenConnection", (InvokeKind)1, 208, "PTR USERDEFINED Connection", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11)]),
+        new(1610809363, "LoginTimeout", (InvokeKind)2, 216, "VT_I4", []),
+        new(1610809363, "LoginTimeout", (InvokeKind)4, 224, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809365, "DefaultCursorDriver", (InvokeKind)2, 232, "VT_I4", []),
+        new(1610809365, "DefaultCursorDriver", (InvokeKind)4, 240, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809367, "hEnv", (InvokeKind)2, 248, "VT_I4", []),
+        new(1610809368, "Type", (InvokeKind)2, 256, "VT_I4", []),
+        new(1610809369, "Connections", (InvokeKind)2, 264, "PTR USERDEFINED Connections", []),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809344, "Name", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809346, "UserName", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809347, "_30_UserName", (InvokeKind)4, 88, 0x1, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "_30_Password", (InvokeKind)4, 96, 0x1, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "IsolateODBCTrans", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809349, "IsolateODBCTrans", (InvokeKind)4, 112, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(0, "Databases", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("ppdbs", "PTR PTR USERDEFINED Databases", 0xA)]),
+        new(1610809352, "Users", (InvokeKind)2, 128, 0x40, "VT_HRESULT", [new("ppusrs", "PTR PTR USERDEFINED Users", 0xA)]),
+        new(1610809353, "Groups", (InvokeKind)2, 136, 0x40, "VT_HRESULT", [new("ppgrps", "PTR PTR USERDEFINED Groups", 0xA)]),
+        new(1610809354, "BeginTrans", (InvokeKind)1, 144, 0x0, "VT_HRESULT", []),
+        new(1610809355, "CommitTrans", (InvokeKind)1, 152, 0x0, "VT_HRESULT", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(1610809356, "Close", (InvokeKind)1, 160, 0x0, "VT_HRESULT", []),
+        new(1610809357, "Rollback", (InvokeKind)1, 168, 0x0, "VT_HRESULT", []),
+        new(1610809358, "OpenDatabase", (InvokeKind)1, 176, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11), new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(1610809359, "CreateDatabase", (InvokeKind)1, 184, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Connect", "VT_BSTR", 0x1), new("Option", "VT_VARIANT", 0x11), new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(1610809360, "CreateUser", (InvokeKind)1, 192, 0x40, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("Password", "VT_VARIANT", 0x11), new("ppusr", "PTR PTR USERDEFINED User", 0xA)]),
+        new(1610809361, "CreateGroup", (InvokeKind)1, 200, 0x40, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("ppgrp", "PTR PTR USERDEFINED Group", 0xA)]),
+        new(1610809362, "OpenConnection", (InvokeKind)1, 208, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("ReadOnly", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11), new("ppconn", "PTR PTR USERDEFINED Connection", 0xA)]),
+        new(1610809363, "LoginTimeout", (InvokeKind)2, 216, 0x0, "VT_HRESULT", [new("pTimeout", "PTR VT_I4", 0xA)]),
+        new(1610809363, "LoginTimeout", (InvokeKind)4, 224, 0x0, "VT_HRESULT", [new("pTimeout", "VT_I4", 0x1)]),
+        new(1610809365, "DefaultCursorDriver", (InvokeKind)2, 232, 0x0, "VT_HRESULT", [new("pCursorType", "PTR VT_I4", 0xA)]),
+        new(1610809365, "DefaultCursorDriver", (InvokeKind)4, 240, 0x0, "VT_HRESULT", [new("pCursorType", "VT_I4", 0x1)]),
+        new(1610809367, "hEnv", (InvokeKind)2, 248, 0x40, "VT_HRESULT", [new("phEnv", "PTR VT_I4", 0xA)]),
+        new(1610809368, "Type", (InvokeKind)2, 256, 0x0, "VT_HRESULT", [new("ptype", "PTR VT_I4", 0xA)]),
+        new(1610809369, "Connections", (InvokeKind)2, 264, 0x0, "VT_HRESULT", [new("ppcns", "PTR PTR USERDEFINED Connections", 0xA)]),
+    ], &Fill_Workspace);
+
+    public static readonly InterfaceDecl Databases = new("Databases", new Guid("00000073-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Database", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+    ], &Fill_Databases);
+
+    public static readonly InterfaceDecl Database = new("Database", new Guid("00000071-0000-0010-8000-00AA006D2EA4"), 400, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, "VT_I4", []),
+        new(1610809345, "Connect", (InvokeKind)2, 72, "VT_BSTR", []),
+        new(1610809346, "Name", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809347, "QueryTimeout", (InvokeKind)2, 88, "VT_I2", []),
+        new(1610809347, "QueryTimeout", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809349, "Transactions", (InvokeKind)2, 104, "VT_BOOL", []),
+        new(1610809350, "Updatable", (InvokeKind)2, 112, "VT_BOOL", []),
+        new(1610809351, "Version", (InvokeKind)2, 120, "VT_BSTR", []),
+        new(1610809352, "RecordsAffected", (InvokeKind)2, 128, "VT_I4", []),
+        new(0, "TableDefs", (InvokeKind)2, 136, "PTR USERDEFINED TableDefs", []),
+        new(1610809354, "QueryDefs", (InvokeKind)2, 144, "PTR USERDEFINED QueryDefs", []),
+        new(1610809355, "Relations", (InvokeKind)2, 152, "PTR USERDEFINED Relations", []),
+        new(1610809356, "Containers", (InvokeKind)2, 160, "PTR USERDEFINED Containers", []),
+        new(1610809357, "Recordsets", (InvokeKind)2, 168, "PTR USERDEFINED Recordsets", []),
+        new(1610809358, "Close", (InvokeKind)1, 176, "VT_VOID", []),
+        new(1610809359, "Execute", (InvokeKind)1, 184, "VT_VOID", [new("Query", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809360, "_30_OpenRecordset", (InvokeKind)1, 192, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809361, "CreateProperty", (InvokeKind)1, 200, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809362, "CreateRelation", (InvokeKind)1, 208, "PTR USERDEFINED Relation", [new("Name", "VT_VARIANT", 0x11), new("Table", "VT_VARIANT", 0x11), new("ForeignTable", "VT_VARIANT", 0x11), new("Attributes", "VT_VARIANT", 0x11)]),
+        new(1610809363, "CreateTableDef", (InvokeKind)1, 216, "PTR USERDEFINED TableDef", [new("Name", "VT_VARIANT", 0x11), new("Attributes", "VT_VARIANT", 0x11), new("SourceTableName", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11)]),
+        new(1610809364, "BeginTrans", (InvokeKind)1, 224, "VT_VOID", []),
+        new(1610809365, "CommitTrans", (InvokeKind)1, 232, "VT_VOID", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(1610809366, "Rollback", (InvokeKind)1, 240, "VT_VOID", []),
+        new(1610809367, "CreateDynaset", (InvokeKind)1, 248, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11)]),
+        new(1610809368, "CreateQueryDef", (InvokeKind)1, 256, "PTR USERDEFINED QueryDef", [new("Name", "VT_VARIANT", 0x11), new("SQLText", "VT_VARIANT", 0x11)]),
+        new(1610809369, "CreateSnapshot", (InvokeKind)1, 264, "PTR USERDEFINED Recordset", [new("Source", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809370, "DeleteQueryDef", (InvokeKind)1, 272, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(1610809371, "ExecuteSQL", (InvokeKind)1, 280, "VT_I4", [new("SQL", "VT_BSTR", 0x1)]),
+        new(1610809372, "ListFields", (InvokeKind)1, 288, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1)]),
+        new(1610809373, "ListTables", (InvokeKind)1, 296, "PTR USERDEFINED Recordset", []),
+        new(1610809374, "OpenQueryDef", (InvokeKind)1, 304, "PTR USERDEFINED QueryDef", [new("Name", "VT_BSTR", 0x1)]),
+        new(1610809375, "OpenTable", (InvokeKind)1, 312, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809376, "ReplicaID", (InvokeKind)2, 320, "VT_BSTR", []),
+        new(1610809377, "DesignMasterID", (InvokeKind)2, 328, "VT_BSTR", []),
+        new(1610809377, "DesignMasterID", (InvokeKind)4, 336, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809379, "Synchronize", (InvokeKind)1, 344, "VT_VOID", [new("DbPathName", "VT_BSTR", 0x1), new("ExchangeType", "VT_VARIANT", 0x11)]),
+        new(1610809380, "MakeReplica", (InvokeKind)1, 352, "VT_VOID", [new("PathName", "VT_BSTR", 0x1), new("Description", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809345, "Connect", (InvokeKind)4, 360, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809382, "NewPassword", (InvokeKind)1, 368, "VT_VOID", [new("bstrOld", "VT_BSTR", 0x1), new("bstrNew", "VT_BSTR", 0x1)]),
+        new(1610809383, "OpenRecordset", (InvokeKind)1, 376, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11)]),
+        new(1610809384, "Connection", (InvokeKind)2, 384, "PTR USERDEFINED Connection", []),
+        new(1610809385, "PopulatePartial", (InvokeKind)1, 392, "VT_VOID", [new("DbPathName", "VT_BSTR", 0x1)]),
+    ],
+    [
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809345, "Connect", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809346, "Name", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809347, "QueryTimeout", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809347, "QueryTimeout", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(1610809349, "Transactions", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809350, "Updatable", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809351, "Version", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809352, "RecordsAffected", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(0, "TableDefs", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("pptdfs", "PTR PTR USERDEFINED TableDefs", 0xA)]),
+        new(1610809354, "QueryDefs", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("ppqdfs", "PTR PTR USERDEFINED QueryDefs", 0xA)]),
+        new(1610809355, "Relations", (InvokeKind)2, 152, 0x0, "VT_HRESULT", [new("pprls", "PTR PTR USERDEFINED Relations", 0xA)]),
+        new(1610809356, "Containers", (InvokeKind)2, 160, 0x0, "VT_HRESULT", [new("ppctns", "PTR PTR USERDEFINED Containers", 0xA)]),
+        new(1610809357, "Recordsets", (InvokeKind)2, 168, 0x0, "VT_HRESULT", [new("pprsts", "PTR PTR USERDEFINED Recordsets", 0xA)]),
+        new(1610809358, "Close", (InvokeKind)1, 176, 0x0, "VT_HRESULT", []),
+        new(1610809359, "Execute", (InvokeKind)1, 184, 0x0, "VT_HRESULT", [new("Query", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809360, "_30_OpenRecordset", (InvokeKind)1, 192, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809361, "CreateProperty", (InvokeKind)1, 200, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+        new(1610809362, "CreateRelation", (InvokeKind)1, 208, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Table", "VT_VARIANT", 0x11), new("ForeignTable", "VT_VARIANT", 0x11), new("Attributes", "VT_VARIANT", 0x11), new("pprel", "PTR PTR USERDEFINED Relation", 0xA)]),
+        new(1610809363, "CreateTableDef", (InvokeKind)1, 216, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Attributes", "VT_VARIANT", 0x11), new("SourceTableName", "VT_VARIANT", 0x11), new("Connect", "VT_VARIANT", 0x11), new("pptdf", "PTR PTR USERDEFINED TableDef", 0xA)]),
+        new(1610809364, "BeginTrans", (InvokeKind)1, 224, 0x1, "VT_HRESULT", []),
+        new(1610809365, "CommitTrans", (InvokeKind)1, 232, 0x1, "VT_HRESULT", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(1610809366, "Rollback", (InvokeKind)1, 240, 0x1, "VT_HRESULT", []),
+        new(1610809367, "CreateDynaset", (InvokeKind)1, 248, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809368, "CreateQueryDef", (InvokeKind)1, 256, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("SQLText", "VT_VARIANT", 0x11), new("ppqdf", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+        new(1610809369, "CreateSnapshot", (InvokeKind)1, 264, 0x1, "VT_HRESULT", [new("Source", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809370, "DeleteQueryDef", (InvokeKind)1, 272, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1)]),
+        new(1610809371, "ExecuteSQL", (InvokeKind)1, 280, 0x1, "VT_HRESULT", [new("SQL", "VT_BSTR", 0x1), new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809372, "ListFields", (InvokeKind)1, 288, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809373, "ListTables", (InvokeKind)1, 296, 0x1, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809374, "OpenQueryDef", (InvokeKind)1, 304, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("ppqdf", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+        new(1610809375, "OpenTable", (InvokeKind)1, 312, 0x1, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809376, "ReplicaID", (InvokeKind)2, 320, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809377, "DesignMasterID", (InvokeKind)2, 328, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809377, "DesignMasterID", (InvokeKind)4, 336, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809379, "Synchronize", (InvokeKind)1, 344, 0x0, "VT_HRESULT", [new("DbPathName", "VT_BSTR", 0x1), new("ExchangeType", "VT_VARIANT", 0x11)]),
+        new(1610809380, "MakeReplica", (InvokeKind)1, 352, 0x0, "VT_HRESULT", [new("PathName", "VT_BSTR", 0x1), new("Description", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809345, "Connect", (InvokeKind)4, 360, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809382, "NewPassword", (InvokeKind)1, 368, 0x0, "VT_HRESULT", [new("bstrOld", "VT_BSTR", 0x1), new("bstrNew", "VT_BSTR", 0x1)]),
+        new(1610809383, "OpenRecordset", (InvokeKind)1, 376, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809384, "Connection", (InvokeKind)2, 384, 0x0, "VT_HRESULT", [new("ppCn", "PTR PTR USERDEFINED Connection", 0xA)]),
+        new(1610809385, "PopulatePartial", (InvokeKind)1, 392, 0x0, "VT_HRESULT", [new("DbPathName", "VT_BSTR", 0x1)]),
+    ], &Fill_Database);
+
+    public static readonly InterfaceDecl TableDefs = new("TableDefs", new Guid("0000004B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED TableDef", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pptdf", "PTR PTR USERDEFINED TableDef", 0xA)]),
+    ], &Fill_TableDefs);
+
+    public static readonly InterfaceDecl TableDef = new("_TableDef", new Guid("00000049-0000-0010-8000-00AA006D2EA4"), 272, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Attributes", (InvokeKind)2, 64, "VT_I4", []),
+        new(1610809344, "Attributes", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809346, "Connect", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809346, "Connect", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "DateCreated", (InvokeKind)2, 96, "VT_VARIANT", []),
+        new(1610809349, "LastUpdated", (InvokeKind)2, 104, "VT_VARIANT", []),
+        new(1610809350, "Name", (InvokeKind)2, 112, "VT_BSTR", []),
+        new(1610809350, "Name", (InvokeKind)4, 120, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809352, "SourceTableName", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(1610809352, "SourceTableName", (InvokeKind)4, 136, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809354, "Updatable", (InvokeKind)2, 144, "VT_BOOL", []),
+        new(1610809355, "ValidationText", (InvokeKind)2, 152, "VT_BSTR", []),
+        new(1610809355, "ValidationText", (InvokeKind)4, 160, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809357, "ValidationRule", (InvokeKind)2, 168, "VT_BSTR", []),
+        new(1610809357, "ValidationRule", (InvokeKind)4, 176, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809359, "RecordCount", (InvokeKind)2, 184, "VT_I4", []),
+        new(0, "Fields", (InvokeKind)2, 192, "PTR USERDEFINED Fields", []),
+        new(1610809361, "Indexes", (InvokeKind)2, 200, "PTR USERDEFINED Indexes", []),
+        new(1610809362, "OpenRecordset", (InvokeKind)1, 208, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809363, "RefreshLink", (InvokeKind)1, 216, "VT_VOID", []),
+        new(1610809364, "CreateField", (InvokeKind)1, 224, "PTR USERDEFINED Field", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11)]),
+        new(1610809365, "CreateIndex", (InvokeKind)1, 232, "PTR USERDEFINED Index", [new("Name", "VT_VARIANT", 0x11)]),
+        new(1610809366, "CreateProperty", (InvokeKind)1, 240, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809367, "ConflictTable", (InvokeKind)2, 248, "VT_BSTR", []),
+        new(1610809368, "ReplicaFilter", (InvokeKind)2, 256, "VT_VARIANT", []),
+        new(1610809368, "ReplicaFilter", (InvokeKind)4, 264, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(1610809344, "Attributes", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809344, "Attributes", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(1610809346, "Connect", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809346, "Connect", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809348, "DateCreated", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809349, "LastUpdated", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809350, "Name", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809350, "Name", (InvokeKind)4, 120, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809352, "SourceTableName", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809352, "SourceTableName", (InvokeKind)4, 136, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809354, "Updatable", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809355, "ValidationText", (InvokeKind)2, 152, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809355, "ValidationText", (InvokeKind)4, 160, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809357, "ValidationRule", (InvokeKind)2, 168, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809357, "ValidationRule", (InvokeKind)4, 176, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809359, "RecordCount", (InvokeKind)2, 184, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(0, "Fields", (InvokeKind)2, 192, 0x0, "VT_HRESULT", [new("ppflds", "PTR PTR USERDEFINED Fields", 0xA)]),
+        new(1610809361, "Indexes", (InvokeKind)2, 200, 0x0, "VT_HRESULT", [new("ppidxs", "PTR PTR USERDEFINED Indexes", 0xA)]),
+        new(1610809362, "OpenRecordset", (InvokeKind)1, 208, 0x0, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809363, "RefreshLink", (InvokeKind)1, 216, 0x0, "VT_HRESULT", []),
+        new(1610809364, "CreateField", (InvokeKind)1, 224, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11), new("ppfld", "PTR PTR USERDEFINED Field", 0xA)]),
+        new(1610809365, "CreateIndex", (InvokeKind)1, 232, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("ppidx", "PTR PTR USERDEFINED Index", 0xA)]),
+        new(1610809366, "CreateProperty", (InvokeKind)1, 240, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+        new(1610809367, "ConflictTable", (InvokeKind)2, 248, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809368, "ReplicaFilter", (InvokeKind)2, 256, 0x0, "VT_HRESULT", [new("pFilter", "PTR VT_VARIANT", 0xA)]),
+        new(1610809368, "ReplicaFilter", (InvokeKind)4, 264, 0x0, "VT_HRESULT", [new("pFilter", "VT_VARIANT", 0x1)]),
+    ], &Fill_TableDef);
+
+    public static readonly InterfaceDecl Fields = new("Fields", new Guid("00000053-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Field", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppfld", "PTR PTR USERDEFINED Field", 0xA)]),
+    ], &Fill_Fields);
+
+    public static readonly InterfaceDecl Field = new("_Field", new Guid("00000051-0000-0010-8000-00AA006D2EA4"), 368, "_DAO", 0x1040, 0x1140,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, "VT_I4", []),
+        new(1610809345, "Type", (InvokeKind)2, 72, "VT_I2", []),
+        new(1610809345, "Type", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809347, "Name", (InvokeKind)2, 88, "VT_BSTR", []),
+        new(1610809347, "Name", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "Size", (InvokeKind)2, 104, "VT_I4", []),
+        new(1610809349, "Size", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809351, "SourceField", (InvokeKind)2, 120, "VT_BSTR", []),
+        new(1610809352, "SourceTable", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(0, "Value", (InvokeKind)2, 136, "VT_VARIANT", []),
+        new(0, "Value", (InvokeKind)4, 144, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809355, "Attributes", (InvokeKind)2, 152, "VT_I4", []),
+        new(1610809355, "Attributes", (InvokeKind)4, 160, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809357, "OrdinalPosition", (InvokeKind)2, 168, "VT_I2", []),
+        new(1610809357, "OrdinalPosition", (InvokeKind)4, 176, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809359, "ValidationText", (InvokeKind)2, 184, "VT_BSTR", []),
+        new(1610809359, "ValidationText", (InvokeKind)4, 192, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809361, "ValidateOnSet", (InvokeKind)2, 200, "VT_BOOL", []),
+        new(1610809361, "ValidateOnSet", (InvokeKind)4, 208, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809363, "ValidationRule", (InvokeKind)2, 216, "VT_BSTR", []),
+        new(1610809363, "ValidationRule", (InvokeKind)4, 224, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809365, "DefaultValue", (InvokeKind)2, 232, "VT_VARIANT", []),
+        new(1610809365, "DefaultValue", (InvokeKind)4, 240, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809367, "Required", (InvokeKind)2, 248, "VT_BOOL", []),
+        new(1610809367, "Required", (InvokeKind)4, 256, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809369, "AllowZeroLength", (InvokeKind)2, 264, "VT_BOOL", []),
+        new(1610809369, "AllowZeroLength", (InvokeKind)4, 272, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809371, "DataUpdatable", (InvokeKind)2, 280, "VT_BOOL", []),
+        new(1610809372, "ForeignName", (InvokeKind)2, 288, "VT_BSTR", []),
+        new(1610809372, "ForeignName", (InvokeKind)4, 296, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809374, "AppendChunk", (InvokeKind)1, 304, "VT_VOID", [new("Val", "VT_VARIANT", 0x1)]),
+        new(1610809375, "GetChunk", (InvokeKind)1, 312, "VT_VARIANT", [new("Offset", "VT_I4", 0x1), new("Bytes", "VT_I4", 0x1)]),
+        new(1610809376, "_30_FieldSize", (InvokeKind)1, 320, "VT_I4", []),
+        new(1610809377, "CreateProperty", (InvokeKind)1, 328, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809378, "CollectionIndex", (InvokeKind)2, 336, "VT_I2", []),
+        new(1610809379, "OriginalValue", (InvokeKind)2, 344, "VT_VARIANT", []),
+        new(1610809380, "VisibleValue", (InvokeKind)2, 352, "VT_VARIANT", []),
+        new(1610809381, "FieldSize", (InvokeKind)2, 360, "VT_I4", []),
+    ],
+    [
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809345, "Type", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809345, "Type", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(1610809347, "Name", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809347, "Name", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809349, "Size", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809349, "Size", (InvokeKind)4, 112, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(1610809351, "SourceField", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809352, "SourceTable", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(0, "Value", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(0, "Value", (InvokeKind)4, 144, 0x0, "VT_HRESULT", [new("pvar", "VT_VARIANT", 0x1)]),
+        new(1610809355, "Attributes", (InvokeKind)2, 152, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809355, "Attributes", (InvokeKind)4, 160, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(1610809357, "OrdinalPosition", (InvokeKind)2, 168, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809357, "OrdinalPosition", (InvokeKind)4, 176, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(1610809359, "ValidationText", (InvokeKind)2, 184, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809359, "ValidationText", (InvokeKind)4, 192, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809361, "ValidateOnSet", (InvokeKind)2, 200, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809361, "ValidateOnSet", (InvokeKind)4, 208, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809363, "ValidationRule", (InvokeKind)2, 216, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809363, "ValidationRule", (InvokeKind)4, 224, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809365, "DefaultValue", (InvokeKind)2, 232, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809365, "DefaultValue", (InvokeKind)4, 240, 0x0, "VT_HRESULT", [new("pvar", "VT_VARIANT", 0x1)]),
+        new(1610809367, "Required", (InvokeKind)2, 248, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809367, "Required", (InvokeKind)4, 256, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809369, "AllowZeroLength", (InvokeKind)2, 264, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809369, "AllowZeroLength", (InvokeKind)4, 272, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809371, "DataUpdatable", (InvokeKind)2, 280, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809372, "ForeignName", (InvokeKind)2, 288, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809372, "ForeignName", (InvokeKind)4, 296, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809374, "AppendChunk", (InvokeKind)1, 304, 0x0, "VT_HRESULT", [new("Val", "VT_VARIANT", 0x1)]),
+        new(1610809375, "GetChunk", (InvokeKind)1, 312, 0x0, "VT_HRESULT", [new("Offset", "VT_I4", 0x1), new("Bytes", "VT_I4", 0x1), new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809376, "_30_FieldSize", (InvokeKind)1, 320, 0x1, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809377, "CreateProperty", (InvokeKind)1, 328, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+        new(1610809378, "CollectionIndex", (InvokeKind)2, 336, 0x40, "VT_HRESULT", [new("i", "PTR VT_I2", 0xA)]),
+        new(1610809379, "OriginalValue", (InvokeKind)2, 344, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809380, "VisibleValue", (InvokeKind)2, 352, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809381, "FieldSize", (InvokeKind)2, 360, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+    ], &Fill_Field);
+
+    public static readonly InterfaceDecl Indexes = new("Indexes", new Guid("0000005B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Index", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppidx", "PTR PTR USERDEFINED Index", 0xA)]),
+    ], &Fill_Indexes);
+
+    public static readonly InterfaceDecl Index = new("_Index", new Guid("00000059-0000-0010-8000-00AA006D2EA4"), 208, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809344, "Name", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809346, "Foreign", (InvokeKind)2, 80, "VT_BOOL", []),
+        new(1610809347, "Unique", (InvokeKind)2, 88, "VT_BOOL", []),
+        new(1610809347, "Unique", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809349, "Clustered", (InvokeKind)2, 104, "VT_BOOL", []),
+        new(1610809349, "Clustered", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809351, "Required", (InvokeKind)2, 120, "VT_BOOL", []),
+        new(1610809351, "Required", (InvokeKind)4, 128, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809353, "IgnoreNulls", (InvokeKind)2, 136, "VT_BOOL", []),
+        new(1610809353, "IgnoreNulls", (InvokeKind)4, 144, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809355, "Primary", (InvokeKind)2, 152, "VT_BOOL", []),
+        new(1610809355, "Primary", (InvokeKind)4, 160, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809357, "DistinctCount", (InvokeKind)2, 168, "VT_I4", []),
+        new(1610809358, "Fields", (InvokeKind)2, 176, "VT_VARIANT", []),
+        new(1610809358, "Fields", (InvokeKind)4, 184, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809360, "CreateField", (InvokeKind)1, 192, "PTR USERDEFINED Field", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11)]),
+        new(1610809361, "CreateProperty", (InvokeKind)1, 200, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809344, "Name", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809346, "Foreign", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809347, "Unique", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809347, "Unique", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809349, "Clustered", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809349, "Clustered", (InvokeKind)4, 112, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809351, "Required", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809351, "Required", (InvokeKind)4, 128, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809353, "IgnoreNulls", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809353, "IgnoreNulls", (InvokeKind)4, 144, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809355, "Primary", (InvokeKind)2, 152, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809355, "Primary", (InvokeKind)4, 160, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809357, "DistinctCount", (InvokeKind)2, 168, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809358, "Fields", (InvokeKind)2, 176, 0x0, "VT_HRESULT", [new("pv", "PTR VT_VARIANT", 0xA)]),
+        new(1610809358, "Fields", (InvokeKind)4, 184, 0x0, "VT_HRESULT", [new("pv", "VT_VARIANT", 0x1)]),
+        new(1610809360, "CreateField", (InvokeKind)1, 192, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11), new("ppfld", "PTR PTR USERDEFINED Field", 0xA)]),
+        new(1610809361, "CreateProperty", (InvokeKind)1, 200, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+    ], &Fill_Index);
+
+    public static readonly InterfaceDecl Recordset = new("Recordset", new Guid("00000031-0000-0010-8000-00AA006D2EA4"), 728, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(101, "BOF", (InvokeKind)2, 64, "VT_BOOL", []),
+        new(102, "Bookmark", (InvokeKind)2, 72, "SAFEARRAY VT_UI1", []),
+        new(102, "Bookmark", (InvokeKind)4, 80, "VT_VOID", [new("", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(103, "Bookmarkable", (InvokeKind)2, 88, "VT_BOOL", []),
+        new(104, "DateCreated", (InvokeKind)2, 96, "VT_VARIANT", []),
+        new(105, "EOF", (InvokeKind)2, 104, "VT_BOOL", []),
+        new(106, "Filter", (InvokeKind)2, 112, "VT_BSTR", []),
+        new(106, "Filter", (InvokeKind)4, 120, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(107, "Index", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(107, "Index", (InvokeKind)4, 136, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(108, "LastModified", (InvokeKind)2, 144, "SAFEARRAY VT_UI1", []),
+        new(109, "LastUpdated", (InvokeKind)2, 152, "VT_VARIANT", []),
+        new(110, "LockEdits", (InvokeKind)2, 160, "VT_BOOL", []),
+        new(110, "LockEdits", (InvokeKind)4, 168, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(111, "Name", (InvokeKind)2, 176, "VT_BSTR", []),
+        new(112, "NoMatch", (InvokeKind)2, 184, "VT_BOOL", []),
+        new(113, "Sort", (InvokeKind)2, 192, "VT_BSTR", []),
+        new(113, "Sort", (InvokeKind)4, 200, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(114, "Transactions", (InvokeKind)2, 208, "VT_BOOL", []),
+        new(115, "Type", (InvokeKind)2, 216, "VT_I2", []),
+        new(116, "RecordCount", (InvokeKind)2, 224, "VT_I4", []),
+        new(117, "Updatable", (InvokeKind)2, 232, "VT_BOOL", []),
+        new(118, "Restartable", (InvokeKind)2, 240, "VT_BOOL", []),
+        new(119, "ValidationText", (InvokeKind)2, 248, "VT_BSTR", []),
+        new(120, "ValidationRule", (InvokeKind)2, 256, "VT_BSTR", []),
+        new(121, "CacheStart", (InvokeKind)2, 264, "SAFEARRAY VT_UI1", []),
+        new(121, "CacheStart", (InvokeKind)4, 272, "VT_VOID", [new("", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(122, "CacheSize", (InvokeKind)2, 280, "VT_I4", []),
+        new(122, "CacheSize", (InvokeKind)4, 288, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(123, "PercentPosition", (InvokeKind)2, 296, "VT_R4", []),
+        new(123, "PercentPosition", (InvokeKind)4, 304, "VT_VOID", [new("", "VT_R4", 0x1)]),
+        new(124, "AbsolutePosition", (InvokeKind)2, 312, "VT_I4", []),
+        new(124, "AbsolutePosition", (InvokeKind)4, 320, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(125, "EditMode", (InvokeKind)2, 328, "VT_I2", []),
+        new(126, "ODBCFetchCount", (InvokeKind)2, 336, "VT_I4", []),
+        new(127, "ODBCFetchDelay", (InvokeKind)2, 344, "VT_I4", []),
+        new(128, "Parent", (InvokeKind)2, 352, "PTR USERDEFINED Database", []),
+        new(0, "Fields", (InvokeKind)2, 360, "PTR USERDEFINED Fields", []),
+        new(130, "Indexes", (InvokeKind)2, 368, "PTR USERDEFINED Indexes", []),
+        new(131, "_30_CancelUpdate", (InvokeKind)1, 376, "VT_VOID", []),
+        new(132, "AddNew", (InvokeKind)1, 384, "VT_VOID", []),
+        new(133, "Close", (InvokeKind)1, 392, "VT_VOID", []),
+        new(134, "OpenRecordset", (InvokeKind)1, 400, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(135, "Delete", (InvokeKind)1, 408, "VT_VOID", []),
+        new(136, "Edit", (InvokeKind)1, 416, "VT_VOID", []),
+        new(137, "FindFirst", (InvokeKind)1, 424, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(138, "FindLast", (InvokeKind)1, 432, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(139, "FindNext", (InvokeKind)1, 440, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(140, "FindPrevious", (InvokeKind)1, 448, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(141, "MoveFirst", (InvokeKind)1, 456, "VT_VOID", []),
+        new(142, "_30_MoveLast", (InvokeKind)1, 464, "VT_VOID", []),
+        new(143, "MoveNext", (InvokeKind)1, 472, "VT_VOID", []),
+        new(144, "MovePrevious", (InvokeKind)1, 480, "VT_VOID", []),
+        new(145, "Seek", (InvokeKind)1, 488, "VT_VOID", [new("Comparison", "VT_BSTR", 0x1), new("Key1", "VT_VARIANT", 0x1), new("Key2", "VT_VARIANT", 0x11), new("Key3", "VT_VARIANT", 0x11), new("Key4", "VT_VARIANT", 0x11), new("Key5", "VT_VARIANT", 0x11), new("Key6", "VT_VARIANT", 0x11), new("Key7", "VT_VARIANT", 0x11), new("Key8", "VT_VARIANT", 0x11), new("Key9", "VT_VARIANT", 0x11), new("Key10", "VT_VARIANT", 0x11), new("Key11", "VT_VARIANT", 0x11), new("Key12", "VT_VARIANT", 0x11), new("Key13", "VT_VARIANT", 0x11)]),
+        new(146, "_30_Update", (InvokeKind)1, 496, "VT_VOID", []),
+        new(147, "Clone", (InvokeKind)1, 504, "PTR USERDEFINED Recordset", []),
+        new(148, "Requery", (InvokeKind)1, 512, "VT_VOID", [new("NewQueryDef", "VT_VARIANT", 0x11)]),
+        new(149, "Move", (InvokeKind)1, 520, "VT_VOID", [new("Rows", "VT_I4", 0x1), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(150, "FillCache", (InvokeKind)1, 528, "VT_VOID", [new("Rows", "VT_VARIANT", 0x11), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(151, "CreateDynaset", (InvokeKind)1, 536, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11)]),
+        new(152, "CreateSnapshot", (InvokeKind)1, 544, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11)]),
+        new(153, "CopyQueryDef", (InvokeKind)1, 552, "PTR USERDEFINED QueryDef", []),
+        new(154, "ListFields", (InvokeKind)1, 560, "PTR USERDEFINED Recordset", []),
+        new(155, "ListIndexes", (InvokeKind)1, 568, "PTR USERDEFINED Recordset", []),
+        new(156, "GetRows", (InvokeKind)1, 576, "VT_VARIANT", [new("NumRows", "VT_VARIANT", 0x11)]),
+        new(-8, "Collect", (InvokeKind)2, 584, "VT_VARIANT", [new("Item", "VT_VARIANT", 0x1)]),
+        new(-8, "Collect", (InvokeKind)4, 592, "VT_VOID", [new("Item", "VT_VARIANT", 0x1), new("", "VT_VARIANT", 0x1)]),
+        new(157, "Cancel", (InvokeKind)1, 600, "VT_VOID", []),
+        new(158, "NextRecordset", (InvokeKind)1, 608, "VT_BOOL", []),
+        new(159, "hStmt", (InvokeKind)2, 616, "VT_I4", []),
+        new(160, "StillExecuting", (InvokeKind)2, 624, "VT_BOOL", []),
+        new(161, "BatchSize", (InvokeKind)2, 632, "VT_I4", []),
+        new(161, "BatchSize", (InvokeKind)4, 640, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(162, "BatchCollisionCount", (InvokeKind)2, 648, "VT_I4", []),
+        new(163, "BatchCollisions", (InvokeKind)2, 656, "VT_VARIANT", []),
+        new(164, "Connection", (InvokeKind)2, 664, "PTR USERDEFINED Connection", []),
+        new(164, "Connection", (InvokeKind)8, 672, "VT_VOID", [new("", "PTR USERDEFINED Connection", 0x1)]),
+        new(165, "RecordStatus", (InvokeKind)2, 680, "VT_I2", []),
+        new(166, "UpdateOptions", (InvokeKind)2, 688, "VT_I4", []),
+        new(166, "UpdateOptions", (InvokeKind)4, 696, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(167, "CancelUpdate", (InvokeKind)1, 704, "VT_VOID", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null))]),
+        new(168, "Update", (InvokeKind)1, 712, "VT_VOID", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null)), new("Force", "VT_BOOL", 0x31, new(11, 0L, null, null))]),
+        new(169, "MoveLast", (InvokeKind)1, 720, "VT_VOID", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+    ],
+    [
+        new(101, "BOF", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(102, "Bookmark", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("ppsach", "PTR SAFEARRAY VT_UI1", 0xA)]),
+        new(102, "Bookmark", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("ppsach", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(103, "Bookmarkable", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(104, "DateCreated", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(105, "EOF", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(106, "Filter", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(106, "Filter", (InvokeKind)4, 120, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(107, "Index", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(107, "Index", (InvokeKind)4, 136, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(108, "LastModified", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("ppsa", "PTR SAFEARRAY VT_UI1", 0xA)]),
+        new(109, "LastUpdated", (InvokeKind)2, 152, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(110, "LockEdits", (InvokeKind)2, 160, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(110, "LockEdits", (InvokeKind)4, 168, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(111, "Name", (InvokeKind)2, 176, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(112, "NoMatch", (InvokeKind)2, 184, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(113, "Sort", (InvokeKind)2, 192, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(113, "Sort", (InvokeKind)4, 200, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(114, "Transactions", (InvokeKind)2, 208, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(115, "Type", (InvokeKind)2, 216, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(116, "RecordCount", (InvokeKind)2, 224, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(117, "Updatable", (InvokeKind)2, 232, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(118, "Restartable", (InvokeKind)2, 240, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(119, "ValidationText", (InvokeKind)2, 248, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(120, "ValidationRule", (InvokeKind)2, 256, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(121, "CacheStart", (InvokeKind)2, 264, 0x0, "VT_HRESULT", [new("ppsa", "PTR SAFEARRAY VT_UI1", 0xA)]),
+        new(121, "CacheStart", (InvokeKind)4, 272, 0x0, "VT_HRESULT", [new("ppsa", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(122, "CacheSize", (InvokeKind)2, 280, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(122, "CacheSize", (InvokeKind)4, 288, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(123, "PercentPosition", (InvokeKind)2, 296, 0x0, "VT_HRESULT", [new("pd", "PTR VT_R4", 0xA)]),
+        new(123, "PercentPosition", (InvokeKind)4, 304, 0x0, "VT_HRESULT", [new("pd", "VT_R4", 0x1)]),
+        new(124, "AbsolutePosition", (InvokeKind)2, 312, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(124, "AbsolutePosition", (InvokeKind)4, 320, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(125, "EditMode", (InvokeKind)2, 328, 0x0, "VT_HRESULT", [new("pi", "PTR VT_I2", 0xA)]),
+        new(126, "ODBCFetchCount", (InvokeKind)2, 336, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(127, "ODBCFetchDelay", (InvokeKind)2, 344, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(128, "Parent", (InvokeKind)2, 352, 0x40, "VT_HRESULT", [new("pdb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(0, "Fields", (InvokeKind)2, 360, 0x0, "VT_HRESULT", [new("ppflds", "PTR PTR USERDEFINED Fields", 0xA)]),
+        new(130, "Indexes", (InvokeKind)2, 368, 0x1, "VT_HRESULT", [new("ppidxs", "PTR PTR USERDEFINED Indexes", 0xA)]),
+        new(131, "_30_CancelUpdate", (InvokeKind)1, 376, 0x1, "VT_HRESULT", []),
+        new(132, "AddNew", (InvokeKind)1, 384, 0x0, "VT_HRESULT", []),
+        new(133, "Close", (InvokeKind)1, 392, 0x0, "VT_HRESULT", []),
+        new(134, "OpenRecordset", (InvokeKind)1, 400, 0x0, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(135, "Delete", (InvokeKind)1, 408, 0x0, "VT_HRESULT", []),
+        new(136, "Edit", (InvokeKind)1, 416, 0x0, "VT_HRESULT", []),
+        new(137, "FindFirst", (InvokeKind)1, 424, 0x0, "VT_HRESULT", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(138, "FindLast", (InvokeKind)1, 432, 0x0, "VT_HRESULT", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(139, "FindNext", (InvokeKind)1, 440, 0x0, "VT_HRESULT", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(140, "FindPrevious", (InvokeKind)1, 448, 0x0, "VT_HRESULT", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(141, "MoveFirst", (InvokeKind)1, 456, 0x0, "VT_HRESULT", []),
+        new(142, "_30_MoveLast", (InvokeKind)1, 464, 0x1, "VT_HRESULT", []),
+        new(143, "MoveNext", (InvokeKind)1, 472, 0x0, "VT_HRESULT", []),
+        new(144, "MovePrevious", (InvokeKind)1, 480, 0x0, "VT_HRESULT", []),
+        new(145, "Seek", (InvokeKind)1, 488, 0x0, "VT_HRESULT", [new("Comparison", "VT_BSTR", 0x1), new("Key1", "VT_VARIANT", 0x1), new("Key2", "VT_VARIANT", 0x11), new("Key3", "VT_VARIANT", 0x11), new("Key4", "VT_VARIANT", 0x11), new("Key5", "VT_VARIANT", 0x11), new("Key6", "VT_VARIANT", 0x11), new("Key7", "VT_VARIANT", 0x11), new("Key8", "VT_VARIANT", 0x11), new("Key9", "VT_VARIANT", 0x11), new("Key10", "VT_VARIANT", 0x11), new("Key11", "VT_VARIANT", 0x11), new("Key12", "VT_VARIANT", 0x11), new("Key13", "VT_VARIANT", 0x11)]),
+        new(146, "_30_Update", (InvokeKind)1, 496, 0x1, "VT_HRESULT", []),
+        new(147, "Clone", (InvokeKind)1, 504, 0x0, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(148, "Requery", (InvokeKind)1, 512, 0x0, "VT_HRESULT", [new("NewQueryDef", "VT_VARIANT", 0x11)]),
+        new(149, "Move", (InvokeKind)1, 520, 0x0, "VT_HRESULT", [new("Rows", "VT_I4", 0x1), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(150, "FillCache", (InvokeKind)1, 528, 0x0, "VT_HRESULT", [new("Rows", "VT_VARIANT", 0x11), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(151, "CreateDynaset", (InvokeKind)1, 536, 0x1, "VT_HRESULT", [new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(152, "CreateSnapshot", (InvokeKind)1, 544, 0x1, "VT_HRESULT", [new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(153, "CopyQueryDef", (InvokeKind)1, 552, 0x0, "VT_HRESULT", [new("ppqdf", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+        new(154, "ListFields", (InvokeKind)1, 560, 0x1, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(155, "ListIndexes", (InvokeKind)1, 568, 0x1, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(156, "GetRows", (InvokeKind)1, 576, 0x0, "VT_HRESULT", [new("NumRows", "VT_VARIANT", 0x11), new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(-8, "Collect", (InvokeKind)2, 584, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(-8, "Collect", (InvokeKind)4, 592, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pvar", "VT_VARIANT", 0x1)]),
+        new(157, "Cancel", (InvokeKind)1, 600, 0x0, "VT_HRESULT", []),
+        new(158, "NextRecordset", (InvokeKind)1, 608, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(159, "hStmt", (InvokeKind)2, 616, 0x40, "VT_HRESULT", [new("phStmt", "PTR VT_I4", 0xA)]),
+        new(160, "StillExecuting", (InvokeKind)2, 624, 0x0, "VT_HRESULT", [new("pStillExec", "PTR VT_BOOL", 0xA)]),
+        new(161, "BatchSize", (InvokeKind)2, 632, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(161, "BatchSize", (InvokeKind)4, 640, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(162, "BatchCollisionCount", (InvokeKind)2, 648, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(163, "BatchCollisions", (InvokeKind)2, 656, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(164, "Connection", (InvokeKind)2, 664, 0x0, "VT_HRESULT", [new("ppCn", "PTR PTR USERDEFINED Connection", 0xA)]),
+        new(164, "Connection", (InvokeKind)8, 672, 0x0, "VT_HRESULT", [new("ppCn", "PTR USERDEFINED Connection", 0x1)]),
+        new(165, "RecordStatus", (InvokeKind)2, 680, 0x0, "VT_HRESULT", [new("pi", "PTR VT_I2", 0xA)]),
+        new(166, "UpdateOptions", (InvokeKind)2, 688, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(166, "UpdateOptions", (InvokeKind)4, 696, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(167, "CancelUpdate", (InvokeKind)1, 704, 0x0, "VT_HRESULT", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null))]),
+        new(168, "Update", (InvokeKind)1, 712, 0x0, "VT_HRESULT", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null)), new("Force", "VT_BOOL", 0x31, new(11, 0L, null, null))]),
+        new(169, "MoveLast", (InvokeKind)1, 720, 0x0, "VT_HRESULT", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+    ], &Fill_Recordset);
+
+    public static readonly InterfaceDecl QueryDef = new("_QueryDef", new Guid("00000079-0000-0010-8000-00AA006D2EA4"), 368, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "DateCreated", (InvokeKind)2, 64, "VT_VARIANT", []),
+        new(1610809345, "LastUpdated", (InvokeKind)2, 72, "VT_VARIANT", []),
+        new(1610809346, "Name", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809346, "Name", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "ODBCTimeout", (InvokeKind)2, 96, "VT_I2", []),
+        new(1610809348, "ODBCTimeout", (InvokeKind)4, 104, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809350, "Type", (InvokeKind)2, 112, "VT_I2", []),
+        new(1610809351, "SQL", (InvokeKind)2, 120, "VT_BSTR", []),
+        new(1610809351, "SQL", (InvokeKind)4, 128, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809353, "Updatable", (InvokeKind)2, 136, "VT_BOOL", []),
+        new(1610809354, "Connect", (InvokeKind)2, 144, "VT_BSTR", []),
+        new(1610809354, "Connect", (InvokeKind)4, 152, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809356, "ReturnsRecords", (InvokeKind)2, 160, "VT_BOOL", []),
+        new(1610809356, "ReturnsRecords", (InvokeKind)4, 168, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809358, "RecordsAffected", (InvokeKind)2, 176, "VT_I4", []),
+        new(1610809359, "Fields", (InvokeKind)2, 184, "PTR USERDEFINED Fields", []),
+        new(0, "Parameters", (InvokeKind)2, 192, "PTR USERDEFINED Parameters", []),
+        new(1610809361, "Close", (InvokeKind)1, 200, "VT_VOID", []),
+        new(1610809362, "_30_OpenRecordset", (InvokeKind)1, 208, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809363, "_30__OpenRecordset", (InvokeKind)1, 216, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809364, "_Copy", (InvokeKind)1, 224, "PTR USERDEFINED QueryDef", []),
+        new(1610809365, "Execute", (InvokeKind)1, 232, "VT_VOID", [new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809366, "Compare", (InvokeKind)1, 240, "VT_VOID", [new("pQdef", "PTR USERDEFINED QueryDef", 0x1), new("lps", "PTR VT_I2", 0x1)]),
+        new(1610809367, "CreateDynaset", (InvokeKind)1, 248, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11)]),
+        new(1610809368, "CreateSnapshot", (InvokeKind)1, 256, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809369, "ListParameters", (InvokeKind)1, 264, "PTR USERDEFINED Recordset", []),
+        new(1610809370, "CreateProperty", (InvokeKind)1, 272, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809371, "OpenRecordset", (InvokeKind)1, 280, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11)]),
+        new(1610809372, "_OpenRecordset", (InvokeKind)1, 288, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11)]),
+        new(1610809373, "Cancel", (InvokeKind)1, 296, "VT_VOID", []),
+        new(1610809374, "hStmt", (InvokeKind)2, 304, "VT_I4", []),
+        new(1610809375, "MaxRecords", (InvokeKind)2, 312, "VT_I4", []),
+        new(1610809375, "MaxRecords", (InvokeKind)4, 320, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809377, "StillExecuting", (InvokeKind)2, 328, "VT_BOOL", []),
+        new(1610809378, "CacheSize", (InvokeKind)2, 336, "VT_I4", []),
+        new(1610809378, "CacheSize", (InvokeKind)4, 344, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809380, "Prepare", (InvokeKind)2, 352, "VT_VARIANT", []),
+        new(1610809380, "Prepare", (InvokeKind)4, 360, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(1610809344, "DateCreated", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809345, "LastUpdated", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809346, "Name", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809346, "Name", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809348, "ODBCTimeout", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809348, "ODBCTimeout", (InvokeKind)4, 104, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(1610809350, "Type", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pi", "PTR VT_I2", 0xA)]),
+        new(1610809351, "SQL", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809351, "SQL", (InvokeKind)4, 128, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809353, "Updatable", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809354, "Connect", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809354, "Connect", (InvokeKind)4, 152, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809356, "ReturnsRecords", (InvokeKind)2, 160, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809356, "ReturnsRecords", (InvokeKind)4, 168, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610809358, "RecordsAffected", (InvokeKind)2, 176, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809359, "Fields", (InvokeKind)2, 184, 0x0, "VT_HRESULT", [new("ppflds", "PTR PTR USERDEFINED Fields", 0xA)]),
+        new(0, "Parameters", (InvokeKind)2, 192, 0x0, "VT_HRESULT", [new("ppprms", "PTR PTR USERDEFINED Parameters", 0xA)]),
+        new(1610809361, "Close", (InvokeKind)1, 200, 0x0, "VT_HRESULT", []),
+        new(1610809362, "_30_OpenRecordset", (InvokeKind)1, 208, 0x1, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809363, "_30__OpenRecordset", (InvokeKind)1, 216, 0x1, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809364, "_Copy", (InvokeKind)1, 224, 0x1, "VT_HRESULT", [new("ppqdf", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+        new(1610809365, "Execute", (InvokeKind)1, 232, 0x0, "VT_HRESULT", [new("Options", "VT_VARIANT", 0x11)]),
+        new(1610809366, "Compare", (InvokeKind)1, 240, 0x1, "VT_HRESULT", [new("pQdef", "PTR USERDEFINED QueryDef", 0x1), new("lps", "PTR VT_I2", 0x1)]),
+        new(1610809367, "CreateDynaset", (InvokeKind)1, 248, 0x1, "VT_HRESULT", [new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809368, "CreateSnapshot", (InvokeKind)1, 256, 0x1, "VT_HRESULT", [new("Options", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809369, "ListParameters", (InvokeKind)1, 264, 0x1, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809370, "CreateProperty", (InvokeKind)1, 272, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+        new(1610809371, "OpenRecordset", (InvokeKind)1, 280, 0x0, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809372, "_OpenRecordset", (InvokeKind)1, 288, 0x1, "VT_HRESULT", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+        new(1610809373, "Cancel", (InvokeKind)1, 296, 0x0, "VT_HRESULT", []),
+        new(1610809374, "hStmt", (InvokeKind)2, 304, 0x40, "VT_HRESULT", [new("phStmt", "PTR VT_I4", 0xA)]),
+        new(1610809375, "MaxRecords", (InvokeKind)2, 312, 0x0, "VT_HRESULT", [new("pMxRecs", "PTR VT_I4", 0xA)]),
+        new(1610809375, "MaxRecords", (InvokeKind)4, 320, 0x0, "VT_HRESULT", [new("pMxRecs", "VT_I4", 0x1)]),
+        new(1610809377, "StillExecuting", (InvokeKind)2, 328, 0x0, "VT_HRESULT", [new("pStillExec", "PTR VT_BOOL", 0xA)]),
+        new(1610809378, "CacheSize", (InvokeKind)2, 336, 0x0, "VT_HRESULT", [new("lCacheSize", "PTR VT_I4", 0xA)]),
+        new(1610809378, "CacheSize", (InvokeKind)4, 344, 0x0, "VT_HRESULT", [new("lCacheSize", "VT_I4", 0x1)]),
+        new(1610809380, "Prepare", (InvokeKind)2, 352, 0x0, "VT_HRESULT", [new("pb", "PTR VT_VARIANT", 0xA)]),
+        new(1610809380, "Prepare", (InvokeKind)4, 360, 0x0, "VT_HRESULT", [new("pb", "VT_VARIANT", 0x1)]),
+    ], &Fill_QueryDef);
+
+    public static readonly InterfaceDecl Parameters = new("Parameters", new Guid("00000083-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Parameter", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppprm", "PTR PTR USERDEFINED Parameter", 0xA)]),
+    ], &Fill_Parameters);
+
+    public static readonly InterfaceDecl Parameter = new("Parameter", new Guid("00000081-0000-0010-8000-00AA006D2EA4"), 120, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(0, "Value", (InvokeKind)2, 72, "VT_VARIANT", []),
+        new(0, "Value", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809347, "Type", (InvokeKind)2, 88, "VT_I2", []),
+        new(1610809347, "Type", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809349, "Direction", (InvokeKind)2, 104, "VT_I2", []),
+        new(1610809349, "Direction", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I2", 0x1)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(0, "Value", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(0, "Value", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("pvar", "VT_VARIANT", 0x1)]),
+        new(1610809347, "Type", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("ps", "PTR VT_I2", 0xA)]),
+        new(1610809347, "Type", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("ps", "VT_I2", 0x1)]),
+        new(1610809349, "Direction", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pOption", "PTR VT_I2", 0xA)]),
+        new(1610809349, "Direction", (InvokeKind)4, 112, 0x0, "VT_HRESULT", [new("pOption", "VT_I2", 0x1)]),
+    ], &Fill_Parameter);
+
+    public static readonly InterfaceDecl Connection = new("Connection", new Guid("00000041-0000-0010-8000-00AA006D2EA4"), 192, "IDispatch", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Name", (InvokeKind)2, 56, "VT_BSTR", []),
+        new(1610743809, "Connect", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610743810, "Database", (InvokeKind)2, 72, "PTR USERDEFINED Database", []),
+        new(1610743811, "hDbc", (InvokeKind)2, 80, "VT_I4", []),
+        new(1610743812, "QueryTimeout", (InvokeKind)2, 88, "VT_I2", []),
+        new(1610743812, "QueryTimeout", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610743814, "Transactions", (InvokeKind)2, 104, "VT_BOOL", []),
+        new(1610743815, "RecordsAffected", (InvokeKind)2, 112, "VT_I4", []),
+        new(1610743816, "StillExecuting", (InvokeKind)2, 120, "VT_BOOL", []),
+        new(1610743817, "Updatable", (InvokeKind)2, 128, "VT_BOOL", []),
+        new(0, "QueryDefs", (InvokeKind)2, 136, "PTR USERDEFINED QueryDefs", []),
+        new(1610743819, "Recordsets", (InvokeKind)2, 144, "PTR USERDEFINED Recordsets", []),
+        new(1610743820, "Cancel", (InvokeKind)1, 152, "VT_VOID", []),
+        new(1610743821, "Close", (InvokeKind)1, 160, "VT_VOID", []),
+        new(1610743822, "CreateQueryDef", (InvokeKind)1, 168, "PTR USERDEFINED QueryDef", [new("Name", "VT_VARIANT", 0x11), new("SQLText", "VT_VARIANT", 0x11)]),
+        new(1610743823, "Execute", (InvokeKind)1, 176, "VT_VOID", [new("Query", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610743824, "OpenRecordset", (InvokeKind)1, 184, "PTR USERDEFINED Recordset", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(1610743808, "Name", (InvokeKind)2, 56, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610743809, "Connect", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610743810, "Database", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("ppDb", "PTR PTR USERDEFINED Database", 0xA)]),
+        new(1610743811, "hDbc", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("phDbc", "PTR VT_I4", 0xA)]),
+        new(1610743812, "QueryTimeout", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("pSeconds", "PTR VT_I2", 0xA)]),
+        new(1610743812, "QueryTimeout", (InvokeKind)4, 96, 0x0, "VT_HRESULT", [new("pSeconds", "VT_I2", 0x1)]),
+        new(1610743814, "Transactions", (InvokeKind)2, 104, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610743815, "RecordsAffected", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pRecords", "PTR VT_I4", 0xA)]),
+        new(1610743816, "StillExecuting", (InvokeKind)2, 120, 0x0, "VT_HRESULT", [new("pStillExec", "PTR VT_BOOL", 0xA)]),
+        new(1610743817, "Updatable", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pStillExec", "PTR VT_BOOL", 0xA)]),
+        new(0, "QueryDefs", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("ppqdfs", "PTR PTR USERDEFINED QueryDefs", 0xA)]),
+        new(1610743819, "Recordsets", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("pprsts", "PTR PTR USERDEFINED Recordsets", 0xA)]),
+        new(1610743820, "Cancel", (InvokeKind)1, 152, 0x0, "VT_HRESULT", []),
+        new(1610743821, "Close", (InvokeKind)1, 160, 0x0, "VT_HRESULT", []),
+        new(1610743822, "CreateQueryDef", (InvokeKind)1, 168, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("SQLText", "VT_VARIANT", 0x11), new("ppqdf", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+        new(1610743823, "Execute", (InvokeKind)1, 176, 0x0, "VT_HRESULT", [new("Query", "VT_BSTR", 0x1), new("Options", "VT_VARIANT", 0x11)]),
+        new(1610743824, "OpenRecordset", (InvokeKind)1, 184, 0x0, "VT_HRESULT", [new("Name", "VT_BSTR", 0x1), new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11), new("LockEdit", "VT_VARIANT", 0x11), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+    ], &Fill_Connection);
+
+    public static readonly InterfaceDecl QueryDefs = new("QueryDefs", new Guid("0000007B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED QueryDef", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppqdef", "PTR PTR USERDEFINED QueryDef", 0xA)]),
+    ], &Fill_QueryDefs);
+
+    public static readonly InterfaceDecl Recordsets = new("Recordsets", new Guid("00000033-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Recordset", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+    ], &Fill_Recordsets);
+
+    public static readonly InterfaceDecl Relations = new("Relations", new Guid("0000008B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Relation", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pprel", "PTR PTR USERDEFINED Relation", 0xA)]),
+    ], &Fill_Relations);
+
+    public static readonly InterfaceDecl Relation = new("_Relation", new Guid("00000089-0000-0010-8000-00AA006D2EA4"), 160, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809344, "Name", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809346, "Table", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610809346, "Table", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809348, "ForeignTable", (InvokeKind)2, 96, "VT_BSTR", []),
+        new(1610809348, "ForeignTable", (InvokeKind)4, 104, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809350, "Attributes", (InvokeKind)2, 112, "VT_I4", []),
+        new(1610809350, "Attributes", (InvokeKind)4, 120, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(0, "Fields", (InvokeKind)2, 128, "PTR USERDEFINED Fields", []),
+        new(1610809353, "CreateField", (InvokeKind)1, 136, "PTR USERDEFINED Field", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11)]),
+        new(1610809354, "PartialReplica", (InvokeKind)2, 144, "VT_BOOL", []),
+        new(1610809354, "PartialReplica", (InvokeKind)4, 152, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809344, "Name", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809346, "Table", (InvokeKind)2, 80, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809346, "Table", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809348, "ForeignTable", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809348, "ForeignTable", (InvokeKind)4, 104, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809350, "Attributes", (InvokeKind)2, 112, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809350, "Attributes", (InvokeKind)4, 120, 0x0, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(0, "Fields", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("ppflds", "PTR PTR USERDEFINED Fields", 0xA)]),
+        new(1610809353, "CreateField", (InvokeKind)1, 136, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Size", "VT_VARIANT", 0x11), new("ppfld", "PTR PTR USERDEFINED Field", 0xA)]),
+        new(1610809354, "PartialReplica", (InvokeKind)2, 144, 0x0, "VT_HRESULT", [new("pfPartialReplica", "PTR VT_BOOL", 0xA)]),
+        new(1610809354, "PartialReplica", (InvokeKind)4, 152, 0x0, "VT_HRESULT", [new("pfPartialReplica", "VT_BOOL", 0x1)]),
+    ], &Fill_Relation);
+
+    public static readonly InterfaceDecl Containers = new("Containers", new Guid("00000093-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Container", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppctn", "PTR PTR USERDEFINED Container", 0xA)]),
+    ], &Fill_Containers);
+
+    public static readonly InterfaceDecl Container = new("Container", new Guid("00000091-0000-0010-8000-00AA006D2EA4"), 152, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809345, "Owner", (InvokeKind)2, 72, "VT_BSTR", []),
+        new(1610809345, "Owner", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809347, "UserName", (InvokeKind)2, 88, "VT_BSTR", []),
+        new(1610809347, "UserName", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "Permissions", (InvokeKind)2, 104, "VT_I4", []),
+        new(1610809349, "Permissions", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809351, "Inherit", (InvokeKind)2, 120, "VT_BOOL", []),
+        new(1610809351, "Inherit", (InvokeKind)4, 128, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(0, "Documents", (InvokeKind)2, 136, "PTR USERDEFINED Documents", []),
+        new(1610809354, "AllPermissions", (InvokeKind)2, 144, "VT_I4", []),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "Owner", (InvokeKind)2, 72, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "Owner", (InvokeKind)4, 80, 0x40, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809347, "UserName", (InvokeKind)2, 88, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809347, "UserName", (InvokeKind)4, 96, 0x40, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809349, "Permissions", (InvokeKind)2, 104, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809349, "Permissions", (InvokeKind)4, 112, 0x40, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(1610809351, "Inherit", (InvokeKind)2, 120, 0x40, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610809351, "Inherit", (InvokeKind)4, 128, 0x40, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(0, "Documents", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("ppdocs", "PTR PTR USERDEFINED Documents", 0xA)]),
+        new(1610809354, "AllPermissions", (InvokeKind)2, 144, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+    ], &Fill_Container);
+
+    public static readonly InterfaceDecl Documents = new("Documents", new Guid("0000009B-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Document", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppdoc", "PTR PTR USERDEFINED Document", 0xA)]),
+    ], &Fill_Documents);
+
+    public static readonly InterfaceDecl Document = new("Document", new Guid("00000099-0000-0010-8000-00AA006D2EA4"), 160, "_DAO", 0x10C0, 0x11C0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809345, "Owner", (InvokeKind)2, 72, "VT_BSTR", []),
+        new(1610809345, "Owner", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809347, "Container", (InvokeKind)2, 88, "VT_BSTR", []),
+        new(1610809348, "UserName", (InvokeKind)2, 96, "VT_BSTR", []),
+        new(1610809348, "UserName", (InvokeKind)4, 104, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809350, "Permissions", (InvokeKind)2, 112, "VT_I4", []),
+        new(1610809350, "Permissions", (InvokeKind)4, 120, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809352, "DateCreated", (InvokeKind)2, 128, "VT_VARIANT", []),
+        new(1610809353, "LastUpdated", (InvokeKind)2, 136, "VT_VARIANT", []),
+        new(1610809354, "AllPermissions", (InvokeKind)2, 144, "VT_I4", []),
+        new(1610809355, "CreateProperty", (InvokeKind)1, 152, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "Owner", (InvokeKind)2, 72, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809345, "Owner", (InvokeKind)4, 80, 0x40, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809347, "Container", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809348, "UserName", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809348, "UserName", (InvokeKind)4, 104, 0x40, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809350, "Permissions", (InvokeKind)2, 112, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809350, "Permissions", (InvokeKind)4, 120, 0x40, "VT_HRESULT", [new("pl", "VT_I4", 0x1)]),
+        new(1610809352, "DateCreated", (InvokeKind)2, 128, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809353, "LastUpdated", (InvokeKind)2, 136, 0x0, "VT_HRESULT", [new("pvar", "PTR VT_VARIANT", 0xA)]),
+        new(1610809354, "AllPermissions", (InvokeKind)2, 144, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610809355, "CreateProperty", (InvokeKind)1, 152, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11), new("pprp", "PTR PTR USERDEFINED Property", 0xA)]),
+    ], &Fill_Document);
+
+    public static readonly InterfaceDecl Users = new("Users", new Guid("0000006B-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10D0, 0x11D0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED User", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppusr", "PTR PTR USERDEFINED User", 0xA)]),
+    ], &Fill_Users);
+
+    public static readonly InterfaceDecl User = new("_User", new Guid("00000069-0000-0010-8000-00AA006D2EA4"), 120, "_DAO", 0x10D0, 0x11D0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809344, "Name", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809346, "PID", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809347, "Password", (InvokeKind)4, 88, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(0, "Groups", (InvokeKind)2, 96, "PTR USERDEFINED Groups", []),
+        new(1610809349, "NewPassword", (InvokeKind)1, 104, "VT_VOID", [new("bstrOld", "VT_BSTR", 0x1), new("bstrNew", "VT_BSTR", 0x1)]),
+        new(1610809350, "CreateGroup", (InvokeKind)1, 112, "PTR USERDEFINED Group", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809344, "Name", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809346, "PID", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(1610809347, "Password", (InvokeKind)4, 88, 0x0, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(0, "Groups", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("ppgrps", "PTR PTR USERDEFINED Groups", 0xA)]),
+        new(1610809349, "NewPassword", (InvokeKind)1, 104, 0x0, "VT_HRESULT", [new("bstrOld", "VT_BSTR", 0x1), new("bstrNew", "VT_BSTR", 0x1)]),
+        new(1610809350, "CreateGroup", (InvokeKind)1, 112, 0x0, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("ppgrp", "PTR PTR USERDEFINED Group", 0xA)]),
+    ], &Fill_User);
+
+    public static readonly InterfaceDecl Groups = new("Groups", new Guid("00000063-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10D0, 0x11D0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "PTR USERDEFINED Group", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppgrp", "PTR PTR USERDEFINED Group", 0xA)]),
+    ], &Fill_Groups);
+
+    public static readonly InterfaceDecl Group = new("_Group", new Guid("00000061-0000-0010-8000-00AA006D2EA4"), 104, "_DAO", 0x10D0, 0x11D0,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "Name", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(1610809344, "Name", (InvokeKind)4, 72, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809346, "PID", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(0, "Users", (InvokeKind)2, 88, "PTR USERDEFINED Users", []),
+        new(1610809348, "CreateUser", (InvokeKind)1, 96, "PTR USERDEFINED User", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("Password", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(1610809344, "Name", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610809344, "Name", (InvokeKind)4, 72, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+        new(1610809346, "PID", (InvokeKind)4, 80, 0x0, "VT_HRESULT", [new("", "VT_BSTR", 0x1)]),
+        new(0, "Users", (InvokeKind)2, 88, 0x0, "VT_HRESULT", [new("ppusrs", "PTR PTR USERDEFINED Users", 0xA)]),
+        new(1610809348, "CreateUser", (InvokeKind)1, 96, 0x40, "VT_HRESULT", [new("Name", "VT_VARIANT", 0x11), new("PID", "VT_VARIANT", 0x11), new("Password", "VT_VARIANT", 0x11), new("ppusr", "PTR PTR USERDEFINED User", 0xA)]),
+    ], &Fill_Group);
+
+    public static readonly InterfaceDecl Connections = new("Connections", new Guid("00000043-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Connection", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("ppconn", "PTR PTR USERDEFINED Connection", 0xA)]),
+    ], &Fill_Connections);
+
+    public static readonly InterfaceDecl Errors = new("Errors", new Guid("00000025-0000-0010-8000-00AA006D2EA4"), 88, "_Collection", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(0, "Item", (InvokeKind)2, 80, "PTR USERDEFINED Error", [new("Item", "VT_VARIANT", 0x1)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x1), new("pperr", "PTR PTR USERDEFINED Error", 0xA)]),
+    ], &Fill_Errors);
+
+    public static readonly InterfaceDecl Error = new("Error", new Guid("00000023-0000-0010-8000-00AA006D2EA4"), 96, "IDispatch", 0x10C0, 0x11C0,
+    [
+        new(1610743808, "Number", (InvokeKind)2, 56, "VT_I4", []),
+        new(1610743809, "Source", (InvokeKind)2, 64, "VT_BSTR", []),
+        new(0, "Description", (InvokeKind)2, 72, "VT_BSTR", []),
+        new(1610743811, "HelpFile", (InvokeKind)2, 80, "VT_BSTR", []),
+        new(1610743812, "HelpContext", (InvokeKind)2, 88, "VT_I4", []),
+    ],
+    [
+        new(1610743808, "Number", (InvokeKind)2, 56, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+        new(1610743809, "Source", (InvokeKind)2, 64, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(0, "Description", (InvokeKind)2, 72, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610743811, "HelpFile", (InvokeKind)2, 80, 0x40, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610743812, "HelpContext", (InvokeKind)2, 88, 0x40, "VT_HRESULT", [new("pl", "PTR VT_I4", 0xA)]),
+    ], &Fill_Error);
+
+    public static readonly InterfaceDecl ComplexType = new("ComplexType", new Guid("0000009D-0000-0010-8000-00AA006D2EA4"), 64, "IDispatch", 0x10C0, 0x11C0,
+    [
+        new(0, "Fields", (InvokeKind)2, 56, "PTR USERDEFINED Fields", []),
+    ],
+    [
+        new(0, "Fields", (InvokeKind)2, 56, 0x0, "VT_HRESULT", [new("ppflds", "PTR PTR USERDEFINED Fields", 0xA)]),
+    ], &Fill_ComplexType);
+
+    public static readonly InterfaceDecl IndexFields = new("IndexFields", new Guid("0000005D-0000-0010-8000-00AA006D2EA4"), 104, "_DynaCollection", 0x10D0, 0x11D0,
+    [
+        new(1610743808, "Count", (InvokeKind)2, 56, "VT_I2", []),
+        new(-4, "_NewEnum", (InvokeKind)1, 64, "VT_UNKNOWN", []),
+        new(1610743810, "Refresh", (InvokeKind)1, 72, "VT_VOID", []),
+        new(1610809344, "Append", (InvokeKind)1, 80, "VT_VOID", [new("Object", "VT_DISPATCH", 0x1)]),
+        new(1610809345, "Delete", (InvokeKind)1, 88, "VT_VOID", [new("Name", "VT_BSTR", 0x1)]),
+        new(0, "Item", (InvokeKind)2, 96, "VT_VARIANT", [new("Item", "VT_VARIANT", 0x11)]),
+    ],
+    [
+        new(0, "Item", (InvokeKind)2, 96, 0x0, "VT_HRESULT", [new("Item", "VT_VARIANT", 0x11), new("pvar", "PTR VT_VARIANT", 0xA)]),
+    ], &Fill_IndexFields);
+
+    public static readonly InterfaceDecl Recordset2 = new("Recordset2", new Guid("00000035-0000-0010-8000-00AA006D2EA4"), 736, "Recordset", 0x1040, 0x1140,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(101, "BOF", (InvokeKind)2, 64, "VT_BOOL", []),
+        new(102, "Bookmark", (InvokeKind)2, 72, "SAFEARRAY VT_UI1", []),
+        new(102, "Bookmark", (InvokeKind)4, 80, "VT_VOID", [new("", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(103, "Bookmarkable", (InvokeKind)2, 88, "VT_BOOL", []),
+        new(104, "DateCreated", (InvokeKind)2, 96, "VT_VARIANT", []),
+        new(105, "EOF", (InvokeKind)2, 104, "VT_BOOL", []),
+        new(106, "Filter", (InvokeKind)2, 112, "VT_BSTR", []),
+        new(106, "Filter", (InvokeKind)4, 120, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(107, "Index", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(107, "Index", (InvokeKind)4, 136, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(108, "LastModified", (InvokeKind)2, 144, "SAFEARRAY VT_UI1", []),
+        new(109, "LastUpdated", (InvokeKind)2, 152, "VT_VARIANT", []),
+        new(110, "LockEdits", (InvokeKind)2, 160, "VT_BOOL", []),
+        new(110, "LockEdits", (InvokeKind)4, 168, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(111, "Name", (InvokeKind)2, 176, "VT_BSTR", []),
+        new(112, "NoMatch", (InvokeKind)2, 184, "VT_BOOL", []),
+        new(113, "Sort", (InvokeKind)2, 192, "VT_BSTR", []),
+        new(113, "Sort", (InvokeKind)4, 200, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(114, "Transactions", (InvokeKind)2, 208, "VT_BOOL", []),
+        new(115, "Type", (InvokeKind)2, 216, "VT_I2", []),
+        new(116, "RecordCount", (InvokeKind)2, 224, "VT_I4", []),
+        new(117, "Updatable", (InvokeKind)2, 232, "VT_BOOL", []),
+        new(118, "Restartable", (InvokeKind)2, 240, "VT_BOOL", []),
+        new(119, "ValidationText", (InvokeKind)2, 248, "VT_BSTR", []),
+        new(120, "ValidationRule", (InvokeKind)2, 256, "VT_BSTR", []),
+        new(121, "CacheStart", (InvokeKind)2, 264, "SAFEARRAY VT_UI1", []),
+        new(121, "CacheStart", (InvokeKind)4, 272, "VT_VOID", [new("", "PTR SAFEARRAY VT_UI1", 0x1)]),
+        new(122, "CacheSize", (InvokeKind)2, 280, "VT_I4", []),
+        new(122, "CacheSize", (InvokeKind)4, 288, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(123, "PercentPosition", (InvokeKind)2, 296, "VT_R4", []),
+        new(123, "PercentPosition", (InvokeKind)4, 304, "VT_VOID", [new("", "VT_R4", 0x1)]),
+        new(124, "AbsolutePosition", (InvokeKind)2, 312, "VT_I4", []),
+        new(124, "AbsolutePosition", (InvokeKind)4, 320, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(125, "EditMode", (InvokeKind)2, 328, "VT_I2", []),
+        new(126, "ODBCFetchCount", (InvokeKind)2, 336, "VT_I4", []),
+        new(127, "ODBCFetchDelay", (InvokeKind)2, 344, "VT_I4", []),
+        new(128, "Parent", (InvokeKind)2, 352, "PTR USERDEFINED Database", []),
+        new(0, "Fields", (InvokeKind)2, 360, "PTR USERDEFINED Fields", []),
+        new(130, "Indexes", (InvokeKind)2, 368, "PTR USERDEFINED Indexes", []),
+        new(131, "_30_CancelUpdate", (InvokeKind)1, 376, "VT_VOID", []),
+        new(132, "AddNew", (InvokeKind)1, 384, "VT_VOID", []),
+        new(133, "Close", (InvokeKind)1, 392, "VT_VOID", []),
+        new(134, "OpenRecordset", (InvokeKind)1, 400, "PTR USERDEFINED Recordset", [new("Type", "VT_VARIANT", 0x11), new("Options", "VT_VARIANT", 0x11)]),
+        new(135, "Delete", (InvokeKind)1, 408, "VT_VOID", []),
+        new(136, "Edit", (InvokeKind)1, 416, "VT_VOID", []),
+        new(137, "FindFirst", (InvokeKind)1, 424, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(138, "FindLast", (InvokeKind)1, 432, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(139, "FindNext", (InvokeKind)1, 440, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(140, "FindPrevious", (InvokeKind)1, 448, "VT_VOID", [new("Criteria", "VT_BSTR", 0x1)]),
+        new(141, "MoveFirst", (InvokeKind)1, 456, "VT_VOID", []),
+        new(142, "_30_MoveLast", (InvokeKind)1, 464, "VT_VOID", []),
+        new(143, "MoveNext", (InvokeKind)1, 472, "VT_VOID", []),
+        new(144, "MovePrevious", (InvokeKind)1, 480, "VT_VOID", []),
+        new(145, "Seek", (InvokeKind)1, 488, "VT_VOID", [new("Comparison", "VT_BSTR", 0x1), new("Key1", "VT_VARIANT", 0x1), new("Key2", "VT_VARIANT", 0x11), new("Key3", "VT_VARIANT", 0x11), new("Key4", "VT_VARIANT", 0x11), new("Key5", "VT_VARIANT", 0x11), new("Key6", "VT_VARIANT", 0x11), new("Key7", "VT_VARIANT", 0x11), new("Key8", "VT_VARIANT", 0x11), new("Key9", "VT_VARIANT", 0x11), new("Key10", "VT_VARIANT", 0x11), new("Key11", "VT_VARIANT", 0x11), new("Key12", "VT_VARIANT", 0x11), new("Key13", "VT_VARIANT", 0x11)]),
+        new(146, "_30_Update", (InvokeKind)1, 496, "VT_VOID", []),
+        new(147, "Clone", (InvokeKind)1, 504, "PTR USERDEFINED Recordset", []),
+        new(148, "Requery", (InvokeKind)1, 512, "VT_VOID", [new("NewQueryDef", "VT_VARIANT", 0x11)]),
+        new(149, "Move", (InvokeKind)1, 520, "VT_VOID", [new("Rows", "VT_I4", 0x1), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(150, "FillCache", (InvokeKind)1, 528, "VT_VOID", [new("Rows", "VT_VARIANT", 0x11), new("StartBookmark", "VT_VARIANT", 0x11)]),
+        new(151, "CreateDynaset", (InvokeKind)1, 536, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11), new("Inconsistent", "VT_VARIANT", 0x11)]),
+        new(152, "CreateSnapshot", (InvokeKind)1, 544, "PTR USERDEFINED Recordset", [new("Options", "VT_VARIANT", 0x11)]),
+        new(153, "CopyQueryDef", (InvokeKind)1, 552, "PTR USERDEFINED QueryDef", []),
+        new(154, "ListFields", (InvokeKind)1, 560, "PTR USERDEFINED Recordset", []),
+        new(155, "ListIndexes", (InvokeKind)1, 568, "PTR USERDEFINED Recordset", []),
+        new(156, "GetRows", (InvokeKind)1, 576, "VT_VARIANT", [new("NumRows", "VT_VARIANT", 0x11)]),
+        new(-8, "Collect", (InvokeKind)2, 584, "VT_VARIANT", [new("Item", "VT_VARIANT", 0x1)]),
+        new(-8, "Collect", (InvokeKind)4, 592, "VT_VOID", [new("Item", "VT_VARIANT", 0x1), new("", "VT_VARIANT", 0x1)]),
+        new(157, "Cancel", (InvokeKind)1, 600, "VT_VOID", []),
+        new(158, "NextRecordset", (InvokeKind)1, 608, "VT_BOOL", []),
+        new(159, "hStmt", (InvokeKind)2, 616, "VT_I4", []),
+        new(160, "StillExecuting", (InvokeKind)2, 624, "VT_BOOL", []),
+        new(161, "BatchSize", (InvokeKind)2, 632, "VT_I4", []),
+        new(161, "BatchSize", (InvokeKind)4, 640, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(162, "BatchCollisionCount", (InvokeKind)2, 648, "VT_I4", []),
+        new(163, "BatchCollisions", (InvokeKind)2, 656, "VT_VARIANT", []),
+        new(164, "Connection", (InvokeKind)2, 664, "PTR USERDEFINED Connection", []),
+        new(164, "Connection", (InvokeKind)8, 672, "VT_VOID", [new("", "PTR USERDEFINED Connection", 0x1)]),
+        new(165, "RecordStatus", (InvokeKind)2, 680, "VT_I2", []),
+        new(166, "UpdateOptions", (InvokeKind)2, 688, "VT_I4", []),
+        new(166, "UpdateOptions", (InvokeKind)4, 696, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(167, "CancelUpdate", (InvokeKind)1, 704, "VT_VOID", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null))]),
+        new(168, "Update", (InvokeKind)1, 712, "VT_VOID", [new("UpdateType", "VT_I4", 0x31, new(3, 1L, null, null)), new("Force", "VT_BOOL", 0x31, new(11, 0L, null, null))]),
+        new(169, "MoveLast", (InvokeKind)1, 720, "VT_VOID", [new("Options", "VT_I4", 0x31, new(3, 0L, null, null))]),
+        new(170, "ParentRecordset", (InvokeKind)2, 728, "PTR USERDEFINED Recordset", []),
+    ],
+    [
+        new(170, "ParentRecordset", (InvokeKind)2, 728, 0x0, "VT_HRESULT", [new("pprst", "PTR PTR USERDEFINED Recordset", 0xA)]),
+    ], &Fill_Recordset2);
+
+    public static readonly InterfaceDecl Field2 = new("Field2", new Guid("00000054-0000-0010-8000-00AA006D2EA4"), 432, "_Field", 0x1040, 0x1140,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, "VT_I4", []),
+        new(1610809345, "Type", (InvokeKind)2, 72, "VT_I2", []),
+        new(1610809345, "Type", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809347, "Name", (InvokeKind)2, 88, "VT_BSTR", []),
+        new(1610809347, "Name", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "Size", (InvokeKind)2, 104, "VT_I4", []),
+        new(1610809349, "Size", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809351, "SourceField", (InvokeKind)2, 120, "VT_BSTR", []),
+        new(1610809352, "SourceTable", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(0, "Value", (InvokeKind)2, 136, "VT_VARIANT", []),
+        new(0, "Value", (InvokeKind)4, 144, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809355, "Attributes", (InvokeKind)2, 152, "VT_I4", []),
+        new(1610809355, "Attributes", (InvokeKind)4, 160, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809357, "OrdinalPosition", (InvokeKind)2, 168, "VT_I2", []),
+        new(1610809357, "OrdinalPosition", (InvokeKind)4, 176, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809359, "ValidationText", (InvokeKind)2, 184, "VT_BSTR", []),
+        new(1610809359, "ValidationText", (InvokeKind)4, 192, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809361, "ValidateOnSet", (InvokeKind)2, 200, "VT_BOOL", []),
+        new(1610809361, "ValidateOnSet", (InvokeKind)4, 208, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809363, "ValidationRule", (InvokeKind)2, 216, "VT_BSTR", []),
+        new(1610809363, "ValidationRule", (InvokeKind)4, 224, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809365, "DefaultValue", (InvokeKind)2, 232, "VT_VARIANT", []),
+        new(1610809365, "DefaultValue", (InvokeKind)4, 240, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809367, "Required", (InvokeKind)2, 248, "VT_BOOL", []),
+        new(1610809367, "Required", (InvokeKind)4, 256, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809369, "AllowZeroLength", (InvokeKind)2, 264, "VT_BOOL", []),
+        new(1610809369, "AllowZeroLength", (InvokeKind)4, 272, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809371, "DataUpdatable", (InvokeKind)2, 280, "VT_BOOL", []),
+        new(1610809372, "ForeignName", (InvokeKind)2, 288, "VT_BSTR", []),
+        new(1610809372, "ForeignName", (InvokeKind)4, 296, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809374, "AppendChunk", (InvokeKind)1, 304, "VT_VOID", [new("Val", "VT_VARIANT", 0x1)]),
+        new(1610809375, "GetChunk", (InvokeKind)1, 312, "VT_VARIANT", [new("Offset", "VT_I4", 0x1), new("Bytes", "VT_I4", 0x1)]),
+        new(1610809376, "_30_FieldSize", (InvokeKind)1, 320, "VT_I4", []),
+        new(1610809377, "CreateProperty", (InvokeKind)1, 328, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809378, "CollectionIndex", (InvokeKind)2, 336, "VT_I2", []),
+        new(1610809379, "OriginalValue", (InvokeKind)2, 344, "VT_VARIANT", []),
+        new(1610809380, "VisibleValue", (InvokeKind)2, 352, "VT_VARIANT", []),
+        new(1610809381, "FieldSize", (InvokeKind)2, 360, "VT_I4", []),
+        new(1610874880, "ComplexType", (InvokeKind)2, 368, "PTR USERDEFINED ComplexType", []),
+        new(1610874881, "LoadFromFile", (InvokeKind)1, 376, "VT_VOID", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874882, "SaveToFile", (InvokeKind)1, 384, "VT_VOID", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874883, "IsComplex", (InvokeKind)2, 392, "VT_BOOL", []),
+        new(1610874884, "AppendOnly", (InvokeKind)2, 400, "VT_BOOL", []),
+        new(1610874884, "AppendOnly", (InvokeKind)4, 408, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610874886, "Expression", (InvokeKind)2, 416, "VT_BSTR", []),
+        new(1610874886, "Expression", (InvokeKind)4, 424, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+    ],
+    [
+        new(1610874880, "ComplexType", (InvokeKind)2, 368, 0x0, "VT_HRESULT", [new("ppComplexType", "PTR PTR USERDEFINED ComplexType", 0xA)]),
+        new(1610874881, "LoadFromFile", (InvokeKind)1, 376, 0x0, "VT_HRESULT", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874882, "SaveToFile", (InvokeKind)1, 384, 0x0, "VT_HRESULT", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874883, "IsComplex", (InvokeKind)2, 392, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610874884, "AppendOnly", (InvokeKind)2, 400, 0x0, "VT_HRESULT", [new("pb", "PTR VT_BOOL", 0xA)]),
+        new(1610874884, "AppendOnly", (InvokeKind)4, 408, 0x0, "VT_HRESULT", [new("pb", "VT_BOOL", 0x1)]),
+        new(1610874886, "Expression", (InvokeKind)2, 416, 0x0, "VT_HRESULT", [new("pbstr", "PTR VT_BSTR", 0xA)]),
+        new(1610874886, "Expression", (InvokeKind)4, 424, 0x0, "VT_HRESULT", [new("pbstr", "VT_BSTR", 0x1)]),
+    ], &Fill_Field2);
+
+    public static readonly InterfaceDecl Field3 = new("Field3", new Guid("00000057-0000-0010-8000-00AA006D2EA4"), 464, "Field2", 0x1040, 0x1140,
+    [
+        new(10, "Properties", (InvokeKind)2, 56, "PTR USERDEFINED Properties", []),
+        new(1610809344, "CollatingOrder", (InvokeKind)2, 64, "VT_I4", []),
+        new(1610809345, "Type", (InvokeKind)2, 72, "VT_I2", []),
+        new(1610809345, "Type", (InvokeKind)4, 80, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809347, "Name", (InvokeKind)2, 88, "VT_BSTR", []),
+        new(1610809347, "Name", (InvokeKind)4, 96, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809349, "Size", (InvokeKind)2, 104, "VT_I4", []),
+        new(1610809349, "Size", (InvokeKind)4, 112, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809351, "SourceField", (InvokeKind)2, 120, "VT_BSTR", []),
+        new(1610809352, "SourceTable", (InvokeKind)2, 128, "VT_BSTR", []),
+        new(0, "Value", (InvokeKind)2, 136, "VT_VARIANT", []),
+        new(0, "Value", (InvokeKind)4, 144, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809355, "Attributes", (InvokeKind)2, 152, "VT_I4", []),
+        new(1610809355, "Attributes", (InvokeKind)4, 160, "VT_VOID", [new("", "VT_I4", 0x1)]),
+        new(1610809357, "OrdinalPosition", (InvokeKind)2, 168, "VT_I2", []),
+        new(1610809357, "OrdinalPosition", (InvokeKind)4, 176, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610809359, "ValidationText", (InvokeKind)2, 184, "VT_BSTR", []),
+        new(1610809359, "ValidationText", (InvokeKind)4, 192, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809361, "ValidateOnSet", (InvokeKind)2, 200, "VT_BOOL", []),
+        new(1610809361, "ValidateOnSet", (InvokeKind)4, 208, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809363, "ValidationRule", (InvokeKind)2, 216, "VT_BSTR", []),
+        new(1610809363, "ValidationRule", (InvokeKind)4, 224, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809365, "DefaultValue", (InvokeKind)2, 232, "VT_VARIANT", []),
+        new(1610809365, "DefaultValue", (InvokeKind)4, 240, "VT_VOID", [new("", "VT_VARIANT", 0x1)]),
+        new(1610809367, "Required", (InvokeKind)2, 248, "VT_BOOL", []),
+        new(1610809367, "Required", (InvokeKind)4, 256, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809369, "AllowZeroLength", (InvokeKind)2, 264, "VT_BOOL", []),
+        new(1610809369, "AllowZeroLength", (InvokeKind)4, 272, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610809371, "DataUpdatable", (InvokeKind)2, 280, "VT_BOOL", []),
+        new(1610809372, "ForeignName", (InvokeKind)2, 288, "VT_BSTR", []),
+        new(1610809372, "ForeignName", (InvokeKind)4, 296, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610809374, "AppendChunk", (InvokeKind)1, 304, "VT_VOID", [new("Val", "VT_VARIANT", 0x1)]),
+        new(1610809375, "GetChunk", (InvokeKind)1, 312, "VT_VARIANT", [new("Offset", "VT_I4", 0x1), new("Bytes", "VT_I4", 0x1)]),
+        new(1610809376, "_30_FieldSize", (InvokeKind)1, 320, "VT_I4", []),
+        new(1610809377, "CreateProperty", (InvokeKind)1, 328, "PTR USERDEFINED Property", [new("Name", "VT_VARIANT", 0x11), new("Type", "VT_VARIANT", 0x11), new("Value", "VT_VARIANT", 0x11), new("DDL", "VT_VARIANT", 0x11)]),
+        new(1610809378, "CollectionIndex", (InvokeKind)2, 336, "VT_I2", []),
+        new(1610809379, "OriginalValue", (InvokeKind)2, 344, "VT_VARIANT", []),
+        new(1610809380, "VisibleValue", (InvokeKind)2, 352, "VT_VARIANT", []),
+        new(1610809381, "FieldSize", (InvokeKind)2, 360, "VT_I4", []),
+        new(1610874880, "ComplexType", (InvokeKind)2, 368, "PTR USERDEFINED ComplexType", []),
+        new(1610874881, "LoadFromFile", (InvokeKind)1, 376, "VT_VOID", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874882, "SaveToFile", (InvokeKind)1, 384, "VT_VOID", [new("FileName", "VT_BSTR", 0x1)]),
+        new(1610874883, "IsComplex", (InvokeKind)2, 392, "VT_BOOL", []),
+        new(1610874884, "AppendOnly", (InvokeKind)2, 400, "VT_BOOL", []),
+        new(1610874884, "AppendOnly", (InvokeKind)4, 408, "VT_VOID", [new("", "VT_BOOL", 0x1)]),
+        new(1610874886, "Expression", (InvokeKind)2, 416, "VT_BSTR", []),
+        new(1610874886, "Expression", (InvokeKind)4, 424, "VT_VOID", [new("", "VT_BSTR", 0x1)]),
+        new(1610940416, "Precision", (InvokeKind)2, 432, "VT_I2", []),
+        new(1610940416, "Precision", (InvokeKind)4, 440, "VT_VOID", [new("", "VT_I2", 0x1)]),
+        new(1610940418, "Scale", (InvokeKind)2, 448, "VT_I2", []),
+        new(1610940418, "Scale", (InvokeKind)4, 456, "VT_VOID", [new("", "VT_I2", 0x1)]),
+    ],
+    [
+        new(1610940416, "Precision", (InvokeKind)2, 432, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I2", 0xA)]),
+        new(1610940416, "Precision", (InvokeKind)4, 440, 0x0, "VT_HRESULT", [new("pl", "VT_I2", 0x1)]),
+        new(1610940418, "Scale", (InvokeKind)2, 448, 0x0, "VT_HRESULT", [new("pl", "PTR VT_I2", 0xA)]),
+        new(1610940418, "Scale", (InvokeKind)4, 456, 0x0, "VT_HRESULT", [new("pl", "VT_I2", 0x1)]),
+    ], &Fill_Field3);
+
+    public static readonly EnumDecl RecordsetTypeEnumDecl = new("RecordsetTypeEnum", new Guid("B6CE0046-20C3-340F-985C-3559E85DC5E1"), [("dbOpenTable", 1073741824, 1), ("dbOpenDynaset", 1073741825, 2), ("dbOpenSnapshot", 1073741826, 4), ("dbOpenForwardOnly", 1073741827, 8), ("dbOpenDynamic", 1073741828, 16)]);
+    public static readonly EnumDecl EditModeEnumDecl = new("EditModeEnum", new Guid("5EBEF31F-3496-3C51-9E36-C66DF55584D7"), [("dbEditNone", 1073741824, 0), ("dbEditInProgress", 1073741825, 1), ("dbEditAdd", 1073741826, 2)]);
+    public static readonly EnumDecl RecordsetOptionEnumDecl = new("RecordsetOptionEnum", new Guid("86DBAF96-C3BE-3773-A5E6-97EB2F1749F4"), [("dbDenyWrite", 1073741824, 1), ("dbDenyRead", 1073741825, 2), ("dbReadOnly", 1073741826, 4), ("dbAppendOnly", 1073741827, 8), ("dbInconsistent", 1073741828, 16), ("dbConsistent", 1073741829, 32), ("dbSQLPassThrough", 1073741830, 64), ("dbFailOnError", 1073741831, 128), ("dbForwardOnly", 1073741832, 256), ("dbSeeChanges", 1073741833, 512), ("dbRunAsync", 1073741834, 1024), ("dbExecDirect", 1073741835, 2048)]);
+    public static readonly EnumDecl LockTypeEnumDecl = new("LockTypeEnum", new Guid("D5662DFD-B471-3E11-865D-F0177E687E3D"), [("dbPessimistic", 1073741824, 2), ("dbOptimistic", 1073741825, 3), ("dbOptimisticValue", 1073741826, 1), ("dbOptimisticBatch", 1073741827, 5)]);
+    public static readonly EnumDecl UpdateCriteriaEnumDecl = new("UpdateCriteriaEnum", new Guid("76903150-BE34-3FC0-A76F-5D6EEA439388"), [("dbCriteriaKey", 1073741824, 1), ("dbCriteriaModValues", 1073741825, 2), ("dbCriteriaAllCols", 1073741826, 4), ("dbCriteriaTimestamp", 1073741827, 8), ("dbCriteriaDeleteInsert", 1073741828, 16), ("dbCriteriaUpdate", 1073741829, 32)]);
+    public static readonly EnumDecl FieldAttributeEnumDecl = new("FieldAttributeEnum", new Guid("0699599D-A8A7-32EC-9B88-690482209BA5"), [("dbFixedField", 1073741824, 1), ("dbVariableField", 1073741825, 2), ("dbAutoIncrField", 1073741826, 16), ("dbUpdatableField", 1073741827, 32), ("dbSystemField", 1073741828, 8192), ("dbHyperlinkField", 1073741829, 32768), ("dbDescending", 1073741830, 1)]);
+    public static readonly EnumDecl DataTypeEnumDecl = new("DataTypeEnum", new Guid("A692012E-5124-3B74-8929-14ECB6AA5D57"), [("dbBoolean", 1073741824, 1), ("dbByte", 1073741825, 2), ("dbInteger", 1073741826, 3), ("dbLong", 1073741827, 4), ("dbCurrency", 1073741828, 5), ("dbSingle", 1073741829, 6), ("dbDouble", 1073741830, 7), ("dbDate", 1073741831, 8), ("dbBinary", 1073741832, 9), ("dbText", 1073741833, 10), ("dbLongBinary", 1073741834, 11), ("dbMemo", 1073741835, 12), ("dbGUID", 1073741836, 15), ("dbBigInt", 1073741837, 16), ("dbVarBinary", 1073741838, 17), ("dbChar", 1073741839, 18), ("dbNumeric", 1073741840, 19), ("dbDecimal", 1073741841, 20), ("dbFloat", 1073741842, 21), ("dbTime", 1073741843, 22), ("dbTimeStamp", 1073741844, 23), ("dbDateTimeExtended", 1073741845, 26), ("dbAttachment", 1073741846, 101), ("dbComplexByte", 1073741847, 102), ("dbComplexInteger", 1073741848, 103), ("dbComplexLong", 1073741849, 104), ("dbComplexSingle", 1073741850, 105), ("dbComplexDouble", 1073741851, 106), ("dbComplexGUID", 1073741852, 107), ("dbComplexDecimal", 1073741853, 108), ("dbComplexText", 1073741854, 109)]);
+    public static readonly EnumDecl RelationAttributeEnumDecl = new("RelationAttributeEnum", new Guid("E9E3CB7C-052B-3808-A4A1-1DDB096DE50C"), [("dbRelationUnique", 1073741824, 1), ("dbRelationDontEnforce", 1073741825, 2), ("dbRelationInherited", 1073741826, 4), ("dbRelationUpdateCascade", 1073741827, 256), ("dbRelationDeleteCascade", 1073741828, 4096), ("dbRelationLeft", 1073741829, 16777216), ("dbRelationRight", 1073741830, 33554432)]);
+    public static readonly EnumDecl TableDefAttributeEnumDecl = new("TableDefAttributeEnum", new Guid("42EA269E-1B51-38CE-9EBA-78F23F4D8FDD"), [("dbAttachExclusive", 1073741824, 65536), ("dbAttachSavePWD", 1073741825, 131072), ("dbSystemObject", 1073741826, -2147483646), ("dbAttachedTable", 1073741827, 1073741824), ("dbAttachedODBC", 1073741828, 536870912), ("dbHiddenObject", 1073741829, 1)]);
+    public static readonly EnumDecl QueryDefTypeEnumDecl = new("QueryDefTypeEnum", new Guid("A9BE12A3-D3A1-3306-B4C3-73DC51CB7503"), [("dbQSelect", 1073741824, 0), ("dbQProcedure", 1073741825, 224), ("dbQAction", 1073741826, 240), ("dbQCrosstab", 1073741827, 16), ("dbQDelete", 1073741828, 32), ("dbQUpdate", 1073741829, 48), ("dbQAppend", 1073741830, 64), ("dbQMakeTable", 1073741831, 80), ("dbQDDL", 1073741832, 96), ("dbQSQLPassThrough", 1073741833, 112), ("dbQSetOperation", 1073741834, 128), ("dbQSPTBulk", 1073741835, 144), ("dbQCompound", 1073741836, 160)]);
+    public static readonly EnumDecl QueryDefStateEnumDecl = new("QueryDefStateEnum", new Guid("ACA374F6-9CA0-36FC-B36D-F90FF0E8683F"), [("dbQPrepare", 1073741824, 1), ("dbQUnprepare", 1073741825, 2)]);
+    public static readonly EnumDecl DatabaseTypeEnumDecl = new("DatabaseTypeEnum", new Guid("57CD4321-2AEC-3A3A-B673-E9542ED0C9A3"), [("dbVersion10", 1073741824, 1), ("dbEncrypt", 1073741825, 2), ("dbDecrypt", 1073741826, 4), ("dbVersion11", 1073741827, 8), ("dbVersion20", 1073741828, 16), ("dbVersion30", 1073741829, 32), ("dbVersion40", 1073741830, 64), ("dbVersion120", 1073741831, 128), ("dbVersion140", 1073741832, 256), ("dbVersion150", 1073741833, 512), ("dbVersion167", 1073741834, 1024)]);
+    public static readonly EnumDecl CollatingOrderEnumDecl = new("CollatingOrderEnum", new Guid("C5BC1285-0A45-3C8C-8514-84979CFD0139"), [("dbSortNeutral", 1073741824, 1024), ("dbSortArabic", 1073741825, 1025), ("dbSortCyrillic", 1073741826, 1049), ("dbSortCzech", 1073741827, 1029), ("dbSortDutch", 1073741828, 1043), ("dbSortGeneral", 1073741829, 1033), ("dbSortGreek", 1073741830, 1032), ("dbSortHebrew", 1073741831, 1037), ("dbSortHungarian", 1073741832, 1038), ("dbSortIcelandic", 1073741833, 1039), ("dbSortNorwdan", 1073741834, 1030), ("dbSortPDXIntl", 1073741835, 1033), ("dbSortPDXNor", 1073741836, 1030), ("dbSortPDXSwe", 1073741837, 1053), ("dbSortPolish", 1073741838, 1045), ("dbSortSpanish", 1073741839, 1034), ("dbSortSwedFin", 1073741840, 1053), ("dbSortTurkish", 1073741841, 1055), ("dbSortJapanese", 1073741842, 1041), ("dbSortChineseSimplified", 1073741843, 2052), ("dbSortChineseTraditional", 1073741844, 1028), ("dbSortKorean", 1073741845, 1042), ("dbSortThai", 1073741846, 1054), ("dbSortSlovenian", 1073741847, 1060), ("dbSortJapaneseRadicalStrokeCount", 1073741848, 263185), ("dbSortHindi", 1073741849, 1081), ("dbSortUndefined", 1073741850, -1)]);
+    public static readonly EnumDecl IdleEnumDecl = new("IdleEnum", new Guid("191F6C41-7AE0-3FAE-A6FC-B51BE325C767"), [("dbFreeLocks", 1073741824, 1), ("dbRefreshCache", 1073741825, 8)]);
+    public static readonly EnumDecl PermissionEnumDecl = new("PermissionEnum", new Guid("2EF8E039-F0C8-3A24-B0C7-F151D7F584E5"), [("dbSecNoAccess", 1073741824, 0), ("dbSecFullAccess", 1073741825, 1048575), ("dbSecDelete", 1073741826, 65536), ("dbSecReadSec", 1073741827, 131072), ("dbSecWriteSec", 1073741828, 262144), ("dbSecWriteOwner", 1073741829, 524288), ("dbSecDBCreate", 1073741830, 1), ("dbSecDBOpen", 1073741831, 2), ("dbSecDBExclusive", 1073741832, 4), ("dbSecDBAdmin", 1073741833, 8), ("dbSecCreate", 1073741834, 1), ("dbSecReadDef", 1073741835, 4), ("dbSecWriteDef", 1073741836, 65548), ("dbSecRetrieveData", 1073741837, 20), ("dbSecInsertData", 1073741838, 32), ("dbSecReplaceData", 1073741839, 64), ("dbSecDeleteData", 1073741840, 128)]);
+    public static readonly EnumDecl SynchronizeTypeEnumDecl = new("SynchronizeTypeEnum", new Guid("91DE8E14-DEE2-3AC6-BB31-415EE24EFFC9"), [("dbRepExportChanges", 1073741824, 1), ("dbRepImportChanges", 1073741825, 2), ("dbRepImpExpChanges", 1073741826, 4), ("dbRepSyncInternet", 1073741827, 16)]);
+    public static readonly EnumDecl ReplicaTypeEnumDecl = new("ReplicaTypeEnum", new Guid("7AD902D0-2C9F-3A6B-A1B6-A242D1206BE9"), [("dbRepMakeReadOnly", 1073741824, 2), ("dbRepMakePartial", 1073741825, 1)]);
+    public static readonly EnumDecl WorkspaceTypeEnumDecl = new("WorkspaceTypeEnum", new Guid("04465B7D-FD0C-38DF-8BA5-6DAE7B103DC9"), [("dbUseODBC", 1073741824, 1), ("dbUseJet", 1073741825, 2)]);
+    public static readonly EnumDecl CursorDriverEnumDecl = new("CursorDriverEnum", new Guid("D81A5990-6F34-3189-9F1D-1D503F601AED"), [("dbUseDefaultCursor", 1073741824, -1), ("dbUseODBCCursor", 1073741825, 1), ("dbUseServerCursor", 1073741826, 2), ("dbUseClientBatchCursor", 1073741827, 3), ("dbUseNoCursor", 1073741828, 4)]);
+    public static readonly EnumDecl DriverPromptEnumDecl = new("DriverPromptEnum", new Guid("B8526372-3E87-3232-B6B5-3E5B10E11239"), [("dbDriverPrompt", 1073741824, 2), ("dbDriverNoPrompt", 1073741825, 1), ("dbDriverComplete", 1073741826, 0), ("dbDriverCompleteRequired", 1073741827, 3)]);
+    public static readonly EnumDecl SetOptionEnumDecl = new("SetOptionEnum", new Guid("32E7BBC7-C15F-38F5-A17F-A073E51C1DB3"), [("dbPageTimeout", 1073741824, 6), ("dbLockRetry", 1073741825, 57), ("dbMaxBufferSize", 1073741826, 8), ("dbUserCommitSync", 1073741827, 58), ("dbImplicitCommitSync", 1073741828, 59), ("dbExclusiveAsyncDelay", 1073741829, 60), ("dbSharedAsyncDelay", 1073741830, 61), ("dbMaxLocksPerFile", 1073741831, 62), ("dbLockDelay", 1073741832, 63), ("dbRecycleLVs", 1073741833, 65), ("dbFlushTransactionTimeout", 1073741834, 66), ("dbPagesLockedToTableLock", 1073741835, 70), ("dbPasswordEncryptionProvider", 1073741836, 80), ("dbPasswordEncryptionAlgorithm", 1073741837, 81), ("dbPasswordEncryptionKeyLength", 1073741838, 82)]);
+    public static readonly EnumDecl ParameterDirectionEnumDecl = new("ParameterDirectionEnum", new Guid("70E6BC1D-51E5-389E-A24E-9AC51A17EA35"), [("dbParamInput", 1073741824, 1), ("dbParamOutput", 1073741825, 2), ("dbParamInputOutput", 1073741826, 3), ("dbParamReturnValue", 1073741827, 4)]);
+    public static readonly EnumDecl UpdateTypeEnumDecl = new("UpdateTypeEnum", new Guid("384D0656-2A34-36FC-AC92-F2FB3072D0F8"), [("dbUpdateBatch", 1073741824, 4), ("dbUpdateRegular", 1073741825, 1), ("dbUpdateCurrentRecord", 1073741826, 2)]);
+    public static readonly EnumDecl RecordStatusEnumDecl = new("RecordStatusEnum", new Guid("9BC090B2-682F-3CEE-ADA0-09759ACDE44D"), [("dbRecordUnmodified", 1073741824, 0), ("dbRecordModified", 1073741825, 1), ("dbRecordNew", 1073741826, 2), ("dbRecordDeleted", 1073741827, 3), ("dbRecordDBDeleted", 1073741828, 4)]);
+    public static readonly EnumDecl CommitTransOptionsEnumDecl = new("CommitTransOptionsEnum", new Guid("AB46CB4A-D340-3172-B681-3204ABCA661F"), [("dbForceOSFlush", 1073741824, 1)]);
+    public static readonly EnumDecl DAOSuppHelpDecl = new("_DAOSuppHelp", new Guid("C8D258D0-9239-3C8D-A2F1-F483968220F6"), [("LogMessages", 1073741824, 0), ("KeepLocal", 1073741825, 0), ("Replicable", 1073741826, 0), ("ReplicableBool", 1073741827, 0), ("V1xNullBehavior", 1073741828, 0)]);
+
+    public static readonly CoclassDecl TableDefClass = new("TableDef", new Guid("367E582C-F71C-4BF9-AA1B-9F62B793E9C5"), 0x6, [("_TableDef", 1)]);
+    public static readonly CoclassDecl FieldClass = new("Field", new Guid("A1EB89D6-0A9C-4575-A0AE-654A990A454C"), 0x6, [("_Field", 1)]);
+    public static readonly CoclassDecl IndexClass = new("Index", new Guid("8D4F994C-EBBE-4F8D-BA4B-AE20CD36E72D"), 0x6, [("_Index", 1)]);
+    public static readonly CoclassDecl QueryDefClass = new("QueryDef", new Guid("D5EC4D34-77DA-4F7A-B8C4-8A910C1C1CFE"), 0x6, [("_QueryDef", 1)]);
+    public static readonly CoclassDecl RelationClass = new("Relation", new Guid("D0B22D03-D05D-4C6D-8AB7-9392E84A87B9"), 0x6, [("_Relation", 1)]);
+    public static readonly CoclassDecl UserClass = new("User", new Guid("805B7F91-C9CF-4EDF-ACA6-775664FDFB3E"), 0x16, [("_User", 1)]);
+    public static readonly CoclassDecl GroupClass = new("Group", new Guid("97A2762C-403C-4953-A121-7A75ABCE4373"), 0x16, [("_Group", 1)]);
+    public static readonly CoclassDecl DBEngineClass = new("DBEngine", new Guid("CD7791B9-43FD-42C5-AE42-8DD2811F0419"), 0xF, [("_DBEngine", 1)]);
+    public static readonly CoclassDecl PrivDBEngineClass = new("PrivDBEngine", new Guid("6F3DD387-5AF2-492B-BDE2-30FF2F451241"), 0x16, [("_DBEngine", 1)]);
+
+    public static readonly LibraryDecl Library = new("DAO", new Guid("4AC9E1DA-5BAD-4AC7-86E3-24F4CDCECA28"), 12, 0, 0,
+        [DAO, Properties, DynaCollection, Collection, Property, DBEngine, Workspaces, Workspace, Databases, Database, TableDefs, TableDef, Fields, Field, Indexes, Index, Recordset, QueryDef, Parameters, Parameter, Connection, QueryDefs, Recordsets, Relations, Relation, Containers, Container, Documents, Document, Users, User, Groups, Group, Connections, Errors, Error, ComplexType, IndexFields, Recordset2, Field2, Field3],
+        [RecordsetTypeEnumDecl, EditModeEnumDecl, RecordsetOptionEnumDecl, LockTypeEnumDecl, UpdateCriteriaEnumDecl, FieldAttributeEnumDecl, DataTypeEnumDecl, RelationAttributeEnumDecl, TableDefAttributeEnumDecl, QueryDefTypeEnumDecl, QueryDefStateEnumDecl, DatabaseTypeEnumDecl, CollatingOrderEnumDecl, IdleEnumDecl, PermissionEnumDecl, SynchronizeTypeEnumDecl, ReplicaTypeEnumDecl, WorkspaceTypeEnumDecl, CursorDriverEnumDecl, DriverPromptEnumDecl, SetOptionEnumDecl, ParameterDirectionEnumDecl, UpdateTypeEnumDecl, RecordStatusEnumDecl, CommitTransOptionsEnumDecl, DAOSuppHelpDecl],
+        [TableDefClass, FieldClass, IndexClass, QueryDefClass, RelationClass, UserClass, GroupClass, DBEngineClass, PrivDBEngineClass]);
+
+    private static void Fill_DAO(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_DAO_7;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_DAO_7(nint self, nint a0) => Com.Unimplemented.Fail(self, DAO, 7, a0, RetvalCell.Pointer);
+
+    private static void Fill_Properties(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Properties_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Properties_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Properties_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Properties_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Properties_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Properties_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_9(nint self) => Com.Unimplemented.Fail(self, Properties, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Properties_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Properties, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_DynaCollection(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_DynaCollection_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_DynaCollection_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_DynaCollection_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_DynaCollection_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_DynaCollection_11;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_DynaCollection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_DynaCollection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_DynaCollection_9(nint self) => Com.Unimplemented.Fail(self, DynaCollection, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_DynaCollection_10(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_DynaCollection_11(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 11, 0, RetvalCell.None);
+
+    private static void Fill_Collection(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Collection_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Collection_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Collection_9;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Collection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Collection, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Collection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Collection, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Collection_9(nint self) => Com.Unimplemented.Fail(self, Collection, 9, 0, RetvalCell.None);
+
+    private static void Fill_Property(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Property_14;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 8, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 12, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 13, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Property_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 14, a0, RetvalCell.Int16);
 
     private static void Fill_DBEngine(nint* table)
     {
@@ -170,4 +1637,2648 @@ internal static unsafe partial class Dao
 
     [UnmanagedCallersOnly]
     private static int U_DBEngine_37(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, DBEngine, 37, 0, RetvalCell.None);
+
+    private static void Fill_Workspaces(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspaces_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspaces_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Workspaces_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspaces_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspaces_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Workspaces_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_9(nint self) => Com.Unimplemented.Fail(self, Workspaces, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspaces_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Workspaces, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Workspace(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_17;
+        table[18] = (nint)(delegate* unmanaged<nint, int>)&U_Workspace_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_19;
+        table[20] = (nint)(delegate* unmanaged<nint, int>)&U_Workspace_20;
+        table[21] = (nint)(delegate* unmanaged<nint, int>)&U_Workspace_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Workspace_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Workspace_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Workspace_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Workspace_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Workspace_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Workspace_33;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 17, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_18(nint self) => Com.Unimplemented.Fail(self, Workspace, 18, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 19, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_20(nint self) => Com.Unimplemented.Fail(self, Workspace, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_21(nint self) => Com.Unimplemented.Fail(self, Workspace, 21, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_22(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Workspace, 22, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_23(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Workspace, 23, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Workspace, 24, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_25(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Workspace, 25, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_26(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Workspace, 26, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 27, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 28, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 29, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 31, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 32, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Workspace_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 33, a0, RetvalCell.Pointer);
+
+    private static void Fill_Databases(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Databases_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Databases_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Databases_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Databases_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Databases_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Databases, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Databases_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Databases, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Databases_9(nint self) => Com.Unimplemented.Fail(self, Databases, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Databases_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Databases, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Database(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_21;
+        table[22] = (nint)(delegate* unmanaged<nint, int>)&U_Database_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Database_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Database_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Database_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Database_27;
+        table[28] = (nint)(delegate* unmanaged<nint, int>)&U_Database_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_29;
+        table[30] = (nint)(delegate* unmanaged<nint, int>)&U_Database_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Database_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Database_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Database_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Database_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Database_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_45;
+        table[46] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Database_46;
+        table[47] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Database_47;
+        table[48] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_48;
+        table[49] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Database_49;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 8, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 14, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 16, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 17, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 18, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 19, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 20, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 21, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_22(nint self) => Com.Unimplemented.Fail(self, Database, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_23(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 23, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Database, 24, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_25(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 25, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_26(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 26, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_27(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 27, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_28(nint self) => Com.Unimplemented.Fail(self, Database, 28, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 29, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_30(nint self) => Com.Unimplemented.Fail(self, Database, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_31(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Database, 31, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_32(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 32, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_33(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 33, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_35(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 35, a1, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_36(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 36, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 37, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_38(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 38, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 39, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 40, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 41, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 42, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_43(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 43, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_44(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 44, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 45, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_46(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 46, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_47(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 47, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 48, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Database_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 49, 0, RetvalCell.None);
+
+    private static void Fill_TableDefs(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDefs_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDefs_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_TableDefs_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDefs_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDefs_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_TableDefs_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_7(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_8(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_9(nint self) => Com.Unimplemented.Fail(self, TableDefs, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_10(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_11(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDefs_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, TableDefs, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_TableDef(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_TableDef_26;
+        table[27] = (nint)(delegate* unmanaged<nint, int>)&U_TableDef_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_TableDef_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_TableDef_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_TableDef_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_TableDef_33;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_7(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_8(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 8, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_9(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_10(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_11(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_12(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 12, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_13(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 13, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_14(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 14, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_15(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 15, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_16(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_17(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 17, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_18(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 18, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_19(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 19, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_20(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_21(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 21, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_22(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_23(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 23, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_24(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 24, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_25(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 25, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_26(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, TableDef, 26, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_27(nint self) => Com.Unimplemented.Fail(self, TableDef, 27, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_28(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, TableDef, 28, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_29(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, TableDef, 29, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_30(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, TableDef, 30, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_31(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 31, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_32(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 32, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_TableDef_33(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 33, 0, RetvalCell.None);
+
+    private static void Fill_Fields(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Fields_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Fields_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Fields_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Fields_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Fields_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Fields_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_9(nint self) => Com.Unimplemented.Fail(self, Fields, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Fields_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Fields, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Field(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Field_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Field_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field_45;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 8, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 9, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 13, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 17, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 18, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 19, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 21, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 23, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 24, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 25, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 26, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 27, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 28, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 29, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 31, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 32, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 33, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 35, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 36, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 37, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 38, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field, 39, a2, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 40, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field, 41, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 42, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 43, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 44, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 45, a0, RetvalCell.Int32);
+
+    private static void Fill_Indexes(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Indexes_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Indexes_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Indexes_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Indexes_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Indexes_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Indexes_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_9(nint self) => Com.Unimplemented.Fail(self, Indexes, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Indexes_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Indexes, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Index(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Index_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Index_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Index_25;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 10, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 15, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 16, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 17, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 18, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 19, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 21, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 22, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 23, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Index, 24, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Index_25(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Index, 25, a4, RetvalCell.Pointer);
+
+    private static void Fill_Recordset(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_45;
+        table[46] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_46;
+        table[47] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_47;
+        table[48] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_48;
+        table[49] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_49;
+        table[50] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Recordset_50;
+        table[51] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_51;
+        table[52] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_52;
+        table[53] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_53;
+        table[54] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_54;
+        table[55] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_55;
+        table[56] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_56;
+        table[57] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_57;
+        table[58] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_58;
+        table[59] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_59;
+        table[60] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_60;
+        table[61] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, int>)&U_Recordset_61;
+        table[62] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_62;
+        table[63] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_63;
+        table[64] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_64;
+        table[65] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_65;
+        table[66] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_66;
+        table[67] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Recordset_67;
+        table[68] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_68;
+        table[69] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_69;
+        table[70] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_70;
+        table[71] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_71;
+        table[72] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_72;
+        table[73] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_73;
+        table[74] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_74;
+        table[75] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset_75;
+        table[76] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_76;
+        table[77] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_77;
+        table[78] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_78;
+        table[79] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_79;
+        table[80] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_80;
+        table[81] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_81;
+        table[82] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_82;
+        table[83] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_83;
+        table[84] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_84;
+        table[85] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_85;
+        table[86] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_86;
+        table[87] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_87;
+        table[88] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_88;
+        table[89] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset_89;
+        table[90] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_90;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 8, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 12, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 14, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 15, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 17, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 18, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 19, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 20, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 21, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 22, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 23, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 24, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 25, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 26, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 27, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 28, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 29, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 30, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 31, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 32, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 33, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 35, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 36, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 37, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 38, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_39(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 39, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 40, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 41, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 42, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 43, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 44, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 45, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 46, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_47(nint self) => Com.Unimplemented.Fail(self, Recordset, 47, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_48(nint self) => Com.Unimplemented.Fail(self, Recordset, 48, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_49(nint self) => Com.Unimplemented.Fail(self, Recordset, 49, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_50(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset, 50, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_51(nint self) => Com.Unimplemented.Fail(self, Recordset, 51, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_52(nint self) => Com.Unimplemented.Fail(self, Recordset, 52, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 53, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 54, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 55, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 56, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_57(nint self) => Com.Unimplemented.Fail(self, Recordset, 57, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_58(nint self) => Com.Unimplemented.Fail(self, Recordset, 58, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_59(nint self) => Com.Unimplemented.Fail(self, Recordset, 59, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_60(nint self) => Com.Unimplemented.Fail(self, Recordset, 60, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13) => Com.Unimplemented.Fail(self, Recordset, 61, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_62(nint self) => Com.Unimplemented.Fail(self, Recordset, 62, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_63(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 63, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_64(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 64, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_65(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 65, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_66(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 66, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_67(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset, 67, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_68(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 68, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_69(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 69, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_70(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 70, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_71(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 71, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_72(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 72, a1, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_73(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 73, a1, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_74(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 74, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_75(nint self) => Com.Unimplemented.Fail(self, Recordset, 75, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_76(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 76, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_77(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 77, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_78(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 78, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_79(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 79, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_80(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 80, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_81(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 81, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_82(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 82, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_83(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 83, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_84(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 84, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_85(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 85, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_86(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 86, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_87(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 87, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_88(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 88, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_89(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 89, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset_90(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 90, 0, RetvalCell.None);
+
+    private static void Fill_QueryDef(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_24;
+        table[25] = (nint)(delegate* unmanaged<nint, int>)&U_QueryDef_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_QueryDef_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_QueryDef_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_QueryDef_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_QueryDef_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_QueryDef_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_QueryDef_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_QueryDef_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_QueryDef_36;
+        table[37] = (nint)(delegate* unmanaged<nint, int>)&U_QueryDef_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDef_45;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_7(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_8(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 8, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_9(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 9, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_10(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_11(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_12(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 12, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_13(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 13, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_14(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 14, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_15(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_16(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 16, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_17(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 17, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_18(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 18, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_19(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 19, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_20(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 20, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_21(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 21, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_22(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 22, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_23(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 23, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_24(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 24, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_25(nint self) => Com.Unimplemented.Fail(self, QueryDef, 25, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_26(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 26, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_27(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 27, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_28(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 28, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_29(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 29, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_30(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDef, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_31(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 31, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_32(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDef, 32, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_33(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 33, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_34(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, QueryDef, 34, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_35(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, QueryDef, 35, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_36(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, QueryDef, 36, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_37(nint self) => Com.Unimplemented.Fail(self, QueryDef, 37, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_38(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 38, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_39(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 39, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_40(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 40, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_41(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 41, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_42(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 42, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_43(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 43, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_44(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 44, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDef_45(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 45, 0, RetvalCell.None);
+
+    private static void Fill_Parameters(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameters_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameters_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Parameters_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Parameters_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameters_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameters, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameters_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameters, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameters_9(nint self) => Com.Unimplemented.Fail(self, Parameters, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameters_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Parameters, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Parameter(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Parameter_14;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 9, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Parameter_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 14, 0, RetvalCell.None);
+
+    private static void Fill_Connection(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connection_18;
+        table[19] = (nint)(delegate* unmanaged<nint, int>)&U_Connection_19;
+        table[20] = (nint)(delegate* unmanaged<nint, int>)&U_Connection_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Connection_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Connection_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Connection_23;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 10, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 14, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 15, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 16, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 17, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 18, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_19(nint self) => Com.Unimplemented.Fail(self, Connection, 19, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_20(nint self) => Com.Unimplemented.Fail(self, Connection, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_21(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Connection, 21, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_22(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Connection, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connection_23(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Connection, 23, a4, RetvalCell.Pointer);
+
+    private static void Fill_QueryDefs(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDefs_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDefs_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_QueryDefs_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDefs_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_QueryDefs_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_QueryDefs_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_7(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_8(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_9(nint self) => Com.Unimplemented.Fail(self, QueryDefs, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_10(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_11(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_QueryDefs_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDefs, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Recordsets(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordsets_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordsets_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Recordsets_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordsets_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordsets_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordsets, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordsets_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordsets, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordsets_9(nint self) => Com.Unimplemented.Fail(self, Recordsets, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordsets_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordsets, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Relations(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relations_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relations_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Relations_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relations_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relations_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Relations_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_9(nint self) => Com.Unimplemented.Fail(self, Relations, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relations_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Relations, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Relation(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Relation_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Relation_19;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 12, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 13, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 14, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 15, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_17(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Relation, 17, a3, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 18, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Relation_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 19, 0, RetvalCell.None);
+
+    private static void Fill_Containers(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Containers_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Containers_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Containers_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Containers_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Containers_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Containers, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Containers_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Containers, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Containers_9(nint self) => Com.Unimplemented.Fail(self, Containers, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Containers_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Containers, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Container(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Container_18;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 13, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 15, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 16, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 17, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Container_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 18, a0, RetvalCell.Int32);
+
+    private static void Fill_Documents(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Documents_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Documents_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Documents_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Documents_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Documents_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Documents, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Documents_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Documents, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Documents_9(nint self) => Com.Unimplemented.Fail(self, Documents, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Documents_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Documents, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Document(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Document_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Document_19;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 12, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 13, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 14, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 15, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 16, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 17, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 18, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Document_19(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Document, 19, a4, RetvalCell.Pointer);
+
+    private static void Fill_Users(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Users_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Users_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Users_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Users_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Users_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Users_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_9(nint self) => Com.Unimplemented.Fail(self, Users, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Users_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Users, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_User(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_User_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_User_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_User_14;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_User_7(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_8(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_9(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_10(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_11(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_12(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 12, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_13(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, User, 13, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_User_14(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, User, 14, a2, RetvalCell.Pointer);
+
+    private static void Fill_Groups(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Groups_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Groups_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Groups_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Groups_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Groups_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Groups_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_9(nint self) => Com.Unimplemented.Fail(self, Groups, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Groups_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Groups, 12, a1, RetvalCell.Pointer);
+
+    private static void Fill_Group(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Group_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Group_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Group_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Group_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Group_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, int>)&U_Group_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Group_12(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Group, 12, a3, RetvalCell.Pointer);
+
+    private static void Fill_Connections(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connections_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Connections_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Connections_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Connections_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Connections_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Connections, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connections_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Connections, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connections_9(nint self) => Com.Unimplemented.Fail(self, Connections, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Connections_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Connections, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Errors(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Errors_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Errors_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_Errors_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Errors_10;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Errors_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Errors, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Errors_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Errors, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Errors_9(nint self) => Com.Unimplemented.Fail(self, Errors, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Errors_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Errors, 10, a1, RetvalCell.Pointer);
+
+    private static void Fill_Error(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Error_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Error_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Error_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Error_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Error_11;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Error_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 7, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Error_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Error_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Error_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 10, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Error_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 11, a0, RetvalCell.Int32);
+
+    private static void Fill_ComplexType(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_ComplexType_7;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_ComplexType_7(nint self, nint a0) => Com.Unimplemented.Fail(self, ComplexType, 7, a0, RetvalCell.Pointer);
+
+    private static void Fill_IndexFields(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_IndexFields_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_IndexFields_8;
+        table[9] = (nint)(delegate* unmanaged<nint, int>)&U_IndexFields_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_IndexFields_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_IndexFields_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_IndexFields_12;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_7(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 7, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_8(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 8, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_9(nint self) => Com.Unimplemented.Fail(self, IndexFields, 9, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_10(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_11(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 11, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_IndexFields_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, IndexFields, 12, a1, RetvalCell.Variant);
+
+    private static void Fill_Recordset2(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_45;
+        table[46] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_46;
+        table[47] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_47;
+        table[48] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_48;
+        table[49] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_49;
+        table[50] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Recordset2_50;
+        table[51] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_51;
+        table[52] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_52;
+        table[53] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_53;
+        table[54] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_54;
+        table[55] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_55;
+        table[56] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_56;
+        table[57] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_57;
+        table[58] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_58;
+        table[59] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_59;
+        table[60] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_60;
+        table[61] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, nint, int>)&U_Recordset2_61;
+        table[62] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_62;
+        table[63] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_63;
+        table[64] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_64;
+        table[65] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_65;
+        table[66] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_66;
+        table[67] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Recordset2_67;
+        table[68] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_68;
+        table[69] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_69;
+        table[70] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_70;
+        table[71] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_71;
+        table[72] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_72;
+        table[73] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_73;
+        table[74] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_74;
+        table[75] = (nint)(delegate* unmanaged<nint, int>)&U_Recordset2_75;
+        table[76] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_76;
+        table[77] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_77;
+        table[78] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_78;
+        table[79] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_79;
+        table[80] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_80;
+        table[81] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_81;
+        table[82] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_82;
+        table[83] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_83;
+        table[84] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_84;
+        table[85] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_85;
+        table[86] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_86;
+        table[87] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_87;
+        table[88] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_88;
+        table[89] = (nint)(delegate* unmanaged<nint, nint, nint, int>)&U_Recordset2_89;
+        table[90] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_90;
+        table[91] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_91;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 8, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 9, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 11, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 12, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 13, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 14, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 15, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 17, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 18, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 19, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 20, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 21, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 22, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 23, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 24, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 25, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 26, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 27, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 28, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 29, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 30, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 31, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 32, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 33, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 35, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 36, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 37, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 38, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_39(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 39, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 40, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 41, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 42, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 43, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 44, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 45, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 46, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_47(nint self) => Com.Unimplemented.Fail(self, Recordset2, 47, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_48(nint self) => Com.Unimplemented.Fail(self, Recordset2, 48, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_49(nint self) => Com.Unimplemented.Fail(self, Recordset2, 49, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_50(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset2, 50, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_51(nint self) => Com.Unimplemented.Fail(self, Recordset2, 51, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_52(nint self) => Com.Unimplemented.Fail(self, Recordset2, 52, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 53, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 54, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 55, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 56, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_57(nint self) => Com.Unimplemented.Fail(self, Recordset2, 57, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_58(nint self) => Com.Unimplemented.Fail(self, Recordset2, 58, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_59(nint self) => Com.Unimplemented.Fail(self, Recordset2, 59, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_60(nint self) => Com.Unimplemented.Fail(self, Recordset2, 60, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13) => Com.Unimplemented.Fail(self, Recordset2, 61, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_62(nint self) => Com.Unimplemented.Fail(self, Recordset2, 62, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_63(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 63, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_64(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 64, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_65(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 65, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_66(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 66, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_67(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset2, 67, a2, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_68(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 68, a1, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_69(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 69, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_70(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 70, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_71(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 71, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_72(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 72, a1, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_73(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 73, a1, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_74(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 74, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_75(nint self) => Com.Unimplemented.Fail(self, Recordset2, 75, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_76(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 76, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_77(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 77, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_78(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 78, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_79(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 79, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_80(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 80, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_81(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 81, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_82(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 82, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_83(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 83, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_84(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 84, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_85(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 85, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_86(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 86, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_87(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 87, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_88(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 88, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_89(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 89, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_90(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 90, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Recordset2_91(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 91, a0, RetvalCell.Pointer);
+
+    private static void Fill_Field2(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Field2_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Field2_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_45;
+        table[46] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_46;
+        table[47] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_47;
+        table[48] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_48;
+        table[49] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_49;
+        table[50] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_50;
+        table[51] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_51;
+        table[52] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_52;
+        table[53] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field2_53;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 8, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 9, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 13, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 17, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 18, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 19, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 21, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 23, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 24, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 25, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 26, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 27, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 28, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 29, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 31, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 32, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 33, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 35, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 36, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 37, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 38, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field2, 39, a2, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 40, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field2, 41, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 42, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 43, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 44, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 45, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 46, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_47(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 47, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 48, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 49, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_50(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 50, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_51(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 51, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_52(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 52, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field2_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 53, 0, RetvalCell.None);
+
+    private static void Fill_Field3(nint* table)
+    {
+        table[7] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_7;
+        table[8] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_8;
+        table[9] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_9;
+        table[10] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_10;
+        table[11] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_11;
+        table[12] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_12;
+        table[13] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_13;
+        table[14] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_14;
+        table[15] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_15;
+        table[16] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_16;
+        table[17] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_17;
+        table[18] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_18;
+        table[19] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_19;
+        table[20] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_20;
+        table[21] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_21;
+        table[22] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_22;
+        table[23] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_23;
+        table[24] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_24;
+        table[25] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_25;
+        table[26] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_26;
+        table[27] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_27;
+        table[28] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_28;
+        table[29] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_29;
+        table[30] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_30;
+        table[31] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_31;
+        table[32] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_32;
+        table[33] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_33;
+        table[34] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_34;
+        table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_35;
+        table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_36;
+        table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_37;
+        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_38;
+        table[39] = (nint)(delegate* unmanaged<nint, nint, nint, nint, int>)&U_Field3_39;
+        table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_40;
+        table[41] = (nint)(delegate* unmanaged<nint, nint, nint, nint, nint, nint, int>)&U_Field3_41;
+        table[42] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_42;
+        table[43] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_43;
+        table[44] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_44;
+        table[45] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_45;
+        table[46] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_46;
+        table[47] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_47;
+        table[48] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_48;
+        table[49] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_49;
+        table[50] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_50;
+        table[51] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_51;
+        table[52] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_52;
+        table[53] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_53;
+        table[54] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_54;
+        table[55] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_55;
+        table[56] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_56;
+        table[57] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Field3_57;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 7, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 8, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 9, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 10, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 11, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 12, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 13, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 14, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 15, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 16, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 17, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 18, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 19, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 20, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 21, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 22, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 23, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 24, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 25, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 26, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 27, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 28, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 29, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 30, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 31, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 32, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 33, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 34, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 35, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 36, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 37, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 38, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field3, 39, a2, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 40, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field3, 41, a4, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 42, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 43, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 44, a0, RetvalCell.Variant);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 45, a0, RetvalCell.Int32);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 46, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_47(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 47, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 48, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 49, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_50(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 50, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_51(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 51, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_52(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 52, a0, RetvalCell.Pointer);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 53, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 54, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 55, 0, RetvalCell.None);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 56, a0, RetvalCell.Int16);
+
+    [UnmanagedCallersOnly]
+    private static int U_Field3_57(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 57, 0, RetvalCell.None);
 }
