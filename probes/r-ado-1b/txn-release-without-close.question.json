@@ -1,0 +1,678 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/txn-release-without-close",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-TXN",
+    "R-TXN-1",
+    "R-LOCK-3"
+  ],
+  "description": "ADO-TXN abandonment on a read/write Connection: BeginTrans and UPDATE S of ID 1 to \"rel\"; the Connection object is released with no CommitTrans, RollbackTrans or Close; after a 300 ms pause the stored row is read through a second ADO Connection, through DAO OpenDatabase and through a third ADO Connection after another pause (State and Errors of each); the file and lock-file state is recorded. Asks whether releasing an open transaction commits, rolls back or leaves it pending, and what a later opener sees.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET S = 'rel' WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "pause",
+      "ms": 300
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2Ds"
+    },
+    {
+      "op": "release",
+      "target": "c2Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, S FROM T WHERE ID <= 2 ORDER BY ID"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "r2Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "r2Flds",
+          "bind": "r2F",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "r2F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "r2Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c2Errs",
+      "bind": "c2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, S FROM T WHERE ID <= 2 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "dr"
+    },
+    {
+      "op": "loopUntil",
+      "target": "dr",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dr",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "dr",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "pause",
+      "ms": 300
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c3"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c3Props",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c3Ds"
+    },
+    {
+      "op": "release",
+      "target": "c3Props"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, S FROM T WHERE ID <= 2 ORDER BY ID"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "r3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "r3Flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "r3Flds",
+          "bind": "r3F",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "r3F",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "r3Flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "r3"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c3Errs",
+      "bind": "c3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

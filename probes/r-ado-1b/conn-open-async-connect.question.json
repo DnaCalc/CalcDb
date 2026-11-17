@@ -1,0 +1,454 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/conn-open-async-connect",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-CONN",
+    "ADO-ASYNC",
+    "D-CALL-1"
+  ],
+  "description": "ADO-ASYNC for connection: Open(Missing, Missing, Missing, adAsyncConnect) on the fixture without an event sink; read State immediately, pause 500 ms, read State again, read Errors, then Execute a SELECT of T (State, rows) and Close; then the same Open on a nonexistent work file (State immediately, after the pause, Errors). Asks whether Open returns before the connection is complete, what State reads and where the failure surfaces.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ca"
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "caProps"
+    },
+    {
+      "op": "invoke",
+      "target": "caProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "caDs"
+    },
+    {
+      "op": "invoke",
+      "target": "caDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "caDs"
+    },
+    {
+      "op": "release",
+      "target": "caProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 500
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "caErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "caErrs",
+      "bind": "caErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "caErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "caErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "caErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "caErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "caErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "caErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code FROM T ORDER BY ID"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ra"
+    },
+    {
+      "op": "loopUntil",
+      "target": "ra",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ra",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "raFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "raFlds",
+          "bind": "raF",
+          "maxItems": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "raF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "raFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "ra",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ra"
+    },
+    {
+      "op": "invoke",
+      "target": "ca",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ca"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cb"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cbProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cbDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cbDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "absent-async.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbDs"
+    },
+    {
+      "op": "release",
+      "target": "cbProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 500
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cbErrs",
+      "bind": "cbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cb"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,1053 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/conn-datasource-spellings",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-CONN",
+    "R-LOCK-1"
+  ],
+  "description": "ADO-CONN path spellings: five Connections with Provider = ACE and Mode = adModeRead, each Properties(\"Data Source\") set to the same fixture file in another spelling (as given, upper case, extended \\\\?\\ prefix, forward slashes, a \".\" path element), then Open(). After each Open read State, the Data Source property, ConnectionString and Errors, then Close. Asks which spellings the provider accepts and what value the property and ConnectionString hold afterwards.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sp_plain"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_plainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plainProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_plainDs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plainDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_plainDs"
+    },
+    {
+      "op": "release",
+      "target": "sp_plainProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_plainPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plainPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_plainDx"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plainDx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_plainDx"
+    },
+    {
+      "op": "release",
+      "target": "sp_plainPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_plainErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sp_plainErrs",
+      "bind": "sp_plainErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sp_plainErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_plainErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_plainErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_plainErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_plainErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_plainErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_plain",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_plain"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sp_upper"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_upperProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upperProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_upperDs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upperDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main",
+          "spelling": "upper"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_upperDs"
+    },
+    {
+      "op": "release",
+      "target": "sp_upperProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_upperPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upperPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_upperDx"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upperDx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_upperDx"
+    },
+    {
+      "op": "release",
+      "target": "sp_upperPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_upperErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sp_upperErrs",
+      "bind": "sp_upperErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sp_upperErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_upperErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_upperErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_upperErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_upperErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_upperErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_upper",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_upper"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sp_extended"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_extendedProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extendedProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_extendedDs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extendedDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main",
+          "spelling": "extended"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_extendedDs"
+    },
+    {
+      "op": "release",
+      "target": "sp_extendedProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_extendedPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extendedPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_extendedDx"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extendedDx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_extendedDx"
+    },
+    {
+      "op": "release",
+      "target": "sp_extendedPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_extendedErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sp_extendedErrs",
+      "bind": "sp_extendedErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sp_extendedErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_extendedErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_extendedErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_extendedErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_extendedErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_extendedErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_extended",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_extended"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sp_slashes"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_slashesProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashesProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_slashesDs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashesDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main",
+          "spelling": "slashes"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_slashesDs"
+    },
+    {
+      "op": "release",
+      "target": "sp_slashesProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_slashesPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashesPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_slashesDx"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashesDx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_slashesDx"
+    },
+    {
+      "op": "release",
+      "target": "sp_slashesPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_slashesErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sp_slashesErrs",
+      "bind": "sp_slashesErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sp_slashesErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_slashesErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_slashesErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_slashesErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_slashesErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_slashesErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_slashes",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_slashes"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "sp_dot"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_dotProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dotProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_dotDs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dotDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main",
+          "spelling": "dot"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_dotDs"
+    },
+    {
+      "op": "release",
+      "target": "sp_dotProps"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_dotPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dotPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "sp_dotDx"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dotDx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_dotDx"
+    },
+    {
+      "op": "release",
+      "target": "sp_dotPr"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sp_dotErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "sp_dotErrs",
+      "bind": "sp_dotErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "sp_dotErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_dotErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_dotErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_dotErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "sp_dotErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "sp_dotErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "sp_dot",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp_dot"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

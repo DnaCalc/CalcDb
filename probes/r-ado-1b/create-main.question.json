@@ -1,0 +1,638 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/create-main",
+  "bookRefs": [
+    "R-ADO-1",
+    "D-OBJECT-1"
+  ],
+  "description": "R-ADO-1B fixture (ACCDB), created by DBEngine.CreateDatabase(path, dbLangGeneral, 128) and the closed file kept: T(ID COUNTER key, unique Code, Long, Double, Currency, Date/Time, Text(50), Memo, Long Binary, Yes/No, Integer, Byte, Single, GUID, and a Decimal added by CreateField type 20) with seven rows (full, mixed-case text, Null date, empty memo, an all-Null row, an apostrophe text, an empty text); W(ID key, unique Code, V, V2, S) with twelve rows; P(ID key, Nm) with three rows; Ch(ID key, PID with a foreign key to P, S) with two rows; saved queries QByL (one Long parameter), QSet (action, two parameters) and QAll.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-ado-1b-main.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, Code TEXT(10) CONSTRAINT UX_T_Code UNIQUE, L LONG, D DOUBLE, C CURRENCY, Dt DATETIME, S TEXT(50), M MEMO, B LONGBINARY, Y YESNO, Sh SHORT, Bt BYTE, Sg SINGLE, G GUID)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dtdf"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "dfld"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dfls"
+    },
+    {
+      "op": "invoke",
+      "target": "dfls",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dfld"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dfls"
+    },
+    {
+      "op": "release",
+      "target": "dfld"
+    },
+    {
+      "op": "release",
+      "target": "dtdf"
+    },
+    {
+      "op": "release",
+      "target": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, D, C, N, Dt, S, M, Y, Sh, Bt, Sg) VALUES ('a1', 10, 1.5, 2.25, 3.125, #2024-01-02#, 'alpha', 'memo one', True, 7, 200, 1.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, D, C, N, Dt, S, M, Y, Sh) VALUES ('b2', 20, -0.5, 0, 0, #2024-03-04 12:00:00#, 'Beta', '', False, 0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, D, C, N, Dt, S, M, Y) VALUES ('c3', 30, 0, 1234.5678, -0.0001, #1999-12-31#, 'gamma', 'x', True)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, D, S) VALUES ('d4', 20, 2.5, 'alpha')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code) VALUES ('e5')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, S) VALUES ('f6', 50, 'it''s')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Code, L, S) VALUES ('g7', 5, '')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT B FROM T WHERE Code = 'a1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rk"
+    },
+    {
+      "op": "invoke",
+      "target": "rk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rkf"
+    },
+    {
+      "op": "invoke",
+      "target": "rkf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rkb"
+    },
+    {
+      "op": "invoke",
+      "target": "rk",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rkb",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "000102ff00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rk",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rkb"
+    },
+    {
+      "op": "release",
+      "target": "rkf"
+    },
+    {
+      "op": "invoke",
+      "target": "rk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, Code TEXT(10) CONSTRAINT UX_W_Code UNIQUE, V LONG, V2 LONG, S TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (1, 'w1', 10, 1, 's1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (2, 'w2', 20, 2, 's2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (3, 'w3', 30, 3, 's3')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (4, 'w4', 40, 4, 's4')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (5, 'w5', 50, 5, 's5')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (6, 'w6', 60, 6, 's6')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (7, 'w7', 70, 7, 's7')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (8, 'w8', 80, 8, 's8')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (9, 'w9', 90, 9, 's9')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (10, 'w10', 100, 10, 's10')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (11, 'w11', 110, 11, 's11')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W VALUES (12, 'w12', 120, 12, 's12')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY, Nm TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P VALUES (1, 'p1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P VALUES (2, 'p2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P VALUES (3, 'p3')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Ch (ID LONG CONSTRAINT PK_Ch PRIMARY KEY, PID LONG CONSTRAINT FK_Ch_P REFERENCES P (ID), S TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Ch VALUES (1, 1, 'c1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Ch VALUES (2, 2, 'c2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QByL"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pL Long; SELECT ID, Code, L FROM T WHERE L = pL;"
+        }
+      ],
+      "bind": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSet"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pS Text(50), pI Long; UPDATE T SET S = pS WHERE ID = pI;"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QAll"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, L, S FROM T ORDER BY ID;"
+        }
+      ],
+      "bind": "q3"
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

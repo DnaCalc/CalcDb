@@ -1,0 +1,434 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/ident-properties",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "OR-OBS",
+    "R-CAT-1"
+  ],
+  "description": "Object identity of Properties reads: Field(\"ID\").Properties read twice from the same Field and once from the Field reached through the TableDef; Properties.Item(\"Name\") twice, Item(0), and Each over Properties (Name, Type read); Database.Properties twice with Item(\"Name\") twice; TableDef.Properties twice; Recordset.Properties once. All objects held. Asks which labels coincide and the property Count of each collection.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-wire-dao.accdb",
+      "sha256": "76ceb0c44e385678689da7e1bdb328c9c25230c28e1c18475ca13e7b01db85b7",
+      "length": 274432,
+      "provenance": "r-wire.create-dao.88c06e1195.a1 qk1-88c06e119534f765f4e1faca668b61437268f2a560b9597f561cef62200de09b output:r-wire-dao.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 311 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "p1"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "p2"
+    },
+    {
+      "op": "invoke",
+      "target": "p1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "p1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "pn1"
+    },
+    {
+      "op": "invoke",
+      "target": "p1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "pn2"
+    },
+    {
+      "op": "invoke",
+      "target": "p2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "pn3"
+    },
+    {
+      "op": "invoke",
+      "target": "p1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "po"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "W"
+        }
+      ],
+      "bind": "td"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfl"
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "tfa"
+    },
+    {
+      "op": "invoke",
+      "target": "tfa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "tpn"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dp2"
+    },
+    {
+      "op": "invoke",
+      "target": "dp1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "dn1"
+    },
+    {
+      "op": "invoke",
+      "target": "dp1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "dn2"
+    },
+    {
+      "op": "invoke",
+      "target": "dp2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "dn3"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdp1"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdp2"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp"
+    },
+    {
+      "op": "invoke",
+      "target": "rp",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pn3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "po",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tpn",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dn1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dn2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dn3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "p1",
+      "bind": "e",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

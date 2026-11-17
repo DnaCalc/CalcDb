@@ -1,0 +1,5192 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sort-3b/nulls-seek",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Null policy / aliases",
+    "Compound framing",
+    "Traversal consequences"
+  ],
+  "description": "Reopen r-sort-3b-nulls (General) read-only. Seek with each of = >= > <= < and the keys Null, empty and a on index IX of NI1, NI2, NI5, NI6 and NR1; and Seek =, >= and <= with the compound keys (Null, Null), (Null, 1), (Null), (empty, Null), (empty, 1), (a, Null), (a, 2) and (a) on NI3, NI4 and NR3; reading NoMatch and the ID of the current record after each. Asks whether a Null or empty key finds a row through an IGNORE NULL index, and how partial and Null compound keys select under it compared with the plain index.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sort-3b-nulls.accdb",
+      "sha256": "4088866805192c917d92514fd2e19df8721765aa744b43012ef7b5615eba69db",
+      "length": 491520,
+      "provenance": "r-sort-3b.create-nulls.515b389f84.a1 qk1-515b389f84e5a246db66d767859446d784fcd8376706395540dcb0925ee04062 output:r-sort-3b-nulls.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI1"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI5"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI6"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NR1"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI3"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NI4"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NR3"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "skf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "skid"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "skid",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "skid"
+    },
+    {
+      "op": "release",
+      "target": "skf"
+    },
+    {
+      "op": "invoke",
+      "target": "sk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

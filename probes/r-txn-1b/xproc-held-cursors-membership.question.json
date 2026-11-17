@@ -1,0 +1,820 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-txn-1b/xproc-held-cursors-membership",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-VIEW",
+    "TXN-LOCAL"
+  ],
+  "description": "What do a dynaset and a snapshot of another process, opened before any level, hold of rows that a level inserted and deleted, while it is open and after it commits, without and with Idle and Requery? Both processes open the main file shared read/write in Workspaces(0). b: opens dynaset hd and snapshot hs on SELECT ID, V, Z FROM R ORDER BY ID. a: BeginTrans; INSERT INTO R (ID, V, Z) VALUES (30, 300, 'x30'); DELETE FROM R WHERE ID = 2 (dbFailOnError). b: hd and hs MoveFirst, read all, RecordCount. a: CommitTrans; DBEngine.Errors. b: the same reads; DBEngine.Idle(dbRefreshCache); the same reads; Requery on both and the same reads.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-txn-1b-main-accdb.accdb",
+      "sha256": "cde7b712cc54e824851b29bf6e711b875a9018edb83b623b81a13a3798799ddb",
+      "length": 339968,
+      "provenance": "r-txn-1b.create-main-accdb.e4d92aea6d.a1 qk1-e4d92aea6db1253b5b424b8e6c661b41c07bcb69f225432a7f8c87b4d6721bbc output:r-txn-1b-main-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "s0",
+      "timeoutMs": 120000
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO R (ID, V, Z) VALUES (30, 300, 'x30')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM R WHERE ID = 2"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "s1"
+    },
+    {
+      "op": "await",
+      "name": "s2",
+      "timeoutMs": 120000
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "s3"
+    },
+    {
+      "op": "await",
+      "name": "s4",
+      "timeoutMs": 120000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 120000
+        },
+        {
+          "op": "observeFiles",
+          "label": "before-open",
+          "keep": false
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Workspaces",
+          "kind": "propertyGet",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ],
+          "bind": "ws"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, V, Z FROM R ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 2
+            }
+          ],
+          "bind": "hd"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, V, Z FROM R ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hs"
+        },
+        {
+          "op": "signal",
+          "name": "s0"
+        },
+        {
+          "op": "await",
+          "name": "s1",
+          "timeoutMs": 120000
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hd",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "s2"
+        },
+        {
+          "op": "await",
+          "name": "s3",
+          "timeoutMs": 120000
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hd",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Idle",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hd",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Requery",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "Requery",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hd",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hd",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "loopUntil",
+          "target": "hs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "s4"
+        },
+        {
+          "op": "invoke",
+          "target": "hs",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-close",
+          "keep": false
+        }
+      ]
+    }
+  ]
+}

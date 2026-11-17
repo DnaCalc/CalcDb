@@ -1,0 +1,763 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/persist-malformed-files",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-PERSIST",
+    "R-ERR-1"
+  ],
+  "description": "ADO-PERSIST failure shapes: ten files written with exact bytes (empty; one byte; three ASCII bytes; 512 zero bytes; \"<xml\"; a UTF-8 BOM alone; \"<xml/>\"; an XML declaration alone; an empty persisted-recordset root with the schema namespaces; a nonexistent path), each opened connectionless with Recordset.Open(path, Missing, static, batch optimistic, adCmdFile): State, Fields.Count where open, then Close. Asks which malformed inputs are refused at Open, with which HRESULT and description, and which open as empty recordsets.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-0.dat",
+      "hex": ""
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf0"
+    },
+    {
+      "op": "invoke",
+      "target": "mf0",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-0.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf0",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf0f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf0f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf0f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf0"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-1.dat",
+      "hex": "41"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf1"
+    },
+    {
+      "op": "invoke",
+      "target": "mf1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-1.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf1f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf1f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf1f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf1"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-2.dat",
+      "hex": "616263"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf2"
+    },
+    {
+      "op": "invoke",
+      "target": "mf2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-2.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf2f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf2f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf2f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf2"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-3.dat",
+      "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf3"
+    },
+    {
+      "op": "invoke",
+      "target": "mf3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-3.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf3f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf3f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf3f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf3"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-4.dat",
+      "hex": "3c786d6c"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf4"
+    },
+    {
+      "op": "invoke",
+      "target": "mf4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-4.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf4f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf4f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf4f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf4"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-5.dat",
+      "hex": "efbbbf"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf5"
+    },
+    {
+      "op": "invoke",
+      "target": "mf5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-5.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf5f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf5f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf5f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf5"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-6.dat",
+      "hex": "3c786d6c2f3e"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf6"
+    },
+    {
+      "op": "invoke",
+      "target": "mf6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-6.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf6f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf6f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf6f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf6"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-7.dat",
+      "hex": "3c3f786d6c2076657273696f6e3d22312e30223f3e"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf7"
+    },
+    {
+      "op": "invoke",
+      "target": "mf7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-7.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf7f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf7f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf7f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf7"
+    },
+    {
+      "op": "writeFile",
+      "file": "work:mal-8.dat",
+      "hex": "3c786d6c20786d6c6e733a733d22757569643a42444336453346302d364441332d313164312d413241332d3030414130304331343838322220786d6c6e733a7a3d2223526f77736574536368656d61223e3c2f786d6c3e"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mf8"
+    },
+    {
+      "op": "invoke",
+      "target": "mf8",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-8.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mf8",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "mf8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mf8f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf8f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf8f"
+    },
+    {
+      "op": "invoke",
+      "target": "mf8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mf8"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "mfx"
+    },
+    {
+      "op": "invoke",
+      "target": "mfx",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "mal-absent.dat"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "mfx",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mfx"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": true
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

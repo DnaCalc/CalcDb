@@ -1,0 +1,3362 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sort-3b/dao-index-flags",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Null policy / aliases",
+    "Compound framing"
+  ],
+  "description": "New General ACCDB. 7 tables (S Counter, K TEXT(20), N Long) with no key; on each one DAO index IX is created with TableDef.CreateIndex, one CreateField per column and the properties (Primary, Unique, Required, IgnoreNulls): (K) primary+IgnoreNulls; (K, N) primary; (K, N) unique+IgnoreNulls; (K, N) unique+Required; (K) IgnoreNulls; (K) Required; (K, N) Required+IgnoreNulls. Each Indexes.Append result is an observation. Then six INSERTs per table over the tuples (Null, Null), (a, Null), (a, 1), (Null, 1), (a, 1), (Null, Null), one per statement; reads the surviving S of each table and every index of each table. An image is kept after each table. Asks which property combinations DAO admits on an empty table, what each reads back as, and which inserts each combination refuses.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-sort-3b-dao-index-flags.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX1 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX1"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX1 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx1-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX2 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX2"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX2 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx2-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX3 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX3"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX3 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx3-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX4 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX4"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX4 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx4-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX5 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX5"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX5 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx5-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX6 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX6"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX6 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx6-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DX7 (S COUNTER, K TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX7"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif1"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES ('a', NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES (NULL, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES ('a', 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DX7 (K, N) VALUES (NULL, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "dx7-final",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX1 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q201"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q201",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q201",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q201",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q201",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q201"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX1"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX2 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q212"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q212",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q212",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q212",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q212",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q212"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX2"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX3 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q223"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q223",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q223",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q223",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q223",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q223"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX3"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX4 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q234"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q234",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q234",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q234",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q234",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q234"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX4"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX5 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q245"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q245",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q245",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q245",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q245",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q245"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX5"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX6 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q256"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q256",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q256",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q256",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q256",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q256"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX6"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT S FROM DX7 ORDER BY S"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q267"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q267",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q267",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q267",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q267",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q267"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX7"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "final-open",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

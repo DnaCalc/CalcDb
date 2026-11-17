@@ -1,0 +1,657 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sort-3b/lu-walk",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Text levels",
+    "Traversal consequences",
+    "Null policy / aliases"
+  ],
+  "description": "Reopen r-sort-3b-lu (English UK, LANGID 0x0809) read-only; reads Version and CollatingOrder. Table-type recordsets walk reading ID: T with no Index (storage order), T by IX_K forward and backward, T by IX_KD forward and backward, and the unindexed twin T0. Asks the physical traversal order, tie order and Null and empty placement of an ascending and a descending Text index under this locale.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sort-3b-lu.accdb",
+      "sha256": "d4311d5e0d1e361133a616d1564c4a2f734bee1ecfd0da2d5b7af0344b6640ac",
+      "length": 253952,
+      "provenance": "r-sort-3b.create-lu.79425354c3.a1 qk1-79425354c370cc2c3226b7cbe1c82bbc2fde8b8a763b0431ef519c00f3a253af output:r-sort-3b-lu.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "BOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MovePrevious",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_KD"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_KD"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "BOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MovePrevious",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T0"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 62,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

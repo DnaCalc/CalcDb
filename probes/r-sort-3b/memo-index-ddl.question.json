@@ -1,0 +1,1794 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sort-3b/memo-index-ddl",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Length510 boundary",
+    "Null policy / aliases"
+  ],
+  "description": "New General ACCDB. MI(ID Long primary key, MK MEMO, TK TEXT(255)) with 8 rows from the memo set. Then each of 10 statements on its own, with an image kept after each: CREATE INDEX and CREATE UNIQUE INDEX on MK, MK DESC, (TK, MK) and (MK, TK); ADD CONSTRAINT UNIQUE (MK); tables whose MEMO column is a primary key or has a unique constraint (column and table form); and CREATE INDEX on TK as the control. Then DAO TableDef.CreateIndex with a field MK appended to a non-unique, to a unique and to a primary index. Reads every index of MI, MI3, MI4 and MI5. Asks whether a memo column can be a native key in any route, and which refusal each route gives.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-sort-3b-memo-index-ddl.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MI (ID LONG CONSTRAINT PK_MI PRIMARY KEY, MK MEMO, TK TEXT(255))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "f0"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MK"
+        }
+      ],
+      "bind": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TK"
+        }
+      ],
+      "bind": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "6100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "4100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "4100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "6200"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "6200"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "4100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041007800"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "4100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041007900"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "41004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041007800"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004200"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004100410041004200"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "f0"
+    },
+    {
+      "op": "release",
+      "target": "f1"
+    },
+    {
+      "op": "release",
+      "target": "f2"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "observeFiles",
+      "label": "mi-rows-no-index",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_MK ON MI (MK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-0",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UX_MK ON MI (MK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-1",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_MKD ON MI (MK DESC)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-2",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_TKMK ON MI (TK, MK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-3",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_MKTK ON MI (MK, TK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-4",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE MI ADD CONSTRAINT UQ_MK UNIQUE (MK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-5",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MI3 (MK MEMO CONSTRAINT PK_MI3 PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-6",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MI4 (MK MEMO, CONSTRAINT UQ_MI4 UNIQUE (MK))"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-7",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MI5 (MK MEMO, CONSTRAINT PK_MI5 PRIMARY KEY (MK))"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-8",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_TK ON MI (TK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ddl-9",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX_MK"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MK"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-dao-nonunique",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX_MKU"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MK"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-dao-unique",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtd"
+    },
+    {
+      "op": "invoke",
+      "target": "dtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI"
+        }
+      ],
+      "bind": "dt"
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DX_MKP"
+        }
+      ],
+      "bind": "dix"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "difl"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MK"
+        }
+      ],
+      "bind": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "difl",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dif0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dif0"
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Primary",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dix",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dixs"
+    },
+    {
+      "op": "invoke",
+      "target": "dixs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dixs"
+    },
+    {
+      "op": "release",
+      "target": "difl"
+    },
+    {
+      "op": "release",
+      "target": "dix"
+    },
+    {
+      "op": "release",
+      "target": "dt"
+    },
+    {
+      "op": "release",
+      "target": "dtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-dao-primary",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI3"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI4"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MI5"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "final-open",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

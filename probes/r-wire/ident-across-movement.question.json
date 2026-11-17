@@ -1,0 +1,417 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/ident-across-movement",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "OR-OBS",
+    "R-CURSOR-1"
+  ],
+  "description": "Object identity of a Field across movement and Close: on a snapshot of SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 311, Fields(\"FLong\") retained as fa; after each of MoveNext, MoveLast, MoveFirst and Requery a fresh Fields and Item(\"FLong\") is read and fa and the fresh Field have Value read; a Clone's Fields(\"FLong\") is read; Recordset.Close, then fa Name and Value, a fresh Fields read on the closed recordset; a second snapshot's Fields(\"FLong\"). All objects stay held. Asks which labels match and what the retained Field returns.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-wire-dao.accdb",
+      "sha256": "76ceb0c44e385678689da7e1bdb328c9c25230c28e1c18475ca13e7b01db85b7",
+      "length": 274432,
+      "provenance": "r-wire.create-dao.88c06e1195.a1 qk1-88c06e119534f765f4e1faca668b61437268f2a560b9597f561cef62200de09b output:r-wire-dao.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 311 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl0"
+    },
+    {
+      "op": "invoke",
+      "target": "fl0",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa0"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl1"
+    },
+    {
+      "op": "invoke",
+      "target": "fl1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa1"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl2"
+    },
+    {
+      "op": "invoke",
+      "target": "fl2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa2"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl3"
+    },
+    {
+      "op": "invoke",
+      "target": "fl3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa3"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Clone",
+      "kind": "method",
+      "args": [],
+      "bind": "rc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flc"
+    },
+    {
+      "op": "invoke",
+      "target": "flc",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fac"
+    },
+    {
+      "op": "invoke",
+      "target": "fac",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flx"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 311 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl2"
+    },
+    {
+      "op": "invoke",
+      "target": "fl2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FLong"
+        }
+      ],
+      "bind": "fa2x"
+    },
+    {
+      "op": "invoke",
+      "target": "fa2x",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

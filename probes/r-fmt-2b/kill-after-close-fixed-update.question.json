@@ -1,0 +1,349 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-fmt-2b/kill-after-close-fixed-update",
+  "bookRefs": [
+    "R-FMT-2",
+    "II-03 concrete mutation probes",
+    "Capture and comparison",
+    "R-TXN-1 flush window",
+    "R-CRASH-1"
+  ],
+  "description": "One fixed-width edit (UPDATE Fx SET Fb = 200 WHERE ID = 5). Fx: ten rows on one small table (ID Long key; Byte Fb, Long Fl, Currency Fc, Date Ft, GUID Fg, Decimal Fm and a trailing Text Vt); row 8 is Null in Fb, Fl, Fc, Ft and Fm. Writer A opens the database read/write, makes the mutation, closes the database (DBEngine alive) and signals; process B kills A at once (TerminateProcess, verified own worker), waits 0.5 s, keeps the frozen file, opens it read-only with DAO and reads the public state. Process-termination model only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-fmt-2b-w-accdb.accdb",
+      "sha256": "4f42d3faa7c46ac394eaa6c8a62df0cbec4bbf1af93e84ea7f794fb2b98303be",
+      "length": 503808,
+      "provenance": "r-fmt-2b.create-w-accdb.86336dfac0.a1 qk1-86336dfac06d6ea1a25de04dc28825971144d002d9b51e7440ebc655dd6ddbe9 output:r-fmt-2b-w-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "observeFiles",
+      "label": "before",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE Fx SET Fb = 200 WHERE ID = 5"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "signal",
+      "name": "a-closed"
+    },
+    {
+      "op": "await",
+      "name": "never",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-closed",
+          "timeoutMs": 30000
+        },
+        {
+          "op": "killParticipant",
+          "name": "a",
+          "delayMs": 0
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "observeFiles",
+          "label": "frozen",
+          "keep": true
+        },
+        {
+          "op": "observeFiles",
+          "label": "before-open",
+          "keep": false
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT * FROM Fx ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "rs"
+        },
+        {
+          "op": "loopUntil",
+          "target": "rs",
+          "member": "EOF",
+          "maxIterations": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 12,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "rs",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "TableDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tdfs"
+        },
+        {
+          "op": "invoke",
+          "target": "tdfs",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Fx"
+            }
+          ],
+          "bind": "tdf"
+        },
+        {
+          "op": "invoke",
+          "target": "tdf",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "idxs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "idxs",
+          "bind": "ix",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Primary",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "Unique",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix",
+              "member": "DistinctCount",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "idxs"
+        },
+        {
+          "op": "release",
+          "target": "tdf"
+        },
+        {
+          "op": "release",
+          "target": "tdfs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "db"
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-read",
+          "keep": true
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-close",
+          "keep": false
+        }
+      ]
+    }
+  ]
+}

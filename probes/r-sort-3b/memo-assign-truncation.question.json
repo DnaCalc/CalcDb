@@ -1,0 +1,961 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sort-3b/memo-assign-truncation",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Length510 boundary",
+    "UTF-16 boundaries"
+  ],
+  "description": "Open a copy of r-sort-3b-memo (General) read-write. CREATE TABLE MT(ID, TK TEXT(255), T20 TEXT(20)); INSERT INTO MT (ID, TK) SELECT ID, MK FROM MM; INSERT INTO MT (ID, T20) SELECT ID + 100, MK FROM MM WHERE LEN(MK) > 20; UPDATE MM SET TK = MK for the A x256 + x row; SELECT * INTO MM2 FROM MM, ALTER TABLE MM2 ALTER COLUMN MK TEXT(255), then CREATE INDEX IX_MK2 ON MM2 (MK); ALTER TABLE MM ALTER COLUMN TK TEXT(100) with its index IX_TK in place. After each step reads the stored LEN of the assigned columns and, for the indexed ones, the ORDER BY or walk. Asks whether memo-to-Text assignment, UPDATE and column conversion refuse or truncate (the cut length), and what the index over a converted or shortened column then contains.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sort-3b-memo.accdb",
+      "sha256": "75c5396af6bc118572f97337ae8f3033df537b73c2da936c866ecb52164afd6c",
+      "length": 204800,
+      "provenance": "r-sort-3b.create-memo.a97ac8b9e6.a1 qk1-a97ac8b9e612ac62c71e82c6dcf09f01b4ba6b8c5607fde88de0a910ba696a4d output:r-sort-3b-memo.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "before-edit",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE MT (ID LONG CONSTRAINT PK_MT PRIMARY KEY, TK TEXT(255), T20 TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MT (ID, TK) SELECT ID, MK FROM MM"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, LEN(TK) FROM MT ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q9"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q9",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO MT (ID, T20) SELECT ID + 100, MK FROM MM WHERE LEN(MK) > 20"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, LEN(TK), LEN(T20) FROM MT ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q14"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q14",
+      "member": "EOF",
+      "maxIterations": 50,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q14",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 3,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q14",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q14",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q14"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-insert-select",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE MM SET TK = MK WHERE ID = 9"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, LEN(TK) FROM MM ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q20"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q20",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q20",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q20",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q20",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * INTO MM2 FROM MM"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE MM2 ALTER COLUMN MK TEXT(255)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, LEN(MK) FROM MM2 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q26"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q26",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q26",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q26",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q26",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q26"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-memo-to-text",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_MK2 ON MM2 (MK)"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-ix-mk2",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MM2"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_MK2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM MM2 ORDER BY MK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q43"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q43",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q43",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q43",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q43",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q43"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE MM ALTER COLUMN TK TEXT(100)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, LEN(TK) FROM MM ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q48"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q48",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q48",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q48",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q48",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q48"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MM"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TK"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 25,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mtd"
+    },
+    {
+      "op": "invoke",
+      "target": "mtd",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MM"
+        }
+      ],
+      "bind": "mt"
+    },
+    {
+      "op": "invoke",
+      "target": "mt",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mix"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mix",
+      "bind": "mi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "mif"
+        },
+        {
+          "op": "forEachItem",
+          "target": "mif",
+          "bind": "mf",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "mf",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "mif"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mix"
+    },
+    {
+      "op": "release",
+      "target": "mt"
+    },
+    {
+      "op": "release",
+      "target": "mtd"
+    },
+    {
+      "op": "observeFiles",
+      "label": "final-open",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

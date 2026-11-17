@@ -13,8 +13,28 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
 
 ## Night of 2026-11-17
 
+> [!WARNING]
+> **Oracle-conduct incident, about 04:12 local (confirmed).** `r-wire/opt-opendatabase` called
+> `DBEngine.OpenDatabase(Empty)`, which did not return within the 300 s attempt timeout; the owned worker was
+> then terminated. Workers then ran on the owner's default desktop. The rerun on a private desktop shows that
+> this call opens a visible ODBC **Select Data Source** dialog (class `#32770`), so that dialog was on the owner's
+> desktop for up to 300 s, until the worker was terminated. It was not dismissed or touched. The
+> assumption that DAO-only probes show no UI was wrong. Since 04:24 every worker runs on a private desktop, and
+> a guard records any owned window on the owner's desktop (see the R-ORACLE-1 OR-DESKTOP entry below).
+
 ### R-ORACLE-1 (capture_core)
 - Retained earlier: fixture creation, first table read, first failed call (see the register).
+- **OR-DESKTOP** (from 04:24). The runner creates the desktop `WinSta0\CalcDbOracle` and starts each worker on it,
+  suspended (`CreateProcessW` with `STARTUPINFO.lpDesktop`), assigns it to the kill-on-close job, then resumes it. Every
+  200 ms a guard lists the visible top-level windows of owned workers on the owner's desktop and on the private desktop.
+  They are recorded in the owner report (`windowsOnUserDesktop`, `windowsOnPrivateDesktop`), and each one is a seal
+  problem, so the capture is Incomplete. Nothing is dismissed; a blocked worker ends at its deadline. Hidden
+  message windows (COM, IME, Office power manager) exist in every worker and are not recorded. Smoke check: the six
+  `r-act-1-thread` questions gave the same answers as their retained records, with no window on either desktop.
+- **`DBEngine.OpenDatabase(Empty)` opens a modal ODBC dialog** (`evidence/r-wire/opt-opendatabase/`). The rerun
+  `smoke-opt.a1` on the private desktop recorded a visible `#32770` window titled `Select Data Source`. The call does
+  not return while the dialog is open. Empty as the name argument is therefore an interactive path; R-ORACLE-1 OR-WIRE
+  probes of optional arguments must not leave the name empty except on the private desktop with a short timeout.
 - **ACE fault in `Recordset.Requery(QueryDef)`** (`evidence/r-crash-requery/`). First seen as a worker death in
   `r-cat-1/parameter-values`. Five discriminating probes on a fresh fixture copy each: opening and reading,
   and `Requery()` without arguments, complete normally; `Requery(qd)` with the recordset's own QueryDef, with

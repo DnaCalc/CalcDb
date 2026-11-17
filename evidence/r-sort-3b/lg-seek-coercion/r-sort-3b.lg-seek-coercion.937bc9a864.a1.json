@@ -1,0 +1,5080 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-sort-3b.lg-seek-coercion.937bc9a864.a1",
+  "retainedUtc": "2026-11-17T02:08:05.2145382+00:00",
+  "probe": "r-sort-3b/lg-seek-coercion",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Traversal consequences",
+    "Text levels"
+  ],
+  "description": "Reopen r-sort-3b-lg (General) read-only. On T with Index IX_K, Seek \"=\" and \">=\" with these keys: Long 1, 10 and 2, Integer 1, Byte 1, Double 1.0, Single 1.0, Currency 1, Boolean True, Date 1.5, the BSTRs \"1\" and \"10\" and \"a\", Empty, Null, no key at all, two keys (\"a\", 1) and two keys (\"a\", \"b\"); reads NoMatch and the ID of the current record after each. Asks how a key of another VARIANT type or a different key count is coerced, matched or refused on a one-column Text index.",
+  "retentionNote": "Designed r-sort-3b probe (A-02); complete capture of the ACE answer.",
+  "token": "r-sort-3b.lg-seek-coercion.937bc9a864",
+  "questionKey": "qk1-937bc9a86428b957e224d6a8ddf9ea5adadc8c07ebb5ffe7075943ae6c9be6fc",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-sort-3b/lg-seek-coercion",
+    "bookRefs": [
+      "R-SORT-3",
+      "SORT-CHECK",
+      "Traversal consequences",
+      "Text levels"
+    ],
+    "description": "Reopen r-sort-3b-lg (General) read-only. On T with Index IX_K, Seek \"=\" and \">=\" with these keys: Long 1, 10 and 2, Integer 1, Byte 1, Double 1.0, Single 1.0, Currency 1, Boolean True, Date 1.5, the BSTRs \"1\" and \"10\" and \"a\", Empty, Null, no key at all, two keys (\"a\", 1) and two keys (\"a\", \"b\"); reads NoMatch and the ID of the current record after each. Asks how a key of another VARIANT type or a different key count is coerced, matched or refused on a one-column Text index.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-sort-3b-lg.accdb",
+        "sha256": "a9f42cfc94a8907aaa00c139401d8f1a6b5e0619e284de100e3dbbfd9610e629",
+        "length": 253952,
+        "provenance": "r-sort-3b.create-lg.4a0f11dedd.a1 qk1-4a0f11dedd6f32ca886e84b9c98b73c4536ad95c46c30e8aa2dd49ee752e0642 output:r-sort-3b-lg.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "CollatingOrder",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "T"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ],
+        "bind": "sk"
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Index",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "IX_K"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "skf"
+      },
+      {
+        "op": "invoke",
+        "target": "skf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ID"
+          }
+        ],
+        "bind": "skid"
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "i4",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "i2",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "ui1",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "r8",
+            "bits": "3ff0000000000000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "r4",
+            "bits": "3f800000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "cy",
+            "scaled": 10000
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "date",
+            "bits": "3ff8000000000000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bstr",
+            "text": "1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bstr",
+            "text": "10"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "empty"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          },
+          {
+            "type": "bstr",
+            "text": "b"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "i4",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "i2",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "ui1",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "r8",
+            "bits": "3ff0000000000000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "r4",
+            "bits": "3f800000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "cy",
+            "scaled": 10000
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "date",
+            "bits": "3ff8000000000000"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bstr",
+            "text": "1"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bstr",
+            "text": "10"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "empty"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": ">="
+          },
+          {
+            "type": "bstr",
+            "text": "a"
+          },
+          {
+            "type": "bstr",
+            "text": "b"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "skid"
+      },
+      {
+        "op": "release",
+        "target": "skf"
+      },
+      {
+        "op": "invoke",
+        "target": "sk",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "sk"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-sort-3b.lg-seek-coercion.937bc9a864.a1",
+    "token": "r-sort-3b.lg-seek-coercion.937bc9a864",
+    "questionKey": "qk1-937bc9a86428b957e224d6a8ddf9ea5adadc8c07ebb5ffe7075943ae6c9be6fc",
+    "workerGeneration": 1,
+    "execution": "ReturnedFailure",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "09615290b98227ddae05348fcb410927cd869a7a01f8629a046e2e2fc4a0f763",
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 7564,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T02:08:05.1921477+00:00",
+    "sealSha256": "7b352dcc11745f19f094f68fd8e50a467a63d6ea9fd4f17f5767096525de2612"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-sort-3b.lg-seek-coercion.937bc9a864.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-937bc9a86428b957e224d6a8ddf9ea5adadc8c07ebb5ffe7075943ae6c9be6fc",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040342\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "04684c2b2e57e0ea0ea54431bc1baed4c02740a7125ffd9880f6f3d41df2328e",
+      "workerBuild": "1.0.0+ff2e9c2cf613609c84afbf482ba27c864feef45d",
+      "toolingRevision": "ff2e9c2cf613609c84afbf482ba27c864feef45d",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 7564,
+      "threadId": 52672,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-sort-3b.lg-seek-coercion.937bc9a864.a1",
+      "windowStation": "WinSta0",
+      "desktop": "Default",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [
+          {
+            "relativePath": "inputs/r-sort-3b-lg.accdb",
+            "length": 253952,
+            "sha256": "a9f42cfc94a8907aaa00c139401d8f1a6b5e0619e284de100e3dbbfd9610e629",
+            "lastWriteUtc": "2026-11-17T02:02:29.9477167Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040342\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040342\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040342\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0073006f00720074002d00330062002e006c0067002d007300650065006b002d0063006f0065007200630069006f006e002e0039003300370062006300390061003800360034002e00610031005c0069006e0070007500740073005c0072002d0073006f00720074002d00330062002d006c0067002e0061006300630064006200",
+            "byteLength": 222,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-sort-3b.lg-seek-coercion.937bc9a864.a1\\inputs\\r-sort-3b-lg.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Version",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809351,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "310032002e003000",
+          "byteLength": 8,
+          "text": "12.0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "CollatingOrder",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809344,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1033"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "5400",
+            "byteLength": 2,
+            "text": "T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "sk",
+          "identity": "u3",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "sk",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Index",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "490058005f004b00",
+            "byteLength": 8,
+            "text": "IX_K"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 107,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "skf",
+          "identity": "u4",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "skf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "skf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004400",
+            "byteLength": 4,
+            "text": "ID"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "skid",
+          "identity": "u5",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "skid",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "10"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "39"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "2"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "40"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 2,
+            "vtName": "VT_I2",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 17,
+            "vtName": "VT_UI1",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 25,
+        "programPath": "24"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 5,
+            "vtName": "VT_R8",
+            "bits": "000000000000f03f",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "25"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "26"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 28,
+        "programPath": "27"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 4,
+            "vtName": "VT_R4",
+            "bits": "0000803f",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 29,
+        "programPath": "28"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "29"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "30"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 6,
+            "vtName": "VT_CY",
+            "bits": "1027000000000000",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "31"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "32"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "33"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "34"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "-1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 36,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BCD",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004600690065006c006400",
+            "byteLength": 18,
+            "text": "DAO.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4e006f002000630075007200720065006e00740020007200650063006f00720064002e00",
+            "byteLength": 36,
+            "text": "No current record."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003021,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00000000-0000-0000-0000-000000000000}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004600690065006c006400",
+            "byteLength": 18,
+            "text": "DAO.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4e006f002000630075007200720065006e00740020007200650063006f00720064002e00",
+            "byteLength": 36,
+            "text": "No current record."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003021,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 37,
+        "programPath": "36"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 7,
+            "vtName": "VT_DATE",
+            "bits": "000000000000f83f",
+            "display": "1.5"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "-1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BCD",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004600690065006c006400",
+            "byteLength": 18,
+            "text": "DAO.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4e006f002000630075007200720065006e00740020007200650063006f00720064002e00",
+            "byteLength": 36,
+            "text": "No current record."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003021,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00000000-0000-0000-0000-000000000000}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004600690065006c006400",
+            "byteLength": 18,
+            "text": "DAO.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4e006f002000630075007200720065006e00740020007200650063006f00720064002e00",
+            "byteLength": 36,
+            "text": "No current record."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003021,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 40,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3100",
+            "byteLength": 2,
+            "text": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "41"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 43,
+        "programPath": "42"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "31003000",
+            "byteLength": 4,
+            "text": "10"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 44,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "44"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "39"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 46,
+        "programPath": "45"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 47,
+        "programPath": "46"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 48,
+        "programPath": "47"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 49,
+        "programPath": "48"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 0,
+            "vtName": "VT_EMPTY"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 50,
+        "programPath": "49"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 51,
+        "programPath": "50"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 52,
+        "programPath": "51"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 1,
+            "vtName": "VT_NULL"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 53,
+        "programPath": "52"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 54,
+        "programPath": "53"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 55,
+        "programPath": "54"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BB9",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49006e00760061006c0069006400200061007200670075006d0065006e0074002e00",
+            "byteLength": 34,
+            "text": "Invalid argument."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003001,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00000000-0000-0000-0000-000000000000}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49006e00760061006c0069006400200061007200670075006d0065006e0074002e00",
+            "byteLength": 34,
+            "text": "Invalid argument."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003001,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 56,
+        "programPath": "55"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 57,
+        "programPath": "56"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 58,
+        "programPath": "57"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB2",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020006200750069006c00640020006b00650079002e00",
+            "byteLength": 40,
+            "text": "Could not build key."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003250,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 59,
+        "programPath": "58"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 60,
+        "programPath": "59"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 61,
+        "programPath": "60"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3d00",
+            "byteLength": 2,
+            "text": "="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6200",
+            "byteLength": 2,
+            "text": "b"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB2",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020006200750069006c00640020006b00650079002e00",
+            "byteLength": 40,
+            "text": "Could not build key."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003250,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 62,
+        "programPath": "61"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 63,
+        "programPath": "62"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 64,
+        "programPath": "63"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 65,
+        "programPath": "64"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 66,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 67,
+        "programPath": "66"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "10"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 68,
+        "programPath": "67"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 69,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "39"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 70,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "2"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 71,
+        "programPath": "70"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "71"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "40"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 73,
+        "programPath": "72"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 2,
+            "vtName": "VT_I2",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 74,
+        "programPath": "73"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 75,
+        "programPath": "74"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 76,
+        "programPath": "75"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 17,
+            "vtName": "VT_UI1",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 77,
+        "programPath": "76"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 78,
+        "programPath": "77"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 79,
+        "programPath": "78"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 5,
+            "vtName": "VT_R8",
+            "bits": "000000000000f03f",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 80,
+        "programPath": "79"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 81,
+        "programPath": "80"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 82,
+        "programPath": "81"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 4,
+            "vtName": "VT_R4",
+            "bits": "0000803f",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 83,
+        "programPath": "82"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 84,
+        "programPath": "83"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 85,
+        "programPath": "84"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 6,
+            "vtName": "VT_CY",
+            "bits": "1027000000000000",
+            "display": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 86,
+        "programPath": "85"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 87,
+        "programPath": "86"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 88,
+        "programPath": "87"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 89,
+        "programPath": "88"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 90,
+        "programPath": "89"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "41"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 91,
+        "programPath": "90"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 7,
+            "vtName": "VT_DATE",
+            "bits": "000000000000f83f",
+            "display": "1.5"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 92,
+        "programPath": "91"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 93,
+        "programPath": "92"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "40"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 94,
+        "programPath": "93"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3100",
+            "byteLength": 2,
+            "text": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 95,
+        "programPath": "94"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 96,
+        "programPath": "95"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "38"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 97,
+        "programPath": "96"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "31003000",
+            "byteLength": 4,
+            "text": "10"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 98,
+        "programPath": "97"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "98"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "39"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 100,
+        "programPath": "99"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 101,
+        "programPath": "100"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 102,
+        "programPath": "101"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 103,
+        "programPath": "102"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 0,
+            "vtName": "VT_EMPTY"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 104,
+        "programPath": "103"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 105,
+        "programPath": "104"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 106,
+        "programPath": "105"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 1,
+            "vtName": "VT_NULL"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 107,
+        "programPath": "106"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 108,
+        "programPath": "107"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 109,
+        "programPath": "108"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BB9",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49006e00760061006c0069006400200061007200670075006d0065006e0074002e00",
+            "byteLength": 34,
+            "text": "Invalid argument."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003001,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00000000-0000-0000-0000-000000000000}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49006e00760061006c0069006400200061007200670075006d0065006e0074002e00",
+            "byteLength": 34,
+            "text": "Invalid argument."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003001,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 110,
+        "programPath": "109"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 111,
+        "programPath": "110"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 112,
+        "programPath": "111"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB2",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020006200750069006c00640020006b00650079002e00",
+            "byteLength": 40,
+            "text": "Could not build key."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003250,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 113,
+        "programPath": "112"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 114,
+        "programPath": "113"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 115,
+        "programPath": "114"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Seek",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e003d00",
+            "byteLength": 4,
+            "text": ">="
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6100",
+            "byteLength": 2,
+            "text": "a"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6200",
+            "byteLength": 2,
+            "text": "b"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 145,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB2",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e005200650063006f0072006400730065007400",
+            "byteLength": 26,
+            "text": "DAO.Recordset"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020006200750069006c00640020006b00650079002e00",
+            "byteLength": 40,
+            "text": "Could not build key."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003250,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 116,
+        "programPath": "115"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "NoMatch",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 112,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 117,
+        "programPath": "116"
+      },
+      {
+        "event": "invoke",
+        "target": "skid",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "51"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 118,
+        "programPath": "117"
+      },
+      {
+        "event": "release",
+        "target": "skid",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 119,
+        "programPath": "118"
+      },
+      {
+        "event": "release",
+        "target": "skf",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 120,
+        "programPath": "119"
+      },
+      {
+        "event": "invoke",
+        "target": "sk",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 121,
+        "programPath": "120"
+      },
+      {
+        "event": "release",
+        "target": "sk",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 122,
+        "programPath": "121"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 123,
+        "programPath": "122"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "inputs/r-sort-3b-lg.accdb",
+            "length": 253952,
+            "sha256": "a9f42cfc94a8907aaa00c139401d8f1a6b5e0619e284de100e3dbbfd9610e629",
+            "lastWriteUtc": "2026-11-17T02:02:29.9477167Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 124,
+        "programPath": "123"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 125,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 126,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1168,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040342\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 127,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [],
+    "execution": "ReturnedFailure",
+    "captureErrors": []
+  },
+  "artifacts": []
+}

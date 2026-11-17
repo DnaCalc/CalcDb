@@ -1,0 +1,674 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/persist-roundtrip-typed",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-PERSIST",
+    "ADO-BUFFER",
+    "R-FMT-1"
+  ],
+  "description": "ADO-PERSIST typed round trip: a client static read-only Recordset of SELECT * FROM T ORDER BY ID is saved as ADTG and as XML (both files kept); the original's Field metadata (Name, Type, DefinedSize, Precision, NumericScale, Attributes) is read; each file is reopened connectionless with adCmdFile (State, RecordCount, ActiveConnection, the same metadata, then Value and ActualSize of every field of every row). Asks what schema, types, sizes and values each format restores.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cnProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnProps"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsMf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsMf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "rsMf",
+      "bind": "rsMx",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rsMx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rsMf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "t.adtg"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "t.xml"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-save",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ra"
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "t.adtg"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "ActiveConnection",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "raMf"
+    },
+    {
+      "op": "invoke",
+      "target": "raMf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "raMf",
+      "bind": "raMx",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "raMx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "raMf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "ra",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ra",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "raFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "raFlds",
+          "bind": "raF",
+          "maxItems": 20,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "raF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "raF",
+              "member": "ActualSize",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "raFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "ra",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ra",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ra"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rx"
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "t.xml"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "ActiveConnection",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rxMf"
+    },
+    {
+      "op": "invoke",
+      "target": "rxMf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "rxMf",
+      "bind": "rxMx",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "DefinedSize",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "Precision",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "NumericScale",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rxMx",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rxMf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rx",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rx",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rxFlds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rxFlds",
+          "bind": "rxF",
+          "maxItems": 20,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rxF",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rxF",
+              "member": "ActualSize",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rxFlds"
+        },
+        {
+          "op": "invoke",
+          "target": "rx",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rx"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

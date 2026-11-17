@@ -1,0 +1,188 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/create-blank",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "R-FMT-1"
+  ],
+  "description": "R-WIRE fixture r-wire-blank: table W(ID LONG primary key PK_W, one column per shared scalar family: FByte BYTE, FInt SHORT, FLong LONG, FSingle SINGLE, FDouble DOUBLE, FCurr CURRENCY, FDate DATETIME, FText TEXT(255), FMemo MEMO, FBin BINARY(255), FOle LONGBINARY, FBool YESNO, FDec Decimal added through TableDef.CreateField) empty, and table One(ID LONG) holding one row (1). Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); every call's result and error is recorded and the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-wire-blank.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, FByte BYTE, FInt SHORT, FLong LONG, FSingle SINGLE, FDouble DOUBLE, FCurr CURRENCY, FDate DATETIME, FText TEXT(255), FMemo MEMO, FBin BINARY(255), FOle LONGBINARY, FBool YESNO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "W"
+        }
+      ],
+      "bind": "dtdf"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FDec"
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "dfld"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dfls"
+    },
+    {
+      "op": "invoke",
+      "target": "dfls",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dfld"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dfls"
+    },
+    {
+      "op": "release",
+      "target": "dfld"
+    },
+    {
+      "op": "release",
+      "target": "dtdf"
+    },
+    {
+      "op": "release",
+      "target": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE One (ID LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO One (ID) VALUES (1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

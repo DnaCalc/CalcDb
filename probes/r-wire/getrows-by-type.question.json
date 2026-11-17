@@ -1,0 +1,599 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/getrows-by-type",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "R-DAO-1"
+  ],
+  "description": "GetRows(100) for each column of W separately (SELECT ID, column FROM W WHERE ID BETWEEN base AND base+99 ORDER BY ID, snapshot), 13 recordsets. Asks the element VARIANT tag, exact value, BSTR byte length and byte-array contents of each cell, and the array bounds; Null cells are included. Cells: FByte (IDs from 100): ui1-0, ui1-255, i2-256, i2-minus1, r8-1.5, r8-2.5; FInt (IDs from 200): i2-min, i2-max, i4-32768, i4-minus32769, r8-1.5, r8-2.5; FLong (IDs from 300): i4-min, i4-max, r8-2147483648, r8-minus2147483649, r8-0.5, r8-1.5, r8-2.5; FSingle (IDs from 400): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, r8-1e39, r8-1e-50, r8-0.1; FDouble (IDs from 500): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, one-plus-ulp, r4-0.1-widened, r8-0.1; FCurr (IDs from 600): cy-min, cy-max, cy-0.0001, cy-minus-0.0001, r8-0.00005, r8-0.00015, r8-1e15, bstr-5-decimals; FDate (IDs from 700): oa-0, oa-min, oa-max, below-min, above-max, negative-1.5, negative-0.25, positive-1.5, one-millisecond, half-second, nan, plus-inf, r8-tag-1.5, bstr-iso; FText (IDs from 800): empty, ascii, bmp, nul-middle, nul-only, astral, lone-high, lone-low, reversed-pair, u-fffe, odd-1-byte, odd-3-bytes, odd-3-bytes-high, len-255, len-256; FMemo (IDs from 900): empty, nul-middle, lone-high, lone-low, odd-1-byte, odd-5-bytes, len-300, len-5000, astral-4000, odd-8001-bytes; FBin (IDs from 1000): empty, leading-zeros, all-zero, ramp-255, ramp-256, bstr-ab, bstr-odd-3-bytes, hex-literal; FOle (IDs from 1100): empty, leading-zeros, ramp-256, pattern-5000, bstr-ab, bstr-odd-3-bytes; FBool (IDs from 1200): true, false, i2-1, i2-2, i2-minus1, r8-0.5, bstr-True, bstr-0, ui1-255; FDec (IDs from 1300): bstr-1.5, bstr-minus-0.0001, bstr-14.4-digits, bstr-28-digits, bstr-29-digits-max, bstr-trailing-zero, bstr-negative-zero, cy-1.5, r8-0.1, i4-7",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-wire-dao.accdb",
+      "sha256": "76ceb0c44e385678689da7e1bdb328c9c25230c28e1c18475ca13e7b01db85b7",
+      "length": 274432,
+      "provenance": "r-wire.create-dao.88c06e1195.a1 qk1-88c06e119534f765f4e1faca668b61437268f2a560b9597f561cef62200de09b output:r-wire-dao.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FByte FROM W WHERE ID BETWEEN 100 AND 199 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFByte"
+    },
+    {
+      "op": "invoke",
+      "target": "gFByte",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFByte",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFByte"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FInt FROM W WHERE ID BETWEEN 200 AND 299 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFInt"
+    },
+    {
+      "op": "invoke",
+      "target": "gFInt",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFInt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFInt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FLong FROM W WHERE ID BETWEEN 300 AND 399 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFLong"
+    },
+    {
+      "op": "invoke",
+      "target": "gFLong",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFLong",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFLong"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FSingle FROM W WHERE ID BETWEEN 400 AND 499 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "gFSingle",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFSingle",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFSingle"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FDouble FROM W WHERE ID BETWEEN 500 AND 599 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "gFDouble",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFDouble",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFDouble"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FCurr FROM W WHERE ID BETWEEN 600 AND 699 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFCurr"
+    },
+    {
+      "op": "invoke",
+      "target": "gFCurr",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFCurr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFCurr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FDate FROM W WHERE ID BETWEEN 700 AND 799 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFDate"
+    },
+    {
+      "op": "invoke",
+      "target": "gFDate",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFDate",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFDate"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FText FROM W WHERE ID BETWEEN 800 AND 899 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFText"
+    },
+    {
+      "op": "invoke",
+      "target": "gFText",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFText",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFText"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FMemo FROM W WHERE ID BETWEEN 900 AND 999 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFMemo"
+    },
+    {
+      "op": "invoke",
+      "target": "gFMemo",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFMemo",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFMemo"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FBin FROM W WHERE ID BETWEEN 1000 AND 1099 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFBin"
+    },
+    {
+      "op": "invoke",
+      "target": "gFBin",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFBin",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFBin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FOle FROM W WHERE ID BETWEEN 1100 AND 1199 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFOle"
+    },
+    {
+      "op": "invoke",
+      "target": "gFOle",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFOle",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFOle"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FBool FROM W WHERE ID BETWEEN 1200 AND 1299 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFBool"
+    },
+    {
+      "op": "invoke",
+      "target": "gFBool",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFBool",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFBool"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, FDec FROM W WHERE ID BETWEEN 1300 AND 1399 ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "gFDec"
+    },
+    {
+      "op": "invoke",
+      "target": "gFDec",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "gFDec",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "gFDec"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

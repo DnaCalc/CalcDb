@@ -1,0 +1,4459 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-wire.create-sql.6fbd2ee0bf.a1",
+  "retainedUtc": "2026-11-17T02:03:17.5908293+00:00",
+  "probe": "r-wire/create-sql",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "R-FMT-1"
+  ],
+  "description": "R-WIRE fixture r-wire-sql: table W as in r-wire-blank, then every cell of r-wire-dao that has a SQL literal written as INSERT INTO W (ID, column) VALUES (id, literal) through Database.Execute (cells without a literal are not attempted; the literals are in the statements). Cells: FByte (IDs from 100): ui1-0, ui1-255, i2-256, i2-minus1, r8-1.5, r8-2.5; FInt (IDs from 200): i2-min, i2-max, i4-32768, i4-minus32769, r8-1.5, r8-2.5; FLong (IDs from 300): i4-min, i4-max, r8-2147483648, r8-minus2147483649, r8-0.5, r8-1.5, r8-2.5; FSingle (IDs from 400): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, r8-1e39, r8-1e-50, r8-0.1; FDouble (IDs from 500): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, one-plus-ulp, r4-0.1-widened, r8-0.1; FCurr (IDs from 600): cy-min, cy-max, cy-0.0001, cy-minus-0.0001, r8-0.00005, r8-0.00015, r8-1e15, bstr-5-decimals; FDate (IDs from 700): oa-0, oa-min, oa-max, below-min, above-max, negative-1.5, negative-0.25, positive-1.5, one-millisecond, half-second, nan, plus-inf, r8-tag-1.5, bstr-iso; FText (IDs from 800): empty, ascii, bmp, nul-middle, nul-only, astral, lone-high, lone-low, reversed-pair, u-fffe, odd-1-byte, odd-3-bytes, odd-3-bytes-high, len-255, len-256; FMemo (IDs from 900): empty, nul-middle, lone-high, lone-low, odd-1-byte, odd-5-bytes, len-300, len-5000, astral-4000, odd-8001-bytes; FBin (IDs from 1000): empty, leading-zeros, all-zero, ramp-255, ramp-256, bstr-ab, bstr-odd-3-bytes, hex-literal; FOle (IDs from 1100): empty, leading-zeros, ramp-256, pattern-5000, bstr-ab, bstr-odd-3-bytes; FBool (IDs from 1200): true, false, i2-1, i2-2, i2-minus1, r8-0.5, bstr-True, bstr-0, ui1-255; FDec (IDs from 1300): bstr-1.5, bstr-minus-0.0001, bstr-14.4-digits, bstr-28-digits, bstr-29-digits-max, bstr-trailing-zero, bstr-negative-zero, cy-1.5, r8-0.1, i4-7. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); every call's result and error is recorded and the closed file is kept.",
+  "retentionNote": "Designed r-wire probe (A-02); complete capture of the ACE answer.",
+  "token": "r-wire.create-sql.6fbd2ee0bf",
+  "questionKey": "qk1-6fbd2ee0bf82cdb4989cb6beaff31562601b6c4af279d41564ab9a8a6cebe61f",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-wire/create-sql",
+    "bookRefs": [
+      "R-ORACLE-1",
+      "OR-WIRE",
+      "R-STRING-1",
+      "D-STRING-1",
+      "R-FMT-1"
+    ],
+    "description": "R-WIRE fixture r-wire-sql: table W as in r-wire-blank, then every cell of r-wire-dao that has a SQL literal written as INSERT INTO W (ID, column) VALUES (id, literal) through Database.Execute (cells without a literal are not attempted; the literals are in the statements). Cells: FByte (IDs from 100): ui1-0, ui1-255, i2-256, i2-minus1, r8-1.5, r8-2.5; FInt (IDs from 200): i2-min, i2-max, i4-32768, i4-minus32769, r8-1.5, r8-2.5; FLong (IDs from 300): i4-min, i4-max, r8-2147483648, r8-minus2147483649, r8-0.5, r8-1.5, r8-2.5; FSingle (IDs from 400): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, r8-1e39, r8-1e-50, r8-0.1; FDouble (IDs from 500): plus-zero, minus-zero, min-subnormal, max-subnormal, min-normal, max-finite, plus-inf, minus-inf, qnan, qnan-payload, snan, negative-qnan, one-plus-ulp, r4-0.1-widened, r8-0.1; FCurr (IDs from 600): cy-min, cy-max, cy-0.0001, cy-minus-0.0001, r8-0.00005, r8-0.00015, r8-1e15, bstr-5-decimals; FDate (IDs from 700): oa-0, oa-min, oa-max, below-min, above-max, negative-1.5, negative-0.25, positive-1.5, one-millisecond, half-second, nan, plus-inf, r8-tag-1.5, bstr-iso; FText (IDs from 800): empty, ascii, bmp, nul-middle, nul-only, astral, lone-high, lone-low, reversed-pair, u-fffe, odd-1-byte, odd-3-bytes, odd-3-bytes-high, len-255, len-256; FMemo (IDs from 900): empty, nul-middle, lone-high, lone-low, odd-1-byte, odd-5-bytes, len-300, len-5000, astral-4000, odd-8001-bytes; FBin (IDs from 1000): empty, leading-zeros, all-zero, ramp-255, ramp-256, bstr-ab, bstr-odd-3-bytes, hex-literal; FOle (IDs from 1100): empty, leading-zeros, ramp-256, pattern-5000, bstr-ab, bstr-odd-3-bytes; FBool (IDs from 1200): true, false, i2-1, i2-2, i2-minus1, r8-0.5, bstr-True, bstr-0, ui1-255; FDec (IDs from 1300): bstr-1.5, bstr-minus-0.0001, bstr-14.4-digits, bstr-28-digits, bstr-29-digits-max, bstr-trailing-zero, bstr-negative-zero, cy-1.5, r8-0.1, i4-7. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); every call's result and error is recorded and the closed file is kept.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "r-wire-sql.accdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, FByte BYTE, FInt SHORT, FLong LONG, FSingle SINGLE, FDouble DOUBLE, FCurr CURRENCY, FDate DATETIME, FText TEXT(255), FMemo MEMO, FBin BINARY(255), FOle LONGBINARY, FBool YESNO)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "TableDefs",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "dtdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "dtdfs",
+        "member": "Refresh",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "dtdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "W"
+          }
+        ],
+        "bind": "dtdf"
+      },
+      {
+        "op": "invoke",
+        "target": "dtdf",
+        "member": "CreateField",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "FDec"
+          },
+          {
+            "type": "i4",
+            "value": 20
+          }
+        ],
+        "bind": "dfld"
+      },
+      {
+        "op": "invoke",
+        "target": "dtdf",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "dfls"
+      },
+      {
+        "op": "invoke",
+        "target": "dfls",
+        "member": "Append",
+        "kind": "method",
+        "args": [
+          {
+            "type": "object",
+            "name": "dfld"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "dfls"
+      },
+      {
+        "op": "release",
+        "target": "dfld"
+      },
+      {
+        "op": "release",
+        "target": "dtdf"
+      },
+      {
+        "op": "release",
+        "target": "dtdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (100, 0)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (101, 255)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (102, 256)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (103, -1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (104, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FByte) VALUES (105, 2.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (200, -32768)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (201, 32767)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (202, 32768)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (203, -32769)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (204, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FInt) VALUES (205, 2.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (300, -2147483648)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (301, 2147483647)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (302, 2147483648)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (303, -2147483649)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (304, 0.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (305, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FLong) VALUES (306, 2.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (400, 0)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (401, -0.0)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (402, 1.401298464324817E-45)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (403, 1.1754942106924411E-38)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (404, 1.1754943508222875E-38)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (405, 3.4028234663852886E+38)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (412, 1E39)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (413, 1E-50)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FSingle) VALUES (414, 0.1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (500, 0)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (501, -0.0)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (502, 4.94065645841247E-324)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (503, 2.2250738585072009E-308)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (504, 2.2250738585072014E-308)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (505, 1.7976931348623157E+308)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (512, 1.0000000000000002)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (513, 0.100000001490116)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDouble) VALUES (514, 0.1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (600, -922337203685477.5808)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (601, 922337203685477.5807)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (602, 0.0001)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (603, -0.0001)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (604, 0.00005)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (605, 0.00015)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (606, 1E15)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FCurr) VALUES (607, 1.23456)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (700, #12/30/1899#)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (701, #1/1/0100#)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (702, #12/31/9999 23:59:59#)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (707, #12/31/1899 12:00:00#)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (712, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDate) VALUES (713, #2024-01-02 03:04:05#)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (800, '')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (801, 'alpha')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (802, 'Bä€')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (803, 'a' & Chr(0) & 'b')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (804, Chr(0))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (805, '\uD834\uDD1E')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (806, ChrW(55296))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (807, ChrW(56320))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (808, ChrW(56320) & ChrW(55296))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (809, ChrW(65534))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (813, 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FText) VALUES (814, 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FMemo) VALUES (900, '')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FMemo) VALUES (901, 'a' & Chr(0) & 'b')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FMemo) VALUES (902, ChrW(55296))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FMemo) VALUES (903, ChrW(56320))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FMemo) VALUES (906, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBin) VALUES (1007, 0x00000102)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1200, True)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1201, False)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1202, 1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1203, 2)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1204, -1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1205, 0.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1206, 'True')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1207, '0')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FBool) VALUES (1208, 255)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1300, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1301, -0.0001)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1302, 12345678901234.5678)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1303, 7922816251426433759354395033.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1304, 79228162514264337593543950335)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1305, 1.50)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1306, -0.00)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1307, 1.5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1308, 0.1)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO W (ID, FDec) VALUES (1309, 7)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-wire.create-sql.6fbd2ee0bf.a1",
+    "token": "r-wire.create-sql.6fbd2ee0bf",
+    "questionKey": "qk1-6fbd2ee0bf82cdb4989cb6beaff31562601b6c4af279d41564ab9a8a6cebe61f",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "412b7e5931bbcec56b8cbc29e000cd2995a63d72c1f098d80d06f6d263d2a638",
+    "artifacts": [
+      {
+        "role": "output:r-wire-sql.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_r-wire-sql.accdb",
+        "length": 221184,
+        "sha256": "e4ee39269d042e90b8c53f9f6bfe80b2e33b940012b941a9528e3dfe89a7071a"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 46428,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T02:03:17.5596824+00:00",
+    "sealSha256": "83803b7e0d3cca4d641f2c58fc6b8ab3f8e62b0c99f94188ca8981ad4afcc051"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-wire.create-sql.6fbd2ee0bf.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-6fbd2ee0bf82cdb4989cb6beaff31562601b6c4af279d41564ab9a8a6cebe61f",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040213\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "04684c2b2e57e0ea0ea54431bc1baed4c02740a7125ffd9880f6f3d41df2328e",
+      "workerBuild": "1.0.0+ff2e9c2cf613609c84afbf482ba27c864feef45d",
+      "toolingRevision": "ff2e9c2cf613609c84afbf482ba27c864feef45d",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 46428,
+      "threadId": 18692,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-wire.create-sql.6fbd2ee0bf.a1",
+      "windowStation": "WinSta0",
+      "desktop": "Default",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040213\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040213\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040213\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0077006900720065002e006300720065006100740065002d00730071006c002e0036006600620064003200650065003000620066002e00610031005c0077006f0072006b005c0072002d0077006900720065002d00730071006c002e0061006300630064006200",
+            "byteLength": 196,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-wire.create-sql.6fbd2ee0bf.a1\\work\\r-wire-sql.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020005700200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f00570020005000520049004d0041005200590020004b00450059002c00200046004200790074006500200042005900540045002c002000460049006e0074002000530048004f00520054002c00200046004c006f006e00670020004c004f004e0047002c0020004600530069006e0067006c0065002000530049004e0047004c0045002c002000460044006f00750062006c006500200044004f00550042004c0045002c002000460043007500720072002000430055005200520045004e00430059002c0020004600440061007400650020004400410054004500540049004d0045002c0020004600540065007800740020005400450058005400280032003500350029002c00200046004d0065006d006f0020004d0045004d004f002c0020004600420069006e002000420049004e00410052005900280032003500350029002c00200046004f006c00650020004c004f004e004700420049004e004100520059002c002000460042006f006f006c0020005900450053004e004f002900",
+            "byteLength": 458,
+            "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, FByte BYTE, FInt SHORT, FLong LONG, FSingle SINGLE, FDouble DOUBLE, FCurr CURRENCY, FDate DATETIME, FText TEXT(255), FMemo MEMO, FBin BINARY(255), FOle LONGBINARY, FBool YESNO)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "TableDefs",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "dtdfs",
+          "identity": "u3",
+          "typeName": "TableDefs",
+          "typeIid": "{0000004B-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "dtdfs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "dtdfs",
+        "member": "Refresh",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743810,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "dtdfs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "5700",
+            "byteLength": 2,
+            "text": "W"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "dtdf",
+          "identity": "u4",
+          "typeName": "_TableDef",
+          "typeIid": "{00000049-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "dtdf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "invoke",
+        "target": "dtdf",
+        "member": "CreateField",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4600440065006300",
+            "byteLength": 8,
+            "text": "FDec"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "20"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809364,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "dfld",
+          "identity": "u5",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "dfld",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "dtdf",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "dfls",
+          "identity": "u6",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "dfls",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "dfls",
+        "member": "Append",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "identity": "u5",
+            "typeName": "Field3",
+            "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809344,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "release",
+        "target": "dfls",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "release",
+        "target": "dfld",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "release",
+        "target": "dtdf",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "release",
+        "target": "dtdfs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300030002c00200030002900",
+            "byteLength": 82,
+            "text": "INSERT INTO W (ID, FByte) VALUES (100, 0)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300031002c0020003200350035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FByte) VALUES (101, 255)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300032002c0020003200350036002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FByte) VALUES (102, 256)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300033002c0020002d0031002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FByte) VALUES (103, -1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300034002c00200031002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FByte) VALUES (104, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420079007400650029002000560041004c00550045005300200028003100300035002c00200032002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FByte) VALUES (105, 2.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300030002c0020002d00330032003700360038002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FInt) VALUES (200, -32768)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300031002c002000330032003700360037002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FInt) VALUES (201, 32767)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300032002c002000330032003700360038002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FInt) VALUES (202, 32768)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300033002c0020002d00330032003700360039002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FInt) VALUES (203, -32769)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 25,
+        "programPath": "24"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300034002c00200031002e0035002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FInt) VALUES (204, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "25"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460049006e00740029002000560041004c00550045005300200028003200300035002c00200032002e0035002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FInt) VALUES (205, 2.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "26"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300030002c0020002d0032003100340037003400380033003600340038002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FLong) VALUES (300, -2147483648)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 28,
+        "programPath": "27"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300031002c00200032003100340037003400380033003600340037002900",
+            "byteLength": 100,
+            "text": "INSERT INTO W (ID, FLong) VALUES (301, 2147483647)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 29,
+        "programPath": "28"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300032002c00200032003100340037003400380033003600340038002900",
+            "byteLength": 100,
+            "text": "INSERT INTO W (ID, FLong) VALUES (302, 2147483648)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "29"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300033002c0020002d0032003100340037003400380033003600340039002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FLong) VALUES (303, -2147483649)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "30"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300034002c00200030002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FLong) VALUES (304, 0.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "31"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300035002c00200031002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FLong) VALUES (305, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "32"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004c006f006e00670029002000560041004c00550045005300200028003300300036002c00200032002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FLong) VALUES (306, 2.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "33"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300030002c00200030002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (400, 0)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "34"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300031002c0020002d0030002e0030002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (401, -0.0)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 36,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300032002c00200031002e0034003000310032003900380034003600340033003200340038003100370045002d00340035002900",
+            "byteLength": 126,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (402, 1.401298464324817E-45)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 37,
+        "programPath": "36"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300033002c00200031002e00310037003500340039003400320031003000360039003200340034003100310045002d00330038002900",
+            "byteLength": 128,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (403, 1.1754942106924411E-38)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300034002c00200031002e00310037003500340039003400330035003000380032003200320038003700350045002d00330038002900",
+            "byteLength": 128,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (404, 1.1754943508222875E-38)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400300035002c00200033002e00340030003200380032003300340036003600330038003500320038003800360045002b00330038002900",
+            "byteLength": 128,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (405, 3.4028234663852886E+38)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 40,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400310032002c00200031004500330039002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (412, 1E39)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400310033002c002000310045002d00350030002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (413, 1E-50)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "41"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600530069006e0067006c00650029002000560041004c00550045005300200028003400310034002c00200030002e0031002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FSingle) VALUES (414, 0.1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 43,
+        "programPath": "42"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300030002c00200030002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (500, 0)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 44,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300031002c0020002d0030002e0030002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (501, -0.0)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "44"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300032002c00200034002e003900340030003600350036003400350038003400310032003400370045002d003300320034002900",
+            "byteLength": 126,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (502, 4.94065645841247E-324)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 46,
+        "programPath": "45"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300033002c00200032002e00320032003500300037003300380035003800350030003700320030003000390045002d003300300038002900",
+            "byteLength": 130,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (503, 2.2250738585072009E-308)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 47,
+        "programPath": "46"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300034002c00200032002e00320032003500300037003300380035003800350030003700320030003100340045002d003300300038002900",
+            "byteLength": 130,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (504, 2.2250738585072014E-308)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 48,
+        "programPath": "47"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500300035002c00200031002e00370039003700360039003300310033003400380036003200330031003500370045002b003300300038002900",
+            "byteLength": 130,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (505, 1.7976931348623157E+308)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 49,
+        "programPath": "48"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500310032002c00200031002e0030003000300030003000300030003000300030003000300030003000300032002900",
+            "byteLength": 120,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (512, 1.0000000000000002)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 50,
+        "programPath": "49"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500310033002c00200030002e003100300030003000300030003000300031003400390030003100310036002900",
+            "byteLength": 118,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (513, 0.100000001490116)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 51,
+        "programPath": "50"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006f00750062006c00650029002000560041004c00550045005300200028003500310034002c00200030002e0031002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FDouble) VALUES (514, 0.1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 52,
+        "programPath": "51"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300030002c0020002d003900320032003300330037003200300033003600380035003400370037002e0035003800300038002900",
+            "byteLength": 122,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (600, -922337203685477.5808)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 53,
+        "programPath": "52"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300031002c0020003900320032003300330037003200300033003600380035003400370037002e0035003800300037002900",
+            "byteLength": 120,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (601, 922337203685477.5807)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 54,
+        "programPath": "53"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300032002c00200030002e0030003000300031002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (602, 0.0001)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 55,
+        "programPath": "54"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300033002c0020002d0030002e0030003000300031002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (603, -0.0001)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 56,
+        "programPath": "55"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300034002c00200030002e00300030003000300035002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (604, 0.00005)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 57,
+        "programPath": "56"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300035002c00200030002e00300030003000310035002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (605, 0.00015)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 58,
+        "programPath": "57"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300036002c00200031004500310035002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (606, 1E15)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 59,
+        "programPath": "58"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600430075007200720029002000560041004c00550045005300200028003600300037002c00200031002e00320033003400350036002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FCurr) VALUES (607, 1.23456)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 60,
+        "programPath": "59"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700300030002c0020002300310032002f00330030002f00310038003900390023002900",
+            "byteLength": 104,
+            "text": "INSERT INTO W (ID, FDate) VALUES (700, #12/30/1899#)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 61,
+        "programPath": "60"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700300031002c002000230031002f0031002f00300031003000300023002900",
+            "byteLength": 100,
+            "text": "INSERT INTO W (ID, FDate) VALUES (701, #1/1/0100#)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 62,
+        "programPath": "61"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700300032002c0020002300310032002f00330031002f0039003900390039002000320033003a00350039003a003500390023002900",
+            "byteLength": 122,
+            "text": "INSERT INTO W (ID, FDate) VALUES (702, #12/31/9999 23:59:59#)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 63,
+        "programPath": "62"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700300037002c0020002300310032002f00330031002f0031003800390039002000310032003a00300030003a003000300023002900",
+            "byteLength": 122,
+            "text": "INSERT INTO W (ID, FDate) VALUES (707, #12/31/1899 12:00:00#)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 64,
+        "programPath": "63"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700310032002c00200031002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FDate) VALUES (712, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 65,
+        "programPath": "64"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600440061007400650029002000560041004c00550045005300200028003700310033002c002000230032003000320034002d00300031002d00300032002000300033003a00300034003a003000350023002900",
+            "byteLength": 122,
+            "text": "INSERT INTO W (ID, FDate) VALUES (713, #2024-01-02 03:04:05#)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 66,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300030002c002000270027002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FText) VALUES (800, '')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 67,
+        "programPath": "66"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300031002c002000270061006c0070006800610027002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FText) VALUES (801, 'alpha')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 68,
+        "programPath": "67"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300032002c00200027004200e400ac2027002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FText) VALUES (802, 'Bä€')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 69,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300033002c0020002700610027002000260020004300680072002800300029002000260020002700620027002900",
+            "byteLength": 116,
+            "text": "INSERT INTO W (ID, FText) VALUES (803, 'a' & Chr(0) & 'b')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 70,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300034002c0020004300680072002800300029002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FText) VALUES (804, Chr(0))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 71,
+        "programPath": "70"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300035002c002000270034d81edd27002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FText) VALUES (805, '\uD834\uDD1E')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "71"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300036002c002000430068007200570028003500350032003900360029002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FText) VALUES (806, ChrW(55296))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 73,
+        "programPath": "72"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300037002c002000430068007200570028003500360033003200300029002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FText) VALUES (807, ChrW(56320))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 74,
+        "programPath": "73"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300038002c00200043006800720057002800350036003300320030002900200026002000430068007200570028003500350032003900360029002900",
+            "byteLength": 130,
+            "text": "INSERT INTO W (ID, FText) VALUES (808, ChrW(56320) & ChrW(55296))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 75,
+        "programPath": "74"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800300039002c002000430068007200570028003600350035003300340029002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FText) VALUES (809, ChrW(65534))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 76,
+        "programPath": "75"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800310033002c002000270078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780027002900",
+            "byteLength": 594,
+            "text": "INSERT INTO W (ID, FText) VALUES (813, 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 77,
+        "programPath": "76"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600540065007800740029002000560041004c00550045005300200028003800310034002c0020002700780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780078007800780027002900",
+            "byteLength": 596,
+            "text": "INSERT INTO W (ID, FText) VALUES (814, 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 78,
+        "programPath": "77"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004d0065006d006f0029002000560041004c00550045005300200028003900300030002c002000270027002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FMemo) VALUES (900, '')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 79,
+        "programPath": "78"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004d0065006d006f0029002000560041004c00550045005300200028003900300031002c0020002700610027002000260020004300680072002800300029002000260020002700620027002900",
+            "byteLength": 116,
+            "text": "INSERT INTO W (ID, FMemo) VALUES (901, 'a' & Chr(0) & 'b')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 80,
+        "programPath": "79"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004d0065006d006f0029002000560041004c00550045005300200028003900300032002c002000430068007200570028003500350032003900360029002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FMemo) VALUES (902, ChrW(55296))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 81,
+        "programPath": "80"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004d0065006d006f0029002000560041004c00550045005300200028003900300033002c002000430068007200570028003500360033003200300029002900",
+            "byteLength": 102,
+            "text": "INSERT INTO W (ID, FMemo) VALUES (903, ChrW(56320))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 82,
+        "programPath": "81"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c00200046004d0065006d006f0029002000560041004c00550045005300200028003900300036002c002000270079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790079007900790027002900",
+            "byteLength": 684,
+            "text": "INSERT INTO W (ID, FMemo) VALUES (906, 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 83,
+        "programPath": "82"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c0020004600420069006e0029002000560041004c005500450053002000280031003000300037002c00200030007800300030003000300030003100300032002900",
+            "byteLength": 100,
+            "text": "INSERT INTO W (ID, FBin) VALUES (1007, 0x00000102)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 84,
+        "programPath": "83"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300030002c00200054007200750065002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1200, True)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 85,
+        "programPath": "84"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300031002c002000460061006c00730065002900",
+            "byteLength": 92,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1201, False)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 86,
+        "programPath": "85"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300032002c00200031002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1202, 1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 87,
+        "programPath": "86"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300033002c00200032002900",
+            "byteLength": 84,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1203, 2)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 88,
+        "programPath": "87"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300034002c0020002d0031002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1204, -1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 89,
+        "programPath": "88"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300035002c00200030002e0035002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1205, 0.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 90,
+        "programPath": "89"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300036002c0020002700540072007500650027002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1206, 'True')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 91,
+        "programPath": "90"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300037002c0020002700300027002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1207, '0')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 92,
+        "programPath": "91"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460042006f006f006c0029002000560041004c005500450053002000280031003200300038002c0020003200350035002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FBool) VALUES (1208, 255)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 93,
+        "programPath": "92"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300030002c00200031002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1300, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 94,
+        "programPath": "93"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300031002c0020002d0030002e0030003000300031002900",
+            "byteLength": 94,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1301, -0.0001)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 95,
+        "programPath": "94"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300032002c002000310032003300340035003600370038003900300031003200330034002e0035003600370038002900",
+            "byteLength": 118,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1302, 12345678901234.5678)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 96,
+        "programPath": "95"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300033002c00200037003900320032003800310036003200350031003400320036003400330033003700350039003300350034003300390035003000330033002e0035002900",
+            "byteLength": 140,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1303, 7922816251426433759354395033.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 97,
+        "programPath": "96"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300034002c002000370039003200320038003100360032003500310034003200360034003300330037003500390033003500340033003900350030003300330035002900",
+            "byteLength": 138,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1304, 79228162514264337593543950335)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 98,
+        "programPath": "97"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300035002c00200031002e00350030002900",
+            "byteLength": 88,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1305, 1.50)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "98"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300036002c0020002d0030002e00300030002900",
+            "byteLength": 90,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1306, -0.00)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 100,
+        "programPath": "99"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300037002c00200031002e0035002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1307, 1.5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 101,
+        "programPath": "100"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300038002c00200030002e0031002900",
+            "byteLength": 86,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1308, 0.1)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 102,
+        "programPath": "101"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000570020002800490044002c002000460044006500630029002000560041004c005500450053002000280031003300300039002c00200037002900",
+            "byteLength": 82,
+            "text": "INSERT INTO W (ID, FDec) VALUES (1309, 7)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 103,
+        "programPath": "102"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 104,
+        "programPath": "103"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "work/r-wire-sql.accdb",
+            "length": 221184,
+            "sha256": "e4ee39269d042e90b8c53f9f6bfe80b2e33b940012b941a9528e3dfe89a7071a",
+            "lastWriteUtc": "2026-11-17T02:03:17.2445837Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 105,
+        "programPath": "104"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 106,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 107,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1192,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-040213\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 108,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "output:r-wire-sql.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_r-wire-sql.accdb",
+        "length": 221184,
+        "sha256": "e4ee39269d042e90b8c53f9f6bfe80b2e33b940012b941a9528e3dfe89a7071a"
+      }
+    ],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "output:r-wire-sql.accdb",
+      "kind": "output-file",
+      "length": 221184,
+      "sha256": "e4ee39269d042e90b8c53f9f6bfe80b2e33b940012b941a9528e3dfe89a7071a",
+      "path": "evidence/artifacts/e4ee39269d042e90b8c53f9f6bfe80b2e33b940012b941a9528e3dfe89a7071a"
+    }
+  ]
+}

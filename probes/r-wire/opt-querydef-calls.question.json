@@ -1,0 +1,527 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/opt-querydef-calls",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "R-DAO-1",
+    "R-SQL-3"
+  ],
+  "description": "Optional arguments of QueryDef.Execute(Options) and QueryDef.OpenRecordset(Type, Options, LockEdit) on a read-write copy of r-wire-blank: a temporary INSERT QueryDef executed with no argument, Missing, Empty, Null, I4 128 and BSTR \"128\" (QueryDef.RecordsAffected after each); a temporary SELECT ID FROM One QueryDef opened with no arguments, Missing x3, Empty x3, Null x3, snapshot alone, snapshot and Missing, and Missing with Options 0. Asks the HRESULT, error, RecordsAffected and, when open, Recordset.Type and Updatable.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-wire-blank.accdb",
+      "sha256": "6ac3ae9f64871e1a452e80f3164207d81c15619222251c524c527783c76090ef",
+      "length": 196608,
+      "provenance": "r-wire.create-blank.715221cf17.a1 qk1-715221cf179ad9f4f06e79d9e001dab188ed801d0f6c18f998997475f01c534f output:r-wire-blank.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "INSERT INTO One (ID) VALUES (900)"
+        }
+      ],
+      "bind": "qi"
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "128"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qi",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qi"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One"
+        }
+      ],
+      "bind": "qs"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "o0"
+    },
+    {
+      "op": "invoke",
+      "target": "o0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o0",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o0"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "o1"
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o1"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "empty"
+        },
+        {
+          "type": "empty"
+        },
+        {
+          "type": "empty"
+        }
+      ],
+      "bind": "o2"
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o2"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "bind": "o3"
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o3"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "o4"
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o4"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        }
+      ],
+      "bind": "o5"
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o5"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "o6"
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "o6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o6"
+    },
+    {
+      "op": "invoke",
+      "target": "qs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

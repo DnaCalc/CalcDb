@@ -1,0 +1,384 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-wire/ident-collections",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-STRING-1",
+    "D-STRING-1",
+    "OR-OBS",
+    "R-DAO-1"
+  ],
+  "description": "Object identity of engine, workspace and database collections: DBEngine.Workspaces twice, Workspaces(0) twice, Workspace.Databases twice, Databases(0) against the opened Database, Database.QueryDefs twice, Database.Relations twice, DBEngine.Errors twice, DBEngine.Properties twice; a temporary QueryDef (SELECT ID FROM W) with Parameters, Fields and Properties each twice. All held. Asks which labels coincide, and the Count of each collection.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-wire-dao.accdb",
+      "sha256": "76ceb0c44e385678689da7e1bdb328c9c25230c28e1c18475ca13e7b01db85b7",
+      "length": 274432,
+      "provenance": "r-wire.create-dao.88c06e1195.a1 qk1-88c06e119534f765f4e1faca668b61437268f2a560b9597f561cef62200de09b output:r-wire-dao.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ws1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ws2"
+    },
+    {
+      "op": "invoke",
+      "target": "ws1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w1"
+    },
+    {
+      "op": "invoke",
+      "target": "ws1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w2"
+    },
+    {
+      "op": "invoke",
+      "target": "ws2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w3"
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs1"
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs2"
+    },
+    {
+      "op": "invoke",
+      "target": "dbs1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "d0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qd1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qd2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rl1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rl2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "er1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "er2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ep1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ep2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM W"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qp1"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qp2"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qf1"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qf2"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qr1"
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qr2"
+    },
+    {
+      "op": "invoke",
+      "target": "ws1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rl1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "er1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ep1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qp1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qf1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qr1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "d0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

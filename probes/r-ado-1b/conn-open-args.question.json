@@ -1,0 +1,1282 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ado-1b/conn-open-args",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-CONN"
+  ],
+  "description": "ADO-CONN Open arguments: seven Connections with Provider (or a ConnectionString), Data Source through Properties and Mode = adModeRead, each opened with a different (ConnectionString, UserID, Password, Options) argument list: (UserID \"Admin\", empty Password), (\"Admin\", \"pw\"), (\"nouser\", empty), Options -1, Options 99, UserID and Password Null, and a ConnectionString property holding \"User ID=Admin\" with UserID argument \"other\". After each Open read State, ConnectionString and Errors, then Close. Asks which arguments the provider and ADO accept and how a string value and an argument combine.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "oa"
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "oaProps"
+    },
+    {
+      "op": "invoke",
+      "target": "oaProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "oaDs"
+    },
+    {
+      "op": "invoke",
+      "target": "oaDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "oaDs"
+    },
+    {
+      "op": "release",
+      "target": "oaProps"
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "Admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "oaErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "oaErrs",
+      "bind": "oaErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "oaErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oaErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oaErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oaErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oaErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "oaErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "oa",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "oa"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "ob"
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "obProps"
+    },
+    {
+      "op": "invoke",
+      "target": "obProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "obDs"
+    },
+    {
+      "op": "invoke",
+      "target": "obDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "obDs"
+    },
+    {
+      "op": "release",
+      "target": "obProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "Admin"
+        },
+        {
+          "type": "bstr",
+          "text": "pw"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "obErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "obErrs",
+      "bind": "obErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "obErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "obErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "obErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "obErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "obErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "obErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ob",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ob"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "oc"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ocProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ocProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ocDs"
+    },
+    {
+      "op": "invoke",
+      "target": "ocDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ocDs"
+    },
+    {
+      "op": "release",
+      "target": "ocProps"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "nouser"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ocErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ocErrs",
+      "bind": "ocErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ocErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ocErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ocErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ocErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ocErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ocErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "oc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "od"
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "odProps"
+    },
+    {
+      "op": "invoke",
+      "target": "odProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "odDs"
+    },
+    {
+      "op": "invoke",
+      "target": "odDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "odDs"
+    },
+    {
+      "op": "release",
+      "target": "odProps"
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "odErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "odErrs",
+      "bind": "odErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "odErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "odErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "odErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "odErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "odErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "odErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "od",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "od"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "oe"
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "oeProps"
+    },
+    {
+      "op": "invoke",
+      "target": "oeProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "oeDs"
+    },
+    {
+      "op": "invoke",
+      "target": "oeDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "oeDs"
+    },
+    {
+      "op": "release",
+      "target": "oeProps"
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "oeErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "oeErrs",
+      "bind": "oeErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "oeErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oeErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oeErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oeErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "oeErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "oeErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "oe",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "oe"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "of"
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ofProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ofProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ofDs"
+    },
+    {
+      "op": "invoke",
+      "target": "ofDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ofDs"
+    },
+    {
+      "op": "release",
+      "target": "ofProps"
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ofErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ofErrs",
+      "bind": "ofErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ofErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ofErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ofErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ofErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ofErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ofErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "of",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "of"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "og"
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "ConnectionString",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Provider=Microsoft.ACE.OLEDB.12.0;User ID=Admin"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ogProps"
+    },
+    {
+      "op": "invoke",
+      "target": "ogProps",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "ogDs"
+    },
+    {
+      "op": "invoke",
+      "target": "ogDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ogDs"
+    },
+    {
+      "op": "release",
+      "target": "ogProps"
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "bstr",
+          "text": "other"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "ConnectionString",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ogErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ogErrs",
+      "bind": "ogErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ogErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ogErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ogErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ogErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ogErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ogErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "og",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "og"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
