@@ -1,0 +1,4852 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1",
+  "retainedUtc": "2026-11-16T23:53:19.3783841+00:00",
+  "probe": "r-cplx-rebuild/publish-held-inproc",
+  "bookRefs": [
+    "R-REBUILD-1",
+    "RB-PUBLISH",
+    "RB-NEGATIVE"
+  ],
+  "description": "CompactDatabase while the source is held in the same process: by a shared read/write Database, by an exclusive Database, by an exclusive read-only Database; while the destination is held by a shared Database; and while a native handle holds the source (read/write, share none; then read, share read) or the existing destination (read, share none). Errors and file state are recorded after each attempt.",
+  "retentionNote": "Designed r-cplx-rebuild probe (A-02); complete capture of the ACE answer.",
+  "token": "r-cplx-rebuild.publish-held-inproc.bf0f64c248",
+  "questionKey": "qk1-bf0f64c2481827edb9820d95c261a42ef0eba22faee283f6d2891a7fed985f53",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-cplx-rebuild/publish-held-inproc",
+    "bookRefs": [
+      "R-REBUILD-1",
+      "RB-PUBLISH",
+      "RB-NEGATIVE"
+    ],
+    "description": "CompactDatabase while the source is held in the same process: by a shared read/write Database, by an exclusive Database, by an exclusive read-only Database; while the destination is held by a shared Database; and while a native handle holds the source (read/write, share none; then read, share read) or the existing destination (read, share none). Errors and file state are recorded after each attempt.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-cplx-rebuild-rb-rich2-accdb.accdb",
+        "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+        "length": 315392,
+        "provenance": "r-cplx-rebuild.create-rb-rich2-accdb.348ec9331f.a1 qk1-348ec9331f93f03496f333cca133668e429ca32f6d671cd12305af3b65b36692 output:r-cplx-rebuild-rb-rich2-accdb.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "observeModules",
+        "label": "before-create"
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "hshared"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "held-shared.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-held-shared",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "held-shared.accdb"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "bheldshared"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldshared",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldshared",
+        "member": "CollatingOrder",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldshared",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM Parent"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "bheldsharedq0"
+      },
+      {
+        "op": "loopUntil",
+        "target": "bheldsharedq0",
+        "member": "EOF",
+        "maxIterations": 4,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "bheldsharedq0",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "fl_bheldsharedq0"
+          },
+          {
+            "op": "forEachItem",
+            "target": "fl_bheldsharedq0",
+            "bind": "f_bheldsharedq0",
+            "maxItems": 8,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f_bheldsharedq0",
+                "member": "Name",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldsharedq0",
+                "member": "Type",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldsharedq0",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "fl_bheldsharedq0"
+          },
+          {
+            "op": "invoke",
+            "target": "bheldsharedq0",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "bheldsharedq0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldsharedq0"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldshared",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldshared"
+      },
+      {
+        "op": "invoke",
+        "target": "hshared",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "hshared"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": true
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "hexcl"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "held-excl.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-held-excl",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "held-excl.accdb"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "bheldexcl"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexcl",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexcl",
+        "member": "CollatingOrder",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexcl",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM Parent"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "bheldexclq0"
+      },
+      {
+        "op": "loopUntil",
+        "target": "bheldexclq0",
+        "member": "EOF",
+        "maxIterations": 4,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "bheldexclq0",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "fl_bheldexclq0"
+          },
+          {
+            "op": "forEachItem",
+            "target": "fl_bheldexclq0",
+            "bind": "f_bheldexclq0",
+            "maxItems": 8,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f_bheldexclq0",
+                "member": "Name",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldexclq0",
+                "member": "Type",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldexclq0",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "fl_bheldexclq0"
+          },
+          {
+            "op": "invoke",
+            "target": "bheldexclq0",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclq0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldexclq0"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexcl",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldexcl"
+      },
+      {
+        "op": "invoke",
+        "target": "hexcl",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "hexcl"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": true
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "hexclro"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "held-exclro.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-held-exclro",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "held-exclro.accdb"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "bheldexclro"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclro",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclro",
+        "member": "CollatingOrder",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclro",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM Parent"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "bheldexclroq0"
+      },
+      {
+        "op": "loopUntil",
+        "target": "bheldexclroq0",
+        "member": "EOF",
+        "maxIterations": 4,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "bheldexclroq0",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "fl_bheldexclroq0"
+          },
+          {
+            "op": "forEachItem",
+            "target": "fl_bheldexclroq0",
+            "bind": "f_bheldexclroq0",
+            "maxItems": 8,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f_bheldexclroq0",
+                "member": "Name",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldexclroq0",
+                "member": "Type",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "f_bheldexclroq0",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "fl_bheldexclroq0"
+          },
+          {
+            "op": "invoke",
+            "target": "bheldexclroq0",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclroq0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldexclroq0"
+      },
+      {
+        "op": "invoke",
+        "target": "bheldexclro",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "bheldexclro"
+      },
+      {
+        "op": "invoke",
+        "target": "hexclro",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "hexclro"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "dst.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-dst0",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "dst.accdb"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "hdst"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "dst.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-dst1",
+        "keep": false
+      },
+      {
+        "op": "invoke",
+        "target": "hdst",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "hdst"
+      },
+      {
+        "op": "nativeOpen",
+        "bind": "n1",
+        "file": "input:main",
+        "access": 3221225472,
+        "share": 0,
+        "disposition": 3
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "native-rw.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-native-rw",
+        "keep": false
+      },
+      {
+        "op": "nativeClose",
+        "handle": "n1"
+      },
+      {
+        "op": "nativeOpen",
+        "bind": "n2",
+        "file": "input:main",
+        "access": 2147483648,
+        "share": 1,
+        "disposition": 3
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "native-r.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-native-r",
+        "keep": false
+      },
+      {
+        "op": "nativeClose",
+        "handle": "n2"
+      },
+      {
+        "op": "nativeOpen",
+        "bind": "n3",
+        "file": "work:dst.accdb",
+        "access": 2147483648,
+        "share": 0,
+        "disposition": 3
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "dst.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "observeFiles",
+        "label": "compact-native-dst",
+        "keep": false
+      },
+      {
+        "op": "nativeClose",
+        "handle": "n3"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-close"
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1",
+    "token": "r-cplx-rebuild.publish-held-inproc.bf0f64c248",
+    "questionKey": "qk1-bf0f64c2481827edb9820d95c261a42ef0eba22faee283f6d2891a7fed985f53",
+    "workerGeneration": 1,
+    "execution": "ReturnedFailure",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "96a9c5407d19d3cea3d889b1dc69ecbfbd61828faf0bc472679fa20d07073d90",
+    "artifacts": [
+      {
+        "role": "lockfile:compact-held-shared:r-cplx-rebuild-rb-rich2-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_compact-held-shared_r-cplx-rebuild-rb-rich2-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:compact-dst1:dst.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_compact-dst1_dst.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "output:dst.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_dst.accdb",
+        "length": 315392,
+        "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 39276,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-16T23:53:19.3201456+00:00",
+    "sealSha256": "c542050aa8e4c371209411ccbc9fd17148bb06a874b28bf2eb32f4e2847bd89f"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-bf0f64c2481827edb9820d95c261a42ef0eba22faee283f6d2891a7fed985f53",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "f94431c363f9004ba6e204352860e8d2791ed872654c1771eef50c5b4bdf6f5c",
+      "workerBuild": "1.0.0+8a24599ea4514b517deccd76fdb8f819f03d3158",
+      "toolingRevision": "8a24599ea4514b517deccd76fdb8f819f03d3158",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 39276,
+      "threadId": 39348,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1",
+      "windowStation": "WinSta0",
+      "desktop": "Default",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "modules",
+        "label": "before-create",
+        "complete": true,
+        "bytesNeeded": 472,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll"
+        ],
+        "identities": [],
+        "deliberate": false,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "hshared",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "hshared",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d007300680061007200650064002e0061006300630064006200",
+            "byteLength": 232,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-shared.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0E78",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "59006f007500200061007400740065006d007000740065006400200074006f0020006f00700065006e002000610020006400610074006100620061007300650020007400680061007400200069007300200061006c007200650061006400790020006f00700065006e00650064002000620079002000750073006500720020002700610064006d0069006e00270020006f006e0020006d0061006300680069006e0065002000270047004f0056004500520054002d004f004d0045004e0027002e002000540072007900200061006700610069006e0020007700680065006e002000740068006500200064006100740061006200610073006500200069007300200061007600610069006c00610062006c0065002e00",
+            "byteLength": 278,
+            "text": "You attempted to open a database that is already opened by user 'admin' on machine 'GOVERT-OMEN'. Try again when the database is available."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003704,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u4",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "7[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3704"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "7[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "59006f007500200061007400740065006d007000740065006400200074006f0020006f00700065006e002000610020006400610074006100620061007300650020007400680061007400200069007300200061006c007200650061006400790020006f00700065006e00650064002000620079002000750073006500720020002700610064006d0069006e00270020006f006e0020006d0061006300680069006e0065002000270047004f0056004500520054002d004f004d0045004e0027002e002000540072007900200061006700610069006e0020007700680065006e002000740068006500200064006100740061006200610073006500200069007300200061007600610069006c00610062006c0065002e00",
+          "byteLength": 278,
+          "text": "You attempted to open a database that is already opened by user 'admin' on machine 'GOVERT-OMEN'. Try again when the database is available."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "7[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "7[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 13,
+        "programPath": "7[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 3,
+        "implicit": false,
+        "seq": 14,
+        "programPath": "8"
+      },
+      {
+        "event": "files",
+        "label": "compact-held-shared",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-16T23:53:18.4227400Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:compact-held-shared:r-cplx-rebuild-rb-rich2-accdb.laccdb"
+          }
+        ],
+        "seq": 15,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d007300680061007200650064002e0061006300630064006200",
+            "byteLength": 232,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-shared.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BD0",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+            "byteLength": 26,
+            "text": "DAO.Workspace"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f0074002000660069006e0064002000660069006c0065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d007300680061007200650064002e006100630063006400620027002e00",
+            "byteLength": 278,
+            "text": "Could not find file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-shared.accdb'."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003024,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 16,
+        "programPath": "10"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldshared' is not bound (an earlier call failed or released it).",
+        "seq": 17,
+        "programPath": "11"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldshared' is not bound (an earlier call failed or released it).",
+        "seq": 18,
+        "programPath": "12"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldshared' is not bound (an earlier call failed or released it).",
+        "seq": 19,
+        "programPath": "13"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldsharedq0' is not bound (an earlier call failed or released it).",
+        "seq": 20,
+        "programPath": "14[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Loop condition bheldsharedq0.EOF did not return VT_BOOL; loop ended.",
+        "seq": 21,
+        "programPath": "14[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldsharedq0' is not bound (an earlier call failed or released it).",
+        "seq": 22,
+        "programPath": "15"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldsharedq0'.",
+        "seq": 23,
+        "programPath": "16"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldshared' is not bound (an earlier call failed or released it).",
+        "seq": 24,
+        "programPath": "17"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldshared'.",
+        "seq": 25,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "hshared",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "19"
+      },
+      {
+        "event": "release",
+        "target": "hshared",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 27,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "hexcl",
+          "identity": "u5",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "hexcl",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 28,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c002e0061006300630064006200",
+            "byteLength": 228,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-excl.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BE5",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+            "byteLength": 348,
+            "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003045,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 29,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "23"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "24.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u6",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "24[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3045"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "24[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+          "byteLength": 348,
+          "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "24[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "24[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 36,
+        "programPath": "24[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 3,
+        "implicit": false,
+        "seq": 37,
+        "programPath": "25"
+      },
+      {
+        "event": "files",
+        "label": "compact-held-excl",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "attributes": "Archive",
+            "error": "IOException (HRESULT 0x80070020): The process cannot access the file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb' because it is being used by another process."
+          }
+        ],
+        "seq": 38,
+        "programPath": "26"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c002e0061006300630064006200",
+            "byteLength": 228,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-excl.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BD0",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+            "byteLength": 26,
+            "text": "DAO.Workspace"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f0074002000660069006e0064002000660069006c0065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c002e006100630063006400620027002e00",
+            "byteLength": 274,
+            "text": "Could not find file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-excl.accdb'."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003024,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 39,
+        "programPath": "27"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexcl' is not bound (an earlier call failed or released it).",
+        "seq": 40,
+        "programPath": "28"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexcl' is not bound (an earlier call failed or released it).",
+        "seq": 41,
+        "programPath": "29"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexcl' is not bound (an earlier call failed or released it).",
+        "seq": 42,
+        "programPath": "30"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclq0' is not bound (an earlier call failed or released it).",
+        "seq": 43,
+        "programPath": "31[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Loop condition bheldexclq0.EOF did not return VT_BOOL; loop ended.",
+        "seq": 44,
+        "programPath": "31[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclq0' is not bound (an earlier call failed or released it).",
+        "seq": 45,
+        "programPath": "32"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldexclq0'.",
+        "seq": 46,
+        "programPath": "33"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexcl' is not bound (an earlier call failed or released it).",
+        "seq": 47,
+        "programPath": "34"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldexcl'.",
+        "seq": 48,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "hexcl",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 49,
+        "programPath": "36"
+      },
+      {
+        "event": "release",
+        "target": "hexcl",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 50,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "hexclro",
+          "identity": "u7",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "hexclro",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 51,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c0072006f002e0061006300630064006200",
+            "byteLength": 232,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-exclro.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BE5",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+            "byteLength": 348,
+            "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003045,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 52,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 53,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 54,
+        "programPath": "41.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u8",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 55,
+        "programPath": "41[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3045"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 56,
+        "programPath": "41[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+          "byteLength": 348,
+          "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 57,
+        "programPath": "41[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 58,
+        "programPath": "41[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 59,
+        "programPath": "41[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 3,
+        "implicit": false,
+        "seq": 60,
+        "programPath": "42"
+      },
+      {
+        "event": "files",
+        "label": "compact-held-exclro",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 61,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c0072006f002e0061006300630064006200",
+            "byteLength": 232,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-exclro.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BD0",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+            "byteLength": 26,
+            "text": "DAO.Workspace"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f0074002000660069006e0064002000660069006c0065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c0072006f002e006100630063006400620027002e00",
+            "byteLength": 278,
+            "text": "Could not find file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-exclro.accdb'."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003024,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 62,
+        "programPath": "44"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclro' is not bound (an earlier call failed or released it).",
+        "seq": 63,
+        "programPath": "45"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclro' is not bound (an earlier call failed or released it).",
+        "seq": 64,
+        "programPath": "46"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclro' is not bound (an earlier call failed or released it).",
+        "seq": 65,
+        "programPath": "47"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclroq0' is not bound (an earlier call failed or released it).",
+        "seq": 66,
+        "programPath": "48[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Loop condition bheldexclroq0.EOF did not return VT_BOOL; loop ended.",
+        "seq": 67,
+        "programPath": "48[0].check"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclroq0' is not bound (an earlier call failed or released it).",
+        "seq": 68,
+        "programPath": "49"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldexclroq0'.",
+        "seq": 69,
+        "programPath": "50"
+      },
+      {
+        "event": "skipped",
+        "reason": "Target 'bheldexclro' is not bound (an earlier call failed or released it).",
+        "seq": 70,
+        "programPath": "51"
+      },
+      {
+        "event": "skipped",
+        "reason": "Release of unbound 'bheldexclro'.",
+        "seq": 71,
+        "programPath": "52"
+      },
+      {
+        "event": "invoke",
+        "target": "hexclro",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "53"
+      },
+      {
+        "event": "release",
+        "target": "hexclro",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 73,
+        "programPath": "54"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006400730074002e0061006300630064006200",
+            "byteLength": 216,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\dst.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 74,
+        "programPath": "55"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 75,
+        "programPath": "56"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 76,
+        "programPath": "57.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u9",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 77,
+        "programPath": "57[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3024"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 78,
+        "programPath": "57[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f0074002000660069006e0064002000660069006c0065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c00680065006c0064002d006500780063006c0072006f002e006100630063006400620027002e00",
+          "byteLength": 278,
+          "text": "Could not find file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\held-exclro.accdb'."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 79,
+        "programPath": "57[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e0057006f0072006b0073007000610063006500",
+          "byteLength": 26,
+          "text": "DAO.Workspace"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 80,
+        "programPath": "57[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 81,
+        "programPath": "57[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 82,
+        "programPath": "58"
+      },
+      {
+        "event": "files",
+        "label": "compact-dst0",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+            "lastWriteUtc": "2026-11-16T23:53:18.5737872Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 83,
+        "programPath": "59"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006400730074002e0061006300630064006200",
+            "byteLength": 216,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\dst.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "hdst",
+          "identity": "u10",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "hdst",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 84,
+        "programPath": "60"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006400730074002e0061006300630064006200",
+            "byteLength": 216,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\dst.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0C84",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "44006100740061006200610073006500200061006c007200650061006400790020006500780069007300740073002e00",
+            "byteLength": 48,
+            "text": "Database already exists."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003204,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 85,
+        "programPath": "61"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 86,
+        "programPath": "62"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 87,
+        "programPath": "63.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u11",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 88,
+        "programPath": "63[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3204"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 89,
+        "programPath": "63[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "44006100740061006200610073006500200061006c007200650061006400790020006500780069007300740073002e00",
+          "byteLength": 48,
+          "text": "Database already exists."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 90,
+        "programPath": "63[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 91,
+        "programPath": "63[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 92,
+        "programPath": "63[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 3,
+        "implicit": false,
+        "seq": 93,
+        "programPath": "64"
+      },
+      {
+        "event": "files",
+        "label": "compact-dst1",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+            "lastWriteUtc": "2026-11-16T23:53:18.5737872Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-16T23:53:18.6016700Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:compact-dst1:dst.laccdb"
+          }
+        ],
+        "seq": 94,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "hdst",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 95,
+        "programPath": "66"
+      },
+      {
+        "event": "release",
+        "target": "hdst",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 96,
+        "programPath": "67"
+      },
+      {
+        "event": "handle",
+        "op": "open",
+        "handle": "n1",
+        "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+        "access": 3221225472,
+        "share": 0,
+        "disposition": 3,
+        "success": true,
+        "volumeSerial": "7E825A368259F35F",
+        "fileId": "000000000000000000290000004FBA22",
+        "atUtc": "2026-11-16T23:53:18.6317487+00:00",
+        "seq": 97,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006e00610074006900760065002d00720077002e0061006300630064006200",
+            "byteLength": 228,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\native-rw.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BE5",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+            "byteLength": 348,
+            "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003045,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 98,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "70"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 100,
+        "programPath": "71.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u12",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 101,
+        "programPath": "71[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3045"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 102,
+        "programPath": "71[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+          "byteLength": 348,
+          "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 103,
+        "programPath": "71[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 104,
+        "programPath": "71[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 105,
+        "programPath": "71[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 106,
+        "programPath": "72"
+      },
+      {
+        "event": "files",
+        "label": "compact-native-rw",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "attributes": "Archive",
+            "error": "IOException (HRESULT 0x80070020): The process cannot access the file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb' because it is being used by another process."
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+            "lastWriteUtc": "2026-11-16T23:53:18.5737872Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 107,
+        "programPath": "73"
+      },
+      {
+        "event": "handle",
+        "op": "close",
+        "handle": "n1",
+        "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+        "success": true,
+        "atUtc": "2026-11-16T23:53:18.6445291+00:00",
+        "seq": 108,
+        "programPath": "74"
+      },
+      {
+        "event": "handle",
+        "op": "open",
+        "handle": "n2",
+        "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+        "access": 2147483648,
+        "share": 1,
+        "disposition": 3,
+        "success": true,
+        "volumeSerial": "7E825A368259F35F",
+        "fileId": "000000000000000000290000004FBA22",
+        "atUtc": "2026-11-16T23:53:18.6447472+00:00",
+        "seq": 109,
+        "programPath": "75"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006e00610074006900760065002d0072002e0061006300630064006200",
+            "byteLength": 226,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\native-r.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0BE5",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+            "byteLength": 348,
+            "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003045,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 110,
+        "programPath": "76"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 111,
+        "programPath": "77"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 112,
+        "programPath": "78.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u13",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 113,
+        "programPath": "78[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3045"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 114,
+        "programPath": "78[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43006f0075006c00640020006e006f00740020007500730065002000270043003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e006100630063006400620027003b002000660069006c006500200061006c0072006500610064007900200069006e0020007500730065002e00",
+          "byteLength": 348,
+          "text": "Could not use 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb'; file already in use."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 115,
+        "programPath": "78[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 116,
+        "programPath": "78[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 117,
+        "programPath": "78[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 118,
+        "programPath": "79"
+      },
+      {
+        "event": "files",
+        "label": "compact-native-r",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+            "lastWriteUtc": "2026-11-16T23:53:18.5737872Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 119,
+        "programPath": "80"
+      },
+      {
+        "event": "handle",
+        "op": "close",
+        "handle": "n2",
+        "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+        "success": true,
+        "atUtc": "2026-11-16T23:53:18.6576909+00:00",
+        "seq": 120,
+        "programPath": "81"
+      },
+      {
+        "event": "handle",
+        "op": "open",
+        "handle": "n3",
+        "relativePath": "work/dst.accdb",
+        "access": 2147483648,
+        "share": 0,
+        "disposition": 3,
+        "success": true,
+        "volumeSerial": "7E825A368259F35F",
+        "fileId": "000000000000000000490000004FBA40",
+        "atUtc": "2026-11-16T23:53:18.6578236+00:00",
+        "seq": 121,
+        "programPath": "82"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CompactDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0069006e0070007500740073005c0072002d00630070006c0078002d00720065006200750069006c0064002d00720062002d00720069006300680032002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 272,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\inputs\\r-cplx-rebuild-rb-rich2-accdb.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00630070006c0078002d00720065006200750069006c0064002e007000750062006c006900730068002d00680065006c0064002d0069006e00700072006f0063002e0062006600300066003600340063003200340038002e00610031005c0077006f0072006b005c006400730074002e0061006300630064006200",
+            "byteLength": 216,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\dst.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0C84",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "440041004f002e004400620045006e00670069006e006500",
+            "byteLength": 24,
+            "text": "DAO.DbEngine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "44006100740061006200610073006500200061006c007200650061006400790020006500780069007300740073002e00",
+            "byteLength": 48,
+            "text": "Database already exists."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "6a0065007400650072007200340030002e00630068006d00",
+            "byteLength": 24,
+            "text": "jeterr40.chm"
+          },
+          "helpContext": 5003204,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000001",
+          "present": false
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 122,
+        "programPath": "83"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u3",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 123,
+        "programPath": "84"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 124,
+        "programPath": "85.count"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "e",
+          "identity": "u14",
+          "typeName": "Error",
+          "typeIid": "{00000023-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "e",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 125,
+        "programPath": "85[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "3204"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 126,
+        "programPath": "85[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "44006100740061006200610073006500200061006c007200650061006400790020006500780069007300740073002e00",
+          "byteLength": 48,
+          "text": "Database already exists."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 127,
+        "programPath": "85[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "e",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743809,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "440041004f002e004400620045006e00670069006e006500",
+          "byteLength": 24,
+          "text": "DAO.DbEngine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 128,
+        "programPath": "85[0].2"
+      },
+      {
+        "event": "release",
+        "target": "e",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 129,
+        "programPath": "85[0].release"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 130,
+        "programPath": "86"
+      },
+      {
+        "event": "files",
+        "label": "compact-native-dst",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "attributes": "Archive",
+            "error": "IOException (HRESULT 0x80070020): The process cannot access the file 'C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-cplx-rebuild.publish-held-inproc.bf0f64c248.a1\\work\\dst.accdb' because it is being used by another process."
+          }
+        ],
+        "seq": 131,
+        "programPath": "87"
+      },
+      {
+        "event": "handle",
+        "op": "close",
+        "handle": "n3",
+        "relativePath": "work/dst.accdb",
+        "success": true,
+        "atUtc": "2026-11-16T23:53:18.6722015+00:00",
+        "seq": 132,
+        "programPath": "88"
+      },
+      {
+        "event": "modules",
+        "label": "after-close",
+        "complete": true,
+        "bytesNeeded": 1248,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.9818_none_3e071914e3359bdd\\Comctl32.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACECORE.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\d2d1.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WTSAPI32.dll",
+          "C:\\WINDOWS\\System32\\CRYPT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WINSTA.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dxgi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\powrprof.dll",
+          "C:\\WINDOWS\\SYSTEM32\\UMPDC.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dxcore.dll",
+          "C:\\WINDOWS\\SYSTEM32\\directxdatabasehelper.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cfgmgr32.dll",
+          "C:\\Windows\\System32\\twinapi.appcore.dll",
+          "C:\\Windows\\System32\\WinTypes.dll",
+          "C:\\WINDOWS\\System32\\netprofm.dll",
+          "C:\\WINDOWS\\SYSTEM32\\CRYPTBASE.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DPAPI.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WININET.dll",
+          "C:\\WINDOWS\\SYSTEM32\\iertutil.dll",
+          "C:\\WINDOWS\\SYSTEM32\\srvcli.dll",
+          "C:\\WINDOWS\\SYSTEM32\\netutils.dll",
+          "C:\\WINDOWS\\System32\\Normaliz.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.26100.9974_none_6ef868b23dc24782\\gdiplus.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DWrite.dll",
+          "C:\\WINDOWS\\System32\\npmproxy.dll",
+          "C:\\WINDOWS\\SYSTEM32\\webservices.dll",
+          "C:\\WINDOWS\\SYSTEM32\\davclnt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\d3d11.dll",
+          "C:\\WINDOWS\\System32\\WS2_32.dll",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\nvldumdx.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msasn1.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptnet.dll",
+          "C:\\WINDOWS\\SYSTEM32\\ondemandconnroutehelper.dll",
+          "C:\\WINDOWS\\SYSTEM32\\wldp.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WINHTTP.dll",
+          "C:\\WINDOWS\\SYSTEM32\\drvstore.dll",
+          "C:\\WINDOWS\\SYSTEM32\\devobj.dll",
+          "C:\\WINDOWS\\System32\\wintrust.dll",
+          "C:\\WINDOWS\\system32\\mswsock.dll",
+          "C:\\WINDOWS\\System32\\imagehlp.dll",
+          "C:\\WINDOWS\\SYSTEM32\\IPHLPAPI.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\WINNSI.DLL",
+          "C:\\WINDOWS\\System32\\NSI.dll",
+          "C:\\WINDOWS\\system32\\rsaenh.dll",
+          "C:\\Windows\\System32\\Windows.UI.dll",
+          "C:\\Windows\\System32\\Windows.UI.Immersive.dll",
+          "C:\\WINDOWS\\SYSTEM32\\urlmon.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DNSAPI.dll",
+          "C:\\WINDOWS\\SYSTEM32\\DSPARSE.dll",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\nvgpucomp64.dll",
+          "C:\\Windows\\System32\\rasadhlp.dll",
+          "C:\\WINDOWS\\System32\\fwpuclnt.dll",
+          "C:\\WINDOWS\\system32\\schannel.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCR100.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc6.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\userenv.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\expsrv.dll",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\NvMemMapStoragex.dll",
+          "C:\\WINDOWS\\SYSTEM32\\WINMM.dll",
+          "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\ncrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\NTASN1.dll",
+          "C:\\WINDOWS\\system32\\ncryptsslp.dll",
+          "C:\\WINDOWS\\SYSTEM32\\srpapi.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\webio.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\nvwgf2umx.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+          "C:\\WINDOWS\\system32\\nvspcap64.dll",
+          "C:\\WINDOWS\\SYSTEM32\\ntmarta.dll",
+          "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nvhm.inf_amd64_f0c4c3905d48bee7\\nvppex.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACECORE.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACECORE.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2321728,
+            "sha256": "0869a35f898f48203966e1d75e1129ccf909df3e4149e6ff76caf26b99fea496",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001300000034DE4F",
+            "lastWriteUtc": "2026-11-13T09:22:53.4479257Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCR100.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcr100.dll",
+            "fileVersion": "10.00.40219.325",
+            "productVersion": "10.00.40219.325",
+            "fileVersionNumber": "10.0.40219.325",
+            "productName": "Microsoft® Visual Studio® 2010",
+            "length": 839952,
+            "sha256": "87acb0f4d1ce3dc0a6d2e1649663e115c957c0f7e0300592d6528baf9c021b61",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000020000003F00B1",
+            "lastWriteUtc": "2026-03-24T17:02:44.7116139Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\expsrv.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\EXPSRV.DLL",
+            "fileVersion": "7.1.1158",
+            "productVersion": "7.1",
+            "fileVersionNumber": "7.1.0.1158",
+            "productName": "Microsoft Visual Basic for Applications",
+            "length": 561984,
+            "sha256": "3d752559d0d96cbcc882912986ab3267d0e923641020ebbd43757be3b9401abd",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000140000004356D9",
+            "lastWriteUtc": "2026-07-29T19:12:27.2817394Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 893352,
+            "sha256": "79893a8f3b81d6c7170ab6a0cd1945875d8d1882d8c1e668b06833c7a3a6e533",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000007D000000352BA6",
+            "lastWriteUtc": "2026-11-13T09:23:00.4826023Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEERR.DLL",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 73640,
+            "sha256": "aac52c65d450f0cb0ddf34975c3c67e882c31a46e890a5013c158176b6e04d54",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000008000000467969",
+            "lastWriteUtc": "2026-10-27T07:29:35.6081978Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\1033\\ACEINTL.DLL",
+            "fileVersion": "16.0.20326.20022",
+            "productVersion": "16.0.20326.20022",
+            "fileVersionNumber": "16.0.20326.20022",
+            "productName": "Microsoft Office",
+            "length": 223184,
+            "sha256": "4df48005324bb37dcc576755200133d5c72b01b0aee096867357c19831b51a96",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000008000000473B8E",
+            "lastWriteUtc": "2026-08-22T22:58:32.2971396Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 929752,
+            "sha256": "206bca66787e8fd9daab80de845bab56fde3a052ce50152d6b06550c28c96ace",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002200000034DE52",
+            "lastWriteUtc": "2026-11-13T09:22:53.4800835Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+            "fileVersion": "7.1.1158",
+            "productVersion": "7.1",
+            "fileVersionNumber": "7.0.1.1158",
+            "productName": "Microsoft Visual Basic for Applications",
+            "length": 32664,
+            "sha256": "dd3f7cc42a6d860e30fb8850beccd76e95bdc4f23f7ba661295bc1bacf9887c4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000017000000439A9D",
+            "lastWriteUtc": "2026-07-29T19:12:37.2535062Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 133,
+        "programPath": "89"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "inputs/r-cplx-rebuild-rb-rich2-accdb.accdb",
+            "length": 315392,
+            "sha256": "8130651568b6327971c34d1dfa19cced7db0327f04e7705777be1295f535798c",
+            "lastWriteUtc": "2026-11-16T23:49:37.3362122Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/dst.accdb",
+            "length": 315392,
+            "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+            "lastWriteUtc": "2026-11-16T23:53:18.5737872Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 134,
+        "programPath": "90"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 135,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1200,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-014920\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 136,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "lockfile:compact-held-shared:r-cplx-rebuild-rb-rich2-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_compact-held-shared_r-cplx-rebuild-rb-rich2-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:compact-dst1:dst.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_compact-dst1_dst.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "output:dst.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_dst.accdb",
+        "length": 315392,
+        "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061"
+      }
+    ],
+    "execution": "ReturnedFailure",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "lockfile:compact-held-shared:r-cplx-rebuild-rb-rich2-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:compact-dst1:dst.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "output:dst.accdb",
+      "kind": "output-file",
+      "length": 315392,
+      "sha256": "e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061",
+      "path": "evidence/artifacts/e44ded5fe397361a073d54ad33e150f8b671e97c9fc945bdf9777e220ac95061"
+    }
+  ]
+}
