@@ -34,6 +34,9 @@ internal static class DaoErrors
     /// <summary>3420 (R-ACT-1 ACT-RETAIN).</summary>
     public const string ObjectInvalid = "Object invalid or no longer set.";
 
+    /// <summary>3219 (r-cursor-1/pos-moves-forwardonly).</summary>
+    public const string InvalidOperation = "Invalid operation.";
+
     /// <summary>3265 (R-DAO-1 DAO-COLL).</summary>
     public const string ItemNotFound = "Item not found in this collection.";
 

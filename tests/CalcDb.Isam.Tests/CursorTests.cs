@@ -160,6 +160,13 @@ public sealed class CursorTests
         p.MoveLast();
         Assert.Equal(2048, store.ObservedCount);
 
+        // Forward-only populates only the rows it reaches (r-cursor-1/pop-count-forwardonly: 1, then 2).
+        var forward = new OccurrenceStore<int>(new ListSource(228), firstMoveChunk: 1);
+        var fp = new PositionState<int>(forward, forwardOnly: true);
+        Assert.Equal(1, forward.ObservedCount);
+        fp.MoveNext();
+        Assert.Equal(2, forward.ObservedCount);
+
         var small = new OccurrenceStore<int>(new ListSource(228));
         new PositionState<int>(small, forwardOnly: false).MoveNext();
         Assert.Equal(228, small.ObservedCount);

@@ -8,19 +8,16 @@ using CalcDb.Isam;
 namespace CalcDb.Com.Dao;
 
 /// <summary>
-/// A table-type Recordset (Recordset2) over the native table cursor (W-04/table-cursor): storage order, the qualified
-/// movement rules (R-CURSOR-1 CUR-POS), the exact count at open (CUR-POP) and root-locator bookmarks (CUR-ID).
+/// A Recordset (Recordset2) over a native read cursor: the table cursor (W-04/table-cursor) or the populated
+/// dynaset/snapshot cursor, with the qualified movement rules (R-CURSOR-1 CUR-POS), counts (CUR-POP) and bookmarks (CUR-ID).
 /// After Close every member fails 3420 (R-ACT-1 ACT-RETAIN), with source DAO.Recordset.
 /// </summary>
 internal sealed unsafe class RecordsetObject : DaoObject
 {
-    /// <summary>dbOpenTable.</summary>
-    private const int TableType = 1;
-
     private static readonly InterfaceDecl Decl = DaoTypes.Recordset2;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Type", (self, args) => Live(self, r => Int16(TableType)))
+        .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
         .Get("RecordCount", (self, args) => Live(self, r => Int32((int)r.Cursor.RecordCount)))
         .Get("EOF", (self, args) => Live(self, r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Live(self, r => Bool(r.Cursor.Bof)))
@@ -32,17 +29,19 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Method("MoveNext", (self, args) => Live(self, r => r.Moved(r.Cursor.MoveNext())))
         .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
+        .Get("AbsolutePosition", (self, args) => Live(self, r => r.AbsolutePosition()))
         .Get("Bookmark", (self, args) => Live(self, r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetBookmark(value)); })
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     private FieldsObject? _fields;
 
-    public RecordsetObject(DatabaseObject database, string tableName, TableCursor cursor) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    public RecordsetObject(DatabaseObject database, string tableName, IRecordCursor cursor, int recordsetType) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         TableName = tableName;
         Cursor = cursor;
+        RecordsetType = recordsetType;
         database.AddRef(); // a recordset keeps its Database object alive
     }
 
@@ -50,7 +49,10 @@ internal sealed unsafe class RecordsetObject : DaoObject
 
     public string TableName { get; }
 
-    public TableCursor Cursor { get; }
+    public IRecordCursor Cursor { get; }
+
+    /// <summary>RecordsetTypeEnum: 1 table, 2 dynaset, 4 snapshot, 8 forward-only.</summary>
+    public int RecordsetType { get; }
 
     public bool Closed { get; private set; }
 
@@ -69,7 +71,20 @@ internal sealed unsafe class RecordsetObject : DaoObject
     {
         MoveOutcome.Moved or MoveOutcome.ReachedBoundary => CallResult.Nothing,
         MoveOutcome.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
+        // Forward-only refuses backward movement with 3219 (CUR-POS, r-cursor-1/pos-moves-forwardonly).
+        MoveOutcome.NotSupported when RecordsetType == 8 => Fail(3219, DaoErrors.InvalidOperation),
         _ => CallResult.Fail(Failure.NotImplemented($"Recordset movement outcome {outcome}")),
+    };
+
+    /// <summary>
+    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot; forward-only refuses it with 3219
+    /// (r-cursor-1/pos-moves-dynaset, pos-moves-forwardonly). Table-type and the value without a current row are not observed.
+    /// </summary>
+    private CallResult AbsolutePosition() => Cursor switch
+    {
+        PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
+        PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
+        _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition on a table-type recordset or without a current row")),
     };
 
     private CallResult Move(nint rowsArg, nint startBookmark)

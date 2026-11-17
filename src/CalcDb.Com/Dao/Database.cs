@@ -118,8 +118,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// OpenRecordset(Name, Type, Options, LockEdit) on a local table: a table-type cursor (Type omitted or dbOpenTable 1).
-    /// Not yet: SQL text and saved queries (W-06/W-09), dynaset and snapshot (the occurrence store), Options, LockEdit.
+    /// OpenRecordset(Name, Type, Options, LockEdit) on a local table: table-type, dynaset, snapshot or forward-only.
+    /// Not yet: SQL text and saved queries (W-06/W-09), Options, LockEdit, editing (W-05).
     /// </summary>
     private CallResult OpenRecordset(ReadOnlySpan<nint> args)
     {
@@ -148,9 +148,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             return Fail(3011, DaoErrors.ObjectNotFound(name));
         }
-        if (type is not (null or 1))
+        if (type is not (null or 1 or 2 or 4 or 8))
         {
-            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {type} (dynaset and snapshot over the occurrence store)"));
+            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {type}"));
         }
         TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Cache.Pin(p).Pin is { } pin ? Copy(pin) : null, Format, 64, out string? viewFailure);
         TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out viewFailure);
@@ -158,12 +158,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the TableDef cannot be read: " + viewFailure));
         }
-        TableCursor? cursor = TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out TraversalFailure? traversal);
+        // A local table opens table-type when no type is given (dbOpenTable 1); dynaset 2, snapshot 4 and forward-only 8
+        // populate through the occurrence store (CUR-POP).
+        int recordsetType = type ?? 1;
+        TraversalFailure? traversal;
+        IRecordCursor? cursor = recordsetType == 1
+            ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
+            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal);
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
         }
-        var recordset = new RecordsetObject(this, entry.Name, cursor);
+        var recordset = new RecordsetObject(this, entry.Name, cursor, recordsetType);
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();
