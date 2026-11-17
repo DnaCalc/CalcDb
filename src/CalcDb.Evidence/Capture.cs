@@ -525,6 +525,9 @@ public sealed record ModuleIdentity
 /// </summary>
 public sealed record EnvironmentReceipt
 {
+    /// <summary>For a candidate attempt: the implementation activated, its module hash and the host binding it bootstrapped.</summary>
+    public string? Implementation { get; init; }
+
     public required string WorkerPath { get; init; }
 
     public required string WorkerSha256 { get; init; }

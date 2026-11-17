@@ -15,7 +15,7 @@ public sealed unsafe class FactoryHostCoreTests
     private static readonly Guid OwnClsid = new("D44A3A3E-4FD9-4426-A7B7-8351E8421EBF");
     private static readonly Guid CompatClsid = new("CD7791B9-43FD-42C5-AE42-8DD2811F0419");
     private const int VersionDispId = 1610809344;
-    private const int WorkspacesDispId = 0;
+    private const int IniPathDispId = 1610809345;
 
     [Fact]
     public void The_published_module_serves_its_classes_through_the_real_caller_route()
@@ -97,10 +97,10 @@ public sealed unsafe class FactoryHostCoreTests
         // Named failures: an unknown name, and a declared member not implemented yet (never a native match).
         Assert.Equal(HResults.DISP_E_UNKNOWNNAME, GetIds(engine, "Versoin", out int unknownId));
         Assert.Equal(-1, unknownId);
-        Assert.Null(InvokeGetText(engine, WorkspacesDispId, out ExcepInfo info));
+        Assert.Null(InvokeGetText(engine, IniPathDispId, out ExcepInfo info));
         Assert.Equal(HResults.E_NOTIMPL, info.Scode);
         Assert.Equal("CalcDb", Marshal.PtrToStringBSTR(info.Source));
-        Assert.Contains("_DBEngine.Workspaces", Marshal.PtrToStringBSTR(info.Description), StringComparison.Ordinal);
+        Assert.Contains("_DBEngine.IniPath", Marshal.PtrToStringBSTR(info.Description), StringComparison.Ordinal);
         FreeExcepInfo(info);
         nint systemDb = 1234;
         Assert.Equal(HResults.E_NOTIMPL, ((delegate* unmanaged<nint, nint*, int>)Vtable(dual)[248 / 8])(dual, &systemDb));

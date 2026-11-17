@@ -10,17 +10,6 @@ internal enum InvokeKind
     PropertyPutRef = 8,
 }
 
-/// <summary>What an unimplemented entry clears in the caller's retval cell before it fails (II-13 §3: null outputs on failure).</summary>
-internal enum RetvalCell
-{
-    None,
-    Byte,
-    Int16,
-    Int32,
-    Pointer,
-    Variant,
-}
-
 /// <summary>A declared default value (PARAMFLAG_FHASDEFAULT): its VARTYPE and exact integer, bits or text.</summary>
 internal sealed record ParamDefault(int Vt, long? Integer = null, ulong? Bits = null, string? Text = null);
 
@@ -45,11 +34,11 @@ internal sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kin
 /// <summary>
 /// A captured dual interface (II-13 F-138 InterfaceDecl): IID, native vtable size, base interface, type flags of the
 /// dispatch and vtable views, the flattened dispatch members beyond IDispatch and the vtable entries it declares.
-/// <see cref="FillUnimplemented"/> fills every slot with a generated entry that clears its outputs and fails with the
-/// named not-implemented outcome; implemented entries then replace their slots.
+/// <see cref="FillEntries"/> fills every declared slot with its generated typed entry (TypedCall), which reaches the
+/// member's operation or fails with the named not-implemented outcome.
 /// </summary>
 internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableBytes, string baseName, int dispatchFlags, int vtableFlags,
-    IReadOnlyList<MemberDecl> members, IReadOnlyList<VtableEntryDecl> entries, delegate*<nint*, void> fillUnimplemented)
+    IReadOnlyList<MemberDecl> members, IReadOnlyList<VtableEntryDecl> entries, delegate*<nint*, void> fillEntries)
 {
     public string Name { get; } = name;
 
@@ -70,7 +59,7 @@ internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableByte
 
     public IReadOnlyList<VtableEntryDecl> Entries { get; } = entries;
 
-    public delegate*<nint*, void> FillUnimplemented { get; } = fillUnimplemented;
+    public delegate*<nint*, void> FillEntries { get; } = fillEntries;
 
     public MemberDecl Member(string name, InvokeKind kind) =>
         Members.Single(m => m.Kind == kind && string.Equals(m.Name, name, StringComparison.Ordinal));

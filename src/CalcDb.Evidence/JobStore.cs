@@ -132,7 +132,7 @@ public sealed partial class JobStore
     /// any worker can execute (II-15 §3). Refuses while the previous attempt is still running, so two
     /// owners never operate on the same inputs.
     /// </summary>
-    public AttemptRecord PrepareAttempt(string token, string toolingRevision, string bookRevision)
+    public AttemptRecord PrepareAttempt(string token, string toolingRevision, string bookRevision, ImplementationSelection? implementation = null)
     {
         JobRecord job = GetJob(token);
         if (job.State is JobState.Running or JobState.Prepared)
@@ -170,6 +170,7 @@ public sealed partial class JobStore
             ToolingRevision = toolingRevision,
             BookRevision = bookRevision,
             PreparedUtc = DateTimeOffset.UtcNow,
+            Implementation = implementation,
         };
         if (!EvidenceJson.TryCreateNew(Path.Combine(dir, "attempt.json"), attempt))
         {

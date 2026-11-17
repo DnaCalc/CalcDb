@@ -1,6 +1,6 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CalcDb.Com.Declarations;
+using CalcDb.Foundation;
 using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Com;
@@ -11,9 +11,14 @@ internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure
     public static CallResult Of(OwnedVariant value) => new(value, null);
 
     public static CallResult Fail(Failure failure) => new(null, failure);
+
+    public static CallResult Nothing { get; } = new(null, null);
 }
 
-/// <summary>A typed object operation. <paramref name="args"/> holds one borrowed VARIANT pointer per declared parameter (0 when omitted).</summary>
+/// <summary>
+/// A typed object operation. <paramref name="args"/> holds one borrowed VARIANT pointer per declared parameter, 0 when
+/// an optional one was omitted. Parameters of declared scalar types arrive coerced to that type.
+/// </summary>
 internal delegate CallResult Operation(ComObject self, ReadOnlySpan<nint> args);
 
 /// <summary>DISPPARAMS, Windows x64 layout.</summary>
@@ -27,9 +32,9 @@ internal struct DispParams
 }
 
 /// <summary>
-/// A wrapper with a dual interface: its declaration, and the operations it implements by (member ID, invoke kind).
-/// The dispatch adapter binds its arguments and reaches the operation; a declared member without an operation fails
-/// with the named not-implemented outcome.
+/// A wrapper with a dual interface: its declaration, and the operations it implements by member. The dispatch adapter
+/// binds and coerces arguments, the typed adapter (<see cref="TypedCall"/>) converts native arguments; both reach the
+/// same operation. A declared member without an operation fails with the named not-implemented outcome.
 /// </summary>
 internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable)
 {
@@ -37,20 +42,44 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 
     protected abstract Operation? Find(MemberDecl member);
 
+    /// <summary>Called with every failure an operation returns, before it is published (DAO records it in Errors).</summary>
+    protected virtual void OnFailure(Failure failure)
+    {
+    }
+
+    protected override int HeadFor(in Guid iid)
+    {
+        if (iid == ComIids.IDispatch)
+        {
+            return 0;
+        }
+        Guid wanted = iid;
+        return DeclarationIndex.Chain(Declaration).Contains(wanted) ? 0 : -1;
+    }
+
     public CallResult Run(MemberDecl member, ReadOnlySpan<nint> args)
     {
+        CallResult result;
         if (Find(member) is not { } op)
         {
-            return CallResult.Fail(Failure.NotImplemented($"{Declaration.Name}.{member.Name}"));
+            result = CallResult.Fail(Failure.NotImplemented($"{Declaration.Name}.{member.Name}"));
         }
-        try
+        else
         {
-            return op(this, args);
+            try
+            {
+                result = op(this, args);
+            }
+            catch (Exception e)
+            {
+                result = CallResult.Fail(Failure.Defect(e));
+            }
         }
-        catch (Exception e)
+        if (result.Failure is { } failure)
         {
-            return CallResult.Fail(Failure.Defect(e));
+            OnFailure(failure);
         }
+        return result;
     }
 
     /// <summary>
@@ -112,8 +141,6 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
             return HResults.DISP_E_MEMBERNOTFOUND;
         }
         int declared = member.Parameters.Count;
-        Span<nint> args = declared <= 8 ? stackalloc nint[declared] : new nint[declared];
-        args.Clear();
         uint count = parameters is null ? 0 : parameters->ArgCount;
         uint named = parameters is null ? 0 : parameters->NamedArgCount;
         if (named > count)
@@ -124,12 +151,15 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         {
             return HResults.DISP_E_BADPARAMCOUNT;
         }
+        nint[] args = new nint[declared];
+        uint[] positions = new uint[declared]; // each argument's index in rgvarg, for puArgErr
         NativeVariant* rgvarg = count == 0 ? null : (NativeVariant*)parameters->Args;
         int* namedIds = named == 0 ? null : (int*)parameters->NamedArgs;
         uint positional = count - named;
         for (uint i = 0; i < positional; i++)
         {
-            args[(int)i] = (nint)(rgvarg + (count - 1 - i));
+            args[i] = (nint)(rgvarg + (count - 1 - i));
+            positions[i] = count - 1 - i;
         }
         for (uint j = 0; j < named; j++)
         {
@@ -149,37 +179,61 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                 return ErrorPublication.ToExcepInfo(Failure.NotImplemented($"{Declaration.Name}.{member.Name} with a repeated named argument"), info);
             }
             args[target] = (nint)(rgvarg + j);
+            positions[target] = j;
         }
-        for (int k = 0; k < declared; k++)
+        var coerced = new List<OwnedVariant>();
+        try
         {
-            bool missing = args[k] == 0 || IsMissing((NativeVariant*)args[k]);
-            if (missing)
+            for (int k = 0; k < declared; k++)
             {
-                args[k] = 0;
-                if (!member.Parameters[k].Optional)
+                if (args[k] == 0 || TypedCall.IsMissing((NativeVariant*)args[k]))
                 {
-                    return HResults.DISP_E_PARAMNOTOPTIONAL;
+                    args[k] = 0;
+                    if (!member.Parameters[k].Optional)
+                    {
+                        return HResults.DISP_E_PARAMNOTOPTIONAL;
+                    }
+                    continue;
+                }
+                // Declared scalar parameters are coerced as DispInvoke does; a failure names the argument.
+                if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt && ((NativeVariant*)args[k])->Vt != (ushort)vt)
+                {
+                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, out int hr);
+                    if (c is null)
+                    {
+                        if (argError is not null)
+                        {
+                            *argError = positions[k];
+                        }
+                        return hr;
+                    }
+                    coerced.Add(c);
+                    args[k] = (nint)c.Pointer;
                 }
             }
-        }
-        CallResult outcome = Run(member, args);
-        if (outcome.Failure is { } failure)
-        {
-            return ErrorPublication.ToExcepInfo(failure, info);
-        }
-        if (outcome.Value is { } value)
-        {
-            if (result is not null)
+            CallResult outcome = Run(member, args);
+            if (outcome.Failure is { } failure)
             {
-                value.TransferTo(result);
+                return ErrorPublication.ToExcepInfo(failure, info);
             }
-            value.Dispose();
+            if (outcome.Value is { } value)
+            {
+                if (result is not null)
+                {
+                    value.TransferTo(result);
+                }
+                value.Dispose();
+            }
+            return HResults.S_OK;
         }
-        return HResults.S_OK;
+        finally
+        {
+            foreach (OwnedVariant c in coerced)
+            {
+                c.Dispose();
+            }
+        }
     }
-
-    /// <summary>A missing optional argument: VT_ERROR DISP_E_PARAMNOTFOUND.</summary>
-    private static bool IsMissing(NativeVariant* v) => v->Vt == (ushort)Foundation.VarType.Error && *(int*)&v->Int64 == HResults.DISP_E_PARAMNOTFOUND;
 
     private MemberDecl? Choose(int dispId, ushort flags)
     {
@@ -198,13 +252,13 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
 internal static unsafe class DualEntries
 {
     /// <summary>
-    /// The vtable of a dual interface: IUnknown and IDispatch, generated not-implemented entries for every declared
-    /// slot, then the implemented typed entries. Built once per interface and kept for the module's lifetime.
+    /// The vtable of a dual interface: IUnknown and IDispatch, then the generated typed entry of every declared slot,
+    /// each reaching its operation through <see cref="TypedCall"/>. Built once per interface, kept for the module's lifetime.
     /// </summary>
-    public static nint Build(InterfaceDecl declaration, params ReadOnlySpan<(MemberDecl Member, nint Entry)> implemented)
+    public static nint Build(InterfaceDecl declaration)
     {
         nint* table = (nint*)NativeMemory.AllocZeroed((nuint)(declaration.SlotCount * sizeof(nint)));
-        declaration.FillUnimplemented(table);
+        declaration.FillEntries(table);
         table[0] = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterface;
         table[1] = (nint)(delegate* unmanaged<nint, uint>)&AddRef;
         table[2] = (nint)(delegate* unmanaged<nint, uint>)&Release;
@@ -212,10 +266,6 @@ internal static unsafe class DualEntries
         table[4] = (nint)(delegate* unmanaged<nint, uint, uint, nint*, int>)&GetTypeInfo;
         table[5] = (nint)(delegate* unmanaged<nint, Guid*, char**, uint, uint, int*, int>)&GetIDsOfNames;
         table[6] = (nint)(delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)&Invoke;
-        foreach ((MemberDecl member, nint entry) in implemented)
-        {
-            table[member.Slot] = entry;
-        }
         return (nint)table;
     }
 
@@ -296,33 +346,168 @@ internal static unsafe class DualEntries
     }
 }
 
-/// <summary>The body of every generated not-implemented vtable entry.</summary>
-internal static unsafe class Unimplemented
+/// <summary>
+/// The typed (vtable) adapter: every generated slot entry passes its raw arguments here. Each argument is turned into a
+/// borrowed VARIANT by its declared type, the operation runs, and the result is written to the retval cell by the
+/// declared return type. The retval cell is cleared first, so a failure leaves a null output (II-13 §3).
+/// </summary>
+internal static unsafe class TypedCall
 {
-    public static int Fail(nint self, InterfaceDecl declaration, int slot, nint retval, RetvalCell cell)
+    public static int Run(nint self, InterfaceDecl declaration, int slot, ulong* raw, int count, nint retval)
     {
-        if (retval != 0)
+        MemberDecl? member = declaration.BySlot(slot);
+        if (member is not null && retval != 0)
         {
-            switch (cell)
-            {
-                case RetvalCell.Byte:
-                    *(byte*)retval = 0;
-                    break;
-                case RetvalCell.Int16:
-                    *(short*)retval = 0;
-                    break;
-                case RetvalCell.Int32:
-                    *(int*)retval = 0;
-                    break;
-                case RetvalCell.Pointer:
-                    *(nint*)retval = 0;
-                    break;
-                case RetvalCell.Variant:
-                    Unsafe.InitBlock((void*)retval, 0, (uint)sizeof(NativeVariant));
-                    break;
-            }
+            Clear(member.ReturnType, retval);
         }
-        string member = declaration.BySlot(slot)?.Name ?? $"slot {slot}";
-        return ErrorPublication.ToErrorInfo(Failure.NotImplemented($"{declaration.Name}.{member}"), declaration.Iid);
+        try
+        {
+            if (member is null)
+            {
+                return ErrorPublication.ToErrorInfo(Failure.NotImplemented($"{declaration.Name} slot {slot}"), declaration.Iid);
+            }
+            DispatchObject target = ComObject.Recover<DispatchObject>(self);
+            NativeVariant* cells = stackalloc NativeVariant[Math.Max(count, 1)];
+            nint[] args = new nint[member.Parameters.Count];
+            for (int k = 0; k < count && k < args.Length; k++)
+            {
+                cells[k] = default;
+                string type = member.Parameters[k].Type;
+                if (type == "VT_VARIANT")
+                {
+                    args[k] = IsMissing((NativeVariant*)raw[k]) ? 0 : (nint)raw[k];
+                    continue;
+                }
+                if (!Box(type, raw[k], cells + k))
+                {
+                    return ErrorPublication.ToErrorInfo(Failure.NotImplemented($"{declaration.Name}.{member.Name} with a {type} argument"), declaration.Iid);
+                }
+                args[k] = (nint)(cells + k);
+            }
+            CallResult outcome = target.Run(member, args);
+            if (outcome.Failure is { } failure)
+            {
+                return ErrorPublication.ToErrorInfo(failure, declaration.Iid);
+            }
+            if (outcome.Value is { } value)
+            {
+                using (value)
+                {
+                    if (retval != 0)
+                    {
+                        Store(member.ReturnType, value, retval);
+                    }
+                }
+            }
+            return HResults.S_OK;
+        }
+        catch (Exception e)
+        {
+            return ErrorPublication.ToErrorInfo(Failure.Defect(e), declaration.Iid);
+        }
+    }
+
+    /// <summary>A missing optional argument: VT_ERROR DISP_E_PARAMNOTFOUND.</summary>
+    public static bool IsMissing(NativeVariant* v) => v->Vt == (ushort)VarType.Error && *(int*)&v->Int64 == HResults.DISP_E_PARAMNOTFOUND;
+
+    /// <summary>The VARTYPE of a declared scalar parameter type, or null for VARIANT, object and pointer types.</summary>
+    public static VarType? ScalarType(string type) => type switch
+    {
+        "VT_BSTR" => VarType.Bstr,
+        "VT_I2" => VarType.I2,
+        "VT_I4" => VarType.I4,
+        "VT_BOOL" => VarType.Bool,
+        "VT_R4" => VarType.R4,
+        "VT_R8" => VarType.R8,
+        "VT_DATE" => VarType.Date,
+        "VT_CY" => VarType.Currency,
+        "VT_UI1" => VarType.UI1,
+        _ => null,
+    };
+
+    private static bool Box(string type, ulong raw, NativeVariant* cell)
+    {
+        if (ScalarType(type) is { } vt)
+        {
+            cell->Vt = (ushort)vt;
+            cell->Int64 = vt switch
+            {
+                VarType.I2 or VarType.Bool => (short)raw,
+                VarType.I4 => (int)raw,
+                VarType.UI1 => (byte)raw,
+                VarType.R4 => (uint)raw, // float bits
+                _ => (long)raw, // BSTR pointer, R8/DATE bits, CY
+            };
+            return true;
+        }
+        if (type.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal) || type is "VT_DISPATCH" or "VT_UNKNOWN")
+        {
+            cell->Vt = (ushort)(type == "VT_UNKNOWN" ? VarType.Unknown : VarType.Dispatch);
+            cell->Pointer = (nint)raw;
+            return true;
+        }
+        return false;
+    }
+
+    private static void Clear(string returnType, nint retval)
+    {
+        switch (returnType)
+        {
+            case "VT_VOID":
+                break;
+            case "VT_VARIANT":
+                *(NativeVariant*)retval = default;
+                break;
+            case "VT_I2" or "VT_BOOL" or "VT_UI2":
+                *(short*)retval = 0;
+                break;
+            case "VT_UI1":
+                *(byte*)retval = 0;
+                break;
+            case "VT_I4" or "VT_R4" or "VT_UI4" or "VT_INT" or "VT_UINT":
+                *(int*)retval = 0;
+                break;
+            default:
+                *(long*)retval = 0; // pointers, BSTR, 8-byte scalars
+                break;
+        }
+    }
+
+    private static void Store(string returnType, OwnedVariant value, nint retval)
+    {
+        NativeVariant* v = value.Pointer;
+        switch (returnType)
+        {
+            case "VT_VARIANT":
+                value.TransferTo((NativeVariant*)retval);
+                return;
+            case "VT_BSTR":
+                *(nint*)retval = value.TransferBstr();
+                return;
+            case "VT_I2" or "VT_BOOL":
+                *(short*)retval = (short)v->Int64;
+                return;
+            case "VT_UI1":
+                *(byte*)retval = (byte)v->Int64;
+                return;
+            case "VT_I4" or "VT_R4":
+                *(int*)retval = (int)v->Int64;
+                return;
+            case "VT_R8" or "VT_DATE" or "VT_CY":
+                *(long*)retval = v->Int64;
+                return;
+        }
+        if (returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
+        {
+            // The declared interface of the returned object (a coclass name stands for its default interface).
+            InterfaceDecl? declared = DeclarationIndex.Interface(returnType[16..]);
+            nint unknown = v->Pointer;
+            nint result = 0;
+            Guid iid = declared?.Iid ?? ComIids.IDispatch;
+            int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)(*(nint**)unknown)[0])(unknown, &iid, &result);
+            *(nint*)retval = hr >= 0 ? result : 0;
+            return;
+        }
+        throw new InvalidOperationException($"no typed return rule for {returnType}");
     }
 }

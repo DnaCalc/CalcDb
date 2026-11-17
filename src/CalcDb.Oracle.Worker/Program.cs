@@ -112,8 +112,25 @@ internal sealed unsafe partial class Run : IDisposable
 
     public Capture Execute()
     {
-        EnvironmentReceipt environment = DescribeEnvironment();
+        // A candidate attempt activates its deployment before anything else; a failed activation runs nothing.
+        using CandidateDeployment? candidate = _attempt.Implementation is { } selection ? CandidateDeployment.Activate(selection, _captureErrors) : null;
+        EnvironmentReceipt environment = DescribeEnvironment() with { Implementation = candidate?.Description };
         _environment = environment;
+        if (_attempt.Implementation is not null && candidate is null)
+        {
+            return new Capture
+            {
+                AttemptId = _attempt.AttemptId,
+                WorkerGeneration = _attempt.WorkerGeneration,
+                QuestionKey = _attempt.QuestionKey,
+                Participant = _participant,
+                Environment = environment,
+                Events = _events,
+                Artifacts = _artifacts.Artifacts,
+                Execution = Evidence.Execution.Aborted,
+                CaptureErrors = _captureErrors,
+            };
+        }
         var inputHashes = _question.Inputs.ToDictionary(i => i.FileName, i => i.Sha256, StringComparer.OrdinalIgnoreCase);
         string execution;
         try

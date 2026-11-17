@@ -1404,7 +1404,10 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_DAO_7(nint self, nint a0) => Com.Unimplemented.Fail(self, DAO, 7, a0, RetvalCell.Pointer);
+    private static int U_DAO_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DAO, 7, null, 0, r);
+    }
 
     private static void Fill_Properties(nint* table)
     {
@@ -1417,22 +1420,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 7, a0, RetvalCell.Int16);
+    private static int U_Properties_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Properties, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 8, a0, RetvalCell.Pointer);
+    private static int U_Properties_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Properties, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_9(nint self) => Com.Unimplemented.Fail(self, Properties, 9, 0, RetvalCell.None);
+    private static int U_Properties_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Properties, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 10, 0, RetvalCell.None);
+    private static int U_Properties_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Properties, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Properties, 11, 0, RetvalCell.None);
+    private static int U_Properties_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Properties, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Properties_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Properties, 12, a1, RetvalCell.Pointer);
+    private static int U_Properties_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Properties, 12, raw, 1, r);
+    }
 
     private static void Fill_DynaCollection(nint* table)
     {
@@ -1444,19 +1465,34 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_DynaCollection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 7, a0, RetvalCell.Int16);
+    private static int U_DynaCollection_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DynaCollection, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DynaCollection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 8, a0, RetvalCell.Pointer);
+    private static int U_DynaCollection_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DynaCollection, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DynaCollection_9(nint self) => Com.Unimplemented.Fail(self, DynaCollection, 9, 0, RetvalCell.None);
+    private static int U_DynaCollection_9(nint self)
+    {
+        return Com.TypedCall.Run(self, DynaCollection, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DynaCollection_10(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 10, 0, RetvalCell.None);
+    private static int U_DynaCollection_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DynaCollection, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DynaCollection_11(nint self, nint a0) => Com.Unimplemented.Fail(self, DynaCollection, 11, 0, RetvalCell.None);
+    private static int U_DynaCollection_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DynaCollection, 11, raw, 1, 0);
+    }
 
     private static void Fill_Collection(nint* table)
     {
@@ -1466,13 +1502,22 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Collection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Collection, 7, a0, RetvalCell.Int16);
+    private static int U_Collection_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Collection, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Collection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Collection, 8, a0, RetvalCell.Pointer);
+    private static int U_Collection_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Collection, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Collection_9(nint self) => Com.Unimplemented.Fail(self, Collection, 9, 0, RetvalCell.None);
+    private static int U_Collection_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Collection, 9, null, 0, 0);
+    }
 
     private static void Fill_Property(nint* table)
     {
@@ -1487,28 +1532,52 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 7, a0, RetvalCell.Pointer);
+    private static int U_Property_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Property, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 8, a0, RetvalCell.Variant);
+    private static int U_Property_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Property, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 9, 0, RetvalCell.None);
+    private static int U_Property_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Property, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 10, a0, RetvalCell.Pointer);
+    private static int U_Property_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Property, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 11, 0, RetvalCell.None);
+    private static int U_Property_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Property, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 12, a0, RetvalCell.Int16);
+    private static int U_Property_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Property, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 13, 0, RetvalCell.None);
+    private static int U_Property_13(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Property, 13, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Property_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Property, 14, a0, RetvalCell.Int16);
+    private static int U_Property_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Property, 14, null, 0, r);
+    }
 
     private static void Fill_DBEngine(nint* table)
     {
@@ -1546,97 +1615,190 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_7(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 7, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_8(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 8, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_9(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 9, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_10(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 10, 0, RetvalCell.None);
+    private static int U_DBEngine_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_11(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 11, 0, RetvalCell.None);
+    private static int U_DBEngine_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_12(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 12, 0, RetvalCell.None);
+    private static int U_DBEngine_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_13(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 13, a0, RetvalCell.Int16);
+    private static int U_DBEngine_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_14(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 14, 0, RetvalCell.None);
+    private static int U_DBEngine_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_15(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 15, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_16(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 16, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_17(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 17, 0, RetvalCell.None);
+    private static int U_DBEngine_17(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 17, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_18(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, DBEngine, 18, 0, RetvalCell.None);
+    private static int U_DBEngine_18(nint self, nint a0, nint a1, nint a2, nint a3, nint a4)
+    {
+        ulong* raw = stackalloc ulong[5]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; raw[4] = (ulong)a4; return Com.TypedCall.Run(self, DBEngine, 18, raw, 5, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_19(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 19, 0, RetvalCell.None);
+    private static int U_DBEngine_19(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 19, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_20(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, DBEngine, 20, 0, RetvalCell.None);
+    private static int U_DBEngine_20(nint self, nint a0, nint a1, nint a2, nint a3)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, DBEngine, 20, raw, 4, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_21(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, DBEngine, 21, a3, RetvalCell.Pointer);
+    private static int U_DBEngine_21(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, DBEngine, 21, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_22(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, DBEngine, 22, a4, RetvalCell.Pointer);
+    private static int U_DBEngine_22(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, DBEngine, 22, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_23(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, DBEngine, 23, a3, RetvalCell.Pointer);
+    private static int U_DBEngine_23(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, DBEngine, 23, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_24(nint self) => Com.Unimplemented.Fail(self, DBEngine, 24, 0, RetvalCell.None);
+    private static int U_DBEngine_24(nint self)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 24, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_25(nint self) => Com.Unimplemented.Fail(self, DBEngine, 25, 0, RetvalCell.None);
+    private static int U_DBEngine_25(nint self)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 25, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_26(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 26, 0, RetvalCell.None);
+    private static int U_DBEngine_26(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 26, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_27(nint self) => Com.Unimplemented.Fail(self, DBEngine, 27, 0, RetvalCell.None);
+    private static int U_DBEngine_27(nint self)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 27, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_28(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, DBEngine, 28, 0, RetvalCell.None);
+    private static int U_DBEngine_28(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, DBEngine, 28, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_29(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, DBEngine, 29, 0, RetvalCell.None);
+    private static int U_DBEngine_29(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, DBEngine, 29, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_30(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, DBEngine, 30, a2, RetvalCell.Int32);
+    private static int U_DBEngine_30(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, DBEngine, 30, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_31(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 31, a0, RetvalCell.Pointer);
+    private static int U_DBEngine_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_32(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 32, 0, RetvalCell.None);
+    private static int U_DBEngine_32(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 32, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_33(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, DBEngine, 33, a4, RetvalCell.Pointer);
+    private static int U_DBEngine_33(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, DBEngine, 33, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_34(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, DBEngine, 34, a4, RetvalCell.Pointer);
+    private static int U_DBEngine_34(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, DBEngine, 34, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_35(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 35, a0, RetvalCell.Int32);
+    private static int U_DBEngine_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, DBEngine, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_36(nint self, nint a0) => Com.Unimplemented.Fail(self, DBEngine, 36, 0, RetvalCell.None);
+    private static int U_DBEngine_36(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, DBEngine, 36, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_DBEngine_37(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, DBEngine, 37, 0, RetvalCell.None);
+    private static int U_DBEngine_37(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, DBEngine, 37, raw, 2, 0);
+    }
 
     private static void Fill_Workspaces(nint* table)
     {
@@ -1649,22 +1811,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 7, a0, RetvalCell.Int16);
+    private static int U_Workspaces_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspaces, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 8, a0, RetvalCell.Pointer);
+    private static int U_Workspaces_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspaces, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_9(nint self) => Com.Unimplemented.Fail(self, Workspaces, 9, 0, RetvalCell.None);
+    private static int U_Workspaces_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Workspaces, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 10, 0, RetvalCell.None);
+    private static int U_Workspaces_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspaces, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspaces, 11, 0, RetvalCell.None);
+    private static int U_Workspaces_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspaces, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspaces_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Workspaces, 12, a1, RetvalCell.Pointer);
+    private static int U_Workspaces_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspaces, 12, raw, 1, r);
+    }
 
     private static void Fill_Workspace(nint* table)
     {
@@ -1698,85 +1878,166 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 7, a0, RetvalCell.Pointer);
+    private static int U_Workspace_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 8, a0, RetvalCell.Pointer);
+    private static int U_Workspace_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 9, 0, RetvalCell.None);
+    private static int U_Workspace_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 10, a0, RetvalCell.Pointer);
+    private static int U_Workspace_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 11, 0, RetvalCell.None);
+    private static int U_Workspace_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 12, 0, RetvalCell.None);
+    private static int U_Workspace_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 13, a0, RetvalCell.Int16);
+    private static int U_Workspace_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 14, 0, RetvalCell.None);
+    private static int U_Workspace_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 15, a0, RetvalCell.Pointer);
+    private static int U_Workspace_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 16, a0, RetvalCell.Pointer);
+    private static int U_Workspace_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 17, a0, RetvalCell.Pointer);
+    private static int U_Workspace_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_18(nint self) => Com.Unimplemented.Fail(self, Workspace, 18, 0, RetvalCell.None);
+    private static int U_Workspace_18(nint self)
+    {
+        return Com.TypedCall.Run(self, Workspace, 18, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 19, 0, RetvalCell.None);
+    private static int U_Workspace_19(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 19, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_20(nint self) => Com.Unimplemented.Fail(self, Workspace, 20, 0, RetvalCell.None);
+    private static int U_Workspace_20(nint self)
+    {
+        return Com.TypedCall.Run(self, Workspace, 20, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_21(nint self) => Com.Unimplemented.Fail(self, Workspace, 21, 0, RetvalCell.None);
+    private static int U_Workspace_21(nint self)
+    {
+        return Com.TypedCall.Run(self, Workspace, 21, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_22(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Workspace, 22, a4, RetvalCell.Pointer);
+    private static int U_Workspace_22(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Workspace, 22, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_23(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Workspace, 23, a3, RetvalCell.Pointer);
+    private static int U_Workspace_23(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Workspace, 23, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Workspace, 24, a3, RetvalCell.Pointer);
+    private static int U_Workspace_24(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Workspace, 24, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_25(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Workspace, 25, a2, RetvalCell.Pointer);
+    private static int U_Workspace_25(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Workspace, 25, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_26(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Workspace, 26, a4, RetvalCell.Pointer);
+    private static int U_Workspace_26(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Workspace, 26, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 27, a0, RetvalCell.Int32);
+    private static int U_Workspace_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 28, 0, RetvalCell.None);
+    private static int U_Workspace_28(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 28, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 29, a0, RetvalCell.Int32);
+    private static int U_Workspace_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 30, 0, RetvalCell.None);
+    private static int U_Workspace_30(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Workspace, 30, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 31, a0, RetvalCell.Int32);
+    private static int U_Workspace_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 32, a0, RetvalCell.Int32);
+    private static int U_Workspace_32(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 32, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Workspace_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Workspace, 33, a0, RetvalCell.Pointer);
+    private static int U_Workspace_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Workspace, 33, null, 0, r);
+    }
 
     private static void Fill_Databases(nint* table)
     {
@@ -1787,16 +2048,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Databases_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Databases, 7, a0, RetvalCell.Int16);
+    private static int U_Databases_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Databases, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Databases_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Databases, 8, a0, RetvalCell.Pointer);
+    private static int U_Databases_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Databases, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Databases_9(nint self) => Com.Unimplemented.Fail(self, Databases, 9, 0, RetvalCell.None);
+    private static int U_Databases_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Databases, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Databases_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Databases, 10, a1, RetvalCell.Pointer);
+    private static int U_Databases_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Databases, 10, raw, 1, r);
+    }
 
     private static void Fill_Database(nint* table)
     {
@@ -1846,133 +2119,262 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 7, a0, RetvalCell.Pointer);
+    private static int U_Database_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 8, a0, RetvalCell.Int32);
+    private static int U_Database_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 9, a0, RetvalCell.Pointer);
+    private static int U_Database_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 10, a0, RetvalCell.Pointer);
+    private static int U_Database_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 11, a0, RetvalCell.Int16);
+    private static int U_Database_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 12, 0, RetvalCell.None);
+    private static int U_Database_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 13, a0, RetvalCell.Int16);
+    private static int U_Database_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 14, a0, RetvalCell.Int16);
+    private static int U_Database_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 15, a0, RetvalCell.Pointer);
+    private static int U_Database_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 16, a0, RetvalCell.Int32);
+    private static int U_Database_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 17, a0, RetvalCell.Pointer);
+    private static int U_Database_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 18, a0, RetvalCell.Pointer);
+    private static int U_Database_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 19, a0, RetvalCell.Pointer);
+    private static int U_Database_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 20, a0, RetvalCell.Pointer);
+    private static int U_Database_20(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 20, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 21, a0, RetvalCell.Pointer);
+    private static int U_Database_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_22(nint self) => Com.Unimplemented.Fail(self, Database, 22, 0, RetvalCell.None);
+    private static int U_Database_22(nint self)
+    {
+        return Com.TypedCall.Run(self, Database, 22, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_23(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 23, 0, RetvalCell.None);
+    private static int U_Database_23(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 23, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Database, 24, a3, RetvalCell.Pointer);
+    private static int U_Database_24(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Database, 24, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_25(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 25, a4, RetvalCell.Pointer);
+    private static int U_Database_25(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Database, 25, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_26(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 26, a4, RetvalCell.Pointer);
+    private static int U_Database_26(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Database, 26, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_27(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 27, a4, RetvalCell.Pointer);
+    private static int U_Database_27(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Database, 27, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_28(nint self) => Com.Unimplemented.Fail(self, Database, 28, 0, RetvalCell.None);
+    private static int U_Database_28(nint self)
+    {
+        return Com.TypedCall.Run(self, Database, 28, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 29, 0, RetvalCell.None);
+    private static int U_Database_29(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 29, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_30(nint self) => Com.Unimplemented.Fail(self, Database, 30, 0, RetvalCell.None);
+    private static int U_Database_30(nint self)
+    {
+        return Com.TypedCall.Run(self, Database, 30, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_31(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Database, 31, a3, RetvalCell.Pointer);
+    private static int U_Database_31(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Database, 31, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_32(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 32, a2, RetvalCell.Pointer);
+    private static int U_Database_32(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 32, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_33(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 33, a2, RetvalCell.Pointer);
+    private static int U_Database_33(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 33, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 34, 0, RetvalCell.None);
+    private static int U_Database_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_35(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 35, a1, RetvalCell.Int32);
+    private static int U_Database_35(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 35, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_36(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 36, a1, RetvalCell.Pointer);
+    private static int U_Database_36(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 36, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 37, a0, RetvalCell.Pointer);
+    private static int U_Database_37(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 37, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_38(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 38, a1, RetvalCell.Pointer);
+    private static int U_Database_38(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 38, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 39, a2, RetvalCell.Pointer);
+    private static int U_Database_39(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 39, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 40, a0, RetvalCell.Pointer);
+    private static int U_Database_40(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 40, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 41, a0, RetvalCell.Pointer);
+    private static int U_Database_41(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 41, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 42, 0, RetvalCell.None);
+    private static int U_Database_42(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 42, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_43(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 43, 0, RetvalCell.None);
+    private static int U_Database_43(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 43, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_44(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Database, 44, 0, RetvalCell.None);
+    private static int U_Database_44(nint self, nint a0, nint a1, nint a2)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Database, 44, raw, 3, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 45, 0, RetvalCell.None);
+    private static int U_Database_45(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 45, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_46(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Database, 46, 0, RetvalCell.None);
+    private static int U_Database_46(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Database, 46, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_47(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Database, 47, a4, RetvalCell.Pointer);
+    private static int U_Database_47(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Database, 47, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 48, a0, RetvalCell.Pointer);
+    private static int U_Database_48(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Database, 48, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Database_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Database, 49, 0, RetvalCell.None);
+    private static int U_Database_49(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Database, 49, raw, 1, 0);
+    }
 
     private static void Fill_TableDefs(nint* table)
     {
@@ -1985,22 +2387,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_7(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 7, a0, RetvalCell.Int16);
+    private static int U_TableDefs_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDefs, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_8(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 8, a0, RetvalCell.Pointer);
+    private static int U_TableDefs_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDefs, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_9(nint self) => Com.Unimplemented.Fail(self, TableDefs, 9, 0, RetvalCell.None);
+    private static int U_TableDefs_9(nint self)
+    {
+        return Com.TypedCall.Run(self, TableDefs, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_10(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 10, 0, RetvalCell.None);
+    private static int U_TableDefs_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDefs, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_11(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDefs, 11, 0, RetvalCell.None);
+    private static int U_TableDefs_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDefs, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDefs_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, TableDefs, 12, a1, RetvalCell.Pointer);
+    private static int U_TableDefs_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDefs, 12, raw, 1, r);
+    }
 
     private static void Fill_TableDef(nint* table)
     {
@@ -2034,85 +2454,166 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_7(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 7, a0, RetvalCell.Pointer);
+    private static int U_TableDef_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_8(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 8, a0, RetvalCell.Int32);
+    private static int U_TableDef_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_9(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 9, 0, RetvalCell.None);
+    private static int U_TableDef_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_10(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 10, a0, RetvalCell.Pointer);
+    private static int U_TableDef_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_11(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 11, 0, RetvalCell.None);
+    private static int U_TableDef_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_12(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 12, a0, RetvalCell.Variant);
+    private static int U_TableDef_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_13(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 13, a0, RetvalCell.Variant);
+    private static int U_TableDef_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_14(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 14, a0, RetvalCell.Pointer);
+    private static int U_TableDef_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_15(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 15, 0, RetvalCell.None);
+    private static int U_TableDef_15(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 15, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_16(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 16, a0, RetvalCell.Pointer);
+    private static int U_TableDef_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_17(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 17, 0, RetvalCell.None);
+    private static int U_TableDef_17(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 17, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_18(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 18, a0, RetvalCell.Int16);
+    private static int U_TableDef_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_19(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 19, a0, RetvalCell.Pointer);
+    private static int U_TableDef_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_20(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 20, 0, RetvalCell.None);
+    private static int U_TableDef_20(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 20, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_21(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 21, a0, RetvalCell.Pointer);
+    private static int U_TableDef_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_22(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 22, 0, RetvalCell.None);
+    private static int U_TableDef_22(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 22, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_23(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 23, a0, RetvalCell.Int32);
+    private static int U_TableDef_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_24(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 24, a0, RetvalCell.Pointer);
+    private static int U_TableDef_24(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 24, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_25(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 25, a0, RetvalCell.Pointer);
+    private static int U_TableDef_25(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 25, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_26(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, TableDef, 26, a2, RetvalCell.Pointer);
+    private static int U_TableDef_26(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, TableDef, 26, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_27(nint self) => Com.Unimplemented.Fail(self, TableDef, 27, 0, RetvalCell.None);
+    private static int U_TableDef_27(nint self)
+    {
+        return Com.TypedCall.Run(self, TableDef, 27, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_28(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, TableDef, 28, a3, RetvalCell.Pointer);
+    private static int U_TableDef_28(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, TableDef, 28, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_29(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, TableDef, 29, a1, RetvalCell.Pointer);
+    private static int U_TableDef_29(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 29, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_30(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, TableDef, 30, a4, RetvalCell.Pointer);
+    private static int U_TableDef_30(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, TableDef, 30, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_31(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 31, a0, RetvalCell.Pointer);
+    private static int U_TableDef_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_32(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 32, a0, RetvalCell.Variant);
+    private static int U_TableDef_32(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, TableDef, 32, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_TableDef_33(nint self, nint a0) => Com.Unimplemented.Fail(self, TableDef, 33, 0, RetvalCell.None);
+    private static int U_TableDef_33(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, TableDef, 33, raw, 1, 0);
+    }
 
     private static void Fill_Fields(nint* table)
     {
@@ -2125,22 +2626,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 7, a0, RetvalCell.Int16);
+    private static int U_Fields_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Fields, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 8, a0, RetvalCell.Pointer);
+    private static int U_Fields_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Fields, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_9(nint self) => Com.Unimplemented.Fail(self, Fields, 9, 0, RetvalCell.None);
+    private static int U_Fields_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Fields, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 10, 0, RetvalCell.None);
+    private static int U_Fields_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Fields, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Fields, 11, 0, RetvalCell.None);
+    private static int U_Fields_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Fields, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Fields_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Fields, 12, a1, RetvalCell.Pointer);
+    private static int U_Fields_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Fields, 12, raw, 1, r);
+    }
 
     private static void Fill_Field(nint* table)
     {
@@ -2186,121 +2705,238 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 7, a0, RetvalCell.Pointer);
+    private static int U_Field_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 8, a0, RetvalCell.Int32);
+    private static int U_Field_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 9, a0, RetvalCell.Int16);
+    private static int U_Field_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 10, 0, RetvalCell.None);
+    private static int U_Field_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 11, a0, RetvalCell.Pointer);
+    private static int U_Field_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 12, 0, RetvalCell.None);
+    private static int U_Field_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 13, a0, RetvalCell.Int32);
+    private static int U_Field_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 14, 0, RetvalCell.None);
+    private static int U_Field_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 15, a0, RetvalCell.Pointer);
+    private static int U_Field_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 16, a0, RetvalCell.Pointer);
+    private static int U_Field_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 17, a0, RetvalCell.Variant);
+    private static int U_Field_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 18, 0, RetvalCell.None);
+    private static int U_Field_18(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 18, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 19, a0, RetvalCell.Int32);
+    private static int U_Field_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 20, 0, RetvalCell.None);
+    private static int U_Field_20(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 20, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 21, a0, RetvalCell.Int16);
+    private static int U_Field_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 22, 0, RetvalCell.None);
+    private static int U_Field_22(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 22, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 23, a0, RetvalCell.Pointer);
+    private static int U_Field_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 24, 0, RetvalCell.None);
+    private static int U_Field_24(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 24, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 25, a0, RetvalCell.Int16);
+    private static int U_Field_25(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 25, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 26, 0, RetvalCell.None);
+    private static int U_Field_26(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 26, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 27, a0, RetvalCell.Pointer);
+    private static int U_Field_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 28, 0, RetvalCell.None);
+    private static int U_Field_28(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 28, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 29, a0, RetvalCell.Variant);
+    private static int U_Field_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 30, 0, RetvalCell.None);
+    private static int U_Field_30(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 30, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 31, a0, RetvalCell.Int16);
+    private static int U_Field_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 32, 0, RetvalCell.None);
+    private static int U_Field_32(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 32, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 33, a0, RetvalCell.Int16);
+    private static int U_Field_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 34, 0, RetvalCell.None);
+    private static int U_Field_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 35, a0, RetvalCell.Int16);
+    private static int U_Field_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 36, a0, RetvalCell.Pointer);
+    private static int U_Field_36(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 36, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 37, 0, RetvalCell.None);
+    private static int U_Field_37(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 37, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 38, 0, RetvalCell.None);
+    private static int U_Field_38(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field, 38, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field, 39, a2, RetvalCell.Variant);
+    private static int U_Field_39(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Field, 39, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 40, a0, RetvalCell.Int32);
+    private static int U_Field_40(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 40, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field, 41, a4, RetvalCell.Pointer);
+    private static int U_Field_41(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Field, 41, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 42, a0, RetvalCell.Int16);
+    private static int U_Field_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 43, a0, RetvalCell.Variant);
+    private static int U_Field_43(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 43, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 44, a0, RetvalCell.Variant);
+    private static int U_Field_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field, 45, a0, RetvalCell.Int32);
+    private static int U_Field_45(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field, 45, null, 0, r);
+    }
 
     private static void Fill_Indexes(nint* table)
     {
@@ -2313,22 +2949,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 7, a0, RetvalCell.Int16);
+    private static int U_Indexes_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Indexes, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 8, a0, RetvalCell.Pointer);
+    private static int U_Indexes_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Indexes, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_9(nint self) => Com.Unimplemented.Fail(self, Indexes, 9, 0, RetvalCell.None);
+    private static int U_Indexes_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Indexes, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 10, 0, RetvalCell.None);
+    private static int U_Indexes_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Indexes, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Indexes, 11, 0, RetvalCell.None);
+    private static int U_Indexes_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Indexes, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Indexes_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Indexes, 12, a1, RetvalCell.Pointer);
+    private static int U_Indexes_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Indexes, 12, raw, 1, r);
+    }
 
     private static void Fill_Index(nint* table)
     {
@@ -2354,61 +3008,118 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 7, a0, RetvalCell.Pointer);
+    private static int U_Index_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 8, a0, RetvalCell.Pointer);
+    private static int U_Index_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 9, 0, RetvalCell.None);
+    private static int U_Index_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 10, a0, RetvalCell.Int16);
+    private static int U_Index_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 11, a0, RetvalCell.Int16);
+    private static int U_Index_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 12, 0, RetvalCell.None);
+    private static int U_Index_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 13, a0, RetvalCell.Int16);
+    private static int U_Index_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 14, 0, RetvalCell.None);
+    private static int U_Index_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 15, a0, RetvalCell.Int16);
+    private static int U_Index_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 16, 0, RetvalCell.None);
+    private static int U_Index_16(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 16, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 17, a0, RetvalCell.Int16);
+    private static int U_Index_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 18, 0, RetvalCell.None);
+    private static int U_Index_18(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 18, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 19, a0, RetvalCell.Int16);
+    private static int U_Index_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 20, 0, RetvalCell.None);
+    private static int U_Index_20(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 20, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 21, a0, RetvalCell.Int32);
+    private static int U_Index_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 22, a0, RetvalCell.Variant);
+    private static int U_Index_22(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Index, 22, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Index, 23, 0, RetvalCell.None);
+    private static int U_Index_23(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Index, 23, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_24(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Index, 24, a3, RetvalCell.Pointer);
+    private static int U_Index_24(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Index, 24, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Index_25(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Index, 25, a4, RetvalCell.Pointer);
+    private static int U_Index_25(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Index, 25, raw, 4, r);
+    }
 
     private static void Fill_Recordset(nint* table)
     {
@@ -2443,7 +3154,7 @@ internal static unsafe partial class DaoTypes
         table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_35;
         table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_36;
         table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_37;
-        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_38;
+        table[38] = (nint)(delegate* unmanaged<nint, float, int>)&U_Recordset_38;
         table[39] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_39;
         table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_40;
         table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset_41;
@@ -2499,256 +3210,508 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 7, a0, RetvalCell.Pointer);
+    private static int U_Recordset_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 8, a0, RetvalCell.Int16);
+    private static int U_Recordset_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 9, a0, RetvalCell.Pointer);
+    private static int U_Recordset_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 10, 0, RetvalCell.None);
+    private static int U_Recordset_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 11, a0, RetvalCell.Int16);
+    private static int U_Recordset_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 12, a0, RetvalCell.Variant);
+    private static int U_Recordset_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 13, a0, RetvalCell.Int16);
+    private static int U_Recordset_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 14, a0, RetvalCell.Pointer);
+    private static int U_Recordset_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 15, 0, RetvalCell.None);
+    private static int U_Recordset_15(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 15, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 16, a0, RetvalCell.Pointer);
+    private static int U_Recordset_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 17, 0, RetvalCell.None);
+    private static int U_Recordset_17(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 17, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 18, a0, RetvalCell.Pointer);
+    private static int U_Recordset_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 19, a0, RetvalCell.Variant);
+    private static int U_Recordset_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 20, a0, RetvalCell.Int16);
+    private static int U_Recordset_20(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 20, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 21, 0, RetvalCell.None);
+    private static int U_Recordset_21(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 21, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 22, a0, RetvalCell.Pointer);
+    private static int U_Recordset_22(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 22, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 23, a0, RetvalCell.Int16);
+    private static int U_Recordset_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 24, a0, RetvalCell.Pointer);
+    private static int U_Recordset_24(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 24, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 25, 0, RetvalCell.None);
+    private static int U_Recordset_25(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 25, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 26, a0, RetvalCell.Int16);
+    private static int U_Recordset_26(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 26, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 27, a0, RetvalCell.Int16);
+    private static int U_Recordset_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 28, a0, RetvalCell.Int32);
+    private static int U_Recordset_28(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 28, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 29, a0, RetvalCell.Int16);
+    private static int U_Recordset_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 30, a0, RetvalCell.Int16);
+    private static int U_Recordset_30(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 30, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 31, a0, RetvalCell.Pointer);
+    private static int U_Recordset_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 32, a0, RetvalCell.Pointer);
+    private static int U_Recordset_32(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 32, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 33, a0, RetvalCell.Pointer);
+    private static int U_Recordset_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 34, 0, RetvalCell.None);
+    private static int U_Recordset_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 35, a0, RetvalCell.Int32);
+    private static int U_Recordset_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 36, 0, RetvalCell.None);
+    private static int U_Recordset_36(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 36, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 37, a0, RetvalCell.Int32);
+    private static int U_Recordset_37(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 37, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 38, 0, RetvalCell.None);
+    private static int U_Recordset_38(nint self, float a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (uint)BitConverter.SingleToInt32Bits(a0); return Com.TypedCall.Run(self, Recordset, 38, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_39(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 39, a0, RetvalCell.Int32);
+    private static int U_Recordset_39(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 39, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 40, 0, RetvalCell.None);
+    private static int U_Recordset_40(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 40, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 41, a0, RetvalCell.Int16);
+    private static int U_Recordset_41(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 41, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 42, a0, RetvalCell.Int32);
+    private static int U_Recordset_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 43, a0, RetvalCell.Int32);
+    private static int U_Recordset_43(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 43, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 44, a0, RetvalCell.Pointer);
+    private static int U_Recordset_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 45, a0, RetvalCell.Pointer);
+    private static int U_Recordset_45(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 45, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 46, a0, RetvalCell.Pointer);
+    private static int U_Recordset_46(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 46, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_47(nint self) => Com.Unimplemented.Fail(self, Recordset, 47, 0, RetvalCell.None);
+    private static int U_Recordset_47(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 47, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_48(nint self) => Com.Unimplemented.Fail(self, Recordset, 48, 0, RetvalCell.None);
+    private static int U_Recordset_48(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 48, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_49(nint self) => Com.Unimplemented.Fail(self, Recordset, 49, 0, RetvalCell.None);
+    private static int U_Recordset_49(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 49, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_50(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset, 50, a2, RetvalCell.Pointer);
+    private static int U_Recordset_50(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 50, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_51(nint self) => Com.Unimplemented.Fail(self, Recordset, 51, 0, RetvalCell.None);
+    private static int U_Recordset_51(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 51, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_52(nint self) => Com.Unimplemented.Fail(self, Recordset, 52, 0, RetvalCell.None);
+    private static int U_Recordset_52(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 52, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 53, 0, RetvalCell.None);
+    private static int U_Recordset_53(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 53, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 54, 0, RetvalCell.None);
+    private static int U_Recordset_54(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 54, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 55, 0, RetvalCell.None);
+    private static int U_Recordset_55(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 55, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 56, 0, RetvalCell.None);
+    private static int U_Recordset_56(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 56, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_57(nint self) => Com.Unimplemented.Fail(self, Recordset, 57, 0, RetvalCell.None);
+    private static int U_Recordset_57(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 57, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_58(nint self) => Com.Unimplemented.Fail(self, Recordset, 58, 0, RetvalCell.None);
+    private static int U_Recordset_58(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 58, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_59(nint self) => Com.Unimplemented.Fail(self, Recordset, 59, 0, RetvalCell.None);
+    private static int U_Recordset_59(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 59, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_60(nint self) => Com.Unimplemented.Fail(self, Recordset, 60, 0, RetvalCell.None);
+    private static int U_Recordset_60(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 60, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13) => Com.Unimplemented.Fail(self, Recordset, 61, 0, RetvalCell.None);
+    private static int U_Recordset_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13)
+    {
+        ulong* raw = stackalloc ulong[14]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; raw[4] = (ulong)a4; raw[5] = (ulong)a5; raw[6] = (ulong)a6; raw[7] = (ulong)a7; raw[8] = (ulong)a8; raw[9] = (ulong)a9; raw[10] = (ulong)a10; raw[11] = (ulong)a11; raw[12] = (ulong)a12; raw[13] = (ulong)a13; return Com.TypedCall.Run(self, Recordset, 61, raw, 14, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_62(nint self) => Com.Unimplemented.Fail(self, Recordset, 62, 0, RetvalCell.None);
+    private static int U_Recordset_62(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 62, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_63(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 63, a0, RetvalCell.Pointer);
+    private static int U_Recordset_63(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 63, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_64(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 64, 0, RetvalCell.None);
+    private static int U_Recordset_64(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 64, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_65(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 65, 0, RetvalCell.None);
+    private static int U_Recordset_65(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 65, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_66(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 66, 0, RetvalCell.None);
+    private static int U_Recordset_66(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 66, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_67(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset, 67, a2, RetvalCell.Pointer);
+    private static int U_Recordset_67(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 67, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_68(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 68, a1, RetvalCell.Pointer);
+    private static int U_Recordset_68(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 68, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_69(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 69, a0, RetvalCell.Pointer);
+    private static int U_Recordset_69(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 69, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_70(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 70, a0, RetvalCell.Pointer);
+    private static int U_Recordset_70(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 70, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_71(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 71, a0, RetvalCell.Pointer);
+    private static int U_Recordset_71(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 71, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_72(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 72, a1, RetvalCell.Variant);
+    private static int U_Recordset_72(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 72, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_73(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 73, a1, RetvalCell.Variant);
+    private static int U_Recordset_73(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 73, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_74(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 74, 0, RetvalCell.None);
+    private static int U_Recordset_74(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 74, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_75(nint self) => Com.Unimplemented.Fail(self, Recordset, 75, 0, RetvalCell.None);
+    private static int U_Recordset_75(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset, 75, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_76(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 76, a0, RetvalCell.Int16);
+    private static int U_Recordset_76(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 76, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_77(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 77, a0, RetvalCell.Int32);
+    private static int U_Recordset_77(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 77, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_78(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 78, a0, RetvalCell.Int16);
+    private static int U_Recordset_78(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 78, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_79(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 79, a0, RetvalCell.Int32);
+    private static int U_Recordset_79(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 79, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_80(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 80, 0, RetvalCell.None);
+    private static int U_Recordset_80(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 80, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_81(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 81, a0, RetvalCell.Int32);
+    private static int U_Recordset_81(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 81, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_82(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 82, a0, RetvalCell.Variant);
+    private static int U_Recordset_82(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 82, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_83(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 83, a0, RetvalCell.Pointer);
+    private static int U_Recordset_83(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 83, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_84(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 84, 0, RetvalCell.None);
+    private static int U_Recordset_84(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 84, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_85(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 85, a0, RetvalCell.Int16);
+    private static int U_Recordset_85(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 85, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_86(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 86, a0, RetvalCell.Int32);
+    private static int U_Recordset_86(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset, 86, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_87(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 87, 0, RetvalCell.None);
+    private static int U_Recordset_87(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 87, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_88(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 88, 0, RetvalCell.None);
+    private static int U_Recordset_88(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 88, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_89(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset, 89, 0, RetvalCell.None);
+    private static int U_Recordset_89(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset, 89, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset_90(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset, 90, 0, RetvalCell.None);
+    private static int U_Recordset_90(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset, 90, raw, 1, 0);
+    }
 
     private static void Fill_QueryDef(nint* table)
     {
@@ -2794,121 +3757,238 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_7(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 7, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_8(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 8, a0, RetvalCell.Variant);
+    private static int U_QueryDef_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_9(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 9, a0, RetvalCell.Variant);
+    private static int U_QueryDef_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_10(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 10, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_11(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 11, 0, RetvalCell.None);
+    private static int U_QueryDef_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_12(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 12, a0, RetvalCell.Int16);
+    private static int U_QueryDef_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_13(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 13, 0, RetvalCell.None);
+    private static int U_QueryDef_13(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 13, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_14(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 14, a0, RetvalCell.Int16);
+    private static int U_QueryDef_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_15(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 15, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_16(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 16, 0, RetvalCell.None);
+    private static int U_QueryDef_16(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 16, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_17(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 17, a0, RetvalCell.Int16);
+    private static int U_QueryDef_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_18(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 18, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_19(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 19, 0, RetvalCell.None);
+    private static int U_QueryDef_19(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 19, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_20(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 20, a0, RetvalCell.Int16);
+    private static int U_QueryDef_20(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 20, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_21(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 21, 0, RetvalCell.None);
+    private static int U_QueryDef_21(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 21, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_22(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 22, a0, RetvalCell.Int32);
+    private static int U_QueryDef_22(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 22, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_23(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 23, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_24(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 24, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_24(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 24, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_25(nint self) => Com.Unimplemented.Fail(self, QueryDef, 25, 0, RetvalCell.None);
+    private static int U_QueryDef_25(nint self)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 25, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_26(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 26, a2, RetvalCell.Pointer);
+    private static int U_QueryDef_26(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, QueryDef, 26, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_27(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 27, a2, RetvalCell.Pointer);
+    private static int U_QueryDef_27(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, QueryDef, 27, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_28(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 28, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_28(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 28, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_29(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 29, 0, RetvalCell.None);
+    private static int U_QueryDef_29(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 29, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_30(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDef, 30, 0, RetvalCell.None);
+    private static int U_QueryDef_30(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, QueryDef, 30, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_31(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, QueryDef, 31, a2, RetvalCell.Pointer);
+    private static int U_QueryDef_31(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, QueryDef, 31, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_32(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDef, 32, a1, RetvalCell.Pointer);
+    private static int U_QueryDef_32(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 32, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_33(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 33, a0, RetvalCell.Pointer);
+    private static int U_QueryDef_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_34(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, QueryDef, 34, a4, RetvalCell.Pointer);
+    private static int U_QueryDef_34(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, QueryDef, 34, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_35(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, QueryDef, 35, a3, RetvalCell.Pointer);
+    private static int U_QueryDef_35(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, QueryDef, 35, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_36(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, QueryDef, 36, a3, RetvalCell.Pointer);
+    private static int U_QueryDef_36(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, QueryDef, 36, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_37(nint self) => Com.Unimplemented.Fail(self, QueryDef, 37, 0, RetvalCell.None);
+    private static int U_QueryDef_37(nint self)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 37, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_38(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 38, a0, RetvalCell.Int32);
+    private static int U_QueryDef_38(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 38, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_39(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 39, a0, RetvalCell.Int32);
+    private static int U_QueryDef_39(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 39, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_40(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 40, 0, RetvalCell.None);
+    private static int U_QueryDef_40(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 40, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_41(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 41, a0, RetvalCell.Int16);
+    private static int U_QueryDef_41(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 41, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_42(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 42, a0, RetvalCell.Int32);
+    private static int U_QueryDef_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_43(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 43, 0, RetvalCell.None);
+    private static int U_QueryDef_43(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 43, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_44(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 44, a0, RetvalCell.Variant);
+    private static int U_QueryDef_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDef, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDef_45(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDef, 45, 0, RetvalCell.None);
+    private static int U_QueryDef_45(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDef, 45, raw, 1, 0);
+    }
 
     private static void Fill_Parameters(nint* table)
     {
@@ -2919,16 +3999,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameters_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameters, 7, a0, RetvalCell.Int16);
+    private static int U_Parameters_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameters, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameters_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameters, 8, a0, RetvalCell.Pointer);
+    private static int U_Parameters_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameters, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameters_9(nint self) => Com.Unimplemented.Fail(self, Parameters, 9, 0, RetvalCell.None);
+    private static int U_Parameters_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Parameters, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameters_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Parameters, 10, a1, RetvalCell.Pointer);
+    private static int U_Parameters_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Parameters, 10, raw, 1, r);
+    }
 
     private static void Fill_Parameter(nint* table)
     {
@@ -2943,28 +4035,52 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 7, a0, RetvalCell.Pointer);
+    private static int U_Parameter_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameter, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 8, a0, RetvalCell.Pointer);
+    private static int U_Parameter_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameter, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 9, a0, RetvalCell.Variant);
+    private static int U_Parameter_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameter, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 10, 0, RetvalCell.None);
+    private static int U_Parameter_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Parameter, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 11, a0, RetvalCell.Int16);
+    private static int U_Parameter_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameter, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 12, 0, RetvalCell.None);
+    private static int U_Parameter_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Parameter, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 13, a0, RetvalCell.Int16);
+    private static int U_Parameter_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Parameter, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Parameter_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Parameter, 14, 0, RetvalCell.None);
+    private static int U_Parameter_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Parameter, 14, raw, 1, 0);
+    }
 
     private static void Fill_Connection(nint* table)
     {
@@ -2988,55 +4104,106 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 7, a0, RetvalCell.Pointer);
+    private static int U_Connection_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 8, a0, RetvalCell.Pointer);
+    private static int U_Connection_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 9, a0, RetvalCell.Pointer);
+    private static int U_Connection_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 10, a0, RetvalCell.Int32);
+    private static int U_Connection_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 11, a0, RetvalCell.Int16);
+    private static int U_Connection_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 12, 0, RetvalCell.None);
+    private static int U_Connection_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Connection, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 13, a0, RetvalCell.Int16);
+    private static int U_Connection_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 14, a0, RetvalCell.Int32);
+    private static int U_Connection_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 15, a0, RetvalCell.Int16);
+    private static int U_Connection_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 16, a0, RetvalCell.Int16);
+    private static int U_Connection_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 17, a0, RetvalCell.Pointer);
+    private static int U_Connection_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Connection, 18, a0, RetvalCell.Pointer);
+    private static int U_Connection_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connection, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_19(nint self) => Com.Unimplemented.Fail(self, Connection, 19, 0, RetvalCell.None);
+    private static int U_Connection_19(nint self)
+    {
+        return Com.TypedCall.Run(self, Connection, 19, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_20(nint self) => Com.Unimplemented.Fail(self, Connection, 20, 0, RetvalCell.None);
+    private static int U_Connection_20(nint self)
+    {
+        return Com.TypedCall.Run(self, Connection, 20, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_21(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Connection, 21, a2, RetvalCell.Pointer);
+    private static int U_Connection_21(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Connection, 21, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_22(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Connection, 22, 0, RetvalCell.None);
+    private static int U_Connection_22(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Connection, 22, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connection_23(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Connection, 23, a4, RetvalCell.Pointer);
+    private static int U_Connection_23(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Connection, 23, raw, 4, r);
+    }
 
     private static void Fill_QueryDefs(nint* table)
     {
@@ -3049,22 +4216,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_7(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 7, a0, RetvalCell.Int16);
+    private static int U_QueryDefs_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDefs, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_8(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 8, a0, RetvalCell.Pointer);
+    private static int U_QueryDefs_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, QueryDefs, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_9(nint self) => Com.Unimplemented.Fail(self, QueryDefs, 9, 0, RetvalCell.None);
+    private static int U_QueryDefs_9(nint self)
+    {
+        return Com.TypedCall.Run(self, QueryDefs, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_10(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 10, 0, RetvalCell.None);
+    private static int U_QueryDefs_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDefs, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_11(nint self, nint a0) => Com.Unimplemented.Fail(self, QueryDefs, 11, 0, RetvalCell.None);
+    private static int U_QueryDefs_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDefs, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_QueryDefs_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, QueryDefs, 12, a1, RetvalCell.Pointer);
+    private static int U_QueryDefs_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, QueryDefs, 12, raw, 1, r);
+    }
 
     private static void Fill_Recordsets(nint* table)
     {
@@ -3075,16 +4260,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordsets_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordsets, 7, a0, RetvalCell.Int16);
+    private static int U_Recordsets_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordsets, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordsets_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordsets, 8, a0, RetvalCell.Pointer);
+    private static int U_Recordsets_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordsets, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordsets_9(nint self) => Com.Unimplemented.Fail(self, Recordsets, 9, 0, RetvalCell.None);
+    private static int U_Recordsets_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordsets, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordsets_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordsets, 10, a1, RetvalCell.Pointer);
+    private static int U_Recordsets_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordsets, 10, raw, 1, r);
+    }
 
     private static void Fill_Relations(nint* table)
     {
@@ -3097,22 +4294,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 7, a0, RetvalCell.Int16);
+    private static int U_Relations_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relations, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 8, a0, RetvalCell.Pointer);
+    private static int U_Relations_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relations, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_9(nint self) => Com.Unimplemented.Fail(self, Relations, 9, 0, RetvalCell.None);
+    private static int U_Relations_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Relations, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 10, 0, RetvalCell.None);
+    private static int U_Relations_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relations, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Relations, 11, 0, RetvalCell.None);
+    private static int U_Relations_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relations, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relations_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Relations, 12, a1, RetvalCell.Pointer);
+    private static int U_Relations_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relations, 12, raw, 1, r);
+    }
 
     private static void Fill_Relation(nint* table)
     {
@@ -3132,43 +4347,82 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 7, a0, RetvalCell.Pointer);
+    private static int U_Relation_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 8, a0, RetvalCell.Pointer);
+    private static int U_Relation_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 9, 0, RetvalCell.None);
+    private static int U_Relation_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relation, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 10, a0, RetvalCell.Pointer);
+    private static int U_Relation_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 11, 0, RetvalCell.None);
+    private static int U_Relation_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relation, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 12, a0, RetvalCell.Pointer);
+    private static int U_Relation_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 13, 0, RetvalCell.None);
+    private static int U_Relation_13(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relation, 13, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 14, a0, RetvalCell.Int32);
+    private static int U_Relation_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 15, 0, RetvalCell.None);
+    private static int U_Relation_15(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relation, 15, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 16, a0, RetvalCell.Pointer);
+    private static int U_Relation_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_17(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Relation, 17, a3, RetvalCell.Pointer);
+    private static int U_Relation_17(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Relation, 17, raw, 3, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 18, a0, RetvalCell.Int16);
+    private static int U_Relation_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Relation, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Relation_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Relation, 19, 0, RetvalCell.None);
+    private static int U_Relation_19(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Relation, 19, raw, 1, 0);
+    }
 
     private static void Fill_Containers(nint* table)
     {
@@ -3179,16 +4433,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Containers_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Containers, 7, a0, RetvalCell.Int16);
+    private static int U_Containers_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Containers, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Containers_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Containers, 8, a0, RetvalCell.Pointer);
+    private static int U_Containers_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Containers, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Containers_9(nint self) => Com.Unimplemented.Fail(self, Containers, 9, 0, RetvalCell.None);
+    private static int U_Containers_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Containers, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Containers_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Containers, 10, a1, RetvalCell.Pointer);
+    private static int U_Containers_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Containers, 10, raw, 1, r);
+    }
 
     private static void Fill_Container(nint* table)
     {
@@ -3207,40 +4473,76 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 7, a0, RetvalCell.Pointer);
+    private static int U_Container_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 8, a0, RetvalCell.Pointer);
+    private static int U_Container_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 9, a0, RetvalCell.Pointer);
+    private static int U_Container_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 10, 0, RetvalCell.None);
+    private static int U_Container_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Container, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 11, a0, RetvalCell.Pointer);
+    private static int U_Container_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 12, 0, RetvalCell.None);
+    private static int U_Container_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Container, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 13, a0, RetvalCell.Int32);
+    private static int U_Container_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 14, 0, RetvalCell.None);
+    private static int U_Container_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Container, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 15, a0, RetvalCell.Int16);
+    private static int U_Container_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 16, 0, RetvalCell.None);
+    private static int U_Container_16(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Container, 16, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 17, a0, RetvalCell.Pointer);
+    private static int U_Container_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Container_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Container, 18, a0, RetvalCell.Int32);
+    private static int U_Container_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Container, 18, null, 0, r);
+    }
 
     private static void Fill_Documents(nint* table)
     {
@@ -3251,16 +4553,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Documents_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Documents, 7, a0, RetvalCell.Int16);
+    private static int U_Documents_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Documents, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Documents_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Documents, 8, a0, RetvalCell.Pointer);
+    private static int U_Documents_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Documents, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Documents_9(nint self) => Com.Unimplemented.Fail(self, Documents, 9, 0, RetvalCell.None);
+    private static int U_Documents_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Documents, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Documents_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Documents, 10, a1, RetvalCell.Pointer);
+    private static int U_Documents_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Documents, 10, raw, 1, r);
+    }
 
     private static void Fill_Document(nint* table)
     {
@@ -3280,43 +4594,82 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 7, a0, RetvalCell.Pointer);
+    private static int U_Document_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 8, a0, RetvalCell.Pointer);
+    private static int U_Document_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 9, a0, RetvalCell.Pointer);
+    private static int U_Document_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 10, 0, RetvalCell.None);
+    private static int U_Document_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Document, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 11, a0, RetvalCell.Pointer);
+    private static int U_Document_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 12, a0, RetvalCell.Pointer);
+    private static int U_Document_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 13, 0, RetvalCell.None);
+    private static int U_Document_13(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Document, 13, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 14, a0, RetvalCell.Int32);
+    private static int U_Document_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 15, 0, RetvalCell.None);
+    private static int U_Document_15(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Document, 15, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 16, a0, RetvalCell.Variant);
+    private static int U_Document_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 17, a0, RetvalCell.Variant);
+    private static int U_Document_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Document, 18, a0, RetvalCell.Int32);
+    private static int U_Document_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Document, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Document_19(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Document, 19, a4, RetvalCell.Pointer);
+    private static int U_Document_19(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Document, 19, raw, 4, r);
+    }
 
     private static void Fill_Users(nint* table)
     {
@@ -3329,22 +4682,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 7, a0, RetvalCell.Int16);
+    private static int U_Users_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Users, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 8, a0, RetvalCell.Pointer);
+    private static int U_Users_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Users, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_9(nint self) => Com.Unimplemented.Fail(self, Users, 9, 0, RetvalCell.None);
+    private static int U_Users_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Users, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 10, 0, RetvalCell.None);
+    private static int U_Users_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Users, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Users, 11, 0, RetvalCell.None);
+    private static int U_Users_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Users, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Users_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Users, 12, a1, RetvalCell.Pointer);
+    private static int U_Users_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Users, 12, raw, 1, r);
+    }
 
     private static void Fill_User(nint* table)
     {
@@ -3359,28 +4730,52 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_User_7(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 7, a0, RetvalCell.Pointer);
+    private static int U_User_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, User, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_8(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 8, a0, RetvalCell.Pointer);
+    private static int U_User_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, User, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_9(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 9, 0, RetvalCell.None);
+    private static int U_User_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, User, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_10(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 10, 0, RetvalCell.None);
+    private static int U_User_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, User, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_11(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 11, 0, RetvalCell.None);
+    private static int U_User_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, User, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_12(nint self, nint a0) => Com.Unimplemented.Fail(self, User, 12, a0, RetvalCell.Pointer);
+    private static int U_User_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, User, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_13(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, User, 13, 0, RetvalCell.None);
+    private static int U_User_13(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, User, 13, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_User_14(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, User, 14, a2, RetvalCell.Pointer);
+    private static int U_User_14(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, User, 14, raw, 2, r);
+    }
 
     private static void Fill_Groups(nint* table)
     {
@@ -3393,22 +4788,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 7, a0, RetvalCell.Int16);
+    private static int U_Groups_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Groups, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 8, a0, RetvalCell.Pointer);
+    private static int U_Groups_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Groups, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_9(nint self) => Com.Unimplemented.Fail(self, Groups, 9, 0, RetvalCell.None);
+    private static int U_Groups_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Groups, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 10, 0, RetvalCell.None);
+    private static int U_Groups_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Groups, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Groups, 11, 0, RetvalCell.None);
+    private static int U_Groups_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Groups, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Groups_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Groups, 12, a1, RetvalCell.Pointer);
+    private static int U_Groups_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Groups, 12, raw, 1, r);
+    }
 
     private static void Fill_Group(nint* table)
     {
@@ -3421,22 +4834,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 7, a0, RetvalCell.Pointer);
+    private static int U_Group_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Group, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 8, a0, RetvalCell.Pointer);
+    private static int U_Group_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Group, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 9, 0, RetvalCell.None);
+    private static int U_Group_9(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Group, 9, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 10, 0, RetvalCell.None);
+    private static int U_Group_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Group, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Group, 11, a0, RetvalCell.Pointer);
+    private static int U_Group_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Group, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Group_12(nint self, nint a0, nint a1, nint a2, nint a3) => Com.Unimplemented.Fail(self, Group, 12, a3, RetvalCell.Pointer);
+    private static int U_Group_12(nint self, nint a0, nint a1, nint a2, nint r)
+    {
+        ulong* raw = stackalloc ulong[3]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; return Com.TypedCall.Run(self, Group, 12, raw, 3, r);
+    }
 
     private static void Fill_Connections(nint* table)
     {
@@ -3447,16 +4878,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Connections_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Connections, 7, a0, RetvalCell.Int16);
+    private static int U_Connections_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connections, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connections_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Connections, 8, a0, RetvalCell.Pointer);
+    private static int U_Connections_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Connections, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connections_9(nint self) => Com.Unimplemented.Fail(self, Connections, 9, 0, RetvalCell.None);
+    private static int U_Connections_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Connections, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Connections_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Connections, 10, a1, RetvalCell.Pointer);
+    private static int U_Connections_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Connections, 10, raw, 1, r);
+    }
 
     private static void Fill_Errors(nint* table)
     {
@@ -3467,16 +4910,28 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Errors_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Errors, 7, a0, RetvalCell.Int16);
+    private static int U_Errors_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Errors, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Errors_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Errors, 8, a0, RetvalCell.Pointer);
+    private static int U_Errors_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Errors, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Errors_9(nint self) => Com.Unimplemented.Fail(self, Errors, 9, 0, RetvalCell.None);
+    private static int U_Errors_9(nint self)
+    {
+        return Com.TypedCall.Run(self, Errors, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Errors_10(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Errors, 10, a1, RetvalCell.Pointer);
+    private static int U_Errors_10(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Errors, 10, raw, 1, r);
+    }
 
     private static void Fill_Error(nint* table)
     {
@@ -3488,19 +4943,34 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Error_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 7, a0, RetvalCell.Int32);
+    private static int U_Error_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Error, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Error_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 8, a0, RetvalCell.Pointer);
+    private static int U_Error_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Error, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Error_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 9, a0, RetvalCell.Pointer);
+    private static int U_Error_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Error, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Error_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 10, a0, RetvalCell.Pointer);
+    private static int U_Error_10(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Error, 10, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Error_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Error, 11, a0, RetvalCell.Int32);
+    private static int U_Error_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Error, 11, null, 0, r);
+    }
 
     private static void Fill_ComplexType(nint* table)
     {
@@ -3508,7 +4978,10 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_ComplexType_7(nint self, nint a0) => Com.Unimplemented.Fail(self, ComplexType, 7, a0, RetvalCell.Pointer);
+    private static int U_ComplexType_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, ComplexType, 7, null, 0, r);
+    }
 
     private static void Fill_IndexFields(nint* table)
     {
@@ -3521,22 +4994,40 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_7(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 7, a0, RetvalCell.Int16);
+    private static int U_IndexFields_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, IndexFields, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_8(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 8, a0, RetvalCell.Pointer);
+    private static int U_IndexFields_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, IndexFields, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_9(nint self) => Com.Unimplemented.Fail(self, IndexFields, 9, 0, RetvalCell.None);
+    private static int U_IndexFields_9(nint self)
+    {
+        return Com.TypedCall.Run(self, IndexFields, 9, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_10(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 10, 0, RetvalCell.None);
+    private static int U_IndexFields_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, IndexFields, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_11(nint self, nint a0) => Com.Unimplemented.Fail(self, IndexFields, 11, 0, RetvalCell.None);
+    private static int U_IndexFields_11(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, IndexFields, 11, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_IndexFields_12(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, IndexFields, 12, a1, RetvalCell.Variant);
+    private static int U_IndexFields_12(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, IndexFields, 12, raw, 1, r);
+    }
 
     private static void Fill_Recordset2(nint* table)
     {
@@ -3571,7 +5062,7 @@ internal static unsafe partial class DaoTypes
         table[35] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_35;
         table[36] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_36;
         table[37] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_37;
-        table[38] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_38;
+        table[38] = (nint)(delegate* unmanaged<nint, float, int>)&U_Recordset2_38;
         table[39] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_39;
         table[40] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_40;
         table[41] = (nint)(delegate* unmanaged<nint, nint, int>)&U_Recordset2_41;
@@ -3628,259 +5119,514 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 7, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 8, a0, RetvalCell.Int16);
+    private static int U_Recordset2_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 9, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 10, 0, RetvalCell.None);
+    private static int U_Recordset2_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 11, a0, RetvalCell.Int16);
+    private static int U_Recordset2_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 12, a0, RetvalCell.Variant);
+    private static int U_Recordset2_12(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 12, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 13, a0, RetvalCell.Int16);
+    private static int U_Recordset2_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 14, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_14(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 14, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 15, 0, RetvalCell.None);
+    private static int U_Recordset2_15(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 15, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 16, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 17, 0, RetvalCell.None);
+    private static int U_Recordset2_17(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 17, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 18, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_18(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 18, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 19, a0, RetvalCell.Variant);
+    private static int U_Recordset2_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 20, a0, RetvalCell.Int16);
+    private static int U_Recordset2_20(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 20, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 21, 0, RetvalCell.None);
+    private static int U_Recordset2_21(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 21, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 22, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_22(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 22, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 23, a0, RetvalCell.Int16);
+    private static int U_Recordset2_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 24, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_24(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 24, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 25, 0, RetvalCell.None);
+    private static int U_Recordset2_25(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 25, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 26, a0, RetvalCell.Int16);
+    private static int U_Recordset2_26(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 26, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 27, a0, RetvalCell.Int16);
+    private static int U_Recordset2_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 28, a0, RetvalCell.Int32);
+    private static int U_Recordset2_28(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 28, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 29, a0, RetvalCell.Int16);
+    private static int U_Recordset2_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 30, a0, RetvalCell.Int16);
+    private static int U_Recordset2_30(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 30, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 31, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 32, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_32(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 32, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 33, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 34, 0, RetvalCell.None);
+    private static int U_Recordset2_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 35, a0, RetvalCell.Int32);
+    private static int U_Recordset2_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 36, 0, RetvalCell.None);
+    private static int U_Recordset2_36(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 36, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 37, a0, RetvalCell.Int32);
+    private static int U_Recordset2_37(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 37, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 38, 0, RetvalCell.None);
+    private static int U_Recordset2_38(nint self, float a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (uint)BitConverter.SingleToInt32Bits(a0); return Com.TypedCall.Run(self, Recordset2, 38, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_39(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 39, a0, RetvalCell.Int32);
+    private static int U_Recordset2_39(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 39, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 40, 0, RetvalCell.None);
+    private static int U_Recordset2_40(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 40, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_41(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 41, a0, RetvalCell.Int16);
+    private static int U_Recordset2_41(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 41, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 42, a0, RetvalCell.Int32);
+    private static int U_Recordset2_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 43, a0, RetvalCell.Int32);
+    private static int U_Recordset2_43(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 43, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 44, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 45, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_45(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 45, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 46, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_46(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 46, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_47(nint self) => Com.Unimplemented.Fail(self, Recordset2, 47, 0, RetvalCell.None);
+    private static int U_Recordset2_47(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 47, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_48(nint self) => Com.Unimplemented.Fail(self, Recordset2, 48, 0, RetvalCell.None);
+    private static int U_Recordset2_48(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 48, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_49(nint self) => Com.Unimplemented.Fail(self, Recordset2, 49, 0, RetvalCell.None);
+    private static int U_Recordset2_49(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 49, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_50(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset2, 50, a2, RetvalCell.Pointer);
+    private static int U_Recordset2_50(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 50, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_51(nint self) => Com.Unimplemented.Fail(self, Recordset2, 51, 0, RetvalCell.None);
+    private static int U_Recordset2_51(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 51, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_52(nint self) => Com.Unimplemented.Fail(self, Recordset2, 52, 0, RetvalCell.None);
+    private static int U_Recordset2_52(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 52, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 53, 0, RetvalCell.None);
+    private static int U_Recordset2_53(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 53, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 54, 0, RetvalCell.None);
+    private static int U_Recordset2_54(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 54, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 55, 0, RetvalCell.None);
+    private static int U_Recordset2_55(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 55, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 56, 0, RetvalCell.None);
+    private static int U_Recordset2_56(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 56, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_57(nint self) => Com.Unimplemented.Fail(self, Recordset2, 57, 0, RetvalCell.None);
+    private static int U_Recordset2_57(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 57, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_58(nint self) => Com.Unimplemented.Fail(self, Recordset2, 58, 0, RetvalCell.None);
+    private static int U_Recordset2_58(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 58, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_59(nint self) => Com.Unimplemented.Fail(self, Recordset2, 59, 0, RetvalCell.None);
+    private static int U_Recordset2_59(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 59, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_60(nint self) => Com.Unimplemented.Fail(self, Recordset2, 60, 0, RetvalCell.None);
+    private static int U_Recordset2_60(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 60, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13) => Com.Unimplemented.Fail(self, Recordset2, 61, 0, RetvalCell.None);
+    private static int U_Recordset2_61(nint self, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8, nint a9, nint a10, nint a11, nint a12, nint a13)
+    {
+        ulong* raw = stackalloc ulong[14]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; raw[4] = (ulong)a4; raw[5] = (ulong)a5; raw[6] = (ulong)a6; raw[7] = (ulong)a7; raw[8] = (ulong)a8; raw[9] = (ulong)a9; raw[10] = (ulong)a10; raw[11] = (ulong)a11; raw[12] = (ulong)a12; raw[13] = (ulong)a13; return Com.TypedCall.Run(self, Recordset2, 61, raw, 14, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_62(nint self) => Com.Unimplemented.Fail(self, Recordset2, 62, 0, RetvalCell.None);
+    private static int U_Recordset2_62(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 62, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_63(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 63, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_63(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 63, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_64(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 64, 0, RetvalCell.None);
+    private static int U_Recordset2_64(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 64, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_65(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 65, 0, RetvalCell.None);
+    private static int U_Recordset2_65(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 65, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_66(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 66, 0, RetvalCell.None);
+    private static int U_Recordset2_66(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 66, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_67(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Recordset2, 67, a2, RetvalCell.Pointer);
+    private static int U_Recordset2_67(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 67, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_68(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 68, a1, RetvalCell.Pointer);
+    private static int U_Recordset2_68(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 68, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_69(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 69, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_69(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 69, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_70(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 70, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_70(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 70, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_71(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 71, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_71(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 71, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_72(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 72, a1, RetvalCell.Variant);
+    private static int U_Recordset2_72(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 72, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_73(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 73, a1, RetvalCell.Variant);
+    private static int U_Recordset2_73(nint self, nint a0, nint r)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 73, raw, 1, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_74(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 74, 0, RetvalCell.None);
+    private static int U_Recordset2_74(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 74, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_75(nint self) => Com.Unimplemented.Fail(self, Recordset2, 75, 0, RetvalCell.None);
+    private static int U_Recordset2_75(nint self)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 75, null, 0, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_76(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 76, a0, RetvalCell.Int16);
+    private static int U_Recordset2_76(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 76, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_77(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 77, a0, RetvalCell.Int32);
+    private static int U_Recordset2_77(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 77, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_78(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 78, a0, RetvalCell.Int16);
+    private static int U_Recordset2_78(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 78, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_79(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 79, a0, RetvalCell.Int32);
+    private static int U_Recordset2_79(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 79, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_80(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 80, 0, RetvalCell.None);
+    private static int U_Recordset2_80(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 80, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_81(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 81, a0, RetvalCell.Int32);
+    private static int U_Recordset2_81(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 81, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_82(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 82, a0, RetvalCell.Variant);
+    private static int U_Recordset2_82(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 82, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_83(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 83, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_83(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 83, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_84(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 84, 0, RetvalCell.None);
+    private static int U_Recordset2_84(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 84, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_85(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 85, a0, RetvalCell.Int16);
+    private static int U_Recordset2_85(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 85, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_86(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 86, a0, RetvalCell.Int32);
+    private static int U_Recordset2_86(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 86, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_87(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 87, 0, RetvalCell.None);
+    private static int U_Recordset2_87(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 87, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_88(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 88, 0, RetvalCell.None);
+    private static int U_Recordset2_88(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 88, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_89(nint self, nint a0, nint a1) => Com.Unimplemented.Fail(self, Recordset2, 89, 0, RetvalCell.None);
+    private static int U_Recordset2_89(nint self, nint a0, nint a1)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Recordset2, 89, raw, 2, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_90(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 90, 0, RetvalCell.None);
+    private static int U_Recordset2_90(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Recordset2, 90, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Recordset2_91(nint self, nint a0) => Com.Unimplemented.Fail(self, Recordset2, 91, a0, RetvalCell.Pointer);
+    private static int U_Recordset2_91(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Recordset2, 91, null, 0, r);
+    }
 
     private static void Fill_Field2(nint* table)
     {
@@ -3934,145 +5680,286 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 7, a0, RetvalCell.Pointer);
+    private static int U_Field2_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 8, a0, RetvalCell.Int32);
+    private static int U_Field2_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 9, a0, RetvalCell.Int16);
+    private static int U_Field2_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 10, 0, RetvalCell.None);
+    private static int U_Field2_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 11, a0, RetvalCell.Pointer);
+    private static int U_Field2_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 12, 0, RetvalCell.None);
+    private static int U_Field2_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 13, a0, RetvalCell.Int32);
+    private static int U_Field2_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 14, 0, RetvalCell.None);
+    private static int U_Field2_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 15, a0, RetvalCell.Pointer);
+    private static int U_Field2_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 16, a0, RetvalCell.Pointer);
+    private static int U_Field2_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 17, a0, RetvalCell.Variant);
+    private static int U_Field2_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 18, 0, RetvalCell.None);
+    private static int U_Field2_18(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 18, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 19, a0, RetvalCell.Int32);
+    private static int U_Field2_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 20, 0, RetvalCell.None);
+    private static int U_Field2_20(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 20, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 21, a0, RetvalCell.Int16);
+    private static int U_Field2_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 22, 0, RetvalCell.None);
+    private static int U_Field2_22(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 22, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 23, a0, RetvalCell.Pointer);
+    private static int U_Field2_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 24, 0, RetvalCell.None);
+    private static int U_Field2_24(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 24, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 25, a0, RetvalCell.Int16);
+    private static int U_Field2_25(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 25, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 26, 0, RetvalCell.None);
+    private static int U_Field2_26(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 26, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 27, a0, RetvalCell.Pointer);
+    private static int U_Field2_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 28, 0, RetvalCell.None);
+    private static int U_Field2_28(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 28, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 29, a0, RetvalCell.Variant);
+    private static int U_Field2_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 30, 0, RetvalCell.None);
+    private static int U_Field2_30(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 30, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 31, a0, RetvalCell.Int16);
+    private static int U_Field2_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 32, 0, RetvalCell.None);
+    private static int U_Field2_32(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 32, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 33, a0, RetvalCell.Int16);
+    private static int U_Field2_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 34, 0, RetvalCell.None);
+    private static int U_Field2_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 35, a0, RetvalCell.Int16);
+    private static int U_Field2_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 36, a0, RetvalCell.Pointer);
+    private static int U_Field2_36(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 36, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 37, 0, RetvalCell.None);
+    private static int U_Field2_37(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 37, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 38, 0, RetvalCell.None);
+    private static int U_Field2_38(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 38, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field2, 39, a2, RetvalCell.Variant);
+    private static int U_Field2_39(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Field2, 39, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 40, a0, RetvalCell.Int32);
+    private static int U_Field2_40(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 40, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field2, 41, a4, RetvalCell.Pointer);
+    private static int U_Field2_41(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Field2, 41, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 42, a0, RetvalCell.Int16);
+    private static int U_Field2_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 43, a0, RetvalCell.Variant);
+    private static int U_Field2_43(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 43, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 44, a0, RetvalCell.Variant);
+    private static int U_Field2_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 45, a0, RetvalCell.Int32);
+    private static int U_Field2_45(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 45, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 46, a0, RetvalCell.Pointer);
+    private static int U_Field2_46(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 46, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_47(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 47, 0, RetvalCell.None);
+    private static int U_Field2_47(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 47, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 48, 0, RetvalCell.None);
+    private static int U_Field2_48(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 48, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 49, a0, RetvalCell.Int16);
+    private static int U_Field2_49(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 49, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_50(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 50, a0, RetvalCell.Int16);
+    private static int U_Field2_50(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 50, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_51(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 51, 0, RetvalCell.None);
+    private static int U_Field2_51(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 51, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_52(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 52, a0, RetvalCell.Pointer);
+    private static int U_Field2_52(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field2, 52, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field2_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Field2, 53, 0, RetvalCell.None);
+    private static int U_Field2_53(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field2, 53, raw, 1, 0);
+    }
 
     private static void Fill_Field3(nint* table)
     {
@@ -4130,155 +6017,308 @@ internal static unsafe partial class DaoTypes
     }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_7(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 7, a0, RetvalCell.Pointer);
+    private static int U_Field3_7(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 7, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_8(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 8, a0, RetvalCell.Int32);
+    private static int U_Field3_8(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 8, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_9(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 9, a0, RetvalCell.Int16);
+    private static int U_Field3_9(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 9, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_10(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 10, 0, RetvalCell.None);
+    private static int U_Field3_10(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 10, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_11(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 11, a0, RetvalCell.Pointer);
+    private static int U_Field3_11(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 11, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_12(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 12, 0, RetvalCell.None);
+    private static int U_Field3_12(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 12, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_13(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 13, a0, RetvalCell.Int32);
+    private static int U_Field3_13(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 13, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_14(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 14, 0, RetvalCell.None);
+    private static int U_Field3_14(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 14, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_15(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 15, a0, RetvalCell.Pointer);
+    private static int U_Field3_15(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 15, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_16(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 16, a0, RetvalCell.Pointer);
+    private static int U_Field3_16(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 16, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_17(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 17, a0, RetvalCell.Variant);
+    private static int U_Field3_17(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 17, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_18(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 18, 0, RetvalCell.None);
+    private static int U_Field3_18(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 18, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_19(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 19, a0, RetvalCell.Int32);
+    private static int U_Field3_19(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 19, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_20(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 20, 0, RetvalCell.None);
+    private static int U_Field3_20(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 20, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_21(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 21, a0, RetvalCell.Int16);
+    private static int U_Field3_21(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 21, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_22(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 22, 0, RetvalCell.None);
+    private static int U_Field3_22(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 22, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_23(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 23, a0, RetvalCell.Pointer);
+    private static int U_Field3_23(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 23, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_24(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 24, 0, RetvalCell.None);
+    private static int U_Field3_24(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 24, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_25(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 25, a0, RetvalCell.Int16);
+    private static int U_Field3_25(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 25, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_26(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 26, 0, RetvalCell.None);
+    private static int U_Field3_26(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 26, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_27(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 27, a0, RetvalCell.Pointer);
+    private static int U_Field3_27(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 27, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_28(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 28, 0, RetvalCell.None);
+    private static int U_Field3_28(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 28, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_29(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 29, a0, RetvalCell.Variant);
+    private static int U_Field3_29(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 29, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_30(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 30, 0, RetvalCell.None);
+    private static int U_Field3_30(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 30, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_31(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 31, a0, RetvalCell.Int16);
+    private static int U_Field3_31(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 31, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_32(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 32, 0, RetvalCell.None);
+    private static int U_Field3_32(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 32, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_33(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 33, a0, RetvalCell.Int16);
+    private static int U_Field3_33(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 33, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_34(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 34, 0, RetvalCell.None);
+    private static int U_Field3_34(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 34, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_35(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 35, a0, RetvalCell.Int16);
+    private static int U_Field3_35(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 35, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_36(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 36, a0, RetvalCell.Pointer);
+    private static int U_Field3_36(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 36, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_37(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 37, 0, RetvalCell.None);
+    private static int U_Field3_37(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 37, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_38(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 38, 0, RetvalCell.None);
+    private static int U_Field3_38(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 38, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_39(nint self, nint a0, nint a1, nint a2) => Com.Unimplemented.Fail(self, Field3, 39, a2, RetvalCell.Variant);
+    private static int U_Field3_39(nint self, nint a0, nint a1, nint r)
+    {
+        ulong* raw = stackalloc ulong[2]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; return Com.TypedCall.Run(self, Field3, 39, raw, 2, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_40(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 40, a0, RetvalCell.Int32);
+    private static int U_Field3_40(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 40, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_41(nint self, nint a0, nint a1, nint a2, nint a3, nint a4) => Com.Unimplemented.Fail(self, Field3, 41, a4, RetvalCell.Pointer);
+    private static int U_Field3_41(nint self, nint a0, nint a1, nint a2, nint a3, nint r)
+    {
+        ulong* raw = stackalloc ulong[4]; raw[0] = (ulong)a0; raw[1] = (ulong)a1; raw[2] = (ulong)a2; raw[3] = (ulong)a3; return Com.TypedCall.Run(self, Field3, 41, raw, 4, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_42(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 42, a0, RetvalCell.Int16);
+    private static int U_Field3_42(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 42, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_43(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 43, a0, RetvalCell.Variant);
+    private static int U_Field3_43(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 43, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_44(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 44, a0, RetvalCell.Variant);
+    private static int U_Field3_44(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 44, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_45(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 45, a0, RetvalCell.Int32);
+    private static int U_Field3_45(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 45, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_46(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 46, a0, RetvalCell.Pointer);
+    private static int U_Field3_46(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 46, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_47(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 47, 0, RetvalCell.None);
+    private static int U_Field3_47(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 47, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_48(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 48, 0, RetvalCell.None);
+    private static int U_Field3_48(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 48, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_49(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 49, a0, RetvalCell.Int16);
+    private static int U_Field3_49(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 49, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_50(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 50, a0, RetvalCell.Int16);
+    private static int U_Field3_50(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 50, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_51(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 51, 0, RetvalCell.None);
+    private static int U_Field3_51(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 51, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_52(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 52, a0, RetvalCell.Pointer);
+    private static int U_Field3_52(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 52, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_53(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 53, 0, RetvalCell.None);
+    private static int U_Field3_53(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 53, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_54(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 54, a0, RetvalCell.Int16);
+    private static int U_Field3_54(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 54, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_55(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 55, 0, RetvalCell.None);
+    private static int U_Field3_55(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 55, raw, 1, 0);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_56(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 56, a0, RetvalCell.Int16);
+    private static int U_Field3_56(nint self, nint r)
+    {
+        return Com.TypedCall.Run(self, Field3, 56, null, 0, r);
+    }
 
     [UnmanagedCallersOnly]
-    private static int U_Field3_57(nint self, nint a0) => Com.Unimplemented.Fail(self, Field3, 57, 0, RetvalCell.None);
+    private static int U_Field3_57(nint self, nint a0)
+    {
+        ulong* raw = stackalloc ulong[1]; raw[0] = (ulong)a0; return Com.TypedCall.Run(self, Field3, 57, raw, 1, 0);
+    }
 }

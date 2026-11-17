@@ -53,6 +53,10 @@ internal static class Show
             sb.Append(Header(manifest));
         }
         EnvironmentReceipt env = capture.Environment;
+        if (env.Implementation is { } implementation)
+        {
+            sb.AppendLine("candidate: " + implementation);
+        }
         sb.AppendLine($"env: {env.Runtime} {env.ProcessArchitecture} {env.ApartmentType} desktop={env.WindowStation}\\{env.Desktop} lcid={env.UserDefaultLcid} acp={env.AnsiCodePage} tooling={env.ToolingRevision}");
         var previousPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (CaptureEvent e in capture.Events)
@@ -195,7 +199,8 @@ internal static class Show
     private static bool IsEngine(string path)
     {
         string name = Path.GetFileName(path);
-        return name.StartsWith("ACE", StringComparison.OrdinalIgnoreCase) || name.Contains("DAO", StringComparison.OrdinalIgnoreCase) || name.Equals("mso.dll", StringComparison.OrdinalIgnoreCase);
+        return name.StartsWith("ACE", StringComparison.OrdinalIgnoreCase) || name.Contains("DAO", StringComparison.OrdinalIgnoreCase) || name.Equals("mso.dll", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("CalcDb.dll", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Value(CapturedValue? v)

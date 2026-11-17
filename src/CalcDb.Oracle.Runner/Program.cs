@@ -20,6 +20,10 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
 /// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
+/// <item><c>batch --dir DIR --env windows-x64-calcdb-local [--deployment DIR] --compare</c>: run the same unchanged questions
+/// against CalcDb's published deployment (default <c>artifacts/native</c>) and compare each capture with the retained
+/// oracle capture of the same question key under <c>calls.trace</c> (W-08/native-read, T-OBJ-02). Candidate attempts are
+/// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store.</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
@@ -110,7 +114,7 @@ internal static class Program
 
     private static CaptureManifest RunAttempt(JobStore store, string token, Options options, string repo)
     {
-        AttemptRecord attempt = store.PrepareAttempt(token, ToolingRevision(repo), BookRevision(repo));
+        AttemptRecord attempt = store.PrepareAttempt(token, ToolingRevision(repo), BookRevision(repo), SelectImplementation(store.GetJob(token).RequestedEnvironment, repo, options));
         string worker = options.Get("worker") ?? DefaultWorker(repo);
         TimeSpan timeout = TimeSpan.FromSeconds(int.Parse(options.Get("timeout") ?? "300", System.Globalization.CultureInfo.InvariantCulture));
         Question question = store.GetQuestion(attempt.QuestionKey);
@@ -128,20 +132,75 @@ internal static class Program
     }
 
     /// <summary>The job token of a question file: its probe name and a key prefix, so a changed question is a new job.</summary>
-    private static string TokenOf(Question question) => question.Probe.Replace('/', '.') + "." + question.Key()[4..14];
+    private static string TokenOf(Question question, string environment) =>
+        question.Probe.Replace('/', '.') + "." + question.Key()[4..14] + (environment == ImplementationSelection.CalcDbEnvironment ? ".calcdb" : "");
+
+    /// <summary>The candidate implementation a job's environment selects, or null for the native installation.</summary>
+    private static ImplementationSelection? SelectImplementation(string environment, string repo, Options options)
+    {
+        if (environment != ImplementationSelection.CalcDbEnvironment)
+        {
+            return null;
+        }
+        string deployment = Path.GetFullPath(options.Get("deployment") ?? Path.Combine(repo, "artifacts", "native"));
+        string module = Path.Combine(deployment, "CalcDb.dll");
+        if (!File.Exists(module))
+        {
+            throw new FileNotFoundException($"No CalcDb deployment at {deployment}: dotnet publish src/CalcDb.Com -r win-x64 -c Release -o artifacts/native");
+        }
+        return new ImplementationSelection("calcdb", deployment, Hashing.Sha256File(module));
+    }
+
+    /// <summary>The retained oracle record of the same question key (the latest complete one), or null.</summary>
+    private static EvidenceRecord? OracleRecord(string evidenceDir, Question question)
+    {
+        string probeDir = Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar));
+        string key = question.Key();
+        return !Directory.Exists(probeDir) ? null : Directory.EnumerateFiles(probeDir, "*.json")
+            .Select(EvidenceJson.Read<EvidenceRecord>)
+            .Where(r => r.Manifest.QuestionKey == key && r.Manifest.IsComplete && r.Capture is not null)
+            .OrderBy(r => r.Manifest.SealedUtc)
+            .LastOrDefault();
+    }
+
+    private static Corpus.ComparisonRecord CompareWithOracle(JobStore store, CaptureManifest manifest, Question question, string evidenceDir)
+    {
+        string capturePath = Path.Combine(store.AttemptDirectory(manifest.AttemptId), "capture.json");
+        EvidenceRecord? oracle = OracleRecord(evidenceDir, question);
+        if (oracle is null || !File.Exists(capturePath))
+        {
+            return new Corpus.ComparisonRecord
+            {
+                CaseId = question.Probe,
+                OracleCapture = oracle?.Manifest.AttemptId ?? "(none retained)",
+                CandidateCapture = manifest.AttemptId,
+                Rule = Corpus.CallTraceComparison.Rule.Key,
+                Status = Corpus.ComparisonStatus.Missing,
+            };
+        }
+        return Corpus.CallTraceComparison.Compare(question.Probe, oracle.Manifest.AttemptId, oracle.Capture!, manifest.AttemptId, EvidenceJson.Read<Capture>(capturePath), "CalcDb.dll");
+    }
 
     private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
     {
         string dir = Path.GetFullPath(options.Require("dir"));
         bool retain = options.Has("retain");
         bool freeze = options.Has("freeze");
+        string environment = options.Get("env") ?? "windows-x64-ace-local";
+        bool candidate = environment == ImplementationSelection.CalcDbEnvironment;
+        if (candidate && (retain || freeze))
+        {
+            throw new ArgumentException("Candidate (CalcDb) attempts are compared, never retained as evidence or frozen as fixtures.");
+        }
+        bool compare = options.Has("compare");
+        var ledger = new Corpus.ComparisonLedger();
         var files = Directory.EnumerateFiles(dir, "*.question.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList();
         int complete = 0, incomplete = 0;
         foreach (string file in files)
         {
             Question question = EvidenceJson.Read<Question>(file);
-            string token = TokenOf(question);
-            (JobRecord job, _) = store.SubmitOrQuery(token, question, options.Get("env") ?? "windows-x64-ace-local");
+            string token = TokenOf(question, environment);
+            (JobRecord job, _) = store.SubmitOrQuery(token, question, environment);
             CaptureManifest? existing = job.Attempts.Count > 0 ? store.GetManifest(job.Attempts[^1]) : null;
             // A capture the sealer could not read because of a tooling defect is not an uncertain native
             // outcome: with --retry-unreadable it gets a new attempt on fresh input copies; the old attempt stays.
@@ -154,6 +213,13 @@ internal static class Program
             if (existing is not null && options.Get("retry-when") is { } when && existing.Problems.Any(x => x.Contains(when, StringComparison.Ordinal)))
             {
                 unreadable = true;
+            }
+            // A candidate attempt answers for the module it ran: a different deployed build is a new attempt.
+            if (candidate && existing is not null
+                && EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
+                    != SelectImplementation(environment, repo, options)!.ModuleSha256)
+            {
+                existing = null;
             }
             CaptureManifest manifest = existing is not null && !(unreadable && (options.Has("retry-unreadable") || options.Has("retry-when")))
                 ? existing
@@ -182,6 +248,17 @@ internal static class Program
                 continue;
             }
             complete++;
+            if (compare)
+            {
+                Corpus.ComparisonRecord verdict = CompareWithOracle(store, manifest, question, evidenceDir);
+                ledger.Append(verdict);
+                File.AppendAllText(Path.Combine(store.Root, "comparisons.jsonl"), EvidenceJson.SerializeLine(verdict) + "\n");
+                Console.WriteLine($"       {verdict.Status} against {verdict.OracleCapture}{(verdict.DifferencesTruncated ? " (differences truncated)" : "")}");
+                foreach (Corpus.Difference d in verdict.Differences.Take(6))
+                {
+                    Console.WriteLine($"         {d.Kind} {d.Path}: expected {d.Expected} actual {d.Actual}");
+                }
+            }
             if (retain && !File.Exists(RecordPath(evidenceDir, question, manifest.AttemptId)))
             {
                 RetainAttempt(store, manifest.AttemptId, options.Get("note"), evidenceDir, artifactsDir);
@@ -199,6 +276,11 @@ internal static class Program
             }
         }
         Console.WriteLine($"{files.Count} questions: {complete} complete, {incomplete} incomplete");
+        if (compare)
+        {
+            // Every case stays in the denominator: incomplete candidate runs count as missing comparisons.
+            Console.WriteLine($"{Corpus.CallTraceComparison.Rule.Key}: " + string.Join(", ", ledger.Account(Corpus.CallTraceComparison.Rule.RuleId).Where(kv => kv.Value > 0).Select(kv => $"{kv.Value} {kv.Key}")) + (incomplete > 0 ? $", {incomplete} not compared (incomplete)" : ""));
+        }
         return incomplete == 0 ? 0 : 3;
     }
 
@@ -345,6 +427,10 @@ internal static class Program
     {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
         string attemptDir = store.AttemptDirectory(attemptId);
+        if (EvidenceJson.Read<AttemptRecord>(Path.Combine(attemptDir, "attempt.json")).Implementation is { } implementation)
+        {
+            throw new InvalidOperationException($"Attempt {attemptId} ran the candidate {implementation.Name}: candidate results are compared, never retained as oracle evidence.");
+        }
         Question question = EvidenceJson.Read<Question>(Path.Combine(attemptDir, "question.json"));
         string capturePath = Path.Combine(attemptDir, "capture.json");
         Capture? capture = manifest.CaptureSha256 is not null && File.Exists(capturePath) ? EvidenceJson.Read<Capture>(capturePath) : null;

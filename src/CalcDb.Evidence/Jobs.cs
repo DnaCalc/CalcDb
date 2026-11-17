@@ -67,6 +67,20 @@ public sealed record AttemptRecord
     public required string BookRevision { get; init; }
 
     public required DateTimeOffset PreparedUtc { get; init; }
+
+    /// <summary>The implementation the question runs against; null for the native installation, the oracle.</summary>
+    public ImplementationSelection? Implementation { get; init; }
+}
+
+/// <summary>
+/// A candidate implementation under test (W-08/native-read, T-OBJ-02): its name, the deployment directory holding its
+/// module and manifests, and the module's SHA-256. Its attempts are candidate results compared with retained oracle
+/// evidence, never oracle evidence themselves.
+/// </summary>
+public sealed record ImplementationSelection(string Name, string DeploymentDirectory, string ModuleSha256)
+{
+    /// <summary>The job environment that selects CalcDb's published deployment.</summary>
+    public const string CalcDbEnvironment = "windows-x64-calcdb-local";
 }
 
 /// <summary>Written by the worker after the admission handshake and before its first native call.</summary>

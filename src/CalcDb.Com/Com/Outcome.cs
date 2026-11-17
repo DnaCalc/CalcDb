@@ -16,9 +16,19 @@ internal enum FailureKind
     Defect,
 }
 
-/// <summary>An operation's failure, independent of the caller's representation (II-12 owned error).</summary>
+/// <summary>
+/// An operation's failure, independent of the caller's representation (II-12 owned error). <see cref="PublishesErrorInfo"/>
+/// is the dispatch lane's IErrorInfo policy as R-ERR-1 ERR-EXCEP qualified it on ACE: only Field.Value failures and
+/// argument-count failures of Database and Recordset members publish one (GUID zero); every other DAO failure carries
+/// EXCEPINFO alone.
+/// </summary>
 internal sealed record Failure(FailureKind Kind, int Scode, string Source, string Description, string? HelpFile = null, int HelpContext = 0)
 {
+    public bool PublishesErrorInfo { get; init; }
+
+    /// <summary>The DAO error number (Error.Number): the scode's low word.</summary>
+    public int Number => Scode & 0xFFFF;
+
     /// <summary>A DAO error as ACE publishes it: scode 0x800A0000 | number, help file jeterr40.chm, context 5000000 + number.</summary>
     public static Failure Dao(int number, string source, string description) =>
         new(FailureKind.Dao, unchecked((int)0x800A0000) | number, source, description, "jeterr40.chm", 5000000 + number);
@@ -46,15 +56,18 @@ internal struct ExcepInfo
 }
 
 /// <summary>
-/// The channels a failure is published through (II-13 §13). Dispatch fills EXCEPINFO and returns DISP_E_EXCEPTION and,
-/// as ACE's DAO does through IDispatch, sets no IErrorInfo (R-ACT-1 ACT-THREAD records: GetErrorInfo S_FALSE after a
-/// failed OpenDatabase). The vtable channel returns the scode and sets IErrorInfo; what ACE does there is not yet
-/// observed (a native vtable caller is open in ACT-ABI).
+/// The channels a failure is published through (II-13 §13). Dispatch fills EXCEPINFO, returns DISP_E_EXCEPTION and
+/// sets an IErrorInfo only under the failure's <see cref="Failure.PublishesErrorInfo"/> policy. The vtable channel returns
+/// the scode and sets IErrorInfo; what ACE does there is not yet observed (a native vtable caller is open in ACT-ABI).
 /// </summary>
 internal static unsafe partial class ErrorPublication
 {
     public static int ToExcepInfo(Failure failure, ExcepInfo* info)
     {
+        if (failure.PublishesErrorInfo)
+        {
+            ToErrorInfo(failure, Guid.Empty);
+        }
         if (info is not null)
         {
             *info = default;

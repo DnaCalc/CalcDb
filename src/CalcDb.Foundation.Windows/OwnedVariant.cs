@@ -233,6 +233,23 @@ public sealed unsafe class OwnedVariant : IDisposable
 
     /// <summary>Move the payload to an empty destination without copying it; this owner becomes empty.</summary>
     /// <summary>
+    /// VariantChangeType of a borrowed value into a new owned one (a VT_BYREF source is read through its reference), or
+    /// null with the failing HRESULT (DISP_E_TYPEMISMATCH, DISP_E_OVERFLOW).
+    /// </summary>
+    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, out int hr)
+    {
+        var result = new OwnedVariant();
+        hr = OleAut.VariantChangeType(result._cell, source, 0, (ushort)target);
+        if (hr < 0)
+        {
+            result.Dispose();
+            return null;
+        }
+        result.State = OwnershipState.Owned;
+        return result;
+    }
+
+    /// <summary>
     /// The final inert handoff into a caller's output cell (II-12 owned publication): the caller's cell receives the
     /// value and its ownership, this value becomes moved-from. No allocation or foreign call happens here.
     /// </summary>

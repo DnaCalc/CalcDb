@@ -1,18 +1,31 @@
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
-using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Dao;
 
 /// <summary>
 /// The engine state of one binding on one apartment thread: what survives the release of every DBEngine reference
-/// (R-ACT-1 ACT-RETAIN: a DBEngine created again still reports the earlier Errors). Workspaces and Errors arrive with
-/// W-08/native-read.
+/// (R-ACT-1 ACT-RETAIN: a DBEngine created again still reports the earlier Errors), the Errors list (R-ORACLE-1 OR-OBS)
+/// and the default session, created at its first touch (R-DAO-1 DAO-BOOT).
 /// </summary>
 internal sealed class EngineState(HostBinding binding)
 {
+    private WorkspaceObject? _defaultWorkspace;
+
     public HostBinding Binding { get; } = binding;
+
+    /// <summary>The latest failure, replacing the earlier one; a success never clears it.</summary>
+    public List<Failure> Errors { get; } = [];
+
+    public void Record(Failure failure)
+    {
+        Errors.Clear();
+        Errors.Add(failure);
+    }
+
+    /// <summary>The default Workspace, created by the first touch; the engine state keeps it for its lifetime.</summary>
+    public WorkspaceObject DefaultWorkspace => _defaultWorkspace ??= new WorkspaceObject(this, "#Default Workspace#", "admin");
 }
 
 /// <summary>
@@ -20,27 +33,36 @@ internal sealed class EngineState(HostBinding binding)
 /// apartment every creation route returns the one live engine. Aggregation is refused as ACT-AGGREGATE observed:
 /// CLASS_E_NOAGGREGATION while no engine exists yet, E_UNEXPECTED once one does (<see cref="AggregationRefusal"/>).
 /// </summary>
-internal sealed unsafe class DBEngineObject : DispatchObject
+internal sealed unsafe class DBEngineObject : DaoObject
 {
     /// <summary>DBEngine.Version on the reference build (r-dao-1-err-1/manifest-library: "16.0").</summary>
     public const string AceVersion = "16.0";
 
     private static readonly InterfaceDecl Decl = DaoTypes.DBEngine;
-    private static readonly MemberDecl VersionGet = Decl.Member("Version", InvokeKind.PropertyGet);
-    private static readonly nint Vtable = DualEntries.Build(Decl, (VersionGet, (nint)(delegate* unmanaged<nint, nint*, int>)&VersionEntry));
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Version", (self, args) => Text(AceVersion))
+        .Get("Workspaces", (self, args) => Object(((DBEngineObject)self).WorkspacesCollection))
+        .Get("Errors", (self, args) => Object(((DBEngineObject)self).ErrorsCollection))
+        .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args));
 
     [ThreadStatic]
     private static Apartment? t_apartment;
 
     private readonly Apartment _apartment;
+    private WorkspacesObject? _workspaces;
+    private ErrorsObject? _errors;
 
-    private DBEngineObject(EngineState state, Apartment apartment) : base(Decl, Vtable)
+    private DBEngineObject(EngineState state, Apartment apartment) : base(Decl, Vtable, state, "DAO.DBEngine")
     {
-        State = state;
         _apartment = apartment;
     }
 
-    public EngineState State { get; }
+    protected override OperationTable Table => Operations;
+
+    private WorkspacesObject WorkspacesCollection => _workspaces ??= new WorkspacesObject(Engine);
+
+    private ErrorsObject ErrorsCollection => _errors ??= new ErrorsObject(Engine);
 
     /// <summary>The engines and engine states of one apartment thread, by binding.</summary>
     private sealed class Apartment
@@ -75,37 +97,93 @@ internal sealed unsafe class DBEngineObject : DispatchObject
         return engine.Publish(iid, result);
     }
 
-    protected override int HeadFor(in Guid iid) => iid == ComIids.IDispatch || iid == Decl.Iid ? 0 : -1;
-
-    protected override void OnFinalRelease() => _apartment.Live.Remove(State.Binding.Identity);
-
-    protected override Operation? Find(MemberDecl member) => member == VersionGet ? Version : null;
-
-    private static CallResult Version(ComObject self, ReadOnlySpan<nint> args) => CallResult.Of(OwnedVariant.FromText(AceVersion));
-
-    [System.Runtime.InteropServices.UnmanagedCallersOnly]
-    private static int VersionEntry(nint self, nint* text)
+    protected override void OnFinalRelease()
     {
-        if (text is null)
+        _apartment.Live.Remove(Engine.Binding.Identity);
+        _workspaces?.Release();
+        _errors?.Release();
+    }
+}
+
+/// <summary>A Workspace (R-DAO-1 DAO-BOOT): the default one is "#Default Workspace#", user "admin".</summary>
+internal sealed unsafe class WorkspaceObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.Workspace;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Name", (self, args) => Text(((WorkspaceObject)self).Name))
+        .Get("UserName", (self, args) => Text(((WorkspaceObject)self).UserName))
+        .Method("OpenDatabase", (self, args) => ((WorkspaceObject)self).OpenDatabase(args));
+
+    private readonly List<DatabaseObject> _databases = [];
+
+    public WorkspaceObject(EngineState engine, string name, string userName) : base(Decl, Vtable, engine, "DAO.Workspace")
+    {
+        Name = name;
+        UserName = userName;
+    }
+
+    public string Name { get; }
+
+    public string UserName { get; }
+
+    protected override OperationTable Table => Operations;
+
+    /// <summary>OpenDatabase(Name, Options, ReadOnly, Connect): the shared operation of DBEngine and Workspace (source DAO.Workspace).</summary>
+    public CallResult OpenDatabase(ReadOnlySpan<nint> args)
+    {
+        string? name = Args.Text(args[0]);
+        if (name is null)
         {
-            return HResults.E_POINTER;
+            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a null name"));
         }
-        *text = 0;
-        try
+        if (args.Length > 3 && Args.Text(args[3]) is { Length: > 0 })
         {
-            DBEngineObject engine = Recover<DBEngineObject>(self);
-            CallResult outcome = engine.Run(VersionGet, []);
-            if (outcome.Failure is { } failure)
-            {
-                return ErrorPublication.ToErrorInfo(failure, Decl.Iid);
-            }
-            *text = outcome.Value!.TransferBstr();
-            outcome.Value.Dispose();
-            return HResults.S_OK;
+            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a Connect string"));
         }
-        catch (Exception e)
+        bool? readOnly = Args.Bool(args.Length > 2 ? args[2] : 0, omitted: false);
+        if (readOnly is null)
         {
-            return ErrorPublication.ToErrorInfo(Failure.Defect(e), Decl.Iid);
+            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a ReadOnly argument that is not Boolean"));
         }
+        CallResult result = DatabaseObject.Open(this, name, out DatabaseObject? database);
+        if (database is not null)
+        {
+            _databases.Add(database);
+            result = Object(database);
+            database.Release(); // the result holds it; the Workspace keeps it in its list until Close
+        }
+        return result;
+    }
+
+    public void Forget(DatabaseObject database) => _databases.Remove(database);
+}
+
+/// <summary>Workspaces: the default session once touched.</summary>
+internal sealed unsafe class WorkspacesObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.Workspaces;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Count", (self, args) => Int16(1))
+        .Get("Item", (self, args) => ((WorkspacesObject)self).Item(args))
+        .Method("Refresh", (self, args) => CallResult.Nothing);
+
+    public WorkspacesObject(EngineState engine) : base(Decl, Vtable, engine, "DAO.Workspaces")
+    {
+        _ = engine.DefaultWorkspace; // reading Workspaces touches the default session (DAO-BOOT)
+    }
+
+    protected override OperationTable Table => Operations;
+
+    private CallResult Item(ReadOnlySpan<nint> args)
+    {
+        WorkspaceObject ws = Engine.DefaultWorkspace;
+        int? found = CollectionLookup.Find(args[0], 1, _ => ws.Name, out bool objectIndex);
+        if (objectIndex)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Workspaces.Item with an object index"));
+        }
+        return found is null ? Fail(3265, DaoErrors.ItemNotFound) : Object(ws);
     }
 }

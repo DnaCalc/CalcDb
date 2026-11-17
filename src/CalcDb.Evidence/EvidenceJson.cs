@@ -24,6 +24,11 @@ public static class EvidenceJson
 
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options) + "\n";
 
+    private static readonly JsonSerializerOptions LineOptions = new(Options) { WriteIndented = false };
+
+    /// <summary>The same form on one line, for append-only JSON Lines ledgers.</summary>
+    public static string SerializeLine<T>(T value) => JsonSerializer.Serialize(value, LineOptions);
+
     public static T Deserialize<T>(string json) =>
         JsonSerializer.Deserialize<T>(json, Options) ?? throw new EvidenceFormatException($"Empty {typeof(T).Name} record.");
 

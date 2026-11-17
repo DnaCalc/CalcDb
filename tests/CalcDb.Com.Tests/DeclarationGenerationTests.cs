@@ -110,12 +110,13 @@ public sealed class DeclarationGenerationTests
             {
                 int slot = f.VtableOffset / 8;
                 bool hasRetval = f.ReturnType != "VT_VOID";
-                int arity = f.Parameters.Count + (hasRetval ? 1 : 0);
-                string sig = string.Concat(Enumerable.Repeat("nint, ", arity + 1)) + "int";
+                string[] native = f.Parameters.Select(p => NativeType(p.Type)).ToArray();
+                string sig = "nint, " + string.Concat(native.Select(t => t + ", ")) + (hasRetval ? "nint, " : "") + "int";
                 stubs.Append($"        table[{slot}] = (nint)(delegate* unmanaged<{sig}>)&U_{id}_{slot};\n");
-                string args = string.Concat(Enumerable.Range(0, arity).Select(k => $", nint a{k}"));
-                string retval = hasRetval ? $"a{arity - 1}" : "0";
-                body.Append($"\n    [UnmanagedCallersOnly]\n    private static int U_{id}_{slot}(nint self{args}) => Com.Unimplemented.Fail(self, {id}, {slot}, {retval}, RetvalCell.{Cell(f.ReturnType)});\n");
+                string args = string.Concat(native.Select((t, k) => $", {t} a{k}")) + (hasRetval ? ", nint r" : "");
+                string packing = native.Length == 0 ? "" : $"ulong* raw = stackalloc ulong[{native.Length}]; " + string.Concat(native.Select((t, k) => $"raw[{k}] = {Raw(t, "a" + k)}; "));
+                string call = $"Com.TypedCall.Run(self, {id}, {slot}, {(native.Length == 0 ? "null" : "raw")}, {native.Length}, {(hasRetval ? "r" : "0")})";
+                body.Append($"\n    [UnmanagedCallersOnly]\n    private static int U_{id}_{slot}(nint self{args})\n    {{\n        {packing}return {call};\n    }}\n");
             }
             stubs.Append("    }\n").Append(body).Append('\n');
         }
@@ -139,18 +140,18 @@ public sealed class DeclarationGenerationTests
         return sb.ToString();
     }
 
-    private static string Cell(string returnType) => returnType switch
+    /// <summary>The native parameter type of a generated entry: floating values travel in XMM registers, the rest as integers.</summary>
+    private static string NativeType(string type) => type switch
     {
-        "VT_VOID" => "None",
-        "VT_UI1" => "Byte",
-        "VT_I2" or "VT_BOOL" or "VT_UI2" => "Int16",
-        "VT_I4" or "VT_UI4" or "VT_INT" or "VT_UINT" or "VT_R4" or "VT_HRESULT" or "VT_ERROR" => "Int32",
-        "VT_VARIANT" => "Variant",
-        // Pointers, BSTRs, arrays and 8-byte scalars clear a pointer-sized cell.
-        _ when returnType.StartsWith("PTR ", StringComparison.Ordinal) || returnType.StartsWith("SAFEARRAY ", StringComparison.Ordinal)
-            || returnType is "VT_BSTR" or "VT_DISPATCH" or "VT_UNKNOWN" or "VT_R8" or "VT_DATE" or "VT_CY" or "VT_I8" or "VT_UI8" => "Pointer",
-        // A user-defined type returned by value is an enum in DAO: a 4-byte integer.
-        _ when returnType.StartsWith("USERDEFINED ", StringComparison.Ordinal) => "Int32",
-        _ => throw new InvalidOperationException("no retval cell rule for " + returnType),
+        "VT_R4" => "float",
+        "VT_R8" or "VT_DATE" => "double",
+        _ => "nint",
+    };
+
+    private static string Raw(string nativeType, string name) => nativeType switch
+    {
+        "float" => $"(uint)BitConverter.SingleToInt32Bits({name})",
+        "double" => $"(ulong)BitConverter.DoubleToInt64Bits({name})",
+        _ => $"(ulong){name}",
     };
 }
