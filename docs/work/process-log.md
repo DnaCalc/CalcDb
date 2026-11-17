@@ -138,3 +138,26 @@ the summaries surfaced the Decimal question.
 
 **Next candidate.** `batch` already takes `--timeout` for all its questions. A per-question timeout would let
 a probe that may block declare 60 s while long joins keep 300 s.
+
+## 2026-11-17 morning · waves 5 and 6
+
+**Work observed.** Wave 5 (233 questions, 4 cards) and a repair wave 6 (264 questions, 5 cards; the wave-6 evidence commit says 265, which was a miscount), designed by
+Sonnet sub-agents, all complete except one designed kill. Every worker ran on the private desktop and no window was
+recorded.
+
+**What changed in how the work is done.**
+- *A repair wave instead of reruns.* Summary sub-agents list probe defects; repair agents re-ask the same
+  questions with the defect designed out, and each repair names its original. Answers are never re-run to get a
+  different one. One repair card invented its own discipline worth adopting: it provokes a known error before
+  each step so DAO's `Errors` belongs to that step alone.
+- *Creation review before dependents* again caught a fixture that would have spoiled 17 dependents
+  (`r-par-1-fold`, a Precision-38 Decimal column); it was rebuilt as `fold2` before they ran.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The freeze fix was built after the round-1 binary snapshot had been taken | Round 1 still froze 56 scratch outputs | Removed by provenance check. Rule: take the snapshot after the last tooling change |
+| A design agent's answer was too large to return (133 KB) | Its card arrived as "no code block"; the file was recovered from its temp folder | Next briefs should name a scratch path to write the file to, and return only the list |
+
+**Next candidates.** The two rules in the table, and a per-question timeout.

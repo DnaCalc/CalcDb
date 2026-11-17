@@ -22,6 +22,32 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
 > assumption that DAO-only probes show no UI was wrong. Since 04:24 every worker runs on a private desktop, and
 > a guard records any owned window on the owner's desktop (see the R-ORACLE-1 OR-DESKTOP entry below).
 
+### The night in numbers
+2,281 retained records in 45 folders, from six waves of designed questions in the book's order (II-16 §25,
+F-223), all through the raw IDispatch lane. Counts per folder are in the register.
+
+| Wave | Cards | Records | Incomplete, retained with notes |
+| --- | --- | --- | --- |
+| 1–2 | the A-02 cards of the native starter graph, plus discriminators | 1,105 | process kills by design; the `Requery(QueryDef)` fault |
+| 3 | deeper R-EXPR-1, R-SQL-1/3, R-DAO-1, R-CURSOR-1, R-ERR-1, R-CAT-1 | 359 | 3: `SELECT Array()` crash, 32-table join over 300 s, `Requery` on a parameter query |
+| 4 | R-TXN-1, R-FMT-2, R-SORT-3, R-ADO-1, OR-WIRE | 301 | 3: two designed kills, `OpenDatabase(Empty)` dialog |
+| — | `r-dec-read` discriminator | 18 | — |
+| 5 | R-PAR-1 serial baseline, deferred-branch sweeps | 234 (233 questions and the superseded `create-fold`) | — |
+| 6 | repairs of probe defects from waves 1–5 | 264 | 1 designed kill |
+
+Open, to revisit (each with its evidence above or in evidence-summaries.md):
+- ACE faults: `Recordset.Requery(QueryDef)` and `SELECT Array()` kill the process; a 32-table INNER JOIN nest takes
+  more than 300 s.
+- Interactive paths: `OpenDatabase(Empty)` prompts. Access-host routes (R-UDF-1, the host part of R-EXPR-1) wait
+  for qualified dialog handling.
+- Decimal: results from waves 1 to 4 built with `AddDecimalField` describe Precision-38 fields. Repairs re-ask the
+  main ones on explicit-precision columns (`r-fix-*`).
+- Not answerable through DAO by the default Admin: system-table reads (3112). Byte-level interpretation of the
+  kept images is W-04 work.
+- Defects not repaired, with reasons: deferred-branches.md, "Wave 6".
+- Provenance: runs from a binary snapshot built while tooling changes were uncommitted carry `tooling=<commit>+dirty`.
+  The commit that follows each such run holds those changes.
+
 ### R-ORACLE-1 (capture_core)
 - Retained earlier: fixture creation, first table read, first failed call (see the register).
 - **OR-DESKTOP** (from 04:24). The runner creates the desktop `WinSta0\CalcDbOracle` and starts each worker on it,

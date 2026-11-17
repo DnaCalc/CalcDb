@@ -97,7 +97,8 @@ is called qualified here.
 | native_host_driver, native_udf, native_expression_effects | R-UDF-1, R-EXPR-1 host effects | — | deferred: needs an owned Access host with qualified dialog handling (OR-DESKTOP, task `b8sx`) |
 | foundation_discovery, host_minimum, browser_minimum | I-FOUNDATION-1, I-HOST-1, R-ACT-1, R-WASM-1 | `r-act-1-thread` 6 | partial for ACT-THREAD; the rest are not ACE observations |
 | other native cards | R-DAO-1, R-ERR-1, R-STRING-1, R-ADO-1, R-ENC-1, R-LINK-1, R-COMPLEX-1, R-REBUILD-1, R-OLEDB-1, R-ODBC-1 | `r-dao-1-err-1` 43, `r-dao-1b` 60, `r-err-1b` 59, `r-str-ado-act` 74, `r-ado-1b` 62, `r-enc-link` 41, `r-cplx-rebuild` 56, `r-oledb-odbc` 82 | partial |
-| **Total** | | 2017 records in 40 folders (2026-11-17 05:10) | |
+| repairs of probe defects (wave 6) | the cards of waves 1 to 5; each probe names the probe it repairs | `r-fix-wire-ado` 51, `r-fix-fmt-sort` 53, `r-fix-cursor-dao` 53, `r-fix-expr-sql` 54, `r-fix-cat-txn` 53 | partial; defects not repaired are listed in deferred-branches.md |
+| **Total** | | 2281 records in 45 folders (2026-11-17 06:00) | |
 
 **Seal note.** These three records were sealed by tooling `67a9af91`, which serialized with
 the host line ending; their `sealSha256` verifies against the CRLF-indented manifest form.

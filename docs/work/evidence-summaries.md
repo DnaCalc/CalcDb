@@ -3550,3 +3550,593 @@ All 52 records answer from the loaded ACEDAO 16.0.20527.20196 (a Jet 4 MDB for `
 - **Complex columns:** `ALTER TABLE … ADD COLUMN B LONG MULTIVALUE` produced a plain LONG. Check how the parser took MULTIVALUE.
 - **R-TXN-1:** `txn-close-original…` shows a failed `Close` ending the transaction. Probe more transaction-ending causes.
 - **Fixtures:** the keyless link (`NoKey`) never tested UPDATE or DELETE on an existing duplicate pair `(2,y)`, `(2,z)`.
+
+*Wave 6, repairs (`r-fix-wire-ado`, `r-fix-fmt-sort`, `r-fix-cursor-dao`, `r-fix-expr-sql`, `r-fix-cat-txn`). Each entry names the probe it repairs. Spot check: `r-fix-wire-ado/opt-opendatabase-options-bstr-x` answers 3421 on the private desktop, and none of the wave-5 or wave-6 records has a window on either desktop.*
+
+### r-fix-wire-ado
+All 51 records are Complete. 20 are ReturnedSuccess and 31 are ReturnedFailure; none is Uncertain. Every ReturnedFailure is a deliberate refusal or an ACE error answer, except where listed in "Still defective". Not summarised: the `Supports()` option lists in `ado-rs-cursors-writable`, and the 25 parameter read-backs in `param-decimal-scale-fresh` beyond the Value and match results below.
+
+**1. Repaired answers**
+- `opt-opendatabase-*` (15 variants) repairs `r-wire/opt-opendatabase`. No dialog opened and every variant was captured.
+  - These open with `Errors.Count` 0: name-only, `(MISS)` and `(MISS,MISS)`, all-missing, all-empty (`VT_EMPTY`×3), `(MISS,MISS,MISS,EMPTY/NULL/BSTR"")` for Connect, and `(MISS,EMPTY/NULL)` for ReadOnly.
+  - `Updatable` is -1 for all of them, including `(MISS, ReadOnly=True)`: ReadOnly is ignored when Options is missing.
+  - `(False,True)` and `(I2 0,I2 -1)` give `Updatable` 0.
+  - `(NULL,NULL,NULL)` and `(BSTR "x")` as Options give `hr=0x80020009`, scode 0x800A0D5D "Data type conversion error.", DBEngine.Errors 1 × 3421.
+  - No variant isolates a NULL in the Options position alone.
+- `ado-provider-pin-isolated` repairs `ado-open-provider-property`. A fresh Connection's Provider reads "MSDASQL". Assigning ACE succeeds after nothing, Provider, State, ConnectionString or Mode as the first read, with Errors 0.
+  - After `Properties.Count` (14) the assignment fails: scode 0x800A0C94 "Supplied provider is different from the one already in use.", Errors.Count 0, Provider then "MSDASQL.1". So the Properties read is what pins it.
+- `ado-open-provider-property-ace-first` repairs the same original. ACE is now inventoried: Properties.Count 31 closed, 101 open, 31 after Close. Open gives State 1, `Mode` 1, `IsolationLevel` 4096 and ConnectionString `Provider=Microsoft.ACE.OLEDB.12.0;User ID=Admin;Data Source=…;Mode=Read;…`.
+  - The retained Property wrapper `ds.Value()` fails after Open and again after Close: 0x800A0D5C "Object is no longer valid." (step 52, step 67). This is the answer, not a defect.
+- `ado-execute-results-rows` (writable connection):
+  - Row SELECT returns an open recordset: State 1, CursorType 0, LockType 1, CursorLocation 2, RecordCount -1, 4 rows (1,a1,alpha / 2,a2,NULL / 3,b3,"" / 4,b4,beta).
+  - `WHERE 1=0` returns an open recordset with BOF and EOF true and 10 fields.
+  - `Execute "QEmpty"` returns an open recordset with BOF and EOF true.
+  - adExecuteNoRecords (129) returns a null interface pointer.
+- `ado-execute-update-compound`:
+  - `UPDATE K SET T=T WHERE Code='a1'` succeeds, returns a recordset with State 0 and Errors 0, and the row reads back (1,a1,alpha).
+  - `SELECT 1 AS A; SELECT 2 AS B` gives `hr=0x80020009`, scode 0x80040E14 "Characters found after end of SQL statement."
+  - Its Errors entry: Number -2147217900, SQLState "3000", NativeError -533204413, source "Microsoft Access Database Engine".
+- `ado-rs-cursors-writable`, requested then effective as (CursorType, LockType, CursorLocation, RecordCount). Seven of the eight requests are in the table below; the eighth is the `adCmdTableDirect` keyset read-only on K, which gives the same tuple as `adCmdTable`.
+
+| Request | Effective | RecordCount |
+|---|---|---|
+| server forward-only RO | 0,1,2 | -1 |
+| server keyset optimistic | 1,3,2 | 4 |
+| server dynamic pessimistic | 1,2,2 | -1 |
+| server static RO | 3,1,2 | 4 |
+| client static batch-optimistic | 3,4,3 | 4 |
+| client forward-only RO | 3,1,3 | 4 |
+| `adCmdTable` keyset RO | 1,1,2 | 4 |
+
+  - `MoveLast` on the forward-only recordset fails with scode 0x80040E24 "Rowset does not support fetching backward.", Errors Number -2147217884, AbsolutePosition -1.
+- `ado-session-writable`:
+  - Both recordsets and the Command return the same Connection object (u2) from `ActiveConnection`.
+  - A failed `Execute "SELEC bad"` on the second connection gives 0x80040E14, SQLState "3000", NativeError -533138860.
+  - After the first connection closes, every Recordset and the Command have State 0, `cmd.ActiveConnection` is a null interface pointer, and the second connection stays State 1.
+- `ado-params-saved-query` (QParam, adCmdStoredProc):
+  - Parameters.Count is 0 on first access and after Refresh; `Item(0)` gives 0x800A0CC1.
+  - `Execute` gives 0x80040E10 "Too few parameters. Expected 1.", SQLState "3061", NativeError -531565506.
+- `ado-params-refresh-only` (two `?`):
+  - Count is 2 before Refresh and 0 after it. `Item(0)` and `Item(1)` give 0x800A0CC1.
+  - `Execute` gives 0x80040E10 "No value given for one or more required parameters.", SQLState "".
+- `ado-edit-fresh` (ID 5 was already the generated ID in the original):
+  - Initial K rows: (1,a1,alpha), (2,a2,NULL), (3,b3,""), (4,b4,beta).
+  - Setting T = "edited" puts EditMode 1; Value is "edited" and OriginalValue is "alpha". `Update` returns EditMode 0 and OriginalValue "edited".
+  - `UnderlyingValue` is refused both times: 0x800A0CB3 "Current provider does not support refreshing underlying values."
+  - "moved" then `MoveNext` posts the edit: EditMode 0, and `MovePrevious` reads "moved".
+  - "cancel" then `CancelUpdate` leaves T "moved".
+  - `AddNew` gives EditMode 2 and `Update` yields ID 5. Final K: (1,a1,moved) plus the n6 row (5,n6,NULL).
+  - Errors.Count 0 after every step.
+- `ado-bulk-elements`:
+  - `GetRows(-1)` returns a variant array [0+4,0+4] with (1,"a1","alpha","memo one"), (2,"a2",NULL,NULL), (3,"b3","",""), (4,"b4","beta","x"). EOF is true.
+  - `GetRows(2,1,"T")` returns [0+1,0+2] = ("alpha", NULL) and AbsolutePosition 3.
+  - `GetString` with clip parameters returns `1|a1|alpha|memo one\n2|a2|<null>|<null>\n…`.
+  - `GetString(2)` with defaults is tab/CR separated, and NULL becomes an empty string.
+- `str-memo-fieldsize` repairs `str-memo-chunks`. `FieldSize` read with a property get works on Memo: `VT_I4`, no error, DBEngine.Errors 0.
+  - By row: ID1 0, ID2 0, ID3 6, ID5 16002, ID8 18000, ID9 4000, ID10 140000, ID11 6.
+  - `GetChunk` on Memo returns the text, or `VT_NULL` for NULL rows. On Text field T of row 3, both `FieldSize` and `GetChunk(0,4)` give 0x800A0CBB "Invalid field data type."
+- `chunk-ole-append-fieldsize`, `chunk-memo-text-append-fieldsize`: the property-get `FieldSize` now answers on all rows.
+  - OLE: row 1 → 3, row 3 → 4, row 4 (BSTR of 3 bytes) → 4 with bytes 41004200, row 5 ("AB") → 6, row 6 (three arrays) → 0x0102030000ff, row 12 → 256. NULL, EMPTY, MISSING, I4, R8 and BOOL put 0x800A0BB9 on AppendChunk.
+  - Memo: odd BSTRs (1 B, 3 B) put 0x800A0E76; a UI1 array 0x800A0D5D; NULL/EMPTY/MISSING/I4 0x800A0BB9; AppendChunk on Text field FText 0x800A0CBB; the 300-character row gives FieldSize 600.
+- `str-schema-change-isolated`:
+  - ALTER with a dynaset open gives scode 0x800A0C8B and Errors 1 × 3211 "could not lock table 'S'…".
+  - With nothing open, the ALTER, the UPDATE and the later OpenRecordset all succeed (hr 0). DBEngine.Errors still reports 1 × 3211 after each, because DAO Errors is not cleared.
+  - After TableDefs Refresh, `TableDefs("S").Fields.Count` is 4 and `Fields("X")` exists.
+- `fields-refresh-ddl-closed`/`-keyset-only`/`-client-only`:
+  - Closed: the ALTER succeeds; retained Fields Count 6 (before Refresh), Refresh and Requery 6; `Item("X")` found; a new recordset has 6.
+  - Keyset-only: the ALTER fails with scode 0x80040E14 "could not lock table 'W'", SQLState "3211", NativeError -534316312. Count stays 5; `Item("X")` gives 0x800A0CC1.
+  - Client-only: the ALTER succeeds; Count stays 5 after the DDL and after Refresh, becomes 6 after Requery; `Item("X")` is found; a new recordset has 6.
+- `persist-save-two-parameter`:
+  - `Save(path)` writes ADTG, 568 B, same sha256 prefix 03cdca6d as the explicit ADTG saves.
+  - A second `Save` to an existing path is refused with scode 0x80030050 for the 1-argument and both 2-argument forms (0, 1).
+  - A new-path ADTG save succeeds. The XML save succeeds at 1430 B and reopens.
+  - `Save(f99.dat, 99)` gives 0x800A0BB9. `Save()` with Destination omitted succeeds. `Save` on a closed recordset gives 0x800A0E78.
+- `param-decimal-scale-fresh`: all 25 combinations run with Errors 0.
+  - String "3.125", Double 3.125 and Currency 3.125 match ID 1 for every (precision, scale) pair.
+  - String "3.1251" and Long 3 return an empty recordset for every pair.
+  - Value read-back: String and Double give DECIMAL 3.125 (scale 3); Currency gives 3.1250 (scale 4); Long 3 gives scale 0. A parameter created with the default precision/scale reads 0/0.
+- `fields-meta-decimal-expressions` (server forward-only and client static):
+  - N, N+1, N+N, N/2 and -N give `adNumeric` (131), DefinedSize 19, Precision 18, scale 4.
+  - N*1.5 gives type 5 (adDouble), DefinedSize 8, Precision 15, value 4.6875.
+  - Sum(N) gives Precision 28, scale 4, 3.1249. Min(N) is -0.0001 and Max(N) is 3.1250, both scale 4.
+  - `Count(N)` gives type 3 (adInteger), value 3.
+  - Avg(N) gives Precision 28, scale 10; server forward-only reads scale 28 (1.0416333333333333333333333333) and client static scale 10 (1.0416333333).
+  - Attributes: 122 for direct columns and aggregates, 114 for the arithmetic expressions.
+- `batch-scope-group-pending-constant`, `batch-scope-group-string-filter`, `batch-scope-group-unposted-edit`: the two causes are now separated.
+  - A constant Filter with no pending edit works: pending (1) gives RecordCount 3, `UpdateBatch(adAffectGroup=2)` succeeds, rows 1–3 store g1, g2, g3, and Status is 8 for every row afterwards.
+  - An empty group (`RecordCount` 0) gives scode 0x800A0C93 "Operation is not allowed in this context." The same applies to "ID > 99".
+  - A string Filter "ID <= 2" (RecordCount 2) gives 0x800A0C93, and no row changes. `adAffectAll` (3) then stores g1–g3.
+  - With a pending edit on row 3 and no Filter, `UpdateBatch(adAffectGroup)` gives 0x800A0C93.
+  - With a pending Filter and the edit still pending (RecordCount 3), it succeeds, and so does the one after `Update` on row 3. The three rows end as g1–g3. The record does not show which call stored row 3.
+- `batch-conflict-delete-readback`: a second connection `DELETE`s ID 2.
+  - `UpdateBatch(adAffectAll)` gives `hr=0x80020009`, scode 0x80004005 "Record is deleted.", Errors -2147467259, SQLState "3167", NativeError -66585593. Rows 1 and 3 have Status 8 with S c1 and c3. Row 2 has Status 2, with Value c2, OriginalValue and UnderlyingValue s2.
+  - `adFilterConflictingRecords` gives RecordCount 0. `Resync(3,1)` and a second `UpdateBatch` give the same error.
+  - Reads of rows with ID ≤ 4: `Execute` on the first connection fails with the same error. `Execute` on a fresh third connection (Errors 0) and the DAO snapshot both return w1/c1, w3/c3, w4. The failure is the reading connection, not the data.
+- `book-position-readback` (ID, AbsolutePosition, RecordCount, Bookmark):
+  - Forward-only: `Supports(adBookmark)` false, Bookmark refused 0x800A0CB3, AbsolutePosition -1, RecordCount -1, `MoveLast` refused 0x80040E24, `MovePrevious` 0x800A0C93.
+  - Keyset: rows 1, 2, 7 → bookmark R8 512, 513, 518 (position 1, 2, 7; RecordCount 7).
+  - Server static and client static: bookmarks R8 1, 2, 7 at positions 1, 2, 7, RecordCount 7.
+  - Past the end: AbsolutePosition -3, Bookmark refused 0x800A0BCD. Before the start: AbsolutePosition -2.
+- `txn-client-cache-rollback-distinct-rows`:
+  - Before rollback the keyset sees all four writes (txc-cn, txr-keyset, txr-client, txr-batch). The static read-only recordset sees the original values.
+  - The client recordset sees only its own txr-client, and the batch recordset only its own txr-batch.
+  - After `RollbackTrans`: keyset shows one row (alpha) then EOF; the client and batch recordsets keep their own values.
+  - `Resync(adAffectAll, adResyncAllValues)` gives 0x800A0CB3 on the keyset and static recordsets, and succeeds on the two client ones, restoring alpha, Beta, gamma, alpha. Requery restores all.
+  - Stored rows by `Execute` and by DAO: alpha, Beta, gamma, alpha. No route's change survives.
+- `ado-command-parameters-fresh`: with fresh Commands there is no stale carry-over.
+  - FInt 32768 / -32769 and FLong ±(2147483648…) fail with scode 0x8002000A "Out of present range." (source "Provider").
+  - The read-back is `VT_EMPTY`, and `Execute` fails with scode 0x80040E10 "Parameter ?_2 has no default value.", SQLState "3748", NativeError -542379020. No rows are stored (`GetRows` gives 0x800A0BCD).
+- `ado-write-values-numeric`, `ado-write-values-text-binary`:
+  - The odd-byte FText put gives 0x80040E21 "Number of bytes of a UNICODE string is not even." and `Update` then gives "Multiple-step OLE DB operation generated errors."; no "Update or CancelUpdate without AddNew or Edit" appears, and later rows 813+ and FMemo, FBin and FOle are written.
+  - A 256-character FText fails with 0x80040E21 "The field is too small…".
+  - `1E+39` and `1E15` fail with 0x8002000A "Out of present range."
+  - Stored: FText 800–809 and 813 (806/807/808 are lone-surrogate byte strings); FOle 1100 NULL, 1101 3 B, 1102 256 B, 1103 5000 B, 1104 1 B, 1105 NULL.
+- `create-ado5`: all DDL and INSERT statements succeed with Errors 0, including `DECIMAL(18,4)` and `[Note]`. K has 4 rows, J has 2, D has 10; QParam and QEmpty exist (QueryDefs Count 2).
+- `create-fdec-dao-put`, `create-fdec-sql-literal`: Decimal fields from `CREATE TABLE … DECIMAL(18,4)/(28,0)`.
+  - FDecS stores fractions: 1.5000, -0.0001, 12345678901234.5678, 0.1000 and so on; 6 rows through `GetRows(100)`.
+  - FDecI stores 7922816251426433759354395033 and ±7.
+  - `79228162514264337593543950335` fails with 0x800A0EB1 "precision is too small…" (DAO field and SQL).
+  - DAO R8 2.5 fails with 0x800A0EAF "Scaling… data truncation"; the row stays NULL.
+  - Through SQL, FDecI 1313 stores DECIMAL 2 (the literal itself is not shown in the record).
+  - 10 expression snapshots each ran alone.
+- `create-sql-extra`: the SQL hex-literal route is now asked.
+  - `0x` literals for FBin 1000 and FOle 1100 give 0x800A0C03 "Syntax error in query expression '0x'."
+  - Stored FBin 1001–1004 as 255-byte arrays; the 256-byte literal 1004 also stores a 255-byte array.
+  - Stored FOle 1101 (3 B), 1102 (256 B), 1103 (5000 B). Stored FMemo 907 (5000 chars) and 908.
+  - DBEngine.Errors stays at 1 after the first failure.
+
+**2. Still defective**
+- `create-param`, Memo rows 902–909, the original defect (failure carried to later rows) is not designed out.
+  - Rows 902–905: the put succeeds, but `Execute` fails with 0x800A0BF5 "Too few parameters. Expected 2." and RecordsAffected 0. Rows 900 and 901 work.
+  - Rows 904 and 905 hold benign values (""/"AB") yet still fail, so this is carry-over. A fresh QueryDef per cell does not isolate it, and one database per cell would be needed.
+  - Rows 906–909: the put fails with 0x800A0CC7 "Invalid property value." (the Text/Memo values are long), then `Execute` fails the same way.
+  - The numeric cells (102, 103, 202, 203, 302, 303, 412, 606) are repaired: the failed put reads back `VT_EMPTY` (0x800A0D5D), though `Execute` still fails 0x800A0BF5 "Expected 2.", and 814 fails with 0x800A0CC7.
+- `param-select-text-fresh`, the original defect (later LongText values failing) is not designed out.
+  - FText is fine: all OpenRecordset calls succeed, Errors 0.
+  - FMemo: `""` and `"ab"` open fine. From the first lone surrogate (00d8) every later LongText open fails with 0x800A0BF5 "Too few parameters. Expected 1." (DBEngine.Errors 3061), including "AB" and the long values.
+  - So a fresh QueryDef per value does not isolate the failure. Whether each later value would fail by itself is not separated.
+- `ado-params-manual-append`: the double-count is not designed out. `Parameters.Count` is already 2 on first read, with no Refresh (names "?", size 510). The Appends give Count 3 and 4 ("x", "y" after the two "?").
+  - `Execute` gives 0x80040E10 "Parameter ?_1 has no default value.", SQLState "3748". After `Delete("x")` the Count is 3 and the same error repeats.
+  - A named-mapping question cannot be answered here.
+
+### r-fix-fmt-sort
+
+Records read: 53; 22 are `ReturnedSuccess`, 30 are `ReturnedFailure`, and one (`fmt2b-kill-after-close-fixed-update`) shows only participant b because participant a was killed. Unless noted, the ACCDB and MDB records agree. Failures are explained under each probe. I did not diff the retained images, so any page-level claim for the fmt2b ladders still needs that diff.
+
+**1. Repaired answers**
+
+*R-FMT-1*
+- `fmt1-accdb-decimal` / `fmt1-mdb-decimal` (repair r-fmt-1/create+read-*-decimal): ADO `DECIMAL(18,4)` is accepted in both formats (DAO column Type 20, Size 16, Precision 18, Scale 4).
+  - DAO reads `VT_DECIMAL` scale 4 values: Null, 12345678901234.5678, -0.0001, 1.5000, 7.0000, 1.5000 (put as VT_CY 1.5), 7.0000 (VT_I4 7), 7.0000 (BSTR "7").
+  - `CStr` gives "12345678901234.5678", "-0.0001", "1.5", "7", "1.5", "7", "7". Same after a read-only reopen.
+  - `ReturnedFailure` comes only from the property-list enumeration (`Value`, `ForeignName`, `FieldSize` and others fail with 0x800A0C93, 0x800A0CC3 or 0x800A0CB3 on a TableDef field).
+- `fmt1-mdb-bigint` / `fmt1-mdb-datetime2` (repair r-fmt-1/create-mdb-*): in the Jet 4 MDB, `ALTER TABLE T ADD COLUMN V BIGINT` and `V DATETIME2` both return 0x800A0BB9, error 3001 "Invalid argument" (DAO.Database).
+  - V never exists, so every `Fields.Item("V")` and put fails with 3265. Only the ID-only rows are stored (3 rows for bigint, 2 for datetime2).
+- `fmt1-collating-contrast`: `Database.CollatingOrder` is 1033 (0x0409), 1031 (0x0407) and 2057 (0x0809), and T's ID and S fields report the same value. All three read the same after a read-only reopen.
+- `fmt1-accdb-properties` / `fmt1-mdb-properties`: the TableDef `Description` append returns hr 0.
+  - It reads back Type 10, Value "table description", and is the 13th entry of T's refreshed Properties.
+  - Database property `CalcDbProbe` reads Type 10, Value "value of a user property". Same in the session and after a read-only reopen.
+
+*R-FMT-2 and R-FMT-2b*
+- `fmt2-fx-fixture`: ADO `ALTER` makes Fx.Fm `DECIMAL(28,0)` (Type 20, Size 16, Precision 28, Scale 0) and Sc2.Fm `DECIMAL(18,4)` (Precision 18, Scale 4).
+  - DAO reads Fm as `VT_DECIMAL` 100 … 1000 (scale 0), Null on row 8. `CStr(Fm)` gives "100" … "1000".
+- `fmt2-scalar-admission-decimal` (repairs scalar-admission): on Sc2.Fm `DECIMAL(18,4)`, SQL INSERT of 12345678901234.5678 and of -0.0001, and the VT_CY 1.5 put, are all accepted (Execute and Update hr 0). DAO reads 12345678901234.5678, -0.0001 and 1.5000.
+  - No refusal occurred, so no precision/scale limit was mapped.
+- `fmt2-scalar-admission-date-range`: all eight VT_DATE puts are accepted with no error: 2958465.99998843, 2958466, 2958466.5, 2958467, 10000000, -657434, -657435 and -700000. Each reads back unchanged.
+  - 2958466 is accepted, as are values beyond it.
+- `fmt2-var-null-empty-ladder`: on T row 7 (world fixture), each step reads back after a read-only reopen. Every UPDATE returns RecordsAffected 1; the file stays 503808 B and the hash changes at every step.
+
+  | Step | V | N |
+  |---|---|---|
+  | start | "v7" | Null |
+  | `V = ''` | "" | Null |
+  | `V = Null` | Null | Null |
+  | `V = 'filled'` | "filled" | Null |
+  | `N = ''` | "filled" | "" (not Null) |
+- `fmt2b-fx-byte-update`, `-currency-update`, `-guid-update`, `-decimal-update`, `-null-to-value`, `-value-to-null`, `-same-value-update`: the UPDATE (or Edit/Update for GUID) returns hr 0, RecordsAffected 1 for the SQL ones. The file stays 253952 B (before hash 53afa2ada2f2).
+
+  | Probe | Row 5 (or 8) reads | After hash |
+  |---|---|---|
+  | byte | Fb 50 → 200 | d3593ab1c1ea |
+  | currency | Fc 6.25 → 1234.5678 | ab1e6c576be2 |
+  | guid | Fg {…EE05} → {FFEEDDCC-BBAA-9988-7766-554433221100} | d0f2cc4c1a2e |
+  | decimal | Fm 500 → `VT_DECIMAL` 12345 scale 0, `CStr` "12345" | cdaa50b2fa63 |
+  | null-to-value | row 8 Fl Null → 777 | afb440073587 |
+  | value-to-null | Fl 5000 → Null | 67e07312be16 |
+  | same-value | Fl stays 5000 | 27808f5e35df |
+
+  The hash differs from the before hash even for the same-value update.
+- `fmt2b-compact-after-fixed-update`: the Fb update gives d3593ab1c1ea. `CompactDatabase` returns hr 0 and writes a 253952 B file (c6fa453135ad); the mutated file is unchanged. The compacted file reads Fb row 5 = 200, Fm 500.
+- `fmt2b-settle-fixed-update`: the images after Close, after 1500 ms and after the DBEngine is released are the same bytes (d3593ab1c1ea).
+- `fmt2b-kill-after-close-fixed-update`: B observed TerminateProcess(A) succeed with exit 0xDEAD after A had closed the database. The frozen file is d3593ab1c1ea, the same as the settled image, and B reads Fb row 5 = 200.
+- `fmt2b-dl-pg-empty-ladder`: Pg has 12 rows. Deletes of IDs 1, 2, 3 and 4 each return RecordsAffected 1, and rows 2..12, 3..12, 4..12 and 5..12 read back after each.
+  - Insert of ID 21 gives rows 5..12 and 21 (every LEN(T1) = 61).
+  - The file stays 503808 B; hashes are 70c86e884583, bafa0b7db211, 344d0233e6a0, d388e1fefcde, then 937183001a7a.
+- `fmt2b-dr-reinsert-same-key-same-values` / `-longer-value`: after delete of 8 (ddef0d16ae9e) rows are 19, and the PK_Dr `DistinctCount` stays 20.
+  - After the reinsert it is 21 with 20 rows. Same values give 2a631246d058; the 60-L value gives 0136b53e63e1. The file stays 503808 B.
+- `fmt2b-ix-delete-reinsert-ladder`: IxM count 602 → 601 → 602 (min 1, max 603). PK_IxM `DistinctCount` goes 602 → 602 → 603. Hashes are 8375bf080045 then ca517433fdf7.
+- `fmt2b-ix-dup-ladder`: IX_IxD_G `DistinctCount` stays 1 throughout. Counts are 300 → 400 → 500 → 700 → 1100 and PK `DistinctCount` equals the count. The file stays 503808 B through add-100 and add-100-more (ac69c8c75539, e1a43384a89d), then grows to 512000 B at add-200 and 520192 B at add-400.
+- `fmt2b-ix-text-ladder`: counts 60 → 80 → 100 → 120 → 140 and both index `DistinctCount`s equal the count. The file grows 503808 → 512000 (add 1) → 512000 → 516096 (add 3) → 516096.
+- `fmt2b-au-explicit-high-ladder`: an explicit ID 100 is inserted. The next auto insert returns `@@IDENTITY` 101.
+- `fmt2b-au-reseed-ladder`: `ALTER … COUNTER(200, 5)` returns hr 0 with RecordsAffected 0. The two inserts return `@@IDENTITY` 200 and 205, so increment 5 is observed.
+
+*R-SORT-3 (ACCDB and MDB identical in every item below)*
+- `sort3-comp-accdb/-mdb`: ADO `WITH COMPRESSION` is accepted, so C exists (KC and KN both Type 10, Size 255, Attributes 2). RecordsAffected is 124 and both index builds return hr 0.
+  - SQL `ORDER BY KC` and `ORDER BY KN` give the same ID sequence (1 203 16 143 191 …).
+  - The IX_KC and IX_KN walks are also the same as each other, but differ from the SQL sequence (walk starts 1 2 15 16 141 143 191 …).
+- `sort3-unique-corpus-*`: every refusal is now captured, all as 0x800A0BCE (3022).
+  - WR has 203 attempts and 78 refusals, leaving 125 rows (UX_K `DistinctCount` 125).
+  - W2R has 37 attempts and 26 refusals, leaving IDs 1 2 4 10 11 12 31 32 33 36 37 (UX_K `DistinctCount` 10).
+- `sort3-stages-*`: all steps hr 0 (ACCDB image sizes 688128 → 704512 → 708608 → 712704 → 733184 → 741376 B).
+  - SQL `ORDER BY K` differs from the IX_K walk on TS (SQL …12 42 41 11 38 8…; walk …12 42 11 41 8 38…).
+  - The fresh TS and incremental T2S give identical SQL, IX_K and IX_KD sequences.
+- `sort3-unique-lu-*`:
+  - LUR and LU2R: 40 attempts, 8 refusals (3022; IDs 27 28 31 32 and the repeats 1 5 6 19), 32 survivors, UX `DistinctCount` 32.
+  - LU3R: 24 refusals, 16 survivors, `DistinctCount` 16.
+- `sort3-np-*`: refusals are 3022 (0x800A0BCE) for duplicates, 3058 (0x800A0BF2) for a Null in a key, and 3314 (0x800A0CF2) for a Null in NP5's NOT NULL K. Survivors by table:
+
+  | Table | Survivors |
+  |---|---|
+  | NP1, NP2 | 10 |
+  | NP3, NP4 | 2 |
+  | NP5 | 6 |
+  | NP6, NP7 | 6 |
+  | NP8 | 12 |
+  | NP9, NP10 | 2 |
+
+  NP9 and NP10 now both get the DAO index UXD, and both refuse Null-K rows with 3058.
+- `sort3-fr-*`: all seven indexes are created with hr 0.
+  - IX_FKN3 walks forward and backward; the backward walk is the exact reverse of the forward one.
+  - IX_FKNd is a separate walk (starts 4 3 2 5 6 1).
+  - SQL `ORDER BY K, N, D` differs from the IX_FKN3 forward walk (…12 42 41 11 38 8 39 9 40 10 against …12 42 11 41 8 38 9 39 10 40).
+- `sort3-nums-decimal-*`: X is `DECIMAL(18,4)` (Precision 18, Scale 4). All 10 stores succeed (8 SQL literals, VT_I4 7, VT_CY 1.5).
+  - DAO reads -12345678901234.5678, -1.0000, -0.0001, 0.0000, 0.0001, 1.0000, 1.5000, 12345678901234.5678, 7.0000, 1.5000. `CStr` gives "-12345678901234.5678", "-1", "-0.0001", "0", "0.0001", "1", "1.5", "12345678901234.5678", "7", "1.5". Same after a reopen.
+  - IX_X forward is IDs 1 2 3 4 5 6 7 10 9 8 (the 1.5 tie has 7 before 10); backward is its exact reverse.
+  - `ReturnedFailure` comes only from the property enumeration.
+
+*R-SORT-3b*
+- `sort3b-unique-refusals-lg` / `-lu` (Database `CollatingOrder` 1033 and 2057): the two records are otherwise identical.
+  - UQ2 and UQD2 each have 13 refusals, all 3022: IDs 2 4 6 8 10 12 13 15 16 43 45 46 54. 41 rows survive in each, and UX_K and UX_KD `DistinctCount` is 40.
+- `sort3b-nulls-refusals`:
+
+  | Table | Refused (error) | Survivors |
+  |---|---|---|
+  | NI8 | 3058 ×10 | 8 (5 6 8 9 14 15 17 18) |
+  | NU1 | 3022 ×4 | 14 |
+  | NU2 | 3058 ×10, 3022 ×4 | 4 (5 6 8 9) |
+  | NU3 | 3022 ×4 | 14 |
+  | NU4 | 3022 ×10 | 8 (1 2 3 4 7 10 11 12) |
+
+  - NU1's IGNORE NULL index walk omits only IDs 1 and 10 (both key columns Null), listing 12 rows. NU3's walk lists all 14. NU4's walk is 7 4.
+- `sort3b-image-build-order-a/-b`: no hr failures, images read.
+  - Index list order is IX1, IX2, IX3, PK_T in both, and the three walks are identical across a and b.
+  - IX1 `DistinctCount` is 15, IX2 15, IX3 and PK_T 24.
+  - Image sizes in order a: 188416 → 192512 → 196608 → 200704 B; b is the same sizes.
+- `sort3b-image-failed-unique`:
+  - Refused `CREATE UNIQUE INDEX UX_K` gives 3022. The file stays 188416 B and the hash still changes (4cf13adf477b → 65eb60d48b90).
+  - UX_K is absent from T's index list (PK_T and UX_KID only). `Recordset.Index("UX_K")` fails with 0x800A0ED8 "'UX_K' is not an index in this table" (the walk then lists storage order 1..10).
+  - TU: refused insert of 'A' and refused update of ID 2 both 3022 (file hash 1ff10ceb456d for both), then two Null inserts both admitted. TU survives as IDs 1 2 4 5 and the UX walk is 4 5 1 2.
+  - `TableDefs.Item("TU")` now works. TU's PK `DistinctCount` is 5 with 4 rows.
+- `sort3b-image-drop-rebuild`: all hr 0 (sizes 188416 → 192512 → 196608 → 208896 → 212992 B).
+  - The IX_K walk after rebuild is identical to the first build.
+  - After deleting and reinserting the even IDs, the IX_K2 walk reorders the ties: 14 15 16 → 15 16 14, 8 10 → 10 8, 12 13 → 13 12. IX_KD walk is 24 23 22 11 13 12 ….
+  - PK_T `DistinctCount` is 36 with 24 rows.
+- `sort3b-existing-nulls-isolated`: each variant on its own copy.
+  - Accepted: unique (K) on BK, unique (K) IGNORE NULL, unique (K,N) and unique (K,N) IGNORE NULL on BKN, non-unique (K,N) IGNORE NULL, unique (N) IGNORE NULL on BN.
+  - Refused with 3058 and no index left: non-unique (K) DISALLOW NULL, `WITH PRIMARY`, `ADD CONSTRAINT PRIMARY KEY (K)`, non-unique (K,N) DISALLOW NULL.
+  - `ALTER COLUMN K TEXT(20) NOT NULL` returns hr 0 with 4 Null K rows present. K then reads `Required` -1 and 4 Null K rows remain. A following unique (K,N) DISALLOW NULL and a following `WITH PRIMARY` both give 3058.
+  - `ReturnedFailure` is the refusals.
+- `sort3b-dao-index-flags`: Index and TableDefs steps all hr 0. Surviving S, then refusals:
+
+  | Table | Surviving S | Refused |
+  |---|---|---|
+  | DX1, DX2, DX5 | 1–6 | none |
+  | DX3 | 1 2 3 4 6 | 3022 ×1 |
+  | DX4 | 3 | 3022 ×1, 3058 ×4 |
+  | DX6 | 2 3 5 | 3058 ×3 |
+  | DX7 | 3 5 | 3058 ×4 |
+
+  - Unique, Required and IgnoreNulls read back as set for DX3–DX7.
+- `sort3b-memo-index-ddl`: all memo values are distinct under General compare.
+  - Non-unique indexes on MK, MK DESC, (TK,MK) and (MK,TK) and the control on TK are accepted. Each reads `DistinctCount` 6 for 10 rows.
+  - `CREATE UNIQUE INDEX` on MK and `ADD CONSTRAINT UNIQUE (MK)` give 3022 (0x800A0BCE). The DAO unique index `Append` fails (hr 0x80020009, error 3022).
+  - `CREATE TABLE` with a MEMO primary key (MI3, MI5) or a unique constraint (MI4) returns hr 0, and the indexes are listed (PK_MI3, UQ_MI4, PK_MI5).
+  - The `DistinctCount` of 6 is consistent with a 255-unit cut, but I did not measure the cut directly.
+
+**2. Still defective**
+- **Stale `DBEngine.Errors`**: the collection is not cleared by later successful statements, so reads after a success repeat the last error.
+  - `sort3-unique-corpus-*`: after the refused ID 4 the successful ID 5 still shows count 1, 3022. Elsewhere the stale error is 94 (Fx probes) or 3251 (`fmt2-scalar-admission-decimal`).
+  - Use each statement's `hr` and EXCEPINFO for per-statement outcomes. This is not a deliberate `DROP TABLE RfixNoSuchMarker` reset.
+- **Every Fx read errors on row 8**: in `fmt2-fx-fixture` and every `fmt2b-fx-*`, `-compact-*`, `-settle-*`, the SQL read of `CStr(Fm)` fails on the Null row 8 (`Field.Value` 0x800A005E, error 94 "Invalid use of Null"), so the record is `ReturnedFailure`.
+  - Rows 9 and 10 and the index stats still read, so no data is lost. The cause is the read itself, not Decimal.
+- **`sort3b-image-build-order-a/-b`**: the two runs build different databases, because the `rows-no-index` images already differ (65999e0ee6e2 against 15f39e2d62ff). The final hashes (21aa8e010c2a against d9173a497935) therefore cannot show an effect of build order.
+- **`Primary` reads back 0 and is not enforced**: this affects `sort3b-dao-index-flags` DX1 and DX2 (all 6 duplicate-bearing rows admitted) and `memo-index-ddl` `dao-primary`, whose Append returned hr 0 although the copy already has a PK.
+  - Each of those puts `Primary(-1)` and then `Unique(0)` (`DaoIndex`, RFixFmtSort.cs line 1260). A later `Unique = False` plausibly clears `Primary`; that is unverified. The question "which combinations DAO admits" is therefore unanswered for the Primary variants.
+- **`DistinctCount` is unreliable as a row count** (not a probe defect): it keeps counting refused, deleted and reinserted entries (PK_W2R 37 with 11 rows, PK_T 36 with 24, PK_TU 5 with 4, PK_Dr 21 with 20).
+
+### r-fix-cursor-dao
+
+All 53 records are Complete; 4 are ReturnedSuccess (the three `create-*` fixtures and `ovf-insert-byte`, plus `lock-readonly`), the rest ReturnedFailure because a deliberate call failed. Every DAO failure is hr 0x80020009 (DISP_E_EXCEPTION) with scode 0x800A0000|Number (for example 3022 = 0x800A0BCE). Single participant unless noted. I counted a call as failed only when its hr was a failure: `DBEngine.Errors` keeps the last failure after later successes, so an `Errors` read after a successful call shows a stale number.
+
+**1. Repaired answers**
+
+*Fixtures*
+- `create-pages`: M2 holds 228 rows. Storage order starts 449 and ends 199, key order starts 101 and ends 449, so the two orders now differ.
+- `create-find`: FU and FI each hold 8 rows.
+- `create-dec`: WD.Dc via ADO DDL reads as DAO Type 20, Size 16, Attributes 1. Values are DECIMAL 1.5000, NULL, -2.2500 and 0.0001, all scale 4.
+
+*r-cursor-1*
+- `id-bookmark-assign-fresh` (repairs `id-bookmark-shape`), each on a fresh dynaset at ID 2:
+  - empty byte array: success, no change
+  - `""`: success, no change
+  - four zero bytes: 3159 "Not a valid bookmark", then ID and Bookmark reads give 3021 (AbsolutePosition stays 1)
+  - Long 1, Null, Empty: 3421, position unchanged
+  - control (Bookmark 02 02 00 00 from the first row): lands on ID 3, AbsolutePosition 2
+- `seek-arguments-from-two-starts`: the start row is (2,10) or (1,10), and no landing equals a start. Rows are (1,30), (1,20), (1,10), (2,10) in PK_C order. Results are identical from both starts.
+  - `=,1,20` lands on (1,20); `=,1` and `=,Missing,20` land on (1,30); string "1","20" lands on (1,20)
+  - `>=,1` and `>,1` land on (1,30); `<,2` lands on (1,10); `<=,1` gives NoMatch with no current row
+  - `=,1,Null`, `=,Null,Null`, `=,Empty,Empty` and `=,1.5,20` give NoMatch with no current row
+  - `=` with no key: 3001. `=,"abc",20`: 3421. `=,1,20,5`: 3250. `==`: 3001. A refused Seek leaves the start row current.
+  - recovery: `=,9,9` gives NoMatch; `=,1,30` then lands on (1,30)
+- `seek-duplicates-null-from-last` (start ID 5, K 3):
+  - IX_K: `=,Null` lands on ID 6 (K Null), then MoveNext gives ID 1 and MovePrevious gives ID 6.
+  - IX_KN: NoMatch with no current row. ID and K reads give 3021, and MoveNext does not restore a row. MovePrevious then gives ID 5. A walk from MoveFirst gives IDs 1 to 5.
+- `edit-conflict-pessimistic-second-workspace` (cursor B in appended W2):
+  - B's Edit on A's locked row 'r1' gives 3188. The Edit on 'r2' also gives 3188.
+  - After A's Update, B edits and updates 'r1'; both Databases read 'pesB'.
+- `edit-conflict-optimistic-readback`:
+  - Same field and different field behave alike. A's first Update gives 3197, EditMode stays 1 and the buffer is kept.
+  - A's second Update succeeds. Stored: 'r1' is 'optA', and 'r2' is (N 2, U 'optC'). B's 'optB' and N 77 are lost, read through both Databases.
+- `edit-validation-errors-per-failure`:
+  - AddNew with T unset and U 'bad': Update gives 3314.
+  - After T is set, U 'bad' gives 3316 "U must not be bad". A duplicate U gives 3022. N 2000 gives 3316 "N must be below 1000".
+  - The final Update succeeds (ID 3, EditMode 0); stored (3,'t',3,'u9').
+  - Assignment order does not change the answer (3314 either way).
+  - ValidateOnSet True: the assignment itself gives 3316, EditMode 1, U stays 'u1'.
+- `pages-traverse-storage-order`, M2 RecordCount 228 at the end (1 at open for the dynasets):
+  - table without Index: forward 449, 385..448, 321..384, 101..199; backward is the exact reverse
+  - table with IX_M2: forward 101..199, 321..449; backward is the reverse
+  - dynaset on the table name and dynaset on `SELECT … ORDER BY ID`: both forward 101..199, 321..449 and backward the reverse
+  - EOF True at the end of the forward walk, BOF True at the end of the backward walk
+- `seek-operator-spelling-controls` (start ID 1, Seek key 4):
+  - controls: `=` lands on 4, `<` on 3, `<=` on 4, `>=` on 4, `>` on 5
+  - refused with 3001: `=>`, `=<`, `!=`, `<=>`, `" = "`, `">= "`, `""`, Like, EQ, `~`, Empty, Missing, Long 0, Long 61, Boolean True
+  - refused with 3421: Null
+  - after a refusal the current row stays 1
+- `option-flags-rw` (writable Database), by Options value:
+  - 4 (ReadOnly) and 4|8 and 4|256 give Updatable 0 on table-type and dynaset. Snapshot and forward-only are always 0.
+  - 16|32 gives 3001 for all four types.
+  - dynaset with 8 (AppendOnly): RecordCount 0. Dynaset with 256: Updatable 0, Bookmarkable 0.
+  - every other value gives Updatable -1 on table-type and dynaset.
+- `open-argument-shapes-rw` (writable):
+  - `F` gives Type 1 (Updatable -1, 8 rows); SQL gives Type 2 (Updatable -1)
+  - `QP` gives 3061; `F,0`, `F,Empty`, `F,3/5/16/32`, `F,2,0,0` and `F,2,Missing,3` give 3001; `F,Null` gives 3421
+  - `F,Missing,4` gives Type 1, Updatable -1. This differs from the `option-flags-rw` result for table with 4 (Updatable 0) and is unexplained.
+  - `F,8` gives Type 8 (Updatable 0)
+  - `F,2,256` gives Updatable 0
+  - `""` and `NoSuch` give 3078
+- `option-join-addnew-delete-omitted|inconsistent|consistent`, each on its own copy:
+  - omitted and consistent are identical. Parent-side AddNew (PID 3, PN 30) stores P2 (3,30). Child fields (CID, CV) refuse assignment with 3164.
+  - Update with PID 1 gives 3022. Delete removes C2 ID 1 only.
+  - inconsistent (16): child fields are assignable and C2 gains (10, NULL, 'n'). PID 1 Update gives 3022. Delete gives 3200 and removes nothing.
+- `clone-write-visibility-same-row` (both cursors on the same row):
+  - P sees the clone's Edit (S 'clone', N 222) at once, and RecordCount 9 after the clone's AddNew.
+  - After the clone's Delete, P reads 3167 "Record is deleted." (BOF and EOF False), also after Move 0. The same holds for C after P's Delete.
+  - C.Requery then gives BOF and EOF both True and an ID read of 3021 (RecordCount not read).
+- `id-bookmark` and `edit-under-commit-second-workspace` (W2 `rx`):
+  - `rx` read the original rows before CommitTrans. After CommitTrans a fresh W2 snapshot reads the edited rows (1,11), (20,200) and no ID 2.
+  - The held `rs`: RecordCount 8 before and after commit; ID read 3021 on a deleted row; EditMode 0; Requery gives the committed rows.
+- `getrows-decimal-ado-ddl`: table, dynaset and snapshot behave alike.
+  - GetRows(2) gives a 2×2 VARIANT array: I4 1, DECIMAL 1.5000, I4 2, NULL. The next call gives I4 3, DECIMAL -2.2500, I4 4, DECIMAL 0.0001 (scale 4).
+  - A third GetRows(2) at the end gives 3021.
+- `find-text-quotes-unindexed` and `find-like-patterns-unindexed`: FU (no index on S) and FI (IX_FI_S) differ in exactly four criteria.
+  - On FU: `S = 'O''Brien'` → ID 3, `S = "a""b"` → ID 4, `S Like '*'` matches IDs 1, 2, 3 (then 4…), `S Like 'O''B*'` → ID 3.
+  - On FI the same four give NoMatch True.
+  - Refused on both: `'O'Brien'`, `"a"b"`, `'''`, `'beta` give 3077; `S = beta` gives 3070.
+  - Case-insensitive matches and a trailing space still match 'alpha' (ID 1).
+
+*R-DAO-1*
+- `index-metadata-seek-pk-name`: `Index='PK_T'` succeeds (Errors 0), and `Seek =,3` lands on (3,'three',30). Seek with 13 key arguments gives 3250 "Could not build key". With 14 keys it gives 3001, and `bogus` gives 3001.
+- `prop-user-appended-lifecycle` (held, appended Property):
+  - duplicate Append: 3367; Type put: 3219
+  - Value put 7 reads back "7"; Null and Empty: 3385
+  - after Delete('P1'), held Name and Value give 3420, and a second Delete gives 3265
+  - recreated P1 (Long, 9) is a new object; the held one stays 3420
+  - after reopen, P1 is Type 4 with Value 9
+- `recordset-state-sort-discriminating`: dynaset on a writable open reports Updatable and LockEdits True. GetRows(2) gives 2 rows×3 fields, and a bare GetRows() gives 1 row. A derived snapshot has Updatable False. Order with Filter ID>2 and Sort V ASC is five, four, three. Sort V DESC gives two, three, one, four, five; Sort N DESC gives 5..1.
+- `ado-connection-errors-clear-with-entries` (ADO, Mode read):
+  - Execute 'SELEC ID FROM T': scode 0x80040E14, Number -2147217900, SQLState 3000, NativeError -533138860. The held and a fresh Errors read both show Count 1.
+  - Clear leaves Count 0 on both.
+  - Second failure: scode 0x80040E37, Number -2147217865, SQLState 3078, same behaviour.
+  - A successful Execute leaves Count 0.
+- `err-base-scope-second-process` (participants main and b): the main process fails with 3078 (Count 1). B starts with Count 0 and fails with 3024 on `OpenDatabase`. The main process's later read still shows 3078 only; its T open does not clear it.
+- `updatable-members-rw`: Database, every TableDef (9) and QueryDef (8) report Updatable -1. Table-type and dynaset have Updatable and LockEdits -1. Snapshot and forward-only have Updatable 0 and `LockEdits` gives 3251. Dynaset with lock arg 2: LockEdits -1; arg 3: LockEdits 0. QUnion snapshot Updatable 0. Typed TableDef fields all report DataUpdatable 0.
+- `coll-delete-field-unindexed`: Fields.Delete of TText and TOle both succeed (14→13→12). The count drops at once, with Errors 0 after TText. Item('TText') then gives 3265. The row keeps its other values.
+- `coll-append-field-readback`: appending a Required Long field to Parent (5 rows) succeeds, Required True. The existing rows hold NULL in ZReq, ZOpt and ZTxt in a snapshot, a dynaset and after reopen.
+
+*R-ERR-1*
+- INSERT with dbFailOnError, table read before and after: unchanged, RecordsAffected 0, one `Errors` entry each.
+  - PK duplicate: 3022
+  - unique index: 3022
+  - required omitted: 3314
+  - zero-length required: 3315
+  - FK orphan: 3201
+  - field rule: 3316 "Pv must be positive"
+  - table rule: 3316 "A must be below B2"
+  - text into Integer: 3464
+- Accepted and stored: `ovf-insert-byte`: Bt 300 succeeds, RecordsAffected 1, Errors 0, stored as UI1 44.
+- `lock-readonly-db-insert-failonerror`: the read-only `dro` Execute succeeds (RecordsAffected 1) and (50,'z') is read back through both `db` and `dro`.
+- `err-multi-violation-sql-failonerror`: one entry (3314, Source DAO.Database), RecordsAffected 0, R unchanged. The repeat gives the same.
+- `err-drop-missing-two-pass`: DROP INDEX gives 3372 and DROP COLUMN gives 3381. The T snapshot open and close leaves 3381, and the second pass gives the same numbers. T keeps 5 indexes and 7 fields.
+- `err-index-over-duplicates-two-pass`: both statements give 3022 in both passes. T keeps 5 indexes; H has 0.
+- `err-dup-append-two-pass`: duplicate index Append gives 3284 and duplicate field Append gives 3191, in both passes. The collections are unchanged.
+- `proto-txn-fail-rollback-failonerror`: the failing INSERT gives 3022, and P is unchanged. Rollback succeeds and `Errors` still holds 3022. A second failing INSERT followed by CommitTrans leaves P with 3 rows.
+- `proto-two-fails-different-numbers`: the failures give 3078, 3061 (SELECT NoCol), 3265 and 3281, and `Errors` holds exactly one entry after each, the newest. A successful snapshot leaves the old entry, and back-to-back A then B leaves 3061.
+- `deleted-tabledef-held-calls`:
+  - SQL-dropped Tmp1: Name and Fields work (Count 0), CreateIndex and CreateField work, and Indexes.Append fails with `Errors` Count 2 (3011, 3078). After Refresh it fails 3420.
+  - `Delete`-removed Tmp2: Name, Fields, CreateIndex and Indexes give 3420.
+- `arg-percentposition-150-readback`: on a fresh dynaset, PercentPosition 150 succeeds with no move (Errors 0). After MoveLast it fails 3001, and the position stays.
+
+*Query and field metadata*
+- `pos-query-sources-rw`: dynaset Updatable is -1 for TOP 3/TOP 4 and the LEFT JOIN; 0 for DISTINCT, GROUP BY, UNION and TRANSFORM. Every snapshot is 0. TOP 4 returns 5 rows (a tie on N=40).
+- `field-metadata-rw`: in the writable dynaset, ID, N1, N2 and S are DataUpdatable -1, while Np and Sx are 0. Aggregate and expression fields are all 0 (Properties Count 24; PA.V in an inner join is -1).
+- `prov-sources-errors-per-call`: DISTINCT, GROUP BY, UNION and TRANSFORM are Updatable 0, and Edit and assign give 3027 and Update gives 3020 (TRANSFORM Requery gives 3251). DISTINCTROW and plain are Updatable -1 and store 41, with `Errors` still 3376 (the marker).
+- `prov-outer-join-cancel-after-failed-update`: on the null-extended row, a child Update gives 3058 and EditMode stays 1; CancelUpdate clears it. A parent Update ('pv3') succeeds. AddNew gives 3101 (EditMode 2). CH and PA counts stay 3.
+- `assign-without-edit-own-transaction`: on table-type and dynaset the assignment gives 3020, the buffer stays 10, and Edit then Update stores 77. After Rollback, N is 10 again. On snapshot, forward-only and GROUP BY the assignment gives 3027 and Edit, Update and CancelUpdate give 3251.
+- `querydef-maxrecords-odbctimeout`: MaxRecords reads back 3, 1, 0, 100 and -1 with no effect on the local rows (snapshot 8 rows; dynaset 1 then 8). ODBCTimeout reads 60. "abc" and Null give 3421.
+
+**2. Still defective, or incomplete**
+- `lock-readonly-db-insert-failonerror`: `dro` is a read-only open of a file that a writable `db` has open in the same engine, so I cannot tell whether the insert is accepted because of that sharing. It is not an isolated read-only test.
+- `deleted-tabledef-held-calls`: the second pass for Tmp2 is not in the record. Its Indexes handle was never created because `t2.Indexes()` failed 3420, so the effect of Refresh on Tmp2 is unanswered.
+- `clone-write-visibility-same-row`: after C.Requery, BOF and EOF are both True but RecordCount was not read, so "empty" versus "positioned nowhere" is unanswered.
+- `open-argument-shapes-rw` against `option-flags-rw`: Updatable differs for the same effective open (see above). I do not know why.
+- Several probes read `Errors` after successful calls (`seek-arguments-from-two-starts`, `id-bookmark-assign-fresh`, `option-join-*`). The stale number there (3021, 3001, 3250, 3022) is not new evidence.
+
+### r-fix-expr-sql
+All 54 records are `Complete`. The engine is DAO.DBEngine.120 (ACEDAO 16.0.20527.20196) throughout, with ADODB over ACE.OLEDB.12.0 for `ado-decimal-union`. `ReturnedFailure` is the usual outcome, from the marker 3376 and expected errors. No record is `Uncertain`. An ACE error from a call is HRESULT 0x80020009 with scode 0x800A0000+n. I read that off the errors seen (3464=0x800A0D88, 3075=0x800A0C03, 6=0x800A0006, 3001, 3072, 3012). The scode for the other numbers I did not read.
+
+**1. Repaired answers**
+- `dec-mixed-precedence` (r-expr-1/b-mixed-precedence): M reads back Decimal (Field.Type 20, VarType 14). M+C, C+M answer Decimal -1844674407370942.8165, M+L Decimal -1844672259887308.1621, and M*L Decimal -3961408123868542473379984.1787. M+D and D+M answer Field.Type 7 (Double) -1844674407370952.8, yet VarType is 14.
+- `dec-fixed-point-fidelity` (r-expr-1/b-fixed-point-fidelity): `M`, `M+0`, `M*1` and `M/1` stay Decimal -1844674407370955.1621. `-M` gives Decimal 1844674407370955.1621. `CDbl(M)` gives R8 -1844674407370955.2. `CCur(M)` and `M \ 1` fail with error 6 "Overflow" at the Field.Value read. `M*C` gives Double -22773612363638864 and `C/3` gives Double 4.1152. `C+0.00005` gives Decimal 12.34565 and `C*C` gives CY 152.4138.
+- `integer-conversion-alias` (r-expr-1/b-integer-conversion): `CInt(D)`=2 and `CInt(-D)`=-2, both Field.Type 3. `CLng(D)`=2, Type 4. `CByte(D)`=2, Type 3, VT_I2. Single and split statements agree.
+- `findfirst-fresh-recordset` (r-expr-1/d-predicate-consumers): `Null` gives no error and NoMatch True. `0`, `1`, `-1`, `2`, `2.5`, `''`, `'1'`, `'0'`, `'q'` and `'True'` give 3001 "Invalid argument." `CVErr(5)` gives 3072 "Unknown function name". Controls: `ID = 1` NoMatch False, `ID = 2` NoMatch True.
+- `validation-rule-literals` (r-expr-1/mut-validation-rules): the rule text reads back with a trailing space. `Null` admits every value. `0`, `2`, `True` and `False` admit only V = 0, 2, -1 and 0 respectively. `''`, `'1'` and `'q'` admit no non-Null value. Refusals are 3317 with EditMode 2. Null and unassigned V are always admitted.
+- `parameter-lifecycle-no-requery-argument` (r-expr-1/bind-parameter-lifecycle): pl=1 reads v=2. After pl=2 the same recordset still reads v=2. `Requery()` with no argument still reads v=2 (no error). A fresh recordset reads v=4. The Text-parameter SQL reads "x!". The saved QueryDef over One gains column X (Null) after ALTER; its SQL text is unchanged.
+- `nul-pattern-requery-no-argument` (r-expr-1/pat-11-16-counted-nul-and-reuse): `Len(S)` is 1, 2, 3, 3. `S='A'` is true for A and A+NUL. A statement with a NUL literal answers 3075 "Syntax error in string in query expression 'G = 'p11' AND S = 'A'." `[pp]`: A+NUL+B matches row 3 on LIKE and `=`; A+NUL+C matches row 4. A+NUL+* matches rows 2 to 4 on LIKE only. `A` matches row 1 on both and row 2 on `=` only. After pp is changed and `Requery()` is called, the old binding still shows.
+- `stored-null-iif` (r-expr-1b/info-stored-null-handling): `IsNull(T)` is true only for ID 4. `Len(T)` is 1, 3, 0, Null, 4. `VarType(T)` for ID 4 is 1. `T & 'x'` gives "x" for ID 4, but `T + 'x'` gives Null. `N + 1` on ID 5 fails with 6 "Overflow" at the Value read. `Val(T)` on ID 4 fails with 3464 at the Value read.
+- `instr-start-argument` (r-expr-1b/str-instr-compare-modes): `InStr(1,'abc','b',1)`=2. The a-umlaut subject searched for 'a' returns 0 in modes 1 and 0.
+- `filter-sort-fresh-recordsets` (r-expr-1b/route-recordset-filter-sort): `Filter` accepts IsNull, Len, InStr, Mid, Format, CInt, IIf, DateDiff, Between, In, Not and `T Is Null`. It fails at OpenRecordset with 3085 for Nz, NoSuchFunc, CurDir and Environ. `Val(T)=12` gives 3464 and `1/0=1` gives 11. A filter on an unselected column gives 3061 "Too few parameters. Expected 2." `Sort 'Nz(N, 0)'` gives 3085, `Sort 'NoSuchField'` gives 3061, and `Sort` accepts `Len(T)`.
+- `stored-where-per-row` (r-expr-1b/cmp-stored-lanes): `T=N` fails with 3464 at open for IDs 1, 3, 5. IDs 2 and 4 return empty with no error. `T<10` fails for IDs 1, 2, 3, 5; `T=D` fails for IDs 1, 2, 3, 5. `N=Y` matches only ID 3. `DT=N` matches nothing. `T Is Null OR T=''` matches IDs 3 and 4. `NOT(N>0)` matches IDs 3 and 4. `N>0 OR T='abc'` matches IDs 1, 2, 5.
+- `cdec-argument-forms` (r-expr-1b/conv-text-to-floating, r-par-1/fold-currency-argument-forms): `CDec` with 1 argument gives 3075 in every form (literals, columns, parameters). 0 or 3 arguments give 3075. `CDec(1,2)` is admitted and returns Field.Type 4, value 0. `[CDec]`, `VBA.CDec` and `[VBA].[CDec]` give 3085.
+- `array-functions-split-only` (r-expr-1b/sandbox-array-functions): Split, Join, Filter, UBound, LBound, IRR, NPV and MIRR all give 3085 "Undefined function". `Split(..)(1)` gives 3075 "Invalid use of '.', '!', or '()'."
+- `bigint-stored-arith` (r-def-expr-sql/expr-bigint-stored-arith): INSERT into BIGINT accepts both int64 extremes, 5, `'9223372036854775807'`, 2.5 (stored 2), Null, 2^62 and 2^62+1. Refused with 3464: 9223372036854775808, 1E19 and 'x'. Reads are Field.Type 16, VarType 20. `B+1`, `B*2` and `B*B` on ID 1 fail with 6 at the Value read (VarType 5). `B\2` and `B Mod 7` stay BIGINT. `Abs(B)` is Double. `B+1.5` gives 3464 for IDs 1, 2 and 10, but ID 3 gives I8 6. ID 10 `B*2` wraps to -9223372036854775808.
+- `bigint-stored-compare-convert` (r-def-expr-sql/expr-bigint-stored-compare-convert): `B=2^62+1` matches ID 11 only. `B=CDbl(2^62)` matches IDs 10 and 11. `B='9223372036854775807'` gives 3464. `Sum(B)` is Double 1.8446744073709552E+19. `CDec(B)` gives 3075. `CCur`, `CLng`, `CInt` and `CByte` of ID 1 give 6.
+- `domain-per-row-no-nz` (r-def-expr-sql/expr-domain-per-row): `DMax` returns Text "30", "30", "30", "50", "50", Null, "70", "70" for IDs 1 to 8, identical with `IIf(IsNull(G),'',G)` and with G direct.
+- `nonjet-whole-statement-entries` (r-def-expr-sql/expr-nonjet-function-names): `SELECT 1 FROM One` returns Expr1000 Long 1. `SELECT * FROM One` returns ID 1. `SELECT COUNT(*) FROM One` returns Expr1000 Long 1.
+- `querydef-name-space-then-plain` and `querydef-name-plain-then-upper` (r-def-expr-sql/sql-querydef-names): `'q '` is created and reads back "q ". Then `'q'` gives 3012 "Object 'q' already exists." from DAO.QueryDefs. Likewise `'q'` then `'Q'` gives 3012 for 'Q'. Count is 1 and the first name is kept; both names open by name.
+- `querydef-create-texts-reopen` (r-def-expr-sql/sql-querydef-create-texts): right after create, Type is 0 for all 13 texts. After reopen, Type is: select 0, UPDATE 48, DELETE 32, INSERT 64, make-table 80, crosstab 16, union 128, parameterised select 0, parameterised UPDATE 48, and CREATE/DROP/ALTER 96. ReturnsRecords is -1 for every text, before and after reopen.
+- `delete-forms-reseeded` (r-def-expr-sql/sql-delete-forms): accepted with RecordsAffected 1: plain, `*`, `Dm.*`, `DELETE ID FROM`, alias `d` and `d.*`, IN TOP 1 and `=Max(N)`. The correlated EXISTS and the IN (SELECT ID WHERE N Is Null) forms also give 1. `DELETE One.* FROM Dm INNER JOIN One` removes the One row only. `EXISTS (SELECT 1 FROM One)` and plain `DELETE FROM Dm` both give 8. `WHERE 1=0` gives 0. Errors: `FROM Dm, One` gives 3128; `TOP 1` 3130; `LIMIT 1` 3131; `ORDER BY` 3137; `FROM Nope` 3078; `WHERE Nope=1` 3061; `ID=(SELECT ID FROM Dm)` 3354.
+- `update-assignment-reseeded` (r-def-expr-sql/sql-update-assignment-order): assignments read the old row, so `SET N=1, V=N` gives V=10 and `SET N=V, V=N` swaps. `SET (N,V)=(1,2)` gives 3144. `SET N=1 FROM One` gives 3075. `SET N=(SELECT Max…)` gives 3073. `DMax`/`DCount` forms succeed. `N='x'` gives 3464. `ID=ID+1` and `ID=ID-1 WHERE ID>1` both give 3022 with no row changed.
+- `fk-actions-dao-relations` (r-def-expr-sql/ddl-fk-actions): Attributes 0 refuses both statements with 3200. 256 cascades the key update (child PID 2 to 9) and refuses the delete with 3200. 4096 deletes the child with the parent and refuses the update with 3200. 4352 does both.
+- `index-forms-fresh-tables` (r-def-expr-sql/ddl-index-forms): `WITH PRIMARY` works once; a second primary on IxA and one over the existing key on IxF both give 3283 "Primary key already exists." `DISALLOW NULL` gives Required -1. `IGNORE NULL` gives IgnoreNulls -1, Required 0. Both combined orders give IgnoreNulls -1 and Required -1. `DISALLOW NULL` over a Null gives 3058.
+- `record-width-bracket` (r-def-expr-sql/ddl-name-and-size-limits): n = 1 to 7 Text(255) columns are accepted, for both 'x' and euro. n = 8 gives 3047 "Record is too large." with 0 rows.
+- `fail-relationship-update-isolated` (r-sql-2-3/act-fail-relationship): without options, RecordsAffected is 2 and child PIDs become 2, 2, 3. With dbFailOnError, error 3201 and RecordsAffected 0, yet the rows read back 2, 2, 3. The rows that had moved were not rolled back.
+- `fail-insert-required-cross-table` (r-sql-2-3/act-fail-insert-required): T3 without options gets 3 rows (IDs 11, 13, 14). T4 with dbFailOnError gives 3314 "You must enter a value in the 'T4.R' field." and stays empty.
+- `pivot-headings-clean` (r-sql-2-3/pivot-headings): `IN ('c','b','a','zz')` publishes Grp, c, b, a, zz. `IN ('a','zz','c')` publishes Grp, a, zz, c. `CStr(PN)`, the IIf form and `PN` all publish Grp, 1, 2, 3.
+- `agg-result-type-decimal` (r-sql-1/agg-result-type): over ND, `Sum` of the 5 rows is Decimal 2.1000, `Avg` Decimal 0.525, `Min` 0.0000 and `Max` 99999999999999.9999 (Decimal), and `Sum` of all rows Decimal 100000000000002.0999. Field Size is 16. Precision and Scale not read (see section 2).
+- `union-types-decimal` (r-sql-1/union-types): Currency arm first gives Field.Type 5 (Size 8), CY values. Decimal arm first gives Type 20, Size 16, Precision 22, Scale 4. UNION ALL Decimal-first gives Decimal values at scale 10, e.g. "1.0000000000". UNION ALL Currency-first stays CY.
+- `ado-decimal-union` (r-sql-1/b-ado): ADO `c UNION x` gives adCurrency 6, DefinedSize 8, Precision 19, NumericScale 255. ADO `x UNION c` gives adNumeric 131, size 19, Precision 22, Scale 4, DECIMAL values. DAO on the same copy matches (Type 5 and Type 20, Size 16, 22/4).
+- `eq-decimal-bigint-groups` (r-sql-1/eq-*, b-join-bound-types): the INNER JOIN `N.c = ND.x` is admitted, with pairs (a,b) = (6,1), (1,1), (3,3), (4,4), (6,6), (1,6). GROUP BY x counts 1.0000 twice. Other groupings also run: BIGINT v, and UNION ALL of Currency/Decimal and BIGINT/Double in both orders. UNION ALL BIGINT/Double returns Double type 7, with 9007199254740992 counted 2.
+- `agg-numeric-per-group` (r-sql-1/agg-numeric): all Double. Group 10: Sum 4000000040, Avg 1000000010, Var 170.66666666666666, VarP 128, StDev 13.063945294843617, StDevP 11.313708498984761. Group 11: Sum 4000000000000040, Avg 1000000000000010, the four dispersions 0. Group 12 gives error 6 at open in all 7 statements.
+- `agg-occur-convertible` (r-sql-1/agg-occur): over TXC, ascending ORDER BY gives rows 2, 3, 1; descending gives 3, 1, 2; HAVING only gives 1, 2, 3. Over TX with `WHERE t<>'x'`: ascending 2, 1; descending 1, 2; HAVING only 1, 2. Unfiltered TX gives 3464 at open.
+- `parameters-values-set` (r-sql-1/b-parameters): undeclared `[p]`/`[P]` unassigned gives 3061 "Expected 1". After `[p]=2` it reads Text "2" and the rows are IDs 2 and 3. `pA` Long unassigned gives 3061; after 1 it returns IDs 1, 2, 3.
+- `join-limit-comma-tables` (r-sql-13b/join-limit-tables): n=32 comma tables is accepted (ID 1). n=33, 34 and 50 each give 3360 "Query is too complex." at OpenRecordset.
+- `join-limit-nest-32` (r-sql-13b/join-limit-tables): the 32-alias nested INNER JOIN gives 3072 "Invalid argument to function." at OpenRecordset. It did not time out.
+- `memo-compare-counts` (r-sql-13b/memo-compare-scope): MMP has 15 rows. INNER JOIN on Memo `a.m=b.m` gives 3118 "Cannot join on Memo, OLE, or Hyperlink Object". Comma join `a.m=b.m` counts 1 pair, so no equality at p ≥ 254. `a.m<b.m` counts 91.
+- `agg-stat-argument-types-renamed` (r-sql-13b/agg-stat-argument-types): Var, VarP, StDev and StDevP are all Double (7). For Integer, Long, Single and Double: 2, 1, 1.4142135623730951, 1. Byte: 0.5, 0.25, 0.7071067811865476, 0.5. Currency (±0.0001): all 0. Date: 5000200002, 2500100001, 70712.09233221713, 50001.
+- `agg-sum-boundary-per-group` (r-sql-13b/agg-sum-boundary): `Sum(c)` and `Avg(c)` give 6 at open for groups 1 to 4. Group 5 is CY 3 and CY 1.5. Groups 6 and 7 Sum is CY 922337203685477.5807, Avg CY 461168601842738.8125. `Sum(d)` and `Avg(d)`: group 1 is 1E+308 and 5E+307, group 4 is -1E+308 and -5E+307, groups 2 and 3 give 6.
+- `nz-free-forms` (r-sql-13b/params-null-and-unset and others): LEFT JOIN rows are (1,1), (1,1), (2,Null), (Null,Null), (4,Null). `Sum` is 53 (Double). ORDER BY gives IDs 2, 1, 7, 6, 5, 9, 3, 4, 8. The Long parameter p unassigned gives 3061 "Expected 1". Null gives v and w Null, z=7, `x=p` Null, `p Is Null` -1. Empty gives 0, 1, 0, 0, 0.
+- `like-clean-operands` (r-sql-13b/like-*): `t LIKE t` and `t LIKE Left(t,1)&'*'` match IDs 1 to 10 and 12 to 20, with Null at ID 11. Unfiltered `CStr(dt) LIKE '*2024*'` gives 94 "Invalid use of Null". With the Null row excluded, `CStr(dt)` and `Format(dt,'yyyy')` both match IDs 1, 2, 3, 5, 7.
+- `params-values-rounding-and-length` (r-sql-13b/params-values-*): Byte gives 2.6→3, 3.5→4; -2.5, 255.5, 300 and any text give 3421 "Data type conversion error." Short and Long give 3, 4, -2, 256, 300. Currency, Single, Double and DateTime keep the value. Bit becomes -1 for any number. Text(5) and Text(20) keep the whole 10- and 26-character text, and the SELECT returns it in full. A rejected assignment leaves the old value.
+- `fold-decimal-28-digits` (r-par-1/fold-decimal-sum-groups, create-fold2): FD0 `Sum` for g=1 (28 nines, 1, -28 nines) is Decimal 1, g=3 is 2. g=2, all rows and GROUP BY give 3761 "The decimal field's precision is too small…". FD20 sums are 2.00000000000000000001, 0.6, 1.0 and 3.60000000000000000001. In GROUP BY the Field is Type 20 with precision 28 and scale 20.
+- `fold-decimal-avg-var-forms` (r-par-1/fold-decimal-avg-var-forms): FD0 g=1: `Avg` is Decimal 0.3333333333333333333333333333. `Var/StDev` give 6. `Sum(x*1)` is Decimal 1. `Sum(CCur)` gives 6. `Sum(CDbl)` is 0. FD0 g=2: `Avg` gives 3761, `Var/StDev` give 6, `Sum(CDbl)` is Double 1E+28. FD0 g=3: `Avg` Decimal 1. FD20: `Avg` is Double 1, 0.2 and 0.5, and `Var` is 2E-20, 0.01 and 0.
+- `fold-double-routes-materialized` (r-par-1/fold-double-routes-*): `Sum` depends on scan order: it is 1 for orders id, k, k DESC and d, and 0 for id DESC, d DESC and the saved query `QFoDesc`. `Avg` is 0.3333333333333333 or 0. Var, VarP, StDev and StDevP, Min, Max and Count are identical in all orders (Var 8.112963841460668E+31).
+- `order-distinct-full-read` (r-par-1/order-distinct-without-order-by): `GetRows(300)` reaches EOF in all 20 reads, on OT5, OT2, OT3 and OT4 alike. DISTINCT k returns 0..6, DISTINCT k,s returns 35 rows, DISTINCTROW k returns 256 rows in scan order, DISTINCT TOP 3 returns 0, 1, 2, and DISTINCT ORDER BY k DESC returns 6..0.
+- `err-where-order-attributed` (r-par-1/err-where-evaluation-order): OpenRecordset succeeds in every case; error 3071 comes from `GetRows(300)`, which first returns 99 rows. That happens for `1/zm>0`, `id<50 OR 1/zm>0` and `IIf(id<50,True,1/zm>0)`. The `AND` forms, `id>=150 AND`, `BETWEEN 1 AND 40 AND` and the select-list form with `id<50` return their rows (49, 49, 91, 40, 49) with no error.
+- `err-aggregate-attributed` (r-par-1/err-aggregate-and-groups): every aggregate over `1/zm`, `1/zl` or `1/zf` gives 11 "Division by zero" at OpenRecordset. `WHERE id<>100` gives 239, `id<100` gives 99, `TOP 10` gives 10, and `id<50` gives 49. `id<=100`, derived `TOP 150 ORDER BY id`, the GROUP BY and HAVING forms and `DISTINCT 1/zm` give 11. `GROUP BY CLng(tx)` gives 3464.
+- `err-last-bad-row-bounded` (r-par-1/err-snapshot-last-bad-row): OpenRecordset, MoveLast, MoveFirst, RecordCount (240) and `Move(236)` raise nothing. The error 11 is raised only at the Value read of `e` on row 240.
+- `pivot-dynaset-requery` (r-sql-2-3/pivot-schema-lifetime): QXtab Fields.Count is 0 before open. A dynaset publishes Grp, "<>", a, b at open and keeps it after MoveNext and MoveLast. The `Requery()` answer is under section 2. QXFixed publishes Grp, b, a, zz.
+- Fixtures: `create-expr`, `create-sql1` and `create-par` return ReturnedSuccess with the expected read-backs. M reads Decimal -1844674407370955.1621. ND, FD0 and FD20 read back as Decimals. NB reads BIGINT.
+
+**2. Still defective**
+- Precision and Scale of ungrouped aggregate fields were not read. In `agg-result-type-decimal`, `agg-numeric-per-group`, `agg-sum-boundary-per-group`, `agg-stat-argument-types-renamed`, `fold-decimal-28-digits` and `fold-decimal-avg-var-forms`, MoveFirst returns 0 but the property Value read fails with 3021 "No current record." The "MoveFirst first" design did not fix this. GROUP BY results do read (28/20, 22/4). On non-Decimal fields Precision/Scale read as I2 1033 and 0, which looks like uninitialised data.
+- `pivot-dynaset-requery`: the Requery() answer is still missing. `Requery()` on the crosstab dynaset fails with 3251 "Operation is not supported for this type of object." (both times). The inserted 'new' value never shows, so the question of whether Requery re-publishes the schema is unanswered. This is an ACE answer, not our defect.
+- `join-limit-nest-32`: 3072 "Invalid argument to function." is not the 3360 seen for comma joins. I am not sure whether it is the limit or the nest form's own answer; the statement looks well-formed (32 aliases, 30 parentheses).
+- `cdec-argument-forms`: the 1-argument form still gives 3075 everywhere, so CDec itself was never observed working. Only the 2-argument form is admitted, and it returns 0 as Long. Nothing in the record explains that.
+
+### r-fix-cat-txn
+
+I read 54 records (`calcdb-oracle show`). Probes with no record: `local-two-rows` a-commit-b-commit and the other variants. Error numbers are DAO numbers followed by the HRESULT.
+
+**1. Repaired answers**
+- `create-catalog-accdb` / `-mdb` (repairs r-cat-1/create-*-catalog): after Refresh, `H.Attributes = 1` put with no error and reads back 1. H=1 and P2/T/U=0 both before and after a read-only reopen. ACCDB lists 9 tables, MDB 8.
+- `cat-drop-table-held-recordset`: the first `DROP TABLE T` under an open recordset gives 3211 (0x800A0C8B). The second, after Close, returns no error (Errors stays a stale 3211). Refreshed TableDefs go 6→5 and T is gone. `OpenRecordset` on T then fails 0x800A0C06, in the same Database and in a reopen.
+- `cat-drop-table-in-relation`: `DROP TABLE Parent` gives 3281 (0x800A0CD1). `DROP TABLE Child` returns no error and the refreshed catalog drops from 9 to 8 tables, with R_Child gone and R_CD (4096) and R_CU (256) kept. A second `DROP TABLE Parent` gives 3281. After a reopen `SELECT * FROM Child` fails 0x800A0C06.
+- `cat-rel-type-pairs-complete`: Relations.Append is accepted for P_Long→L, P_Text→T10, P_Text→T20, P_Counter→L and P_Int→I (the missing pair). It is refused with 3368 for P_Long→I/D/T10/B, P_Counter→I, P_Int→L and P_Int→B.
+- `cat-xproc-catalog-visibility`: after B closed and A waited 7 s, A's held collections showed T2 missing, Q9 already present (count 1) and ProbeProp missing. After Refresh: tables 7, queries 1, properties 12, all three found. After Idle(8) and through a second Database the same. `SELECT * FROM T2` returns (1,'b').
+- `cat-xproc-drop-table-under-reader`: B's DROP/ALTER give 3262 (0x800A0CBE) three times; the last `DROP TABLE T` succeeds. B then lists 5 tables and its SELECT fails 0x800A0C06. A, reading 29 ms after b-done with no pause, still lists T (6, refreshed). A's SELECT on T fails 0x800A0BC3, through both the first Database and a second read-only one. Staleness vs non-visibility is not separated (see section 2).
+- `compact-errors-table-singular`: MDB→ACCDB compaction (128) gives no error. TableDefs adds `MSysCompactError`, with fields ErrorCode (4), ErrorDescription (12), ErrorRecid (9) and ErrorTable (10) and no indexes. It holds one row: -3831, "The current file format no longer supports user-level security…", Recid NULL, Table "MSysACEs".
+- `clone-close-read-between`: a failed `rc.Close` (3246, 0x800A0CAE) ended the level. After it row 1 reads V=10 instead of 777, and Rollback fails with 3034 (0x800A0BDA).
+- `clone-close-update-only`: the Update alone does not end the level. The row reads 777, Rollback succeeds and the row returns to 10.
+- `ddl-alter-index-drop-rollback-catalog`: inside the transaction the catalog shows T with Z and IX_V, no UX_K and no S. A 3265 comes from the read of S. After Rollback S is back, T has ID/V/K/N, T's indexes are PK_T and UX_K, and the same holds through a fresh Workspace.
+- `ddl-relation-querydef-property-rollback-refresh`: inside the transaction there are 0 relations, 2 queries (QInsMid changed to `SELECT * FROM S;`, plus QNew) and 12 properties. Errors is 0 before and after Rollback. After Rollback FK_C_T is back, there is 1 query (QInsMid's original SQL), 11 properties, and reading TxnProbe gives 0x800A0CC6. A fresh Workspace shows the same.
+- `ddl-second-workspace-idle`: A reads X (row 1) inside its transaction. B never lists X and its `SELECT ID FROM X` fails 0x800A0C06 (3078) as is, after Idle(8) and after 7 s. After A's Rollback both processes fail the same way.
+- `edit-workspace-transactions-child-only`: child AddNew/Update gives Errors 0 and `c1.RecordCount` 3. Rollback succeeds with Errors 0. The group is then alpha, beta, both in a new recordset and in a fresh Workspace.
+- `edit-workspace-transactions-with-parent-update`: `rs.Update` gives no error. Then `c1.RecordCount`/BOF/EOF fail with 3420 (0x800A0D5C), and Rollback fails with 3034. The parent Update ended the level. The group is alpha, beta.
+- `stmt-expression-fail-a-survives`: `UPDATE V = 100/(ID-3)` gives 11 (0x800A000B) with `RecordsAffected` 0. Rows 1 and 2 stay changed (V=-50, -100). A's K='q' on ID 5 survives, and C's K='z' on ID 4 persists after CommitTrans, also in a fresh Workspace.
+- `wsrelease-no-close-read-first`: `Workspaces.Count` is 1 and Errors is 0. Lv row 1 stays 0 (the released level did not commit). The follow-up UPDATE of row 2 gives (1,0),(2,9),(3,0).
+- `nest-depth-recordset-writes-fresh-witness`:
+  - Fresh-snapshot sums after levels 1–5: 1, 3, 7, 15, 31 (24 rows).
+  - At level 6 `rw.Update` and the witness open fail with 3003 (0x800A0BBB). Level 7's BeginTrans works but Update still fails 3003. The 8th BeginTrans fails 3003.
+  - Rollbacks 1–2 succeed and the witness still fails 3003. Rollbacks 3–7 give 15, 7, 3, 1, 0. Rollbacks 8–9 fail with 3034. A fresh Workspace shows 0 / 24.
+- `local-two-rows-far-b-commit-a-rollback`: both writes are admitted with Errors 0 (no 3188). After B's CommitTrans and A's Rollback, rows are (1,0),(2,0),(64,101): B's change survives.
+- `xproc-reader-own-level-late`: B inside its own level read row 1 as 0 before A's UPDATE. After 7 s, as is and after Idle, it reads 100, and it still reads 100 after CommitTrans.
+- `xproc-uncommitted-membership-late`: A's uncommitted insert of 30 and delete of 2 are never visible to B (as is or after Idle). After Rollback plus 7 s, R is unchanged. After the commit of 31 plus 7 s, B sees ID 31 as is and after Idle.
+- `xproc-held-cursors-membership-late`:
+  - The held dynaset's ID-2 field reads fail with 3167 (0x800A0C5F), while 1 and 3–8 read normally. It shows no row 30 and `RecordCount` stays 8.
+  - The held snapshot still shows ID 2 and no row 30.
+  - Idle changes nothing. After Requery both show 1,3–8,30.
+- `txn-view-readers-late`:
+  - Phase 2 (A's update open): all held and new cursors read row 1 N=10.
+  - Phase 3 (7 s after A's commit, no Requery): held snapshot and forward-only read 10, held dynaset and table cursor read 1010.
+  - Requery moves snapshot, dynaset and forward-only to 1010. `ht.Requery` gives 3251 (0x800A0CB3). New cursors read 1010.
+  - The later phases are not fully read.
+- `txn-xproc-cascade-delete-vs-pending-child-edit-final`: `DELETE FROM Parent WHERE ID=3` (no FailOnError) gives no error, `RecordsAffected` 0 and Errors 0. Nothing is deleted. After B's Update plus Idle, ChildCD row 1 has V=999, with Parent 3 intact. A read-only reopen shows the same.
+- `txn-local-xproc-same-page-retry`: B's competing write gives 3260 (0x800A0CBC) while A's level is open, on row 2 (same page) and on row 1 (same row). The retry succeeds (`RecordsAffected` 1) after A's Rollback and after A's CommitTrans. A's row-1 change rolls back or commits accordingly, and B's change survives.
+- `txn-range-close-retry`: B's write gives 3260. Closing A's second Workspace with its level open lets B's retry succeed and drops A's pending update. Closing A's Database with the level open leaves B's write at 3260 and A's row at 1010. B succeeds only after A's Rollback.
+- `write-alloc-counter-rollback-readid`: the ID read right after AddNew gives 3 (A) and 4 (B). After Update it reads 1 (cursor stays on the old record), and after MoveLast 3. B's Update gives 3260. After Rollback the next IDs are 5 (B) and 6 (A). Final rows: 1, 2, 5, 6; the values 3 and 4 are not reused.
+- `write-ddl-vs-open-transaction-ddl-first`: A's ADD COLUMN Za and CREATE INDEX IX_Ua succeed in its level (Errors 0). B's ALTER, CREATE INDEX and DROP TABLE give 3262 (0x800A0CBE). B's `SELECT * FROM U` gives 3261 (0x800A0CBD) and B sees ID/N/W only. After A's Rollback Za is gone, B reads rows 1–4, and B's `ADD COLUMN Zc` succeeds.
+- `write-tree-unique-secondary`: B's inserts that collide with A's open insert (301 or 311 with the same U, and 300 or 310 with a different U) all give 3260. After A's Rollback, 301 with U=90000 is accepted. After A's commit of 310 / U=91000, B's 311 / U=91000 gives 3022 (0x800A0BCE).
+- `enc-accdb-compact-encrypt-130`: option 130 alone on a plain source gives 3001 (0x800A0BB9) and no output file. The following opens give 3024 (0x800A0BD0).
+- `enc-accdb-compact-password-route`: with the password in the DstLocale argument, compaction succeeds. Output 1 opened with no password gives 3031 (0x800A0BD7). Opened with `CalcDbProbe1` it counts 3. Compacting o1→o2 with the password in the fifth argument also succeeds, and o2 again needs the password (3031 without, count 3 with).
+- `profile-unprotected-existing-roles`: all 9 read-only opens (mdb_plain, mdb_enc and accdb_plain × no Connect, `;pwd=wrong-pass`, `;pwd=`) succeed, with Errors 0 before and after and identical counts.
+- `link-update-own-source`: UPDATE `RecordsAffected` 3, INSERT 1, INSERT 1, DELETE 1, memo UPDATE 1, Errors 0 throughout. LK and the independent source read both show the changes: ID 3 deleted, 7 'added', 1 'edited'. I am not sure whether ID 1 appears twice in LK.
+- `link-relink-bad-targets-own-link`: RefreshLink fails with 3024 (missing file), 3011 (0x800A0BC3, no table SRC) and 3170 (0x800A0C62, 'garbage'). `;FOO=bar;DATABASE=…` succeeds, and Connect is stored verbatim. LK recordsets still open and return rows 1–4 after every step.
+- `link-select-in-clause-forms-columns`: all five IN / `[…]` forms, INSERT…IN and SELECT INTO give 3251 (0x800A0CB3), including the forms with the `MS Access` source-type string. A missing file gives 3024.
+- `link-drop-delete-and-alter-refreshed`: DROP of the link succeeds and the source stays at 5 rows. `ALTER TABLE LK ADD COLUMN` gives 3611 (0x800A0E1B). Rename to LK2 and `Delete('LK2')` run without error.
+- `link-keyless-duplicate-rows`: Updatable is 0 and there are no indexes. UPDATE of (2,'y'), DELETE of (2,'z'), `UPDATE … WHERE A=2` and `DELETE … WHERE A=2` each give `RecordsAffected` 1 with Errors 0. The last read is (1,'x') only.
+- `members-writable-open`: QSel and QUpd `Updatable` are -1 (QUpd Type 48), and TP.Updatable is -1. All 11 `Field.DataUpdatable` are 0. CacheSize/Prepare/StillExecuting give 3251.
+- `qd-view-writable-reopen`: Updatable is -1 for all nine on both handles. Types are 0 on the creation handle. After a writable reopen: QUpd 48, QDel 32, QApp 64, QMake 80, QXtab 16, QUni 128, QDdl 96, QSel and QParam 0.
+- `qd-create-invalid-sql-errors`: QBadSyntax and QEmptySql give 3129 (0x800A0C39). QBadTable and QBadColumn succeed. QTwoStatements gives 3142 and QUnclosed 3075.
+- `qd-execute-action-discriminating`: QueryDef `RecordsAffected` is QUpd 4, QDel 2, QApp 4, QMake 4; `Database.RecordsAffected` is 1 each time.
+- `rel-orphan-insert-errors`: refused with 3201 (0x800A0C81): Child1 (1,99), Child6 (1,99), ChildMC (1,5,NULL) and (2,5,6), Self (1,77). Accepted: Child1 (2,NULL) and Child5 (1,99).
+- `calc-admission-refreshed`:
+  - Refused with 3859 (0x800A0F13): Now, Date, Rnd, DLookup, DCount, Eval, Switch, NoSuchFunction, CLng([S]), Format.
+  - Refused with 3867 (0x800A0F1B) for `[T].[A]` and 3866 (0x800A0F1A) for `[X]+1`.
+  - Accepted: Len, `[A]/0`, `[A]*2147483647`, Mid, IIf. Reading `/0` gives 11 and the overflow gives 6.
+  - The same expressions as queries give Now 46343.24219907408, Date 46343, Rnd 0.7055…, 3085 for Eval and NoSuchFunction, 3103 for `[X]+1`, 3464 for CLng.
+- `cx-drop-complex-column-refreshed`: `DROP COLUMN Tags` gives no error. Refreshed Fields go from 3 to 2 (ID, Name), also after compaction.
+- `options-collation-discriminating` (ACCDB and MDB identical):
+  - CollatingOrder: General 1033, Spanish 1034, Swedish 1053.
+  - Spanish order: a, ä, ci, cz, ch, d, lz, ll, m, o, ö, z.
+  - Swedish order: a, ch, ci, cz, d, ll, lz, m, o, z, ä, ö.
+  - `'ch' < V < 'd'` returns ci, cz for General and Swedish, and nothing for Spanish.
+- `att-file-failures-reacquired`: the last two steps now reach ACE (no 3420). SaveToFile onto an existing file gives 3839 (0x800A0EFF). LoadFromFile of a missing file gives 3024. SaveToFile on an empty group gives 3021 (0x800A0BCD). LoadFromFile of the database file gives 0x800C000E (Errors -30020). Update then gives 3058. SaveToFile onto the database file gives 3839.
+- `create-cx-types-accdb`: V is now created in all eight tables with no error. The reopened p1 groups read Byte 1, 255; Integer -1, 32767; Long -1, 2147483647; Single -0, 1.5; Double 0.1, 1E+300; two GUIDs; Text "alpha", "Bä€". The p2 groups are empty.
+- `create-cx-history-accdb` (creation phase only): the existing AppendOnly is Type 1, Value 0. Put True gives Errors 0 and reads back -1. Rows after the UPDATEs: (1,'one','v4'), (2,'two','w3'), (3,'three','t1'). The persisted read after reopen is not repaired (see section 2).
+- `create-lock-accdb`: fixture created with IX_N and unique UX_U.
+- `enc-newpassword-shared-and-readonly-protected-first` (partial): `NewPassword("", "pw-base")` on an exclusive open now succeeds with Errors 0. Opening with no password gives 3031, and with `pw-base` it counts 3.
+
+**2. Still defective**
+- `create-props-accdb`: `Table(p,"t2","T")` uses the default handle `db`, which was released. The T, field and index property reads after reopen never ran (33 unbound notes, first `db`). `qp.Properties.Append("Description")` gives 3367 (0x800A0D27). The reopened QP Description reads Type 10, "table description", which I cannot explain.
+- `create-cx-history-accdb`: same `db` handle defect. The AppendOnly read after reopen never ran (8 unbound notes).
+- `create-cx-types-accdb`: Decimal is not repaired. Writing a `VT_CY` value gives 0x800A0EAF (scaling truncation) and Update then gives 3058. The Decimal group is empty.
+- `att-replace-remove-reacquired`:
+  - After `rb.Close` the handle `db` is unbound (38 unbound notes), so the p2 deletion steps did not run. The group of p2 stays at 2 rows.
+  - Direct FileData byte assignment gives 3001 (0x800A0BB9), so `bytes.bin` has NULL data.
+  - The p1 delete itself now works: the group goes from 2 to 1 row (`renamed.dat` remains).
+  - The Errors read after the p1 delete shows 3420, and I did not trace which call raised it.
+- `enc-newpassword-shared-and-readonly-protected-first`: the shared `NewPassword('pw-base','pw-shared')` is again refused with 3621 (0x800A0E25). The exclusive read-only step is not exercised: its open with `pw-shared` fails 3031 and all later opens fail 3031. They use the wrong password because pw-shared was never set. `pw-base` is not tried in that phase.
+- `link-schema-change-own-source`: the second Database's `ALTER … ADD COLUMN X` and `DROP COLUMN N` both give 3211 (0x800A0C8B), because LK holds SRC. No schema change happened, so LK still shows N. LINK-SCHEMA remains unanswered.
+- `cat-xproc-drop-table-under-reader`: there is no pause between B's final DROP and A's reads (29 ms). A listing T while its SELECT fails could still be a read cache. I cannot tell.
+- `txn-view-readers-late`: my reading of the third and fourth phases (A's second update and rollback) is incomplete, so treat that part as unverified.
