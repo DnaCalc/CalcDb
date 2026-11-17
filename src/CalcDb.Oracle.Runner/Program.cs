@@ -440,7 +440,7 @@ internal static class Program
         if (options.Get("record") is { } recordPath)
         {
             EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
-            Console.Write(record.Capture is null ? "record has no capture\n" : Show.Render(record.Manifest, record.Capture, options.Has("all-modules")));
+            Console.Write(record.Capture is null ? "record has no capture\n" : Show.Render(record.Manifest, record.Capture, options.Has("all-modules"), options.Get("type")));
             foreach ((string name, Capture peer) in record.ParticipantCaptures ?? new Dictionary<string, Capture>())
             {
                 Console.WriteLine($"===== participant {name}");
@@ -453,7 +453,7 @@ internal static class Program
         CaptureManifest? manifest = store.GetManifest(attemptId);
         if (File.Exists(capturePath))
         {
-            Console.Write(Show.Render(manifest, EvidenceJson.Read<Capture>(capturePath), options.Has("all-modules")));
+            Console.Write(Show.Render(manifest, EvidenceJson.Read<Capture>(capturePath), options.Has("all-modules"), options.Get("type")));
         }
         else
         {

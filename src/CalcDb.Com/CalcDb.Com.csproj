@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- W-08/factory-host-core (II-13 §§2-4, 15-17, 23): the native CalcDb module. Published with NativeAOT as a native
+       DLL (CalcDb.dll) exporting DllGetClassObject, DllCanUnloadNow and the host bootstrap; interface heads and vtables
+       are laid out by hand from the captured DAO declarations. Publish: dotnet publish src/CalcDb.Com -r win-x64 -c Release -->
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <AssemblyName>CalcDb</AssemblyName>
+    <RootNamespace>CalcDb.Com</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x64</PlatformTarget>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalcDb.Com.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Beside CalcDb.dll: a manifest's file element names a module in the manifest's own directory. -->
+    <None Include="deploy\*.manifest" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
+    <ProjectReference Include="..\CalcDb.Foundation.Windows\CalcDb.Foundation.Windows.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,154 @@
+using System.Runtime.InteropServices;
+
+namespace CalcDb.Com.Com;
+
+/// <summary>
+/// The native interface head (II-13 §3, F-140): its first word is the vtable pointer a client calls through; the second
+/// recovers the managed owner. Heads live in one immovable native block per wrapper.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct InterfaceHead
+{
+    public nint Vtable;
+    public nint Owner;
+}
+
+/// <summary>
+/// The module-lifetime obligations (II-13 §4, §17): live wrappers and factories, and server locks, counted apart.
+/// A NativeAOT module cannot be unloaded, so <c>DllCanUnloadNow</c> answers S_FALSE whatever the counts; they stay
+/// visible for T-INT-17's accounting.
+/// </summary>
+internal static class ModuleLifetime
+{
+    private static long _objects;
+    private static long _locks;
+    private static long _lockUnderflows;
+
+    public static long Objects => Interlocked.Read(ref _objects);
+
+    public static long Locks => Interlocked.Read(ref _locks);
+
+    /// <summary>LockServer(FALSE) calls with no lock outstanding; kept visible, never forced to zero.</summary>
+    public static long LockUnderflows => Interlocked.Read(ref _lockUnderflows);
+
+    public static void ObjectCreated() => Interlocked.Increment(ref _objects);
+
+    public static void ObjectFreed() => Interlocked.Decrement(ref _objects);
+
+    public static void Lock() => Interlocked.Increment(ref _locks);
+
+    public static void Unlock()
+    {
+        if (Interlocked.Decrement(ref _locks) < 0)
+        {
+            Interlocked.Increment(ref _locks);
+            Interlocked.Increment(ref _lockUnderflows);
+        }
+    }
+}
+
+/// <summary>
+/// A COM wrapper: one controlling identity, a fixed set of interface heads and an immutable supported-interface set
+/// (II-13 §4). Head 0 is the controlling IUnknown. The wrapper is kept alive by a GC handle while any reference is
+/// outstanding; the final Release frees the heads and runs the owner's cleanup.
+/// </summary>
+internal abstract unsafe class ComObject
+{
+    private readonly InterfaceHead* _heads;
+    private readonly int _headCount;
+    private GCHandle _self;
+    private int _references = 1;
+
+    protected ComObject(params ReadOnlySpan<nint> vtables)
+    {
+        _headCount = vtables.Length;
+        _heads = (InterfaceHead*)NativeMemory.AllocZeroed((nuint)(sizeof(InterfaceHead) * _headCount));
+        _self = GCHandle.Alloc(this);
+        for (int i = 0; i < _headCount; i++)
+        {
+            _heads[i].Vtable = vtables[i];
+            _heads[i].Owner = GCHandle.ToIntPtr(_self);
+        }
+        ModuleLifetime.ObjectCreated();
+    }
+
+    /// <summary>The controlling IUnknown.</summary>
+    public nint Identity => (nint)_heads;
+
+    public nint Head(int index) => (nint)(_heads + index);
+
+    /// <summary>The head that answers <paramref name="iid"/>, or -1. Never opens a resource or changes over the lifetime.</summary>
+    protected abstract int HeadFor(in Guid iid);
+
+    public static T Recover<T>(nint head) where T : ComObject =>
+        (T)GCHandle.FromIntPtr(((InterfaceHead*)head)->Owner).Target!;
+
+    public int QueryInterface(in Guid iid, nint* result)
+    {
+        int index = iid == ComIids.IUnknown ? 0 : HeadFor(iid);
+        if (index < 0)
+        {
+            *result = 0;
+            return HResults.E_NOINTERFACE;
+        }
+        AddRef();
+        *result = Head(index);
+        return HResults.S_OK;
+    }
+
+    public uint AddRef() => (uint)Interlocked.Increment(ref _references);
+
+    public uint Release()
+    {
+        int left = Interlocked.Decrement(ref _references);
+        if (left == 0)
+        {
+            OnFinalRelease();
+            _self.Free();
+            NativeMemory.Free(_heads);
+            ModuleLifetime.ObjectFreed();
+        }
+        return (uint)left;
+    }
+
+    /// <summary>Hand out the controlling identity or another head for a requested IID, as a creation result.</summary>
+    public int Publish(in Guid iid, nint* result)
+    {
+        int hr = QueryInterface(iid, result);
+        Release(); // the construction reference
+        return hr;
+    }
+
+    protected virtual void OnFinalRelease()
+    {
+    }
+}
+
+internal static class ComIids
+{
+    public static readonly Guid IUnknown = new("00000000-0000-0000-C000-000000000046");
+    public static readonly Guid IDispatch = new("00020400-0000-0000-C000-000000000046");
+    public static readonly Guid IClassFactory = new("00000001-0000-0000-C000-000000000046");
+    public static readonly Guid IErrorInfo = new("1CF2B120-547D-101B-8E65-08002B2BD119");
+}
+
+internal static class HResults
+{
+    public const int S_OK = 0;
+    public const int S_FALSE = 1;
+    public const int E_NOTIMPL = unchecked((int)0x80004001);
+    public const int E_NOINTERFACE = unchecked((int)0x80004002);
+    public const int E_POINTER = unchecked((int)0x80004003);
+    public const int E_UNEXPECTED = unchecked((int)0x8000FFFF);
+    public const int E_INVALIDARG = unchecked((int)0x80070057);
+    public const int CLASS_E_NOAGGREGATION = unchecked((int)0x80040110);
+    public const int CLASS_E_CLASSNOTAVAILABLE = unchecked((int)0x80040111);
+    public const int DISP_E_UNKNOWNINTERFACE = unchecked((int)0x80020001);
+    public const int DISP_E_MEMBERNOTFOUND = unchecked((int)0x80020003);
+    public const int DISP_E_PARAMNOTFOUND = unchecked((int)0x80020004);
+    public const int DISP_E_UNKNOWNNAME = unchecked((int)0x80020006);
+    public const int DISP_E_EXCEPTION = unchecked((int)0x80020009);
+    public const int DISP_E_BADPARAMCOUNT = unchecked((int)0x8002000E);
+    public const int DISP_E_PARAMNOTOPTIONAL = unchecked((int)0x8002000F);
+    public const int TYPE_E_ELEMENTNOTFOUND = unchecked((int)0x8002802B);
+}

@@ -41,7 +41,11 @@ internal static class Show
         return sb.ToString();
     }
 
-    public static string Render(CaptureManifest? manifest, Capture capture, bool allModules)
+    /// <summary>
+    /// The capture's events. A type event shows its library and type count; <paramref name="typeName"/> lists that type's
+    /// members (and its dual interface's vtable view) wherever it appears.
+    /// </summary>
+    public static string Render(CaptureManifest? manifest, Capture capture, bool allModules, string? typeName = null)
     {
         var sb = new StringBuilder();
         if (manifest is not null)
@@ -121,6 +125,17 @@ internal static class Show
                         previousPages[o.RelativePath] = o.PageHashes!;
                     }
                     break;
+                case TypeEvent t:
+                    sb.AppendLine($"types {t.Target}: {(t.Library is { } lib ? $"library {lib.Name} {lib.Guid} {lib.Major}.{lib.Minor} lcid {lib.Lcid}, " : "")}{t.Types.Count} types{(t.Errors.Count == 0 ? "" : ", errors: " + string.Join("; ", t.Errors))}");
+                    foreach (TypeView v in t.Types.Where(v => typeName is not null && string.Equals(v.Name, typeName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        TypeMembers(sb, v);
+                        if (v.DualInterface is { } dual)
+                        {
+                            TypeMembers(sb, dual);
+                        }
+                    }
+                    break;
                 case ModulesEvent m:
                     sb.AppendLine($"modules[{m.Label}]: complete={m.Complete} rounds={m.Rounds} loaded={m.ModulePaths.Count} identified={m.Identities.Count} changedDuring={m.ChangedDuringCollection.Count}{(m.Error is null ? "" : " error=" + m.Error)}");
                     foreach (ModuleIdentity id in m.Identities.Where(id => allModules || IsEngine(id.Path)))
@@ -139,6 +154,20 @@ internal static class Show
             sb.AppendLine($"artifact {a.Role} {a.Length}B sha256 {a.Sha256}");
         }
         return sb.ToString();
+    }
+
+    private static void TypeMembers(StringBuilder sb, TypeView v)
+    {
+        sb.AppendLine($"{"",22}{v.Name} {v.Guid} kind {v.TypeKind} flags 0x{v.TypeFlags:X} vtable {v.VtableBytes}B implements {string.Join(", ", v.Implements)}");
+        foreach (FunctionInfo fn in v.Functions)
+        {
+            string parameters = string.Join(", ", fn.Parameters.Select(p => $"{p.Name}:{p.Type}/0x{p.Flags:X}{(p.Default is null ? "" : "=" + Value(p.Default))}"));
+            sb.AppendLine($"{"",24}id {fn.MemberId} {fn.Name} invoke {fn.InvokeKind} funckind {fn.FuncKind} vft {fn.VtableOffset} -> {fn.ReturnType} ({parameters})");
+        }
+        foreach (VariableInfo va in v.Variables)
+        {
+            sb.AppendLine($"{"",24}var {va.MemberId} {va.Name}: {va.Type}{(va.Value is null ? "" : " = " + Value(va.Value))}");
+        }
     }
 
     /// <summary>For a page-hashed file: its page count, and the pages that differ from its previous page-hashed observation.</summary>

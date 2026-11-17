@@ -232,6 +232,31 @@ public sealed unsafe class OwnedVariant : IDisposable
     }
 
     /// <summary>Move the payload to an empty destination without copying it; this owner becomes empty.</summary>
+    /// <summary>
+    /// The final inert handoff into a caller's output cell (II-12 owned publication): the caller's cell receives the
+    /// value and its ownership, this value becomes moved-from. No allocation or foreign call happens here.
+    /// </summary>
+    public void TransferTo(NativeVariant* callerCell)
+    {
+        if (State == OwnershipState.CleanupPending)
+        {
+            throw new InvalidOperationException("A value whose cleanup failed cannot be transferred; settle it first.");
+        }
+        *callerCell = *Pointer;
+        OleAut.VariantInit(_cell);
+        State = OwnershipState.MovedFrom;
+    }
+
+    /// <summary>The BSTR of a VT_BSTR value, handed to a caller's <c>BSTR*</c> output; this value becomes moved-from.</summary>
+    public nint TransferBstr()
+    {
+        Require(VarType.Bstr);
+        nint bstr = _cell->Pointer;
+        OleAut.VariantInit(_cell);
+        State = OwnershipState.MovedFrom;
+        return bstr;
+    }
+
     public void MoveTo(OwnedVariant destination)
     {
         if (destination.State != OwnershipState.Empty && destination.State != OwnershipState.MovedFrom)
