@@ -5,6 +5,22 @@ the owner's request (oracle-service.md, "Isolated environments to evaluate"): le
 oracle tier, as the DnaCalc Excel service lessons did for Excel. Each claim below comes from the source named; claims
 from community repositories are someone else's measurements, not verified here. Nothing was installed or changed.
 
+## Uses of isolation
+
+Isolation serves several uses here, with different needs. An environment that is wrong for one may suit another, so
+each finding below is judged per use. Being a candidate does not make an environment a good idea for that use: the
+experiments decide.
+
+| Use | What runs | Needs Office? | What it needs most |
+| --- | --- | --- | --- |
+| U1. The ACE oracle (tiers 1 and 2) | DAO and ACE, the exact build of the host | yes | the same ACE build (OR-IDENT), byte and lock-file fidelity, low cost per question |
+| U2. Our own code on untrusted input | DnaCalc, CalcVBA and CalcDb builds, run on outside VBA, outside databases or generated tests | no | disposability, easy deployment of our binaries, a boundary around what the code touches |
+| U3. Outside code before or instead of review | macros or tools from outside sources (the macro policy in oracle-service.md) | for Access macros, yes | containment of effects; it never replaces the review |
+
+Owner's view (2026-11-17): Windows Sandbox does not sound like a candidate for running Office inside (U1). It may be an
+environment where our own code runs easily (U2), so that untrusted or other test code can run with our libraries in a
+safe place.
+
 ## The machine
 
 Windows 11 Pro 25H2, build 26200.9974, hypervisor present, 8 cores, 31 GB. Office Click-to-Run 16.0.20527.20196 x64.
@@ -30,7 +46,7 @@ The Windows Sandbox feature is **not enabled** (no `WindowsSandbox.exe`, no `wsb
 - **Telemetry**: required diagnostic data is sent, "not controlled by an MXC setting"; a build from source can turn
   its routing off ([telemetry](https://github.com/microsoft/mxc/blob/main/docs/telemetry.md)).
 
-For CalcDb: `processcontainer` could bound what a worker or an outside macro can touch, if ACE runs in it at all. It
+For U1 and U3: `processcontainer` could bound what a worker or an outside macro can touch, if ACE runs in it at all. It
 gives neither fresh state nor more crash isolation than our job objects, and it conflicts with the private desktop as
 configured by default. Its Sandbox backend is useful mainly as a design for driving a guest; its failure model is the
 opposite of ours (a crash is an answer, and bisection re-runs).
@@ -58,6 +74,11 @@ opposite of ours (a crash is an answer, and bisection re-runs).
   activations Microsoft allows ([shared computer activation](https://learn.microsoft.com/en-us/microsoft-365-apps/licensing-activation/overview-shared-computer-activation)).
   Microsoft's pages say nothing about Office in Windows Sandbox, nor about whether DAO works unactivated.
 
+**Per use.** For U1 the per-guest Office install, activation limit and licence question make Windows Sandbox a poor
+fit; its experiments for U1 (W3, W4, W5, W8, W10) wait until U2 shows the environment is worth having. For U2 none of
+those problems exist: our binaries need no licence and can be mapped in read-only, the guest is fresh each time, and
+its inability to return command output matters less when results come back through a mapped output folder.
+
 ## MCP servers for Windows Sandbox
 
 None from Microsoft was found. Community servers, all driving `wsb.exe` and so sharing its limits:
@@ -73,7 +94,7 @@ reusing any of their code needs a licence-ledger entry.
 | ID | Decision | Needed by |
 | --- | --- | --- |
 | S1 | Enable Windows Sandbox (elevation, reboot), then launch it once from Start | every Sandbox experiment |
-| L1 | How Office is licensed in a guest: sign-in per guest (activation-limit risk), shared computer activation with a token folder, no activation, or the Access Runtime (only if its ACE build is proven identical) | W4 onward |
+| L1 | Only for U1 in Windows Sandbox. How Office is licensed in a guest: sign-in per guest (activation-limit risk), shared computer activation with a token folder, no activation, or the Access Runtime (only if its ACE build is proven identical) | W4 onward |
 | M0 | Whether to download and run mxc (Microsoft, MIT): it is outside code, an executable rather than a macro | M1 onward |
 | M7 | Whether mxc's required telemetry is acceptable, or a source build without it | M1 onward |
 
@@ -99,11 +120,14 @@ Each measures; none is an impression. Marks: E elevation, R reboot, L licence, O
 | W8 | A long-lived tier-1 worker in a guest | Questions over TCP to the guest, or over a shared-folder mailbox; p50 and p95 against the host worker | W4 |
 | W9 | One instance only: pool consequences | A second `wsb start`; a second logon session | S1 |
 | W10 | Activation budget | Activations used by a day of fresh guests, under L1 | L1 |
+| X1 | U2: our code in a guest | Map a CalcDb build and test assets read-only and an output folder read-write; run the CalcDb tests and a CalcVBA run of outside VBA; compare results and timing with the host | S1 |
+| X2 | U2: does the boundary hold for our code? | A test program of our own that tries to write outside the output folder, reach the network, read the host profile and show a window; record what each attempt gets | S1 |
+| X3 | U2 by mxc `processcontainer` | X1 and X2 in a process container instead of a guest, for the cost difference | M1 |
 
-**Order.** M1–M3 first, once M0 and M7 are decided: they need no feature, reboot or licence. Then S1, W1, W2 and W6
-(no Office). W4 and W3 are the gate: same ACE build, activation, and byte and lock-file fidelity. Only if W4 passes:
-W5, W8, W9, then W7 under the macro policy. A recommendation per tier waits for numbers from W1, W3, W4 and W8 (tier
-1) and W5 and W6 (tier 2).
+**Order.** M1–M3 first, once M0 and M7 are decided: they need no feature, reboot or licence. After S1: W1, W2 and W6,
+then X1 and X2 (U2, no Office). The U1 experiments follow only if they still look worthwhile; for them W4 and W3 are
+the gate (same ACE build, activation, byte and lock-file fidelity), then W5, W8, W9, and W7 under the macro policy. A
+recommendation is made per use: U2 after W1, W6, X1 and X2; U1 after W1, W3, W4 and W8 (tier 1) and W5 and W6 (tier 2).
 
 ## Where the sources are silent
 
