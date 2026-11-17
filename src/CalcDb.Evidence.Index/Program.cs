@@ -40,7 +40,7 @@ internal static class Program
                 Build(Option("out") ?? defaultDb, tables);
                 return 0;
             case "verify":
-                return Verify(Option("db") ?? defaultDb, tables);
+                return Verify(Option("db") ?? defaultDb, Option("table") is { } only ? [.. tables.Where(t => t.Name == only)] : tables);
             case "query":
                 Query(Option("db") ?? defaultDb, Option("sql") ?? throw new ArgumentException("--sql is required."));
                 return 0;
@@ -122,7 +122,19 @@ internal static class Program
     }
 
     private static string? Render(CapturedValue? v) =>
-        v is null ? null : v.Integer ?? v.Text ?? v.Display ?? v.Bits ?? v.Identity ?? v.Unsupported;
+        v is null ? null : v.Integer ?? (v.Text is { } t ? EscapeForAce(t) : null) ?? v.Display ?? v.Bits ?? v.Identity ?? v.Unsupported;
+
+    /// <summary>
+    /// Workaround: in this index a LONGTEXT value "￾", written and read through the DAO PIA from .NET, read back
+    /// as "" (verify, 2026-11-17). The cause is not found. Through the raw IDispatch lane ACE keeps U+FFFE in Text and
+    /// Memo, ACCDB and MDB, by DAO put and SQL literal (evidence/r-text-fffe), so it lies in this tool's path. Until
+    /// it is found, the display text writes U+FFFE and U+FFFF as <c>￾</c> and <c>￿</c> (and a backslash as
+    /// <c>\\</c>) so it round-trips; the exact bytes are in ResultBytes. Remove this once the cause is fixed.
+    /// </summary>
+    private static string EscapeForAce(string text) =>
+        text.AsSpan().IndexOfAny('￾', '￿', '\\') < 0
+            ? text
+            : text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("￾", "\\uFFFE", StringComparison.Ordinal).Replace("￿", "\\uFFFF", StringComparison.Ordinal);
 
     private static void Build(string path, IReadOnlyList<Table> tables)
     {
@@ -189,6 +201,18 @@ internal static class Program
                 if (!same)
                 {
                     mismatches++;
+                    // Show where they differ: the first rows present on one side only.
+                    var inIndex = new HashSet<string>(actual, StringComparer.Ordinal);
+                    var inJson = new HashSet<string>(expected, StringComparer.Ordinal);
+                    foreach (string row in expected.Where(x => !inIndex.Contains(x)).Take(5))
+                    {
+                        Console.WriteLine("  only derived: " + Shorten(row));
+                    }
+                    foreach (string row in actual.Where(x => !inJson.Contains(x)).Take(5))
+                    {
+                        Console.WriteLine("  only in index: " + Shorten(row));
+                    }
+                    Console.WriteLine($"  rows differing: {expected.Count(x => !inIndex.Contains(x))} derived, {actual.Count(x => !inJson.Contains(x))} in index");
                 }
             }
         }
@@ -229,6 +253,12 @@ internal static class Program
         {
             db.Close();
         }
+    }
+
+    private static string Shorten(string row)
+    {
+        string escaped = string.Concat(row.Select(c => c < ' ' || char.IsSurrogate(c) ? $"\\u{(int)c:X4}" : c.ToString()));
+        return escaped.Length > 400 ? escaped[..400] + "…" : escaped;
     }
 
     /// <summary>Type-tagged canonical row text; the index's typed values must equal the derivation.</summary>

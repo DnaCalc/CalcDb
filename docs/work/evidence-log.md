@@ -22,6 +22,15 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
 > assumption that DAO-only probes show no UI was wrong. Since 04:24 every worker runs on a private desktop, and
 > a guard records any owned window on the owner's desktop (see the R-ORACLE-1 OR-DESKTOP entry below).
 
+### U+FFFE in Text and Memo (R-STRING-1, OR-WIRE) — `evidence/r-text-fffe`, 4 records
+The evidence-index check found a LONGTEXT value "￾" that read back as "" through the DAO PIA. The designed
+probe asks ACE directly, through the raw lane: U+FFFE alone, leading, trailing, inside and doubled, U+FFFF, U+FEFF
+and U+FFFD, written to TEXT(255) and MEMO by DAO put and by SQL literal, in ACCDB and MDB. After reopening, the rows
+checked (U+FFFE alone, leading, trailing and inside, all four routes) return the value unchanged, with the expected
+`Len`, and U+FFFE reads as `AscW` −2. The U+FFFF, U+FEFF and U+FFFD rows are recorded but not yet read. The loss is therefore in
+the index tool's .NET path, not in ACE storage. Its cause is open; the index escapes the two noncharacters until it
+is found.
+
 ### The night in numbers
 2,281 retained records in 45 folders, from six waves of designed questions in the book's order (II-16 §25,
 F-223), all through the raw IDispatch lane. Counts per folder are in the register.
