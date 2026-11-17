@@ -30,6 +30,8 @@ public sealed record FormatDescriptor
 
     public required MapRules Map { get; init; }
 
+    public required CatalogRules Catalog { get; init; }
+
     /// <summary>Every rule of the description, for the inspector and for single-description checks (T-FMT-23).</summary>
     public IEnumerable<FieldRule> AllRules =>
         Header.Rules.Concat(DataPage.Rules).Concat(TableDef.Rules).Concat(Column.Rules).Concat(Row.Rules).Concat(IndexPage.Rules).Concat(Map.Rules);
@@ -129,6 +131,15 @@ public sealed record FormatDescriptor
             ReferencePointersOffset = 1,
             ReferencePointerBytes = 4,
             BitmapPageBodyOffset = 4,
+        },
+        Catalog = new CatalogRules
+        {
+            ObjectTableRoot = 2,
+            TopLevelParent = 0x0F000000,
+            TablesContainerName = "Tables",
+            LocalTableType = 1,
+            RequiredFields = [("Id", NativeTypes.Long), ("ParentId", NativeTypes.Long), ("Name", NativeTypes.Text), ("Type", NativeTypes.Integer), ("Flags", NativeTypes.Long)],
+            Evidence = "S-JACK-CATDB-PIN; II-06 §§1-2",
         },
     };
 }
@@ -256,6 +267,27 @@ public sealed record IndexPageRules
     public required byte InteriorKind { get; init; }
 
     public IEnumerable<FieldRule> Rules => [FreeCount, Owner, PreviousPeer, NextPeer, TailChild, PrefixLength, Level];
+}
+
+/// <summary>
+/// The catalog bootstrap conventions of the profile (II-06 §§1.1, 2): where the object table's TableDef is, the
+/// namespace seed, the local-table type, and the required field projection bound by name and native type.
+/// </summary>
+public sealed record CatalogRules
+{
+    public required uint ObjectTableRoot { get; init; }
+
+    /// <summary>The profile's default top-level parent; containers are then discovered from the rows.</summary>
+    public required int TopLevelParent { get; init; }
+
+    public required string TablesContainerName { get; init; }
+
+    /// <summary>Object type 1: a local table, whose Id is its TableDef page.</summary>
+    public required short LocalTableType { get; init; }
+
+    public required IReadOnlyList<(string Name, byte Type)> RequiredFields { get; init; }
+
+    public required string Evidence { get; init; }
 }
 
 /// <summary>Usage-map declarations (II-03 §1.4): inline bitmaps and bitmap-page references.</summary>
