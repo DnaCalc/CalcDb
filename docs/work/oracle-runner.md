@@ -126,6 +126,20 @@ claim goes to `receipts/owned-children[.participant].json`. The runner reads the
 image and start time again, and puts the process in the attempt's kill-on-close job. It guards the process's windows
 with the worker's, gives it 20 s after the worker ends to exit, and then ends it. The owner report records how it ended.
 
+**Dialogs (OR-DESKTOP).** Office shows modal dialogs that no caller option prevents: VBA run-time and compile
+errors, MsgBox in generated code, an ODBC prompt. While workers run, the runner looks for visible dialog windows
+(class `#32770`) of every owned process, claimed servers included. For each new one it starts the UI Automation
+helper `calcdb-dialogs` ([src/CalcDb.Oracle.Dialogs](../../src/CalcDb.Oracle.Dialogs)) on the dialog's own desktop,
+inside the attempt's job. The helper records the dialog's title, class and every element of its tree (texts, buttons,
+enabled state) in the owner report. It acts only when a rule of the question's dialog policy matches (probe property
+`Dialogs`: title, optional text, button; part of the question key). It then invokes that button through its
+InvokePattern, with no mouse, keyboard or focus, and records whether the dialog closed. A window other than a dialog
+is handled the same way when its title contains a rule's title, such as the VBA editor in `[break]` mode after a
+compile error, whose Reset button ends the blocked call. A window is described again when its title changes. An answered
+dialog that closed is an observation, not a seal problem. An unanswered one stays open until the deadline, as before.
+In a main-desktop run, keyboard or mouse input in the owner's session after a dialog appeared is recorded
+(`GetLastInputInfo`, no content) and is a seal problem, because a person may have answered it.
+
 **Main desktop, by owner instruction only.** `run --desktop main` runs the workers, and the servers they start, on
 `WinSta0\Default`. The owner allowed this for the Access host on 2026-11-17, until they move it to the private desktop.
 The owner report records the instruction, and windows on the owner's desktop are then observations of that run, not
@@ -160,8 +174,8 @@ long-lived ACE workers, and this runner as its tier for owned experiments, is in
 - DAO alone can show UI: `DBEngine.OpenDatabase(Empty)` opens the ODBC Select Data Source
   dialog (evidence log, night of 2026-11-17). The private desktop and the window guard are in
   place; UI Automation dialog handling is not, so a dialog ends its attempt at the deadline.
-  The owned Access host runs (card `r-access-host`), on the main desktop for now; a VBA error in a
-  fixture function opens a modal dialog that ends its attempt at the deadline in the same way.
+  The owned Access host runs (cards `r-access-host`, `r-access-dialog`), on the main desktop for now. Dialogs
+  are answered by policy (above); a dialog no rule matches still ends its attempt at the deadline.
 - OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and
   OR-REPAIR are not yet exercised against the real worker; the sealing rules they rely on
   are covered by synthetic tests that qualify the harness only.

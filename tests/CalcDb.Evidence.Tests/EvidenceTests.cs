@@ -42,6 +42,22 @@ public class QuestionKeyTests
     }
 
     [Fact]
+    public void Dialog_policy_changes_the_key_only_when_present_and_round_trips()
+    {
+        Question plain = With(new I4Arg(1));
+        Question empty = plain with { DialogPolicy = [] };
+        Question answered = plain with { DialogPolicy = [new DialogRule("Microsoft Visual Basic", "End") { Text = "Run-time error" }, new DialogRule("[break]", "Reset")] };
+        Question other = plain with { DialogPolicy = [new DialogRule("Microsoft Visual Basic", "Debug") { Text = "Run-time error" }, new DialogRule("[break]", "Reset")] };
+        Assert.Equal(plain.Key(), empty.Key());
+        Assert.NotEqual(plain.Key(), answered.Key());
+        Assert.NotEqual(answered.Key(), other.Key());
+        // A rule without text is omitted from JSON as null and must still load (OR-DESKTOP).
+        Question back = EvidenceJson.Deserialize<Question>(EvidenceJson.Serialize(answered));
+        Assert.Equal(answered.Key(), back.Key());
+        Assert.Null(back.DialogPolicy![1].Text);
+    }
+
+    [Fact]
     public void By_reference_differs_from_by_value_and_typed_from_variant()
     {
         string byValue = With(new I4Arg(1)).Key();

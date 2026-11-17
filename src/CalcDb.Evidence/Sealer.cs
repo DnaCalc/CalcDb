@@ -157,15 +157,32 @@ public static class Sealer
         {
             problems.Add("The owned worker exceeded its timeout and was terminated.");
         }
-        foreach (string window in owner.WindowsOnPrivateDesktop ?? [])
+        foreach (string seen in owner.OwnerInput ?? [])
+        {
+            problems.Add("Owner input during a main-desktop run while the host showed UI; a dialog may have been answered by a person: " + seen);
+        }
+        // A dialog the policy answered and that then closed is an observation (owner report), not a problem. In a
+        // main-desktop run the host's own windows are expected; only a dialog left unanswered is a problem there.
+        var answered = (owner.Dialogs ?? []).Where(d => d.Pressed is not null && (d.Outcome.Contains("closed", StringComparison.Ordinal) || d.Outcome.Contains("changed", StringComparison.Ordinal)))
+            .Select(d => "hwnd " + d.Window + " ").ToList();
+        bool Answered(string window) => answered.Any(a => window.Contains(a, StringComparison.Ordinal));
+        foreach (string window in (owner.WindowsOnPrivateDesktop ?? []).Where(w => !Answered(w)))
         {
             problems.Add("Window of the owned worker on the private desktop (OR-DESKTOP): " + window);
         }
-        foreach (string window in owner.WindowsOnUserDesktop ?? [])
+        foreach (string window in (owner.WindowsOnUserDesktop ?? []).Where(w => !Answered(w)))
         {
-            problems.Add(owner.MainDesktopInstruction is { } instruction
-                ? $"Window of an owned process on the main desktop (main-desktop run, {instruction}): {window}"
-                : "CONDUCT: window of the owned worker on the owner's desktop (OR-DESKTOP guard): " + window);
+            if (owner.MainDesktopInstruction is { } instruction)
+            {
+                if (window.Contains("class '#32770'", StringComparison.Ordinal))
+                {
+                    problems.Add($"Unanswered dialog of an owned process on the main desktop (main-desktop run, {instruction}): {window}");
+                }
+            }
+            else
+            {
+                problems.Add("CONDUCT: window of the owned worker on the owner's desktop (OR-DESKTOP guard): " + window);
+            }
         }
         return (execution, captureSha);
     }

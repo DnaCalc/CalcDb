@@ -27,10 +27,10 @@ probes, and spot-checked against the records. Statuses:
   | --- | --- | --- | --- | --- | --- | --- | --- |
   | After the first round | 468 | 164 | 103 | 30 | 122 | 44 | 4 |
   | After the worker operations | 468 | 186 | 120 | 10 | 104 | 44 | 4 |
-  | Now | 479 | 187 | 124 | 10 | 110 | 44 | 4 |
+  | Now | 479 | 187 | 125 | 10 | 109 | 44 | 4 |
 
-  The last line: RO-NATIVE T to Q and EXPR-SANDBOX T to Q+T; R-UDF-1 gets UDF-NAME, UDF-SIGNATURE and UDF-CONTEXT as Q+T
-  and its eight other branches as T.
+  The last line: RO-NATIVE T to Q and EXPR-SANDBOX T to Q+T; R-UDF-1 gets UDF-NAME, UDF-SIGNATURE, UDF-CONTEXT and,
+  with dialog handling, UDF-ERROR as Q+T, and its seven other branches as T.
 
   The notes record about 20 draft claims that later records corrected, among them the tie order under equal keys,
   TXN-CLOSE, the Double fold and the engine-identity note.
@@ -44,8 +44,8 @@ probes, and spot-checked against the records. Statuses:
   later. Close, CompactDatabase and the exclusive creation session never flush. The sampling recorder (`r-sample-rec`)
   saw the same at the file-cache level.
 - **The owned Access host runs (`r-access-host`),** on the main desktop by the owner's instruction for now: Eval and
-  CurrentDb contexts, generated VBA functions in queries, and the standalone-DAO contrast. A VBA error in a fixture
-  function opens a modal dialog, so the error channels of that route wait for dialog handling.
+  CurrentDb contexts, generated VBA functions in queries, and the standalone-DAO contrast. VBA errors and MsgBox open
+  modal dialogs; the runner describes each by UI Automation and answers it by the question's policy (`r-access-dialog`).
 - **How far construction can go:** the whole read path up to the first joined goal, W-08/native-read, is clear of
   unsettled ACE facts except one follow-up (CUR-POP) and our own byte analysis. The first wall is still durable
   writes: the exact order in which ACE writes data and index pages (CRASH-ORDER).
@@ -69,8 +69,8 @@ probes, and spot-checked against the records. Statuses:
 | R-CURSOR-1 | 10 | 3 | 5 | 1 | 0 | 1 | — |
 | R-TXN-1 | 14 | 7 | 4 | 2 | 1 | 0 | ODBC transactions |
 | R-CRASH-1 | 16 | 1 | 2 | 1 | 5 | 7 | Page roles of the recorded writes (W-04), injection, power loss |
-| R-EXPR-1 | 31 | 17 | 10 | 1 | 3 | 0 | The full function-by-context inventory; Access error channels without a dialog |
-| R-UDF-1 | 11 | 0 | 3 | 0 | 8 | 0 | ByRef, entry, ownership, effect, reentry, close and thread need instrumented callbacks; UDF-ERROR needs dialog handling |
+| R-EXPR-1 | 31 | 17 | 10 | 1 | 3 | 0 | The full function-by-context inventory |
+| R-UDF-1 | 11 | 0 | 4 | 0 | 7 | 0 | ByRef, entry, ownership, effect, reentry, close and thread need instrumented callbacks |
 | R-SQL-1 | 43 | 19 | 7 | 0 | 3 | 14 | Access contexts; overflow past $2^{31}$ rows |
 | R-SQL-2 | 23 | 9 | 10 | 0 | 4 | 0 | Injected failures, storage-closure bytes |
 | R-SQL-3 | 17 | 13 | 3 | 0 | 1 | 0 | Trace |
@@ -129,7 +129,7 @@ ACE runs. Power-loss and torn-write behaviour stay out of reach of a trace. The 
 | Area | What it needs |
 | --- | --- |
 | Sharing: W-10/native-readers-only, W-11, W-12 | RO-NATIVE is Q now; the rest of R-LOCK-2/3/4 is Q or F; SMB for the network combinations |
-| Host extension, W-06/host-extension (R-UDF-1) | the owned Access host runs; instrumented callbacks (reentry, close, ByRef) and dialog handling for UDF-ERROR |
+| Host extension, W-06/host-extension (R-UDF-1) | the owned Access host runs, with dialog handling; instrumented callbacks (reentry, close, ByRef) |
 | ADO events and persistence, W-09/events-persistence-inventory | network persistence only; the event branches are qualified |
 | Encryption: W-L1 | protected temp backing and failures |
 | Links: W-L2 | cancel has no DAO route |
@@ -146,7 +146,7 @@ ACE runs. Power-loss and torn-write behaviour stay out of reach of a trace. The 
 | A sampling write recorder (suspend, page hashes, resume) | CRASH-ORDER at the file-cache level, CRASH-OBS | **done** (`r-sample-rec`); needs repeats per mutation class |
 | A per-write and flush recorder (ETW, Microsoft-Windows-Kernel-File) | exact write and flush order, RO-NATIVE, CRASH-TRACE | **done** (`r-etw-rec`, installed 2026-11-17); paging (disk) writes are attributed only in part |
 | Fault injection (I/O failures, memory, temp space) | ERR-OOM, ENC-FAIL, RB-FAIL, CX-FAIL, the injected parts of SQL-ACT-FAIL | large; not started |
-| An owned Access host with dialog handling (UI Automation on the private desktop) | R-UDF-1, EXPR-SANDBOX, the Access contexts of R-EXPR-1 and R-SQL-1, CAT-X, RB-OPAQUE, the VBA lane of OR-OBS | **host done** (`r-access-host`, main desktop by owner instruction); dialog handling and the private desktop remain; task `b8sx` |
+| An owned Access host with dialog handling (UI Automation on the private desktop) | R-UDF-1, EXPR-SANDBOX, the Access contexts of R-EXPR-1 and R-SQL-1, CAT-X, RB-OPAQUE, the VBA lane of OR-OBS | **host and dialog handling done** (`r-access-host`, `r-access-dialog`, main desktop by owner instruction); the private desktop remains; task `b8sx` |
 | Managed caller lanes (ExcelDna.Interop.Dao on .NET Framework 4.8 and .NET 10) | the OR-OBS managed lanes, OLE-MANAGED, ACT-MANAGED | medium; task `9fkt` |
 | Byte-level interpretation of the retained images | FMT-*, II-05 index pages, SORT-DERIVE, STR-COMPRESS, slot reuse, the meaning of the sampled pages | our W-04 work; no new ACE run |
 | An SMB share | WRITE-NET, network persistence, network combinations | setup |
@@ -228,7 +228,7 @@ does not.
 | Level | Slice | Status of its deciding branches | Follow-ups (F) | Troublesome remainder (T, and what it needs) |
 | --- | --- | --- | --- | --- |
 | 3 | W-06/restricted-scalar | blocked | — | R-EXPR-1 EXPR-INVENTORY [large matrix] |
-| 4 | W-06/host-extension | blocked | R-EXPR-1 EXPR-DOMAIN | R-UDF-1 UDF-BYREF [instrumented callbacks]; R-UDF-1 UDF-ENTRY [instrumented callbacks]; R-UDF-1 UDF-OWNERSHIP [instrumented callbacks]; R-UDF-1 UDF-REENTRY [instrumented callbacks]; R-UDF-1 UDF-ERROR [dialog handling]; R-UDF-1 UDF-THREAD [instrumented callbacks]; R-EXPR-1 EXPR-EVAL [Access error channels]. UDF-NAME, UDF-SIGNATURE and UDF-CONTEXT are Q+T (`r-access-host`) |
+| 4 | W-06/host-extension | blocked | R-EXPR-1 EXPR-DOMAIN | R-UDF-1 UDF-BYREF [instrumented callbacks]; R-UDF-1 UDF-ENTRY [instrumented callbacks]; R-UDF-1 UDF-OWNERSHIP [instrumented callbacks]; R-UDF-1 UDF-REENTRY [instrumented callbacks]; R-UDF-1 UDF-THREAD [instrumented callbacks]; R-EXPR-1 EXPR-EVAL [nested Eval limits]. UDF-NAME, UDF-SIGNATURE, UDF-CONTEXT and UDF-ERROR are Q+T (`r-access-host`, `r-access-dialog`) |
 | 6 | W-06/parser-binder-scan | follow-up | R-CURSOR-1 CUR-POP | - |
 | 7 | W-06/relational-spill | clear with remainders | — | — |
 | 8 | W-06/measured-specialization | clear with remainders | — | — |

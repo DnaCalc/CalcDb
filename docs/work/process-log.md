@@ -254,3 +254,28 @@ it falls after.
 **Next candidates.** Dialog handling by UI Automation (it would open UDF-ERROR's channels); the recorder's paging-write
 attribution, which needs a recorder change and the owner's reinstall; moving the Access host to the private desktop when
 the owner says so.
+
+## 2026-11-17 (evening) · Dialog handling by UI Automation (one session, Claude Opus 5.5)
+
+**Work observed.** Reproduce first, then handle: four repro probes recorded what each VBA dialog is, then three rounds
+of answered probes (the second round contaminated, the third clean). A UI Automation helper, dialog policies in the
+question key, editor windows, an input guard. 10 records, one note rewritten, two report rows.
+
+**What worked.**
+- *Describing before answering.* With no policy, the repros recorded every dialog's text and buttons; the policies were
+  written from those trees, not from guesses.
+- *The owner's warning taken at face value.* The round they might have touched was rerun, not argued over, and the
+  runner now detects input instead of relying on being told.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The helper read the dialog's class after pressing | A successful press reported as "not described" | Title and class are read before any invoke |
+| UI Automation nests owned windows under their owner | The editor matched the dialog's rule and pressed its OK | Each top-level window is described on its own |
+| Nullable constructor parameter in a JSON record | Questions with an optional rule text did not load | Optional fields are init properties |
+| A visible editor on the owner's desktop takes the foreground | The owner's typing reached it | Input guard in the seal |
+
+**Rule.** On the owner's desktop the owner is a participant: record their input, never assume its absence.
+
+**Next candidates.** The private desktop for the host (by the owner's word); nested and cleanup errors (UDF-ERROR open).

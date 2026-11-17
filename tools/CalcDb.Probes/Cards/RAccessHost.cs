@@ -25,7 +25,7 @@ public sealed class RAccessHost : ICard
     /// trace-and-return function with an in-memory trace, an error-after-trace function, and a Double-typed parameter for
     /// coercion. No file, registry, network or object creation.
     /// </summary>
-    private const string Module = """
+    internal const string Module = """
         Option Compare Database
         Option Explicit
 
@@ -72,19 +72,28 @@ public sealed class RAccessHost : ICard
 
         """;
 
-    /// <summary>Activate Access as a local server, claim its process, and lower macro security on this instance only.</summary>
-    private static P Host(P p)
+    /// <summary>
+    /// Activate Access as a local server, claim its process, and lower macro security on this instance only; with
+    /// <paramref name="visible"/>, show its window (main-desktop runs only).
+    /// </summary>
+    internal static P Host(P p, bool visible = false)
     {
         p.Files("before-open").Modules("before-activate")
             .Activate("app", "Access.Application", "cocreate", ClsCtxLocalServer, IidDispatch)
             .Claim("app", "hWndAccessApp", "MSACCESS.EXE")
             .Get("app", "Version").Get("app", "Build").Get("app", "Visible").Get("app", "UserControl")
             .Get("app", "AutomationSecurity");
-        return p.Put("app", "AutomationSecurity", A.I4(AutomationSecurityLow)).Get("app", "AutomationSecurity");
+        p.Put("app", "AutomationSecurity", A.I4(AutomationSecurityLow)).Get("app", "AutomationSecurity");
+        return visible ? p.Put("app", "Visible", A.Bool(true)).Get("app", "Visible") : p;
     }
 
+    /// <summary>Write a generated module to the attempt folder and load it as standard module CalcDbGen.</summary>
+    internal static P LoadModule(P p, string module) =>
+        p.WriteFile("work:CalcDbGen.bas", Encoding.ASCII.GetBytes(module.ReplaceLineEndings("\r\n")))
+            .Call("app", "LoadFromText", A.I4(AcModule), A.Str("CalcDbGen"), A.Out("CalcDbGen.bas"));
+
     /// <summary>A new database in the attempt folder as Access's current database, with T (ID, X Double, S Text, N Long) and three rows.</summary>
-    private static P Database(P p, string file) =>
+    internal static P Database(P p, string file) =>
         p.Call("app", "NewCurrentDatabase", A.Out(file)).CallBind("db", "app", "CurrentDb")
             .Call("db", "Execute", A.Str("CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"))
             .Call("db", "Execute", A.Str("INSERT INTO T VALUES (1, 1.5, 'a', Null)"))
@@ -92,10 +101,10 @@ public sealed class RAccessHost : ICard
             .Call("db", "Execute", A.Str("INSERT INTO T VALUES (3, -0.5, Null, 3)"));
 
     /// <summary>Close the current database, quit without saving, release, and give the server time to end.</summary>
-    private static P Quit(P p) =>
+    internal static P Quit(P p) =>
         p.Call("db", "Close").Release("db").Call("app", "CloseCurrentDatabase").Call("app", "Quit", A.I4(AcQuitSaveNone)).Release("app").Pause(3000);
 
-    private static P Query(P p, string db, string sql) =>
+    internal static P Query(P p, string db, string sql) =>
         p.OpenRs("rs", db, sql, Dao.OpenSnapshot).ReadAll("rs").Call("rs", "Close").Release("rs");
 
     /// <summary>After Access quit: open the same file with standalone DAO and run the same SQL (UDF-CONTEXT).</summary>

@@ -1,0 +1,310 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-access-dialog/runtime-run-end",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-DESKTOP",
+    "OR-OWN",
+    "R-UDF-1",
+    "UDF-ERROR"
+  ],
+  "description": "Owned Access host, visible, main desktop; a new current database and a generated module; Application.Run(\"CalcDbRaise\", 2), the run-time error dialog answered End; then Run(\"CalcDbRaise\", 1) and Eval(\"1+1\"). Asks what error Run returns once the dialog is ended, and whether the module still runs. Every dialog of the host is described by UI Automation; the policy answers it.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false,
+      "pageSize": 0
+    },
+    {
+      "op": "observeModules",
+      "label": "before-activate"
+    },
+    {
+      "op": "activate",
+      "class": "Access.Application",
+      "route": "cocreate",
+      "clsCtx": 4,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "app",
+      "aggregate": false
+    },
+    {
+      "op": "claimProcess",
+      "target": "app",
+      "member": "hWndAccessApp",
+      "image": "MSACCESS.EXE"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Build",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Visible",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "UserControl",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Visible",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Visible",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "NewCurrentDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "dialog-runtime-run-end.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CurrentDb",
+      "kind": "method",
+      "args": [],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 1.5, 'a', Null)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 2.5, 'b', 7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (3, -0.5, Null, 3)"
+        }
+      ]
+    },
+    {
+      "op": "writeFile",
+      "file": "work:CalcDbGen.bas",
+      "hex": "4f7074696f6e20436f6d706172652044617461626173650d0a4f7074696f6e204578706c696369740d0a0d0a5075626c69632046756e6374696f6e2043616c634462526169736528427956616c2078204173204c6f6e6729204173204c6f6e670d0a2020202049662078203d2032205468656e204572722e52616973652076624f626a6563744572726f72202b203531332c202243616c63446247656e222c202243616c6344622066697874757265206572726f722061742032220d0a2020202043616c6344625261697365203d20780d0a456e642046756e6374696f6e0d0a"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "LoadFromText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "bstr",
+          "text": "CalcDbGen"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "CalcDbGen.bas"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Run",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbRaise"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Run",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbRaise"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1+1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CloseCurrentDatabase",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Quit",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "app"
+    },
+    {
+      "op": "pause",
+      "ms": 3000
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 0
+    }
+  ],
+  "dialogPolicy": [
+    {
+      "title": "Microsoft Visual Basic",
+      "press": "End",
+      "text": "Run-time error"
+    }
+  ]
+}

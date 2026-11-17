@@ -1,0 +1,354 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "dlg-repro-syntax-eval.a1",
+  "retainedUtc": "2026-11-17T17:10:09.3720026+00:00",
+  "probe": "r-access-dialog/repro-syntax-eval",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-DESKTOP",
+    "OR-OWN",
+    "R-UDF-1",
+    "UDF-ERROR",
+    "R-EXPR-1",
+    "EXPR-EVAL"
+  ],
+  "description": "Owned Access host, visible, main desktop; a new current database and a generated module; a module with a syntax error (CalcDbBroken = = 1), then Application.Eval(\"CalcDbBroken()\"). Every dialog of the host is described by UI Automation; no dialog policy, so a dialog stays until the deadline.",
+  "retentionNote": "Owned Access host, visible, main desktop by owner instruction (2026-11-17); every dialog of the host described by UI Automation (calcdb-dialogs) in the owner report. Repro, no dialog policy: Eval of a function with a syntax error opens #32770 \"Microsoft Visual Basic for Applications\", text \"Compile error: Syntax error\", buttons OK and Help, over the VBA editor (wndclass_desked_gsk, code window of CalcDbGen); the call blocks until the deadline.",
+  "token": "dlg-repro-syntax-eval",
+  "questionKey": "qk1-3d40457d18bcbe4f584422707d7021afb63767cd01d527131ca7bb2a28d81cb4",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-access-dialog/repro-syntax-eval",
+    "bookRefs": [
+      "R-ORACLE-1",
+      "OR-DESKTOP",
+      "OR-OWN",
+      "R-UDF-1",
+      "UDF-ERROR",
+      "R-EXPR-1",
+      "EXPR-EVAL"
+    ],
+    "description": "Owned Access host, visible, main desktop; a new current database and a generated module; a module with a syntax error (CalcDbBroken = = 1), then Application.Eval(\"CalcDbBroken()\"). Every dialog of the host is described by UI Automation; no dialog policy, so a dialog stays until the deadline.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "observeModules",
+        "label": "before-activate"
+      },
+      {
+        "op": "activate",
+        "class": "Access.Application",
+        "route": "cocreate",
+        "clsCtx": 4,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "app",
+        "aggregate": false
+      },
+      {
+        "op": "claimProcess",
+        "target": "app",
+        "member": "hWndAccessApp",
+        "image": "MSACCESS.EXE"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Build",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "UserControl",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "NewCurrentDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "dialog-repro-syntax-eval.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "CurrentDb",
+        "kind": "method",
+        "args": [],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (1, 1.5, 'a', Null)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (2, 2.5, 'b', 7)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (3, -0.5, Null, 3)"
+          }
+        ]
+      },
+      {
+        "op": "writeFile",
+        "file": "work:CalcDbGen.bas",
+        "hex": "4f7074696f6e20436f6d706172652044617461626173650d0a4f7074696f6e204578706c696369740d0a0d0a5075626c69632046756e6374696f6e2043616c63446242726f6b656e2829204173204c6f6e670d0a2020202043616c63446242726f6b656e203d203d20310d0a456e642046756e6374696f6e0d0a"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "LoadFromText",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 5
+          },
+          {
+            "type": "bstr",
+            "text": "CalcDbGen"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "CalcDbGen.bas"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Eval",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CalcDbBroken()"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "CloseCurrentDatabase",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Quit",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "app"
+      },
+      {
+        "op": "pause",
+        "ms": 3000
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false,
+        "pageSize": 0
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "dlg-repro-syntax-eval.a1",
+    "token": "dlg-repro-syntax-eval",
+    "questionKey": "qk1-3d40457d18bcbe4f584422707d7021afb63767cd01d527131ca7bb2a28d81cb4",
+    "workerGeneration": 1,
+    "execution": "Uncertain",
+    "capture": "Incomplete",
+    "problems": [
+      "Started without a returned receipt: native effects may or may not have happened.",
+      "Last native call entered (lifecycle trace): {\"seq\":23,\"path\":\"21\",\"call\":\"app.Eval\",\"utc\":\"2026-11-17T16:55:22.4608005+00:00\"}",
+      "The owned worker exceeded its timeout and was terminated.",
+      "Unanswered dialog of an owned process on the main desktop (main-desktop run, owner instruction of 2026-11-17: the Access host runs on the main desktop until the owner moves it to the private desktop): pid 28968 hwnd 0xF10AA class '#32770' title 'Microsoft Visual Basic for Applications' visible True"
+    ],
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 2212,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 1,
+      "timedOut": true,
+      "killed": true,
+      "exitObserved": true,
+      "desktop": "WinSta0\\Default",
+      "windowsOnUserDesktop": [
+        "pid 28968 hwnd 0x240AAC class 'OMain' title 'Access - dialog-repro-syntax-eval : Database- C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\dlg-repro-syntax-eval.a1\\work\\dialog-repro-syntax-eval.accdb (Access' visible True",
+        "pid 28968 hwnd 0x240AAC class 'OMain' title 'Access' visible True",
+        "pid 28968 hwnd 0x2C0BFA class 'wndclass_desked_gsk' title 'Microsoft Visual Basic for Applications - [CalcDbGen (Code)]' visible True",
+        "pid 28968 hwnd 0xF10AA class '#32770' title 'Microsoft Visual Basic for Applications' visible True"
+      ],
+      "windowsOnPrivateDesktop": [],
+      "mainDesktopInstruction": "owner instruction of 2026-11-17: the Access host runs on the main desktop until the owner moves it to the private desktop",
+      "claimedChildren": [
+        "pid 28968 MSACCESS.EXE started 2026-11-17T16:55:20.4574017+00:00, claimed by a, in the job (kill on close); still running 20 s after its claimant ended; terminated by the runner"
+      ],
+      "dialogs": [
+        {
+          "window": "0xF10AA",
+          "processId": 28968,
+          "title": "Microsoft Visual Basic for Applications",
+          "className": "#32770",
+          "elements": [
+            "Button 'OK' [2] (Button)",
+            "Button 'Help' [9] (Button)",
+            "Image '' [20] (Static)",
+            "Text 'Compile error:\n\nSyntax error' [65535] (Static)",
+            "TitleBar 'Microsoft Visual Basic for Applications' [TitleBar] ()",
+            "  MenuBar 'System Menu Bar' [SystemMenuBar] ()",
+            "    MenuItem 'System' [Item 1] ()",
+            "  Button 'Close' [Close] ()"
+          ],
+          "outcome": "described; the question has no dialog policy",
+          "seenUtc": "2026-11-17T16:55:23.0461028+00:00"
+        }
+      ]
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T16:56:40.5927524+00:00",
+    "sealSha256": "154926665bcb4d9eb2009bf77e9bd0938f71333ab7011968ecaa4766c8016a1d"
+  },
+  "artifacts": []
+}

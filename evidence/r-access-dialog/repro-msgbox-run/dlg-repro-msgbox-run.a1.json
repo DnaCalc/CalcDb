@@ -1,0 +1,348 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "dlg-repro-msgbox-run.a1",
+  "retainedUtc": "2026-11-17T17:10:09.9275852+00:00",
+  "probe": "r-access-dialog/repro-msgbox-run",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-DESKTOP",
+    "OR-OWN",
+    "R-UDF-1",
+    "UDF-ENTRY"
+  ],
+  "description": "Owned Access host, visible, main desktop; a new current database and a generated module; Application.Run(\"CalcDbSay\"), which calls MsgBox with OK and Cancel. Every dialog of the host is described by UI Automation; no dialog policy, so a dialog stays until the deadline.",
+  "retentionNote": "Owned Access host, visible, main desktop by owner instruction (2026-11-17); every dialog of the host described by UI Automation (calcdb-dialogs) in the owner report. Repro, no dialog policy: MsgBox in generated code opens #32770 with its own title \"CalcDb fixture\", its text and buttons OK and Cancel; Run blocks until the deadline.",
+  "token": "dlg-repro-msgbox-run",
+  "questionKey": "qk1-13ffabffed67d32befb9bd975908407d200b358190cb9e5693d82d2ecebc65f6",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-access-dialog/repro-msgbox-run",
+    "bookRefs": [
+      "R-ORACLE-1",
+      "OR-DESKTOP",
+      "OR-OWN",
+      "R-UDF-1",
+      "UDF-ENTRY"
+    ],
+    "description": "Owned Access host, visible, main desktop; a new current database and a generated module; Application.Run(\"CalcDbSay\"), which calls MsgBox with OK and Cancel. Every dialog of the host is described by UI Automation; no dialog policy, so a dialog stays until the deadline.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "observeModules",
+        "label": "before-activate"
+      },
+      {
+        "op": "activate",
+        "class": "Access.Application",
+        "route": "cocreate",
+        "clsCtx": 4,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "app",
+        "aggregate": false
+      },
+      {
+        "op": "claimProcess",
+        "target": "app",
+        "member": "hWndAccessApp",
+        "image": "MSACCESS.EXE"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Build",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "UserControl",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "AutomationSecurity",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Visible",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "NewCurrentDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "dialog-repro-msgbox-run.accdb"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "CurrentDb",
+        "kind": "method",
+        "args": [],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (1, 1.5, 'a', Null)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (2, 2.5, 'b', 7)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (3, -0.5, Null, 3)"
+          }
+        ]
+      },
+      {
+        "op": "writeFile",
+        "file": "work:CalcDbGen.bas",
+        "hex": "4f7074696f6e20436f6d706172652044617461626173650d0a4f7074696f6e204578706c696369740d0a0d0a5075626c69632046756e6374696f6e2043616c6344625361792829204173204c6f6e670d0a2020202043616c634462536179203d204d7367426f78282243616c6344622066697874757265206d657373616765222c2076624f4b43616e63656c2c202243616c634462206669787475726522290d0a456e642046756e6374696f6e0d0a"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "LoadFromText",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 5
+          },
+          {
+            "type": "bstr",
+            "text": "CalcDbGen"
+          },
+          {
+            "type": "outputPath",
+            "fileName": "CalcDbGen.bas"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Run",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CalcDbSay"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "CloseCurrentDatabase",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "app",
+        "member": "Quit",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "app"
+      },
+      {
+        "op": "pause",
+        "ms": 3000
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false,
+        "pageSize": 0
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "dlg-repro-msgbox-run.a1",
+    "token": "dlg-repro-msgbox-run",
+    "questionKey": "qk1-13ffabffed67d32befb9bd975908407d200b358190cb9e5693d82d2ecebc65f6",
+    "workerGeneration": 1,
+    "execution": "Uncertain",
+    "capture": "Incomplete",
+    "problems": [
+      "Started without a returned receipt: native effects may or may not have happened.",
+      "Last native call entered (lifecycle trace): {\"seq\":23,\"path\":\"21\",\"call\":\"app.Run\",\"utc\":\"2026-11-17T16:58:04.6859099+00:00\"}",
+      "The owned worker exceeded its timeout and was terminated.",
+      "Unanswered dialog of an owned process on the main desktop (main-desktop run, owner instruction of 2026-11-17: the Access host runs on the main desktop until the owner moves it to the private desktop): pid 31900 hwnd 0x2313D6 class '#32770' title 'CalcDb fixture' visible True"
+    ],
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 18400,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 1,
+      "timedOut": true,
+      "killed": true,
+      "exitObserved": true,
+      "desktop": "WinSta0\\Default",
+      "windowsOnUserDesktop": [
+        "pid 31900 hwnd 0x2313D6 class '#32770' title 'CalcDb fixture' visible True",
+        "pid 31900 hwnd 0xE067C class 'OMain' title 'Access - dialog-repro-msgbox-run : Database- C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\dlg-repro-msgbox-run.a1\\work\\dialog-repro-msgbox-run.accdb (Access 20' visible True",
+        "pid 31900 hwnd 0xE067C class 'OMain' title 'Access' visible True"
+      ],
+      "windowsOnPrivateDesktop": [],
+      "mainDesktopInstruction": "owner instruction of 2026-11-17: the Access host runs on the main desktop until the owner moves it to the private desktop",
+      "claimedChildren": [
+        "pid 31900 MSACCESS.EXE started 2026-11-17T16:58:02.7857671+00:00, claimed by a, in the job (kill on close); still running 20 s after its claimant ended; terminated by the runner"
+      ],
+      "dialogs": [
+        {
+          "window": "0x2313D6",
+          "processId": 31900,
+          "title": "CalcDb fixture",
+          "className": "#32770",
+          "elements": [
+            "Button 'OK' [1] (Button)",
+            "Button 'Cancel' [2] (Button)",
+            "Text 'CalcDb fixture message' [65535] (Static)",
+            "TitleBar 'CalcDb fixture' [TitleBar] ()",
+            "  MenuBar 'System Menu Bar' [SystemMenuBar] ()",
+            "    MenuItem 'System' [Item 1] ()",
+            "  Button 'Close' [Close] ()"
+          ],
+          "outcome": "described; the question has no dialog policy",
+          "seenUtc": "2026-11-17T16:58:04.8718937+00:00"
+        }
+      ]
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T16:59:22.9629492+00:00",
+    "sealSha256": "656f4801337cdb7a3450548b92c5786992673d9a4ddee795796913abc97f3d2c"
+  },
+  "artifacts": []
+}

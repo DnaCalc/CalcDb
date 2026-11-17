@@ -78,6 +78,7 @@ internal static class Program
                 ObservationRecipe = p.RecordFileIo ? [.. Recipe, "etwFileIo"] : Recipe,
                 Inputs = p.Fixtures.Select(f => fixtures[f.Fixture] with { Role = f.Role }).ToList(),
                 Program = builder.Ops,
+                DialogPolicy = p.Dialogs.Length == 0 ? null : p.Dialogs,
                 Participants = p.Participants.Length == 0 ? null : p.Participants.Select(pt =>
                 {
                     var b = new P();

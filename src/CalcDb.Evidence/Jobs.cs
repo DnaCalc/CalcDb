@@ -114,6 +114,42 @@ public sealed record OwnerReport
 
     /// <summary>OR-OWN: COM-started server processes this participant claimed, with how each one ended.</summary>
     public IReadOnlyList<string>? ClaimedChildren { get; init; }
+
+    /// <summary>
+    /// Main-desktop runs: keyboard or mouse input in the owner's session after a dialog of the host appeared. Such input
+    /// may have answered a dialog or reached an editor, so the seal reports it as a problem.
+    /// </summary>
+    public IReadOnlyList<string>? OwnerInput { get; init; }
+
+    /// <summary>OR-DESKTOP: dialogs of this participant's processes, as UI Automation described them, and how each was answered.</summary>
+    public IReadOnlyList<DialogObservation>? Dialogs { get; init; }
+}
+
+/// <summary>
+/// One dialog of an owned process (R-ORACLE-1 OR-DESKTOP), described by UI Automation: its window, the elements of its
+/// tree in order, the rule that matched (if any), the button invoked, and whether the window then closed.
+/// </summary>
+public sealed record DialogObservation
+{
+    public required string Window { get; init; }
+
+    public required int ProcessId { get; init; }
+
+    public required string Title { get; init; }
+
+    public required string ClassName { get; init; }
+
+    /// <summary>Each element as "ControlType 'name' [automationId] (className)", disabled ones marked, in tree order.</summary>
+    public required IReadOnlyList<string> Elements { get; init; }
+
+    public DialogRule? Rule { get; init; }
+
+    public string? Pressed { get; init; }
+
+    /// <summary>What happened: described only, invoked and closed, invoked but still open, or why nothing was invoked.</summary>
+    public required string Outcome { get; init; }
+
+    public required DateTimeOffset SeenUtc { get; init; }
 }
 
 /// <summary>A server process a worker claimed (<see cref="ClaimProcess"/>), as written to its owned-children receipt.</summary>

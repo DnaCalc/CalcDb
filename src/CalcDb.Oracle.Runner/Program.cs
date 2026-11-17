@@ -123,7 +123,7 @@ internal static class Program
             "main" => true,
             string other => throw new ArgumentException($"--desktop {other}: use private or main."),
         };
-        IReadOnlyList<OwnerReport> owners = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, participants, timeout, () => store.MarkRunning(token), mainDesktop);
+        IReadOnlyList<OwnerReport> owners = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, participants, timeout, () => store.MarkRunning(token), mainDesktop, DialogHelper(repo));
         return store.Seal(attempt, owners);
     }
 
@@ -459,11 +459,8 @@ internal static class Program
         {
             // Participant a returned no capture (for example it was killed); the other participants' captures,
             // which may hold the kill, still show.
-            Console.WriteLine(manifest is null ? $"attempt {attemptId}: not sealed; participant a returned no capture" : $"attempt {attemptId}: execution={manifest.Execution} capture={manifest.Capture}; participant a returned no capture");
-            foreach (string p in manifest?.Problems ?? [])
-            {
-                Console.WriteLine("  problem: " + p);
-            }
+            Console.Write(manifest is null ? $"attempt {attemptId}: not sealed\n" : Show.Header(manifest));
+            Console.WriteLine("participant a returned no capture");
         }
         foreach (string peer in Directory.EnumerateFiles(store.AttemptDirectory(attemptId), "capture.*.json").Order(StringComparer.Ordinal))
         {
@@ -540,6 +537,14 @@ internal static class Program
         string own = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug";
         string worker = Path.Combine(repo, "src", "CalcDb.Oracle.Worker", "bin", own, "net11.0-windows", "win-x64", exe);
         return File.Exists(worker) ? worker : throw new FileNotFoundException($"Build CalcDb.Oracle.Worker ({own}) first, or pass --worker.");
+    }
+
+    /// <summary>The UI Automation dialog helper of the runner's own build configuration, or null when it is not built.</summary>
+    private static string? DialogHelper(string repo)
+    {
+        string own = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug";
+        string helper = Path.Combine(repo, "src", "CalcDb.Oracle.Dialogs", "bin", own, "net11.0-windows", "win-x64", "calcdb-dialogs.exe");
+        return OperatingSystem.IsWindows() && File.Exists(helper) ? helper : null;
     }
 
     /// <summary>Exact tooling source revision: the commit, marked <c>+dirty</c> when the tree has changes.</summary>

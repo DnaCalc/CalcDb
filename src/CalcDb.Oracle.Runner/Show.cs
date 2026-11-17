@@ -6,27 +6,47 @@ namespace CalcDb.Oracle.Runner;
 /// <summary>Compact, human-readable view of a capture for the agent or person inspecting a result.</summary>
 internal static class Show
 {
+    /// <summary>The manifest's verdict, problems, claimed servers, dialogs and desktop, shown with or without a capture.</summary>
+    public static string Header(CaptureManifest manifest)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"attempt {manifest.AttemptId}: execution={manifest.Execution} capture={manifest.Capture}");
+        foreach (string p in manifest.Problems)
+        {
+            sb.AppendLine("  problem: " + p);
+        }
+        OwnerReport[] owners = [manifest.Owner, .. manifest.Participants.Select(x => x.Owner)];
+        foreach (OwnerReport owner in owners)
+        {
+            foreach (string child in owner.ClaimedChildren ?? [])
+            {
+                sb.AppendLine($"  claimed by {owner.Participant}: {child}");
+            }
+        }
+        foreach (OwnerReport owner in owners)
+        {
+            foreach (DialogObservation d in owner.Dialogs ?? [])
+            {
+                sb.AppendLine($"  dialog of {owner.Participant}: {d.Window} pid {d.ProcessId} '{d.Title}' ({d.ClassName}) at {d.SeenUtc:HH:mm:ss.fff}: {d.Outcome}");
+                foreach (string element in d.Elements)
+                {
+                    sb.AppendLine("      " + Visible(element));
+                }
+            }
+        }
+        if (manifest.Owner.MainDesktopInstruction is { } instruction)
+        {
+            sb.AppendLine("  desktop: main (" + instruction + ")");
+        }
+        return sb.ToString();
+    }
+
     public static string Render(CaptureManifest? manifest, Capture capture, bool allModules)
     {
         var sb = new StringBuilder();
         if (manifest is not null)
         {
-            sb.AppendLine($"attempt {manifest.AttemptId}: execution={manifest.Execution} capture={manifest.Capture}");
-            foreach (string p in manifest.Problems)
-            {
-                sb.AppendLine("  problem: " + p);
-            }
-            foreach (OwnerReport owner in new[] { manifest.Owner }.Concat(manifest.Participants.Select(x => x.Owner)))
-            {
-                foreach (string child in owner.ClaimedChildren ?? [])
-                {
-                    sb.AppendLine($"  claimed by {owner.Participant}: {child}");
-                }
-            }
-            if (manifest.Owner.MainDesktopInstruction is { } instruction)
-            {
-                sb.AppendLine("  desktop: main (" + instruction + ")");
-            }
+            sb.Append(Header(manifest));
         }
         EnvironmentReceipt env = capture.Environment;
         sb.AppendLine($"env: {env.Runtime} {env.ProcessArchitecture} {env.ApartmentType} desktop={env.WindowStation}\\{env.Desktop} lcid={env.UserDefaultLcid} acp={env.AnsiCodePage} tooling={env.ToolingRevision}");

@@ -21,6 +21,12 @@ public sealed record Probe(string Card, string Name, string[] Refs, string Descr
     public bool RecordFileIo { get; init; }
 
     /// <summary>
+    /// R-ORACLE-1 OR-DESKTOP: how the runner answers dialogs of the probe's processes (part of the question key). Every
+    /// dialog is described by UI Automation; a dialog no rule matches stays open until the deadline.
+    /// </summary>
+    public DialogRule[] Dialogs { get; init; } = [];
+
+    /// <summary>
     /// Further participants (b, c, ...), each run at the same time in its own owned worker process on the same
     /// attempt files; order them with Signal/Await only. Participant a (Program) keeps the final files, so it
     /// should await the others' last signal before it ends.

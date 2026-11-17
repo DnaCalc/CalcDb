@@ -61,6 +61,14 @@ public sealed record Question
     [JsonIgnore]
     public IReadOnlyList<Participant> Peers => Participants ?? [];
 
+    /// <summary>
+    /// R-ORACLE-1 OR-DESKTOP dialog policy: how the runner answers a dialog of an owned process. Every dialog is
+    /// described by UI Automation whether or not a rule matches; the first rule whose title (and text, when given)
+    /// matches names the button the runner invokes. Without a matching rule the dialog stays, and the attempt runs into
+    /// its deadline as before. Part of the key: answering a dialog changes what the program observes.
+    /// </summary>
+    public IReadOnlyList<DialogRule>? DialogPolicy { get; init; }
+
     public string Key()
     {
         var w = new CanonicalWriter(KeyEncoding);
@@ -76,6 +84,11 @@ public sealed record Question
         {
             // Written only when present, so the keys of single-process questions are unchanged.
             w.List("participants", Peers, (cw, pt) => cw.Begin("participant").Text("name", pt.Name).List("program", pt.Program, (c2, op) => op.Write(c2)));
+        }
+        if (DialogPolicy is { Count: > 0 } rules)
+        {
+            // Written only when present, so the keys of questions without a policy are unchanged.
+            w.List("dialogPolicy", rules, (cw, r) => cw.Begin("dialogRule").Text("title", r.Title).Text("text", r.Text ?? "").Text("press", r.Press));
         }
         return "qk1-" + w.Sha256Hex();
     }
@@ -109,6 +122,16 @@ public sealed record Question
             }
         }
     }
+}
+
+/// <summary>
+/// A dialog rule (<see cref="Question.DialogPolicy"/>): a dialog whose title contains <see cref="Title"/>, and some
+/// element's name contains <see cref="Text"/> when it is given, is answered by invoking the enabled button named
+/// <see cref="Press"/> (its name without the access-key ampersand).
+/// </summary>
+public sealed record DialogRule(string Title, string Press)
+{
+    public string? Text { get; init; }
 }
 
 /// <summary>A further participant of a multi-process question; see <see cref="Question.Participants"/>.</summary>

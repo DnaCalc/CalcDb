@@ -157,6 +157,42 @@ internal static partial class PrivateDesktop
         return (user, priv);
     }
 
+    /// <summary>
+    /// Visible windows of the given processes that need an answer, on the desktop they run on (the owner's desktop for a
+    /// main-desktop run, otherwise the private desktop): every dialog (class #32770), and any window whose title
+    /// contains one of <paramref name="titles"/> (a policy rule's title, such as the VBA editor in break mode).
+    /// </summary>
+    public static List<(nint Window, int ProcessId, string Title)> DialogsOf(IReadOnlySet<int> pids, string desktop, IReadOnlyList<string> titles)
+    {
+        var found = new List<(nint, int, string)>();
+        bool Look(nint hwnd, nint state)
+        {
+            _ = GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pids.Contains((int)pid) && IsWindowVisible(hwnd))
+            {
+                char[] cls = new char[256];
+                int n = GetClassNameW(hwnd, cls, cls.Length);
+                char[] text = new char[512];
+                int t = GetWindowTextW(hwnd, text, text.Length);
+                string title = new(text, 0, Math.Max(0, t));
+                if (new string(cls, 0, Math.Max(0, n)) == "#32770" || titles.Any(x => title.Contains(x, StringComparison.Ordinal)))
+                {
+                    found.Add((hwnd, (int)pid, title));
+                }
+            }
+            return true;
+        }
+        if (desktop == MainName)
+        {
+            EnumWindows(Look, 0);
+        }
+        else
+        {
+            EnumDesktopWindows(HandleOf(desktop), Look, 0);
+        }
+        return found;
+    }
+
     private static void Note(nint hwnd, IReadOnlySet<int> pids, List<string> into)
     {
         _ = GetWindowThreadProcessId(hwnd, out uint pid);
@@ -170,7 +206,7 @@ internal static partial class PrivateDesktop
         int clsLength = GetClassNameW(hwnd, cls, cls.Length);
         char[] title = new char[512];
         int titleLength = GetWindowTextW(hwnd, title, title.Length);
-        into.Add($"pid {pid} class '{new string(cls, 0, Math.Max(0, clsLength))}' title '{new string(title, 0, Math.Max(0, titleLength))}' visible {IsWindowVisible(hwnd)}");
+        into.Add($"pid {pid} hwnd 0x{(long)hwnd:X} class '{new string(cls, 0, Math.Max(0, clsLength))}' title '{new string(title, 0, Math.Max(0, titleLength))}' visible {IsWindowVisible(hwnd)}");
     }
 
     private static string Quote(string s) => s.Contains(' ', StringComparison.Ordinal) || s.Length == 0 ? "\"" + s.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"" : s;

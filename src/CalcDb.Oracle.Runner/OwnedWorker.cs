@@ -25,25 +25,34 @@ internal static partial class OwnedWorker
     /// <summary>How long a claimed server may outlive its claimant before the runner ends it (an Access host quits asynchronously).</summary>
     private static readonly TimeSpan ChildGrace = TimeSpan.FromSeconds(20);
 
-    public static IReadOnlyList<OwnerReport> Run(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop = false)
+    public static IReadOnlyList<OwnerReport> Run(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop = false, string? dialogsPath = null)
     {
         if (!OperatingSystem.IsWindows())
         {
             return [.. participants.Select(p => new OwnerReport { Participant = p, Ownership = "none", LaunchError = "The ACE worker runs only on a Windows oracle host; submit this job to one." })];
         }
-        return RunWindows(workerPath, attemptDir, attempt, participants, timeout, onAdmitted, mainDesktop);
+        return RunWindows(workerPath, attemptDir, attempt, participants, timeout, onAdmitted, mainDesktop, dialogsPath);
     }
 
     [SupportedOSPlatform("windows")]
-    private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop)
+    private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop, string? dialogsPath)
     {
         string desktop = mainDesktop ? PrivateDesktop.MainName : PrivateDesktop.Name;
         string? instruction = mainDesktop ? MainDesktopInstruction : null;
         // R-CRASH-1 CRASH-ORDER: a question that asks for ETW file-I/O records every file operation on its attempt files.
         string questionFile = Path.Combine(attemptDir, "question.json");
-        EtwBridge? etw = File.Exists(questionFile) && EvidenceJson.Read<Question>(questionFile).ObservationRecipe.Contains(EtwBridge.Channel)
+        Question? question = File.Exists(questionFile) ? EvidenceJson.Read<Question>(questionFile) : null;
+        EtwBridge? etw = question is not null && question.ObservationRecipe.Contains(EtwBridge.Channel)
             ? EtwBridge.Start(attemptDir, (int)Math.Ceiling(timeout.TotalSeconds) + 30)
             : null;
+        // OR-DESKTOP: the question's dialog policy, for the UI Automation helper that answers dialogs.
+        string? policy = null;
+        string[] policyTitles = [.. (question?.DialogPolicy ?? []).Select(r => r.Title)];
+        if (question?.DialogPolicy is { Count: > 0 } rules)
+        {
+            policy = Path.Combine(attemptDir, "receipts", "dialog-policy.json");
+            File.WriteAllText(policy, EvidenceJson.Serialize(rules));
+        }
         using var job = JobObject.CreateKillOnClose();
         var started = new List<Started>();
         foreach (string participant in participants)
@@ -77,7 +86,8 @@ internal static partial class OwnedWorker
         }
 
         // Wait for all workers, sampling the guard every 200 ms: owned windows on the owner's desktop (which
-        // must stay none) and on the private desktop (a dialog, recorded as evidence). Nothing is dismissed.
+        // must stay none) and on the private desktop (a dialog, recorded as evidence). Each new dialog of an owned
+        // process is described by UI Automation and answered only by a rule of the question's dialog policy.
         // Server processes a worker claims (OR-OWN) join the job and the guard as soon as their receipt appears.
         var deadline = Stopwatch.StartNew();
         var pids = started.Where(s => s.Process is not null).Select(s => s.Process!.ProcessId).ToHashSet();
@@ -85,12 +95,27 @@ internal static partial class OwnedWorker
         var onUser = new Dictionary<int, SortedSet<string>>();
         var onPrivate = new Dictionary<int, SortedSet<string>>();
         var live = started.Where(s => s.Process is not null).ToList();
+        var dialogs = new List<DialogObservation>();
+        var described = new HashSet<(nint, string)>();
+        // On the owner's desktop a person can answer a dialog or type into an editor the host shows: any input in the
+        // session after the first such window appeared is recorded, so the seal cannot credit it to the program.
+        var input = new List<string>();
+        uint lastInput = mainDesktop ? LastInputTick() : 0;
         void Sample()
         {
             ClaimChildren(attemptDir, attempt, job, claimed, pids);
             (List<string> user, List<string> priv) = PrivateDesktop.WindowsOf(pids, desktop);
             Collect(user, onUser);
             Collect(priv, onPrivate);
+            HandleDialogs(dialogsPath, attemptDir, desktop, policy, policyTitles, job, pids, described, dialogs);
+            if (mainDesktop && LastInputTick() is var now && now != lastInput)
+            {
+                lastInput = now;
+                if (dialogs.Count > 0 && input.Count < 20)
+                {
+                    input.Add($"input in the owner's session at +{deadline.ElapsedMilliseconds} ms, after {dialogs.Count} dialog(s) of the host appeared");
+                }
+            }
         }
         while (live.Count > 0 && deadline.Elapsed < timeout)
         {
@@ -145,6 +170,8 @@ internal static partial class OwnedWorker
                 WindowsOnUserDesktop = Windows(onUser),
                 WindowsOnPrivateDesktop = Windows(onPrivate),
                 ClaimedChildren = mine.Count == 0 ? null : [.. mine.Select(c => c.Describe())],
+                OwnerInput = s.Participant == "a" && input.Count > 0 ? [.. input] : null,
+                Dialogs = dialogs.Where(d => d.ProcessId == process.ProcessId || mine.Any(c => c.Child.ProcessId == d.ProcessId)) is var own && own.Any() ? [.. own] : null,
             });
         }
         foreach (Claimed c in claimed.Values)
@@ -154,6 +181,75 @@ internal static partial class OwnedWorker
         etw?.Stop();
         return reports;
     }
+
+    /// <summary>
+    /// OR-DESKTOP: run the UI Automation helper once for each new visible dialog of an owned process, on the dialog's
+    /// desktop and inside the attempt's job. It describes the dialog and invokes a button only by a matching policy rule.
+    /// Without the helper (not built), dialogs are only recorded as windows.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void HandleDialogs(string? dialogsPath, string attemptDir, string desktop, string? policy, IReadOnlyList<string> titles, JobObject job, HashSet<int> pids, HashSet<(nint, string)> described, List<DialogObservation> dialogs)
+    {
+        if (dialogsPath is null)
+        {
+            return;
+        }
+        foreach ((nint window, int pid, string title) in PrivateDesktop.DialogsOf(pids, desktop, titles))
+        {
+            // A window is described again when its title changes (the VBA editor entering break mode).
+            if (!described.Add((window, title)))
+            {
+                continue;
+            }
+            string dir = Path.Combine(attemptDir, "receipts", "dialogs");
+            Directory.CreateDirectory(dir);
+            string outFile = Path.Combine(dir, $"dialog-{dialogs.Count + 1}.json");
+            string hex = ((long)window).ToString("X", System.Globalization.CultureInfo.InvariantCulture);
+            DialogObservation Failed(string why) => new()
+            {
+                Window = "0x" + hex,
+                ProcessId = pid,
+                Title = "",
+                ClassName = "#32770",
+                Elements = [],
+                Outcome = why,
+                SeenUtc = DateTimeOffset.UtcNow,
+            };
+            try
+            {
+                using PrivateDesktop.Launched helper = PrivateDesktop.StartSuspended(dialogsPath, [hex, pid.ToString(System.Globalization.CultureInfo.InvariantCulture), policy ?? "-", outFile], attemptDir, outFile + ".log", desktop);
+                _ = job.TryAssign(helper.Process, out _);
+                helper.Resume();
+                if (!helper.Wait(TimeSpan.FromSeconds(20)))
+                {
+                    helper.Terminate(1);
+                    _ = helper.Wait(Timeout.InfiniteTimeSpan);
+                }
+                dialogs.Add(File.Exists(outFile) ? EvidenceJson.Read<DialogObservation>(outFile) : Failed($"the dialog helper wrote nothing (exit {helper.ExitCode})"));
+            }
+            catch (Win32Exception ex)
+            {
+                dialogs.Add(Failed("the dialog helper did not start: " + ex.Message));
+            }
+        }
+    }
+
+    /// <summary>The tick of the last keyboard or mouse input in this session (GetLastInputInfo); no content is read.</summary>
+    private static uint LastInputTick()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) ? info.Time : 0;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo
+    {
+        public uint Size;
+        public uint Time;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LastInputInfo info);
 
     /// <summary>A claimed server process, held by handle from the claim to the end so its id cannot be reused meanwhile.</summary>
     private sealed class Claimed(OwnedChild child, Process process, string ownership)

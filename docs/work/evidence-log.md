@@ -97,8 +97,34 @@ and the only code run is the generated fixture module, loaded by `LoadFromText(a
   **Microsoft Visual Basic** run-time error dialog in the host and blocks the caller (the query at the failing row's field
   read). The three records are Uncertain by construction. The dialog was not dismissed, and the runner ended the host.
   On the main desktop such a dialog is visible to the owner until the attempt's timeout.
-- Open: error channels without the dialog (they need a VBA error-trapping setting that is not changed in a run, or
-  dialog handling by UI Automation); UDF-BYREF, UDF-ENTRY, UDF-REENTRY, UDF-CLOSE; CAT-X; the private desktop for the host.
+- Open: UDF-BYREF, UDF-ENTRY, UDF-REENTRY, UDF-CLOSE; CAT-X; the private desktop for the host. The error channels
+  are in the next entry.
+
+### Dialogs of the Access host, described and answered by UI Automation (R-ORACLE-1 OR-DESKTOP, R-UDF-1 UDF-ERROR) — `evidence/r-access-dialog`, 10 records
+The runner describes every dialog of an owned process with the helper `calcdb-dialogs` and answers it by the question's
+dialog policy, invoking a button through UI Automation (no mouse, keyboard or focus). Access ran visible on the main
+desktop by owner instruction.
+- **What the dialogs are** (repros, unanswered):
+  - A run-time error is `#32770` "Microsoft Visual Basic": "Run-time error '-2147220991 (80040201)': <text>", with
+    Continue (disabled), End, Debug and Help.
+  - A compile error is "Microsoft Visual Basic for Applications": "Compile error: Syntax error" or "Variable not
+    defined", with OK and Help, over the VBA editor.
+  - MsgBox shows its own title, text and buttons.
+- **Answered:**
+  - After End, Run and Eval fail with `0x800A9C68` (40040) and no source or description: the raised error reaches the
+    caller only through the dialog.
+  - A query's failing field reads 3072 (empty description), and the scan goes on.
+  - After OK on a compile error, the editor enters break mode and the call stays blocked; Reset in the editor ends it with
+    the same 40040. Calling the same function again shows the dialog again.
+  - MsgBox answered Cancel makes Run return 2.
+  - The host and its module stay usable throughout.
+- **Tooling found on the way:**
+  - The helper first read a closed dialog's class after pressing, and misreported a press as "not described".
+  - UI Automation lists an owned dialog as a child of the VBA editor, so the helper now describes each top-level window on
+    its own.
+  - The visible editor takes the foreground, so typing on the owner's desktop reached it: one attempt of the first round
+    shows a compile error ("Expected: expression") that no probe made. That round is not retained. The runner now records
+    input in the owner's session after a dialog appears, and the seal reports it as a problem.
 
 ### Erratum: twelve retention notes name the wrong kill mechanism
 The \`retentionNote\` of these records says participant a "ends itself with TerminateSelf". It did not. In every one,
