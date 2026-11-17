@@ -1,0 +1,561 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-cursor-dao/errbase-two-ado-connections",
+  "bookRefs": [
+    "R-ERR-1",
+    "ERR-BASE",
+    "ERR-ADO"
+  ],
+  "description": "ERR-BASE and ERR-ADO, variant: is ADO Errors per Connection? Two ADODB.Connections (Provider Microsoft.ACE.OLEDB.12.0, read-only, the fixture) are opened; c1 Execute 'SELEC ID FROM T' (provider failure): both Errors read; c2 Execute 'SELECT * FROM NoSuchTable': both read; c1 successful Execute 'SELECT ID FROM T' (recordset closed): both read.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q-cursor-dao-main.accdb",
+      "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+      "length": 909312,
+      "provenance": "r-q-cursor-dao.create-main.21478f5c42.a1 qk1-21478f5c424553abb562d6ec4db4d8dcc9ccd3b9975c0665eebde0e7da33e187 output:r-q-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c1"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cpc1"
+    },
+    {
+      "op": "invoke",
+      "target": "cpc1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdsc1"
+    },
+    {
+      "op": "invoke",
+      "target": "cdsc1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdsc1"
+    },
+    {
+      "op": "release",
+      "target": "cpc1"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cpc2"
+    },
+    {
+      "op": "invoke",
+      "target": "cpc2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdsc2"
+    },
+    {
+      "op": "invoke",
+      "target": "cdsc2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdsc2"
+    },
+    {
+      "op": "release",
+      "target": "cpc2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELEC ID FROM T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "aec1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec1",
+      "bind": "aerc1",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "aec2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec2",
+      "bind": "aerc2",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM NoSuchTable"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "aec1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec1",
+      "bind": "aerc1",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "aec2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec2",
+      "bind": "aerc2",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T"
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "aec1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec1",
+      "bind": "aerc1",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc1",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec1"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "aec2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aec2",
+      "bind": "aerc2",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aerc2",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aec2"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c1"
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

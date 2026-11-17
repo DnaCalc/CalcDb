@@ -1,0 +1,5061 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q-ado-misc.values-witness-keyset.d13e93ae91.a1",
+  "retainedUtc": "2026-11-17T09:59:13.2235629+00:00",
+  "probe": "r-q-ado-misc/values-witness-keyset",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-VALUES",
+    "R-OLEDB-1",
+    "OLE-UPDATE"
+  ],
+  "description": "ADO-VALUES, the 100 to 120 proposal with an external 110 witness, server keyset optimistic: L of ID 1 set to 100; recordset on that row; L put to 120; connection B sets L to 110; Value, OriginalValue, UnderlyingValue and Status are read; Update; Errors; the same reads; CancelUpdate and the reads; then a second edit to 130 with Update; and an independent reader at the end. Asks which stage reports the conflict and what each value shows.",
+  "retentionNote": "Designed r-q-ado-misc probe (A-02); complete capture of the ACE answer.",
+  "token": "r-q-ado-misc.values-witness-keyset.d13e93ae91",
+  "questionKey": "qk1-d13e93ae91c0edc47f15024690eb5dc104c502f6d6659882c280537a51a6b3ab",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q-ado-misc/values-witness-keyset",
+    "bookRefs": [
+      "R-ADO-1",
+      "ADO-VALUES",
+      "R-OLEDB-1",
+      "OLE-UPDATE"
+    ],
+    "description": "ADO-VALUES, the 100 to 120 proposal with an external 110 witness, server keyset optimistic: L of ID 1 set to 100; recordset on that row; L put to 120; connection B sets L to 110; Value, OriginalValue, UnderlyingValue and Status are read; Update; Errors; the same reads; CancelUpdate and the reads; then a second edit to 130 with Update; and an independent reader at the end. Asks which stage reports the conflict and what each value shows.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-q-ado-misc-main.accdb",
+        "sha256": "8ce44b486c3496e0903cdeae890bbe83fc1709ca82f353ca7c0175c34a91fbea",
+        "length": 200704,
+        "provenance": "r-q-ado-misc.create-main.0800d6e79b.a1 qk1-0800d6e79bafb66c993cf8f775562d119ff1e206f926e2677fd38f098ecfe29c output:r-q-ado-misc-main.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Connection",
+        "bind": "cn"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Provider",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Properties",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnPr"
+      },
+      {
+        "op": "invoke",
+        "target": "cnPr",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Data Source"
+          }
+        ],
+        "bind": "cnDs"
+      },
+      {
+        "op": "invoke",
+        "target": "cnDs",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnDs"
+      },
+      {
+        "op": "release",
+        "target": "cnPr"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Open",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Connection",
+        "bind": "cb"
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Provider",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Properties",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cbPr"
+      },
+      {
+        "op": "invoke",
+        "target": "cbPr",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Data Source"
+          }
+        ],
+        "bind": "cbDs"
+      },
+      {
+        "op": "invoke",
+        "target": "cbDs",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cbDs"
+      },
+      {
+        "op": "release",
+        "target": "cbPr"
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Open",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "UPDATE K SET L = 100 WHERE ID = 1"
+          },
+          {
+            "type": "missing"
+          },
+          {
+            "type": "i4",
+            "value": 129
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cnErrs",
+        "bind": "cnErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cnEc"
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Recordset",
+        "bind": "rs"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "CursorLocation",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Open",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT ID, L FROM K WHERE ID = 1"
+          },
+          {
+            "type": "object",
+            "name": "cn"
+          },
+          {
+            "type": "i4",
+            "value": 1
+          },
+          {
+            "type": "i4",
+            "value": 3
+          },
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsSf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsSf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsSx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsSx",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 120
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "rsSx"
+      },
+      {
+        "op": "release",
+        "target": "rsSf"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsUx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsUx"
+      },
+      {
+        "op": "release",
+        "target": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "UPDATE K SET L = 110 WHERE ID = 1"
+          },
+          {
+            "type": "missing"
+          },
+          {
+            "type": "i4",
+            "value": 129
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cbErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cbErrs",
+        "bind": "cbErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cbErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cbErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cbErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cbErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cbErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cbErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cbEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cbEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cbEc"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsUx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsUx"
+      },
+      {
+        "op": "release",
+        "target": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cnErrs",
+        "bind": "cnErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cnErrs",
+        "bind": "cnErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsUx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsUx"
+      },
+      {
+        "op": "release",
+        "target": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "CancelUpdate",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cnErrs",
+        "bind": "cnErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsUx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsUx"
+      },
+      {
+        "op": "release",
+        "target": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsSf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsSf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsSx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsSx",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 130
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "rsSx"
+      },
+      {
+        "op": "release",
+        "target": "rsSf"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnErrs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "cnErrs",
+        "bind": "cnErr",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "SQLState",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "cnErr",
+            "member": "NativeError",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cnErrs"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cnEc"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "L"
+          }
+        ],
+        "bind": "rsUx"
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "rsUx"
+      },
+      {
+        "op": "release",
+        "target": "rsUf"
+      },
+      {
+        "op": "invoke",
+        "target": "rs",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Connection",
+        "bind": "pka"
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Provider",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Properties",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "pkaPr"
+      },
+      {
+        "op": "invoke",
+        "target": "pkaPr",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Data Source"
+          }
+        ],
+        "bind": "pkaDs"
+      },
+      {
+        "op": "invoke",
+        "target": "pkaDs",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "pkaDs"
+      },
+      {
+        "op": "release",
+        "target": "pkaPr"
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Mode",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Open",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT ID, L FROM K WHERE ID = 1"
+          }
+        ],
+        "bind": "pra"
+      },
+      {
+        "op": "loopUntil",
+        "target": "pra",
+        "member": "EOF",
+        "maxIterations": 2,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "pra",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "praFlds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "praFlds",
+            "bind": "praF",
+            "maxItems": 2,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "praF",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "praFlds"
+          },
+          {
+            "op": "invoke",
+            "target": "pra",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "pra",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "pra"
+      },
+      {
+        "op": "invoke",
+        "target": "pka",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "pka"
+      },
+      {
+        "op": "invoke",
+        "target": "cb",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q-ado-misc.values-witness-keyset.d13e93ae91.a1",
+    "token": "r-q-ado-misc.values-witness-keyset.d13e93ae91",
+    "questionKey": "qk1-d13e93ae91c0edc47f15024690eb5dc104c502f6d6659882c280537a51a6b3ab",
+    "workerGeneration": 1,
+    "execution": "ReturnedFailure",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "7ecfde1a3984b64a7c7f7d2c4e871d4fd2c10a99a171f57be2674e00e8b7e375",
+    "artifacts": [
+      {
+        "role": "input-final:r-q-ado-misc-main.accdb",
+        "kind": "changed-input",
+        "relativePath": "artifacts/input-final_r-q-ado-misc-main.accdb",
+        "length": 200704,
+        "sha256": "c900fe2f33bec71f55070115f7ded0fef82006b9157274627ddcbdb344d3c40e"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 27236,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T09:59:13.20136+00:00",
+    "sealSha256": "7a54d7be2a62fff2af029d8b853dec352fabe6a24611ad417651a0aa283c81bc"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q-ado-misc.values-witness-keyset.d13e93ae91.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-d13e93ae91c0edc47f15024690eb5dc104c502f6d6659882c280537a51a6b3ab",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "0f7137ceced2fc0261526885d6aa4aec3a64990c81c807fb9713ccf28f2a2473",
+      "workerBuild": "1.0.0+86660cf4faba26ef1d17213ab29ed436617b2b32",
+      "toolingRevision": "86660cf4faba26ef1d17213ab29ed436617b2b32+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 27236,
+      "threadId": 26704,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.values-witness-keyset.d13e93ae91.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [
+          {
+            "relativePath": "inputs/r-q-ado-misc-main.accdb",
+            "length": 200704,
+            "sha256": "8ce44b486c3496e0903cdeae890bbe83fc1709ca82f353ca7c0175c34a91fbea",
+            "lastWriteUtc": "2026-11-17T09:48:38.9008179Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Connection",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "cn",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cn",
+          "identity": "u2",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Apartment"
+        },
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Provider",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+            "byteLength": 48,
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Properties",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 500,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnPr",
+          "identity": "u3",
+          "typeName": "Properties",
+          "typeIid": "{00000504-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnPr",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "cnPr",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4400610074006100200053006f007500720063006500",
+            "byteLength": 22,
+            "text": "Data Source"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnDs",
+          "identity": "u4",
+          "typeName": "Property",
+          "typeIid": "{00000503-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnDs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "cnDs",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e00760061006c007500650073002d007700690074006e006500730073002d006b00650079007300650074002e0064003100330065003900330061006500390031002e00610031005c0069006e0070007500740073005c0072002d0071002d00610064006f002d006d006900730063002d006d00610069006e002e0061006300630064006200",
+            "byteLength": 248,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.values-witness-keyset.d13e93ae91.a1\\inputs\\r-q-ado-misc-main.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "release",
+        "target": "cnDs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "release",
+        "target": "cnPr",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Open",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 10,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 18,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Connection",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "cb",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cb",
+          "identity": "u5",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Apartment"
+        },
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Provider",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+            "byteLength": 48,
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Properties",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 500,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cbPr",
+          "identity": "u6",
+          "typeName": "Properties",
+          "typeIid": "{00000504-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cbPr",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "invoke",
+        "target": "cbPr",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4400610074006100200053006f007500720063006500",
+            "byteLength": 22,
+            "text": "Data Source"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cbDs",
+          "identity": "u7",
+          "typeName": "Property",
+          "typeIid": "{00000503-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cbDs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "cbDs",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e00760061006c007500650073002d007700690074006e006500730073002d006b00650079007300650074002e0064003100330065003900330061006500390031002e00610031005c0069006e0070007500740073005c0072002d0071002d00610064006f002d006d006900730063002d006d00610069006e002e0061006300630064006200",
+            "byteLength": 248,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.values-witness-keyset.d13e93ae91.a1\\inputs\\r-q-ado-misc-main.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "release",
+        "target": "cbDs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "release",
+        "target": "cbPr",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Open",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 10,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 18,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "55005000440041005400450020004b00200053004500540020004c0020003d00200031003000300020005700480045005200450020004900440020003d0020003100",
+            "byteLength": 66,
+            "text": "UPDATE K SET L = 100 WHERE ID = 1"
+          },
+          {
+            "vt": 10,
+            "vtName": "VT_ERROR",
+            "integer": "-2147352572"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "129"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "display": "null interface pointer"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErrs",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23.count"
+      },
+      {
+        "event": "release",
+        "target": "cnErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 25,
+        "programPath": "24"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnEc",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "25"
+      },
+      {
+        "event": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "26"
+      },
+      {
+        "event": "release",
+        "target": "cnEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 28,
+        "programPath": "27"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Recordset",
+        "clsid": "{00000535-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "rs",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rs",
+          "identity": "u9",
+          "typeName": "_Recordset",
+          "typeIid": "{00001556-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Both"
+        },
+        "seq": 29,
+        "programPath": "28"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "CursorLocation",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "2"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1051,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "29"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Open",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c004500430054002000490044002c0020004c002000460052004f004d0020004b0020005700480045005200450020004900440020003d0020003100",
+            "byteLength": 64,
+            "text": "SELECT ID, L FROM K WHERE ID = 1"
+          },
+          {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "identity": "u2",
+            "typeName": "_Connection",
+            "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "3"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1022,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "30"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1054,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "31"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsSf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsSf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "32"
+      },
+      {
+        "event": "invoke",
+        "target": "rsSf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsSx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsSx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "33"
+      },
+      {
+        "event": "invoke",
+        "target": "rsSx",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "120"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "34"
+      },
+      {
+        "event": "release",
+        "target": "rsSx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 36,
+        "programPath": "35"
+      },
+      {
+        "event": "release",
+        "target": "rsSf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 37,
+        "programPath": "36"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "120"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 40,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1104,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "100"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "40"
+      },
+      {
+        "event": "release",
+        "target": "rsUx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 42,
+        "programPath": "41"
+      },
+      {
+        "event": "release",
+        "target": "rsUf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 43,
+        "programPath": "42"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "55005000440041005400450020004b00200053004500540020004c0020003d00200031003100300020005700480045005200450020004900440020003d0020003100",
+            "byteLength": 66,
+            "text": "UPDATE K SET L = 110 WHERE ID = 1"
+          },
+          {
+            "vt": 10,
+            "vtName": "VT_ERROR",
+            "integer": "-2147352572"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "129"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "display": "null interface pointer"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 44,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cbErrs",
+          "identity": "u12",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cbErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "44"
+      },
+      {
+        "event": "invoke",
+        "target": "cbErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 46,
+        "programPath": "45.count"
+      },
+      {
+        "event": "release",
+        "target": "cbErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 47,
+        "programPath": "46"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cbEc",
+          "identity": "u12",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cbEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 48,
+        "programPath": "47"
+      },
+      {
+        "event": "invoke",
+        "target": "cbEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 49,
+        "programPath": "48"
+      },
+      {
+        "event": "release",
+        "target": "cbEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 50,
+        "programPath": "49"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 51,
+        "programPath": "50"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 52,
+        "programPath": "51"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "120"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 53,
+        "programPath": "52"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1104,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "100"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 54,
+        "programPath": "53"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1105,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB3",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00001569-0000-0010-8000-00AA006D2EA4}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 55,
+        "programPath": "54"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1116,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 56,
+        "programPath": "55"
+      },
+      {
+        "event": "release",
+        "target": "rsUx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 57,
+        "programPath": "56"
+      },
+      {
+        "event": "release",
+        "target": "rsUf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 58,
+        "programPath": "57"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErrs",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 59,
+        "programPath": "58"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 60,
+        "programPath": "59.count"
+      },
+      {
+        "event": "release",
+        "target": "cnErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 61,
+        "programPath": "60"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnEc",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 62,
+        "programPath": "61"
+      },
+      {
+        "event": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 63,
+        "programPath": "62"
+      },
+      {
+        "event": "release",
+        "target": "cnEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 64,
+        "programPath": "63"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1025,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x80040E21",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002000410063006300650073007300200044006100740061006200610073006500200045006e00670069006e006500",
+            "byteLength": 64,
+            "text": "Microsoft Access Database Engine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "54006800650020004d006900630072006f0073006f00660074002000410063006300650073007300200064006100740061006200610073006500200065006e00670069006e0065002000730074006f00700070006500640020007400680065002000700072006f00630065007300730020006200650063006100750073006500200079006f007500200061006e006400200061006e006f007400680065007200200075007300650072002000610072006500200061007400740065006d007000740069006e006700200074006f0020006300680061006e006700650020007400680065002000730061006d0065002000640061007400610020006100740020007400680065002000730061006d0065002000740069006d0065002e00",
+            "byteLength": 284,
+            "text": "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time."
+          },
+          "helpContext": 5003197,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{0C733A6D-2A1C-11CE-ADE5-00AA0044773D}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002000410063006300650073007300200044006100740061006200610073006500200045006e00670069006e006500",
+            "byteLength": 64,
+            "text": "Microsoft Access Database Engine"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "54006800650020004d006900630072006f0073006f00660074002000410063006300650073007300200064006100740061006200610073006500200065006e00670069006e0065002000730074006f00700070006500640020007400680065002000700072006f00630065007300730020006200650063006100750073006500200079006f007500200061006e006400200061006e006f007400680065007200200075007300650072002000610072006500200061007400740065006d007000740069006e006700200074006f0020006300680061006e006700650020007400680065002000730061006d0065002000640061007400610020006100740020007400680065002000730061006d0065002000740069006d0065002e00",
+            "byteLength": 284,
+            "text": "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time."
+          },
+          "helpContext": 5003197,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 65,
+        "programPath": "64"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1026,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 66,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErrs",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 67,
+        "programPath": "66"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 68,
+        "programPath": "67.count"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErr",
+          "identity": "u13",
+          "typeName": "Error",
+          "typeIid": "{00000500-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErr",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 69,
+        "programPath": "67[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErr",
+        "member": "Number",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "-2147217887"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 70,
+        "programPath": "67[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErr",
+        "member": "Description",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "54006800650020004d006900630072006f0073006f00660074002000410063006300650073007300200064006100740061006200610073006500200065006e00670069006e0065002000730074006f00700070006500640020007400680065002000700072006f00630065007300730020006200650063006100750073006500200079006f007500200061006e006400200061006e006f007400680065007200200075007300650072002000610072006500200061007400740065006d007000740069006e006700200074006f0020006300680061006e006700650020007400680065002000730061006d0065002000640061007400610020006100740020007400680065002000730061006d0065002000740069006d0065002e00",
+          "byteLength": 284,
+          "text": "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time."
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 71,
+        "programPath": "67[0].1"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErr",
+        "member": "Source",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 2,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "4d006900630072006f0073006f00660074002000410063006300650073007300200044006100740061006200610073006500200045006e00670069006e006500",
+          "byteLength": 64,
+          "text": "Microsoft Access Database Engine"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "67[0].2"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErr",
+        "member": "SQLState",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 5,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "3300310039003700",
+          "byteLength": 8,
+          "text": "3197"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 73,
+        "programPath": "67[0].3"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErr",
+        "member": "NativeError",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "-105514571"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 74,
+        "programPath": "67[0].4"
+      },
+      {
+        "event": "release",
+        "target": "cnErr",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 75,
+        "programPath": "67[0].release"
+      },
+      {
+        "event": "release",
+        "target": "cnErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 76,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnEc",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 77,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 78,
+        "programPath": "70"
+      },
+      {
+        "event": "release",
+        "target": "cnEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 79,
+        "programPath": "71"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 80,
+        "programPath": "72"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 81,
+        "programPath": "73"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "120"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 82,
+        "programPath": "74"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1104,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "110"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 83,
+        "programPath": "75"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1105,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB3",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00001569-0000-0010-8000-00AA006D2EA4}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 84,
+        "programPath": "76"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1116,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 85,
+        "programPath": "77"
+      },
+      {
+        "event": "release",
+        "target": "rsUx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 86,
+        "programPath": "78"
+      },
+      {
+        "event": "release",
+        "target": "rsUf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 87,
+        "programPath": "79"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "CancelUpdate",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1013,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 88,
+        "programPath": "80"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1026,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 89,
+        "programPath": "81"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErrs",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 90,
+        "programPath": "82"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 91,
+        "programPath": "83.count"
+      },
+      {
+        "event": "release",
+        "target": "cnErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 92,
+        "programPath": "84"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnEc",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 93,
+        "programPath": "85"
+      },
+      {
+        "event": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 94,
+        "programPath": "86"
+      },
+      {
+        "event": "release",
+        "target": "cnEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 95,
+        "programPath": "87"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 96,
+        "programPath": "88"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 97,
+        "programPath": "89"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "110"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 98,
+        "programPath": "90"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1104,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "110"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "91"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "UnderlyingValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1105,
+        "invokeHresult": "0x80020009",
+        "argErr": 0,
+        "excepInfo": {
+          "wCode": 0,
+          "scode": "0x800A0CB3",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "deferredFillPresent": false
+        },
+        "errorInfo": {
+          "getErrorInfoHresult": "0x00000000",
+          "present": true,
+          "guid": "{00001569-0000-0010-8000-00AA006D2EA4}",
+          "source": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "410044004f00440042002e004600690065006c006400",
+            "byteLength": 22,
+            "text": "ADODB.Field"
+          },
+          "description": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430075007200720065006e0074002000700072006f0076006900640065007200200064006f006500730020006e006f007400200073007500700070006f00720074002000720065006600720065007300680069006e006700200075006e006400650072006c00790069006e0067002000760061006c007500650073002e00",
+            "byteLength": 126,
+            "text": "Current provider does not support refreshing underlying values."
+          },
+          "helpFile": {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c00570049004e0044004f00570053005c00480045004c0050005c00410044004f003200370030002e00430048004d00",
+            "byteLength": 52,
+            "text": "C:\\WINDOWS\\HELP\\ADO270.CHM"
+          },
+          "helpContext": 1240648,
+          "getterHresults": {
+            "GetGUID": "0x00000000",
+            "GetSource": "0x00000000",
+            "GetDescription": "0x00000000",
+            "GetHelpFile": "0x00000000",
+            "GetHelpContext": "0x00000000"
+          }
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return",
+          "excepinfo",
+          "errorInfo"
+        ],
+        "seq": 100,
+        "programPath": "92"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1116,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 101,
+        "programPath": "93"
+      },
+      {
+        "event": "release",
+        "target": "rsUx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 102,
+        "programPath": "94"
+      },
+      {
+        "event": "release",
+        "target": "rsUf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 103,
+        "programPath": "95"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsSf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsSf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 104,
+        "programPath": "96"
+      },
+      {
+        "event": "invoke",
+        "target": "rsSf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsSx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsSx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 105,
+        "programPath": "97"
+      },
+      {
+        "event": "invoke",
+        "target": "rsSx",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "130"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 106,
+        "programPath": "98"
+      },
+      {
+        "event": "release",
+        "target": "rsSx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 107,
+        "programPath": "99"
+      },
+      {
+        "event": "release",
+        "target": "rsSf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 108,
+        "programPath": "100"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Update",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1025,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 109,
+        "programPath": "101"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "EditMode",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1026,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 110,
+        "programPath": "102"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnErrs",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnErrs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 111,
+        "programPath": "103"
+      },
+      {
+        "event": "invoke",
+        "target": "cnErrs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 112,
+        "programPath": "104.count"
+      },
+      {
+        "event": "release",
+        "target": "cnErrs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 113,
+        "programPath": "105"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 11,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnEc",
+          "identity": "u8",
+          "typeName": "Errors",
+          "typeIid": "{00000501-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnEc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 114,
+        "programPath": "106"
+      },
+      {
+        "event": "invoke",
+        "target": "cnEc",
+        "member": "Clear",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809345,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 115,
+        "programPath": "107"
+      },
+      {
+        "event": "release",
+        "target": "cnEc",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 116,
+        "programPath": "108"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUf",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUf",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 117,
+        "programPath": "109"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUf",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c00",
+            "byteLength": 2,
+            "text": "L"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rsUx",
+          "identity": "u11",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rsUx",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 118,
+        "programPath": "110"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "130"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 119,
+        "programPath": "111"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "OriginalValue",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1104,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "130"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 120,
+        "programPath": "112"
+      },
+      {
+        "event": "invoke",
+        "target": "rsUx",
+        "member": "Status",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1116,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 121,
+        "programPath": "113"
+      },
+      {
+        "event": "release",
+        "target": "rsUx",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 122,
+        "programPath": "114"
+      },
+      {
+        "event": "release",
+        "target": "rsUf",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 123,
+        "programPath": "115"
+      },
+      {
+        "event": "invoke",
+        "target": "rs",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1014,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 124,
+        "programPath": "116"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Connection",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "pka",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "pka",
+          "identity": "u14",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Apartment"
+        },
+        "seq": 125,
+        "programPath": "117"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Provider",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+            "byteLength": 48,
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 126,
+        "programPath": "118"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Properties",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 500,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "pkaPr",
+          "identity": "u15",
+          "typeName": "Properties",
+          "typeIid": "{00000504-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "pkaPr",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 127,
+        "programPath": "119"
+      },
+      {
+        "event": "invoke",
+        "target": "pkaPr",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4400610074006100200053006f007500720063006500",
+            "byteLength": 22,
+            "text": "Data Source"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "pkaDs",
+          "identity": "u16",
+          "typeName": "Property",
+          "typeIid": "{00000503-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "pkaDs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 128,
+        "programPath": "120"
+      },
+      {
+        "event": "invoke",
+        "target": "pkaDs",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e00760061006c007500650073002d007700690074006e006500730073002d006b00650079007300650074002e0064003100330065003900330061006500390031002e00610031005c0069006e0070007500740073005c0072002d0071002d00610064006f002d006d006900730063002d006d00610069006e002e0061006300630064006200",
+            "byteLength": 248,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.values-witness-keyset.d13e93ae91.a1\\inputs\\r-q-ado-misc-main.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 129,
+        "programPath": "121"
+      },
+      {
+        "event": "release",
+        "target": "pkaDs",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 130,
+        "programPath": "122"
+      },
+      {
+        "event": "release",
+        "target": "pkaPr",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 131,
+        "programPath": "123"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Mode",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 16,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 132,
+        "programPath": "124"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Open",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 10,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 133,
+        "programPath": "125"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 18,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 134,
+        "programPath": "126"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c004500430054002000490044002c0020004c002000460052004f004d0020004b0020005700480045005200450020004900440020003d0020003100",
+            "byteLength": 64,
+            "text": "SELECT ID, L FROM K WHERE ID = 1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "pra",
+          "identity": "u17",
+          "typeName": "_Recordset",
+          "typeIid": "{00001556-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "pra",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 135,
+        "programPath": "127"
+      },
+      {
+        "event": "invoke",
+        "target": "pra",
+        "member": "EOF",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1006,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 136,
+        "programPath": "128[0].check"
+      },
+      {
+        "event": "invoke",
+        "target": "pra",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "praFlds",
+          "identity": "u18",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "praFlds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 137,
+        "programPath": "128[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "praFlds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 138,
+        "programPath": "128[0].1.count"
+      },
+      {
+        "event": "invoke",
+        "target": "praFlds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "praF",
+          "identity": "u19",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "praF",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 139,
+        "programPath": "128[0].1[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "praF",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 140,
+        "programPath": "128[0].1[0].0"
+      },
+      {
+        "event": "release",
+        "target": "praF",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 141,
+        "programPath": "128[0].1[0].release"
+      },
+      {
+        "event": "invoke",
+        "target": "praFlds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "praF",
+          "identity": "u20",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "praF",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 142,
+        "programPath": "128[0].1[1].item"
+      },
+      {
+        "event": "invoke",
+        "target": "praF",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "110"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 143,
+        "programPath": "128[0].1[1].0"
+      },
+      {
+        "event": "release",
+        "target": "praF",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 144,
+        "programPath": "128[0].1[1].release"
+      },
+      {
+        "event": "release",
+        "target": "praFlds",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 145,
+        "programPath": "128[0].2"
+      },
+      {
+        "event": "invoke",
+        "target": "pra",
+        "member": "MoveNext",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1018,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 146,
+        "programPath": "128[0].3"
+      },
+      {
+        "event": "invoke",
+        "target": "pra",
+        "member": "EOF",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1006,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "-1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 147,
+        "programPath": "128[1].check"
+      },
+      {
+        "event": "invoke",
+        "target": "pra",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1014,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 148,
+        "programPath": "129"
+      },
+      {
+        "event": "release",
+        "target": "pra",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 149,
+        "programPath": "130"
+      },
+      {
+        "event": "invoke",
+        "target": "pka",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 5,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 150,
+        "programPath": "131"
+      },
+      {
+        "event": "release",
+        "target": "pka",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 151,
+        "programPath": "132"
+      },
+      {
+        "event": "invoke",
+        "target": "cb",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 5,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 152,
+        "programPath": "133"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 5,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 153,
+        "programPath": "134"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "inputs/r-q-ado-misc-main.accdb",
+            "length": 200704,
+            "sha256": "c900fe2f33bec71f55070115f7ded0fef82006b9157274627ddcbdb344d3c40e",
+            "lastWriteUtc": "2026-11-17T09:59:13.0048538Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 154,
+        "programPath": "135"
+      },
+      {
+        "event": "release",
+        "target": "rs",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 155,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "cb",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 156,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "cn",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 157,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 158,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1272,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 159,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "input-final:r-q-ado-misc-main.accdb",
+        "kind": "changed-input",
+        "relativePath": "artifacts/input-final_r-q-ado-misc-main.accdb",
+        "length": 200704,
+        "sha256": "c900fe2f33bec71f55070115f7ded0fef82006b9157274627ddcbdb344d3c40e"
+      }
+    ],
+    "execution": "ReturnedFailure",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "input-final:r-q-ado-misc-main.accdb",
+      "kind": "changed-input",
+      "length": 200704,
+      "sha256": "c900fe2f33bec71f55070115f7ded0fef82006b9157274627ddcbdb344d3c40e",
+      "path": "evidence/artifacts/c900fe2f33bec71f55070115f7ded0fef82006b9157274627ddcbdb344d3c40e"
+    }
+  ]
+}

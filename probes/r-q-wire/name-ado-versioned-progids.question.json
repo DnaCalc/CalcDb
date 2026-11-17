@@ -1,0 +1,164 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-wire/name-ado-versioned-progids",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-NAME",
+    "R-ADO-1"
+  ],
+  "description": "ACT-NAME: ProgIDs that the ADO library registers by version (ADODB.Connection.6.1, ADODB.Recordset.6.1, ADODB.Command.6.1, ADODB.Stream.6.1) against the version-independent names, each created with its CLSID, registration and threading model recorded, and a Version or State read. Only names expected to be registered are asked; no missing name is probed.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection.6.1",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset.6.1",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command.6.1",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream.6.1",
+      "bind": "o"
+    },
+    {
+      "op": "invoke",
+      "target": "o",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "o"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

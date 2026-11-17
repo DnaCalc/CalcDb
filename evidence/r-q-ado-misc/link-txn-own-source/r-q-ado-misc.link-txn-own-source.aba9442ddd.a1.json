@@ -1,0 +1,6155 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q-ado-misc.link-txn-own-source.aba9442ddd.a1",
+  "retainedUtc": "2026-11-17T09:48:55.2652225+00:00",
+  "probe": "r-q-ado-misc/link-txn-own-source",
+  "bookRefs": [
+    "R-LINK-1",
+    "LINK-TXN"
+  ],
+  "description": "LINK-TXN with an own source: host with local table L and link LK to the source; in a Workspace transaction INSERT into LK and into L, counts read through the host and through an independent Database opened on the source; Rollback and the counts; a second transaction with Commit and the counts; a nested pair (inner commit, outer rollback) and the counts. Asks the source effect of rollback and commit for a link participant, as seen by an independent reader.",
+  "retentionNote": "Designed r-q-ado-misc probe (A-02); complete capture of the ACE answer.",
+  "token": "r-q-ado-misc.link-txn-own-source.aba9442ddd",
+  "questionKey": "qk1-aba9442ddd109a52c6765dc4abfef9cb7e83a72ee1dc2f6e879cb9c9405609a5",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q-ado-misc/link-txn-own-source",
+    "bookRefs": [
+      "R-LINK-1",
+      "LINK-TXN"
+    ],
+    "description": "LINK-TXN with an own source: host with local table L and link LK to the source; in a Workspace transaction INSERT into LK and into L, counts read through the host and through an independent Database opened on the source; Rollback and the counts; a second transaction with Commit and the counts; a nested pair (inner commit, outer rollback) and the counts. Asks the source effect of rollback and commit for a link participant, as seen by an independent reader.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "scratch-lt-src.accdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ],
+        "bind": "s"
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE SRC (ID LONG CONSTRAINT PK_SRC PRIMARY KEY, D LONG, V TEXT(20))"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO SRC VALUES (1, 10, 'a')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO SRC VALUES (2, 20, 'b')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO SRC VALUES (3, 10, 'c')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO SRC VALUES (4, 30, 'd')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "s",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "s"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "scratch-lt-host.accdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ],
+        "bind": "h"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE L (ID LONG PRIMARY KEY, V TEXT(20))"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO L VALUES (1, 'l1')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "CreateTableDef",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "LK"
+          },
+          {
+            "type": "i4",
+            "value": 0
+          },
+          {
+            "type": "bstr",
+            "text": "SRC"
+          },
+          {
+            "type": "bstr",
+            "text": ";DATABASE=work\\scratch-lt-src.accdb"
+          }
+        ],
+        "bind": "lkd"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "TableDefs",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "lktd"
+      },
+      {
+        "op": "invoke",
+        "target": "lktd",
+        "member": "Append",
+        "kind": "method",
+        "args": [
+          {
+            "type": "object",
+            "name": "lkd"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "lktd"
+      },
+      {
+        "op": "release",
+        "target": "lkd"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "scratch-lt-src.accdb"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "sd"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Workspaces",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "ws"
+      },
+      {
+        "op": "invoke",
+        "target": "ws",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "i4",
+            "value": 0
+          }
+        ],
+        "bind": "w0"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk0"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk0",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk0"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl0"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl0",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl0"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr0"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr0",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr0",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr0"
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LK VALUES (101, 1, 'in-txn')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO L VALUES (101, 'in-txn')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk1"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk1",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk1",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk1"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl1"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl1",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl1",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl1"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr1"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr1",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr1",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr1"
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "Rollback",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk2"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk2",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk2",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk2"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl2"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl2",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl2",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl2"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr2"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr2",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr2",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr2"
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LK VALUES (102, 2, 'commit')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO L VALUES (102, 'commit')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "CommitTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk3"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk3",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk3",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk3"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl3"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl3",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl3",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl3"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr3"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr3",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr3",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr3"
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LK VALUES (103, 3, 'nested')"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "CommitTrans",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk4"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk4",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk4",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk4"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl4"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl4",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl4",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl4"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr4"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr4",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr4",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr4"
+      },
+      {
+        "op": "invoke",
+        "target": "w0",
+        "member": "Rollback",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshk5"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk5",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshk5",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshk5"
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cshl5"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl5",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cshl5",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cshl5"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "cssr5"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr5",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "flds"
+      },
+      {
+        "op": "forEachItem",
+        "target": "flds",
+        "bind": "f",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "f",
+            "member": "Value",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "flds"
+      },
+      {
+        "op": "invoke",
+        "target": "cssr5",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "cssr5"
+      },
+      {
+        "op": "release",
+        "target": "w0"
+      },
+      {
+        "op": "release",
+        "target": "ws"
+      },
+      {
+        "op": "invoke",
+        "target": "sd",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "h",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q-ado-misc.link-txn-own-source.aba9442ddd.a1",
+    "token": "r-q-ado-misc.link-txn-own-source.aba9442ddd",
+    "questionKey": "qk1-aba9442ddd109a52c6765dc4abfef9cb7e83a72ee1dc2f6e879cb9c9405609a5",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "c13c89d2a8c1aadb9a6a9b3f78949ee606b1c84306a386a47e5a604dc0a8ebd8",
+    "artifacts": [
+      {
+        "role": "output:scratch-lt-host.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-lt-host.accdb",
+        "length": 200704,
+        "sha256": "068ecf9c6d06b52e3e0af1e3e77b558accbc0d22dc5010f609a202d3d08068f1"
+      },
+      {
+        "role": "output:scratch-lt-src.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-lt-src.accdb",
+        "length": 188416,
+        "sha256": "2753434c0fa1d750088926122cc745e8b22e4819206f878411ab999ea85dfb00"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 27060,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T09:48:55.2342202+00:00",
+    "sealSha256": "1a1087739a1484a408b4e406e7d38c12b3da39b9667e474eb0d52bdbb9c9b0c4"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q-ado-misc.link-txn-own-source.aba9442ddd.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-aba9442ddd109a52c6765dc4abfef9cb7e83a72ee1dc2f6e879cb9c9405609a5",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114553\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "0f7137ceced2fc0261526885d6aa4aec3a64990c81c807fb9713ccf28f2a2473",
+      "workerBuild": "1.0.0+86660cf4faba26ef1d17213ab29ed436617b2b32",
+      "toolingRevision": "86660cf4faba26ef1d17213ab29ed436617b2b32+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 27060,
+      "threadId": 14472,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.link-txn-own-source.aba9442ddd.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114553\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114553\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114553\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e006c0069006e006b002d00740078006e002d006f0077006e002d0073006f0075007200630065002e0061006200610039003400340032006400640064002e00610031005c0077006f0072006b005c0073006300720061007400630068002d006c0074002d007300720063002e0061006300630064006200",
+            "byteLength": 234,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.link-txn-own-source.aba9442ddd.a1\\work\\scratch-lt-src.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "s",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "s",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c0045002000530052004300200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f0053005200430020005000520049004d0041005200590020004b00450059002c002000440020004c004f004e0047002c00200056002000540045005800540028003200300029002900",
+            "byteLength": 152,
+            "text": "CREATE TABLE SRC (ID LONG CONSTRAINT PK_SRC PRIMARY KEY, D LONG, V TEXT(20))"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020005300520043002000560041004c005500450053002000280031002c002000310030002c0020002700610027002900",
+            "byteLength": 70,
+            "text": "INSERT INTO SRC VALUES (1, 10, 'a')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020005300520043002000560041004c005500450053002000280032002c002000320030002c0020002700620027002900",
+            "byteLength": 70,
+            "text": "INSERT INTO SRC VALUES (2, 20, 'b')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020005300520043002000560041004c005500450053002000280033002c002000310030002c0020002700630027002900",
+            "byteLength": 70,
+            "text": "INSERT INTO SRC VALUES (3, 10, 'c')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020005300520043002000560041004c005500450053002000280034002c002000330030002c0020002700640027002900",
+            "byteLength": 70,
+            "text": "INSERT INTO SRC VALUES (4, 30, 'd')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "s",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "release",
+        "target": "s",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e006c0069006e006b002d00740078006e002d006f0077006e002d0073006f0075007200630065002e0061006200610039003400340032006400640064002e00610031005c0077006f0072006b005c0073006300720061007400630068002d006c0074002d0068006f00730074002e0061006300630064006200",
+            "byteLength": 236,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.link-txn-own-source.aba9442ddd.a1\\work\\scratch-lt-host.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "h",
+          "identity": "u3",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "h",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020004c00200028004900440020004c004f004e00470020005000520049004d0041005200590020004b00450059002c00200056002000540045005800540028003200300029002900",
+            "byteLength": 96,
+            "text": "CREATE TABLE L (ID LONG PRIMARY KEY, V TEXT(20))"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c002000560041004c005500450053002000280031002c00200027006c00310027002900",
+            "byteLength": 60,
+            "text": "INSERT INTO L VALUES (1, 'l1')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "CreateTableDef",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4c004b00",
+            "byteLength": 4,
+            "text": "LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530052004300",
+            "byteLength": 6,
+            "text": "SRC"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b00440041005400410042004100530045003d0077006f0072006b005c0073006300720061007400630068002d006c0074002d007300720063002e0061006300630064006200",
+            "byteLength": 70,
+            "text": ";DATABASE=work\\scratch-lt-src.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809363,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "lkd",
+          "identity": "u4",
+          "typeName": "_TableDef",
+          "typeIid": "{00000049-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "lkd",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "TableDefs",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "lktd",
+          "identity": "u5",
+          "typeName": "TableDefs",
+          "typeIid": "{0000004B-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "lktd",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "lktd",
+        "member": "Append",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "identity": "u4",
+            "typeName": "_TableDef",
+            "typeIid": "{00000049-0000-0010-8000-00AA006D2EA4}"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809344,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "release",
+        "target": "lktd",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "release",
+        "target": "lkd",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d00610064006f002d006d006900730063002e006c0069006e006b002d00740078006e002d006f0077006e002d0073006f0075007200630065002e0061006200610039003400340032006400640064002e00610031005c0077006f0072006b005c0073006300720061007400630068002d006c0074002d007300720063002e0061006300630064006200",
+            "byteLength": 234,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-ado-misc.link-txn-own-source.aba9442ddd.a1\\work\\scratch-lt-src.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "sd",
+          "identity": "u6",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "sd",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Workspaces",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "ws",
+          "identity": "u7",
+          "typeName": "Workspaces",
+          "typeIid": "{0000003B-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "ws",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "ws",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "w0",
+          "identity": "u8",
+          "typeName": "Workspace",
+          "typeIid": "{00000039-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "w0",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk0",
+          "identity": "u9",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk0",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk0",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u10",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 25,
+        "programPath": "24.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u11",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "24[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "4"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "24[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 28,
+        "programPath": "24[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 29,
+        "programPath": "25"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk0",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "26"
+      },
+      {
+        "event": "release",
+        "target": "cshk0",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 31,
+        "programPath": "27"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl0",
+          "identity": "u12",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl0",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "28"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl0",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "29"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "30.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u14",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "30[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 36,
+        "programPath": "30[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 37,
+        "programPath": "30[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 38,
+        "programPath": "31"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl0",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "32"
+      },
+      {
+        "event": "release",
+        "target": "cshl0",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 40,
+        "programPath": "33"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr0",
+          "identity": "u15",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr0",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "34"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr0",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 43,
+        "programPath": "36.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u16",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 44,
+        "programPath": "36[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "4"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "36[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 46,
+        "programPath": "36[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 47,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr0",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 48,
+        "programPath": "38"
+      },
+      {
+        "event": "release",
+        "target": "cssr0",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 49,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 50,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c004b002000560041004c00550045005300200028003100300031002c00200031002c002000270069006e002d00740078006e0027002900",
+            "byteLength": 80,
+            "text": "INSERT INTO LK VALUES (101, 1, 'in-txn')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 51,
+        "programPath": "41"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c002000560041004c00550045005300200028003100300031002c002000270069006e002d00740078006e0027002900",
+            "byteLength": 72,
+            "text": "INSERT INTO L VALUES (101, 'in-txn')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 52,
+        "programPath": "42"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk1",
+          "identity": "u17",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk1",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 53,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk1",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 54,
+        "programPath": "44"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 55,
+        "programPath": "45.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u18",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 56,
+        "programPath": "45[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 57,
+        "programPath": "45[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 58,
+        "programPath": "45[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 59,
+        "programPath": "46"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk1",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 60,
+        "programPath": "47"
+      },
+      {
+        "event": "release",
+        "target": "cshk1",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 61,
+        "programPath": "48"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl1",
+          "identity": "u19",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl1",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 62,
+        "programPath": "49"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl1",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 63,
+        "programPath": "50"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 64,
+        "programPath": "51.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u20",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 65,
+        "programPath": "51[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 66,
+        "programPath": "51[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 67,
+        "programPath": "51[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 68,
+        "programPath": "52"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl1",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 69,
+        "programPath": "53"
+      },
+      {
+        "event": "release",
+        "target": "cshl1",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 70,
+        "programPath": "54"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr1",
+          "identity": "u21",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr1",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 71,
+        "programPath": "55"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr1",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "56"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 73,
+        "programPath": "57.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u22",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 74,
+        "programPath": "57[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 75,
+        "programPath": "57[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 76,
+        "programPath": "57[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 77,
+        "programPath": "58"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr1",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 78,
+        "programPath": "59"
+      },
+      {
+        "event": "release",
+        "target": "cssr1",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 79,
+        "programPath": "60"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "Rollback",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809357,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 80,
+        "programPath": "61"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk2",
+          "identity": "u23",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk2",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 81,
+        "programPath": "62"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk2",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 82,
+        "programPath": "63"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 83,
+        "programPath": "64.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u24",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 84,
+        "programPath": "64[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "4"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 85,
+        "programPath": "64[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 86,
+        "programPath": "64[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 87,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk2",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 88,
+        "programPath": "66"
+      },
+      {
+        "event": "release",
+        "target": "cshk2",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 89,
+        "programPath": "67"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl2",
+          "identity": "u25",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl2",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 90,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl2",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 91,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 92,
+        "programPath": "70.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u26",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 93,
+        "programPath": "70[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 94,
+        "programPath": "70[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 95,
+        "programPath": "70[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 96,
+        "programPath": "71"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl2",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 97,
+        "programPath": "72"
+      },
+      {
+        "event": "release",
+        "target": "cshl2",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 98,
+        "programPath": "73"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr2",
+          "identity": "u27",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr2",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "74"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr2",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 100,
+        "programPath": "75"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 101,
+        "programPath": "76.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u28",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 102,
+        "programPath": "76[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "4"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 103,
+        "programPath": "76[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 104,
+        "programPath": "76[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 105,
+        "programPath": "77"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr2",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 106,
+        "programPath": "78"
+      },
+      {
+        "event": "release",
+        "target": "cssr2",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 107,
+        "programPath": "79"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 108,
+        "programPath": "80"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c004b002000560041004c00550045005300200028003100300032002c00200032002c002000270063006f006d006d006900740027002900",
+            "byteLength": 80,
+            "text": "INSERT INTO LK VALUES (102, 2, 'commit')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 109,
+        "programPath": "81"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c002000560041004c00550045005300200028003100300032002c002000270063006f006d006d006900740027002900",
+            "byteLength": 72,
+            "text": "INSERT INTO L VALUES (102, 'commit')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 110,
+        "programPath": "82"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "CommitTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809355,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 111,
+        "programPath": "83"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk3",
+          "identity": "u29",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk3",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 112,
+        "programPath": "84"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk3",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 113,
+        "programPath": "85"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 114,
+        "programPath": "86.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u30",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 115,
+        "programPath": "86[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 116,
+        "programPath": "86[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 117,
+        "programPath": "86[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 118,
+        "programPath": "87"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk3",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 119,
+        "programPath": "88"
+      },
+      {
+        "event": "release",
+        "target": "cshk3",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 120,
+        "programPath": "89"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl3",
+          "identity": "u31",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl3",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 121,
+        "programPath": "90"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl3",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 122,
+        "programPath": "91"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 123,
+        "programPath": "92.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u32",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 124,
+        "programPath": "92[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 125,
+        "programPath": "92[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 126,
+        "programPath": "92[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 127,
+        "programPath": "93"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl3",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 128,
+        "programPath": "94"
+      },
+      {
+        "event": "release",
+        "target": "cshl3",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 129,
+        "programPath": "95"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr3",
+          "identity": "u33",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr3",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 130,
+        "programPath": "96"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr3",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 131,
+        "programPath": "97"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 132,
+        "programPath": "98.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u34",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 133,
+        "programPath": "98[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 134,
+        "programPath": "98[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 135,
+        "programPath": "98[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 136,
+        "programPath": "99"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr3",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 137,
+        "programPath": "100"
+      },
+      {
+        "event": "release",
+        "target": "cssr3",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 138,
+        "programPath": "101"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 139,
+        "programPath": "102"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "BeginTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809354,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 140,
+        "programPath": "103"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c004b002000560041004c00550045005300200028003100300033002c00200033002c00200027006e006500730074006500640027002900",
+            "byteLength": 80,
+            "text": "INSERT INTO LK VALUES (103, 3, 'nested')"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 141,
+        "programPath": "104"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "CommitTrans",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809355,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 142,
+        "programPath": "105"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk4",
+          "identity": "u35",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk4",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 143,
+        "programPath": "106"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk4",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 144,
+        "programPath": "107"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 145,
+        "programPath": "108.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u36",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 146,
+        "programPath": "108[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "6"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 147,
+        "programPath": "108[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 148,
+        "programPath": "108[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 149,
+        "programPath": "109"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk4",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 150,
+        "programPath": "110"
+      },
+      {
+        "event": "release",
+        "target": "cshk4",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 151,
+        "programPath": "111"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl4",
+          "identity": "u37",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl4",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 152,
+        "programPath": "112"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl4",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 153,
+        "programPath": "113"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 154,
+        "programPath": "114.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u38",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 155,
+        "programPath": "114[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 156,
+        "programPath": "114[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 157,
+        "programPath": "114[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 158,
+        "programPath": "115"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl4",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 159,
+        "programPath": "116"
+      },
+      {
+        "event": "release",
+        "target": "cshl4",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 160,
+        "programPath": "117"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr4",
+          "identity": "u39",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr4",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 161,
+        "programPath": "118"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr4",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 162,
+        "programPath": "119"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 163,
+        "programPath": "120.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u40",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 164,
+        "programPath": "120[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "6"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 165,
+        "programPath": "120[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 166,
+        "programPath": "120[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 167,
+        "programPath": "121"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr4",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 168,
+        "programPath": "122"
+      },
+      {
+        "event": "release",
+        "target": "cssr4",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 169,
+        "programPath": "123"
+      },
+      {
+        "event": "invoke",
+        "target": "w0",
+        "member": "Rollback",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809357,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 170,
+        "programPath": "124"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c004b00",
+            "byteLength": 56,
+            "text": "SELECT COUNT(*) AS N FROM LK"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshk5",
+          "identity": "u41",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshk5",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 171,
+        "programPath": "125"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk5",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 172,
+        "programPath": "126"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 173,
+        "programPath": "127.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u42",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 174,
+        "programPath": "127[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 175,
+        "programPath": "127[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 176,
+        "programPath": "127[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 177,
+        "programPath": "128"
+      },
+      {
+        "event": "invoke",
+        "target": "cshk5",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 178,
+        "programPath": "129"
+      },
+      {
+        "event": "release",
+        "target": "cshk5",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 179,
+        "programPath": "130"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d0020004c00",
+            "byteLength": 54,
+            "text": "SELECT COUNT(*) AS N FROM L"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cshl5",
+          "identity": "u43",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cshl5",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 180,
+        "programPath": "131"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl5",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 181,
+        "programPath": "132"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 182,
+        "programPath": "133.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u44",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 183,
+        "programPath": "133[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 184,
+        "programPath": "133[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 185,
+        "programPath": "133[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 186,
+        "programPath": "134"
+      },
+      {
+        "event": "invoke",
+        "target": "cshl5",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 187,
+        "programPath": "135"
+      },
+      {
+        "event": "release",
+        "target": "cshl5",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 188,
+        "programPath": "136"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a00290020004100530020004e002000460052004f004d002000530052004300",
+            "byteLength": 58,
+            "text": "SELECT COUNT(*) AS N FROM SRC"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cssr5",
+          "identity": "u45",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cssr5",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 189,
+        "programPath": "137"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr5",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u13",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 190,
+        "programPath": "138"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 191,
+        "programPath": "139.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u46",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 192,
+        "programPath": "139[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "5"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 193,
+        "programPath": "139[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 194,
+        "programPath": "139[0].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 195,
+        "programPath": "140"
+      },
+      {
+        "event": "invoke",
+        "target": "cssr5",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 196,
+        "programPath": "141"
+      },
+      {
+        "event": "release",
+        "target": "cssr5",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 197,
+        "programPath": "142"
+      },
+      {
+        "event": "release",
+        "target": "w0",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 198,
+        "programPath": "143"
+      },
+      {
+        "event": "release",
+        "target": "ws",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 199,
+        "programPath": "144"
+      },
+      {
+        "event": "invoke",
+        "target": "sd",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 200,
+        "programPath": "145"
+      },
+      {
+        "event": "invoke",
+        "target": "h",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 201,
+        "programPath": "146"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "work/scratch-lt-host.accdb",
+            "length": 200704,
+            "sha256": "068ecf9c6d06b52e3e0af1e3e77b558accbc0d22dc5010f609a202d3d08068f1",
+            "lastWriteUtc": "2026-11-17T09:48:55.0307518Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "work/scratch-lt-src.accdb",
+            "length": 188416,
+            "sha256": "2753434c0fa1d750088926122cc745e8b22e4819206f878411ab999ea85dfb00",
+            "lastWriteUtc": "2026-11-17T09:48:55.0194187Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 202,
+        "programPath": "147"
+      },
+      {
+        "event": "release",
+        "target": "sd",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 203,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "h",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 204,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 205,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1152,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114553\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 206,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "output:scratch-lt-host.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-lt-host.accdb",
+        "length": 200704,
+        "sha256": "068ecf9c6d06b52e3e0af1e3e77b558accbc0d22dc5010f609a202d3d08068f1"
+      },
+      {
+        "role": "output:scratch-lt-src.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-lt-src.accdb",
+        "length": 188416,
+        "sha256": "2753434c0fa1d750088926122cc745e8b22e4819206f878411ab999ea85dfb00"
+      }
+    ],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "output:scratch-lt-host.accdb",
+      "kind": "output-file",
+      "length": 200704,
+      "sha256": "068ecf9c6d06b52e3e0af1e3e77b558accbc0d22dc5010f609a202d3d08068f1",
+      "path": "evidence/artifacts/068ecf9c6d06b52e3e0af1e3e77b558accbc0d22dc5010f609a202d3d08068f1"
+    },
+    {
+      "role": "output:scratch-lt-src.accdb",
+      "kind": "output-file",
+      "length": 188416,
+      "sha256": "2753434c0fa1d750088926122cc745e8b22e4819206f878411ab999ea85dfb00",
+      "path": "evidence/artifacts/2753434c0fa1d750088926122cc745e8b22e4819206f878411ab999ea85dfb00"
+    }
+  ]
+}

@@ -1,0 +1,1696 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+  "retainedUtc": "2026-11-17T09:50:17.9671348+00:00",
+  "probe": "r-q-cursor-dao/life-release-without-close-database-and-engine",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-LIFE",
+    "DAO-CLOSE-OWN",
+    "R-LOCK-1"
+  ],
+  "description": "DAO-LIFE, variant: public Close versus last reference release. Process A opens the fixture exclusive read-write, then releases its database-and-engine reference WITHOUT calling Close, records the file and lock file, and signals; process B then opens the same file exclusive read-write, reads COUNT(*) of T, Errors, closes and signals; A ends after B.",
+  "retentionNote": "Designed r-q-cursor-dao probe (A-02); complete capture of the ACE answer.",
+  "token": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02",
+  "questionKey": "qk1-f770273c02334b4f617b10887e3616429ae30b3c5cf47f7a741e68513b83a52c",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q-cursor-dao/life-release-without-close-database-and-engine",
+    "bookRefs": [
+      "R-DAO-1",
+      "DAO-LIFE",
+      "DAO-CLOSE-OWN",
+      "R-LOCK-1"
+    ],
+    "description": "DAO-LIFE, variant: public Close versus last reference release. Process A opens the fixture exclusive read-write, then releases its database-and-engine reference WITHOUT calling Close, records the file and lock file, and signals; process B then opens the same file exclusive read-write, reads COUNT(*) of T, Errors, closes and signals; A ends after B.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-q-cursor-dao-main.accdb",
+        "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+        "length": 909312,
+        "provenance": "r-q-cursor-dao.create-main.21478f5c42.a1 qk1-21478f5c424553abb562d6ec4db4d8dcc9ccd3b9975c0665eebde0e7da33e187 output:r-q-cursor-dao-main.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": true
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Name",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "db"
+      },
+      {
+        "op": "release",
+        "target": "eng"
+      },
+      {
+        "op": "observeFiles",
+        "label": "a-released",
+        "keep": false
+      },
+      {
+        "op": "signal",
+        "name": "a-released"
+      },
+      {
+        "op": "await",
+        "name": "b-done",
+        "timeoutMs": 30000
+      },
+      {
+        "op": "observeFiles",
+        "label": "a-end",
+        "keep": false
+      }
+    ],
+    "participants": [
+      {
+        "name": "b",
+        "program": [
+          {
+            "op": "await",
+            "name": "a-released",
+            "timeoutMs": 30000
+          },
+          {
+            "op": "create",
+            "progId": "DAO.DBEngine.120",
+            "bind": "eng"
+          },
+          {
+            "op": "invoke",
+            "target": "eng",
+            "member": "OpenDatabase",
+            "kind": "method",
+            "args": [
+              {
+                "type": "inputPath",
+                "role": "main"
+              },
+              {
+                "type": "bool",
+                "value": true
+              },
+              {
+                "type": "bool",
+                "value": false
+              }
+            ],
+            "bind": "dbb"
+          },
+          {
+            "op": "invoke",
+            "target": "eng",
+            "member": "Errors",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "errs"
+          },
+          {
+            "op": "forEachItem",
+            "target": "errs",
+            "bind": "e",
+            "maxItems": 16,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "e",
+                "member": "Number",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "e",
+                "member": "Description",
+                "kind": "propertyGet",
+                "args": []
+              },
+              {
+                "op": "invoke",
+                "target": "e",
+                "member": "Source",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "errs"
+          },
+          {
+            "op": "invoke",
+            "target": "dbb",
+            "member": "OpenRecordset",
+            "kind": "method",
+            "args": [
+              {
+                "type": "bstr",
+                "text": "SELECT COUNT(*) FROM T"
+              },
+              {
+                "type": "i4",
+                "value": 4
+              }
+            ],
+            "bind": "rb"
+          },
+          {
+            "op": "invoke",
+            "target": "rb",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "rb",
+            "member": "Close",
+            "kind": "method",
+            "args": []
+          },
+          {
+            "op": "release",
+            "target": "rb"
+          },
+          {
+            "op": "invoke",
+            "target": "dbb",
+            "member": "Close",
+            "kind": "method",
+            "args": []
+          },
+          {
+            "op": "release",
+            "target": "dbb"
+          },
+          {
+            "op": "observeFiles",
+            "label": "b-after",
+            "keep": false
+          },
+          {
+            "op": "signal",
+            "name": "b-done"
+          }
+        ]
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+    "token": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02",
+    "questionKey": "qk1-f770273c02334b4f617b10887e3616429ae30b3c5cf47f7a741e68513b83a52c",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "a8d5f89fae6261ea95bd928fd7b9c22af3266a42e260d395eea2e34c484e40cb",
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 14656,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [
+      {
+        "name": "b",
+        "execution": "ReturnedSuccess",
+        "owner": {
+          "participant": "b",
+          "launched": true,
+          "processId": 17016,
+          "ownership": "retained process handle + job object (kill on close)",
+          "exitCode": 0,
+          "timedOut": false,
+          "killed": false,
+          "exitObserved": true,
+          "desktop": "WinSta0\\CalcDbOracle",
+          "windowsOnUserDesktop": [],
+          "windowsOnPrivateDesktop": []
+        },
+        "captureSha256": "3c7f2b3a509e496c8f072938eb065e234e99179315fd49cbf3f6674da7222f64"
+      }
+    ],
+    "sealedUtc": "2026-11-17T09:50:17.953504+00:00",
+    "sealSha256": "dd5401674756c9068899681daa3869c3be4ec6c03df8c8b193d768e3e3788482"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-f770273c02334b4f617b10887e3616429ae30b3c5cf47f7a741e68513b83a52c",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "0f7137ceced2fc0261526885d6aa4aec3a64990c81c807fb9713ccf28f2a2473",
+      "workerBuild": "1.0.0+86660cf4faba26ef1d17213ab29ed436617b2b32",
+      "toolingRevision": "86660cf4faba26ef1d17213ab29ed436617b2b32+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 14656,
+      "threadId": 14232,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [
+          {
+            "relativePath": "inputs/r-q-cursor-dao-main.accdb",
+            "length": 909312,
+            "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+            "lastWriteUtc": "2026-11-17T09:47:51.5603248Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002e006c006900660065002d00720065006c0065006100730065002d0077006900740068006f00750074002d0063006c006f00730065002d00640061007400610062006100730065002d0061006e0064002d0065006e00670069006e0065002e0066003700370030003200370033006300300032002e00610031005c0069006e0070007500740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002d006d00610069006e002e0061006300630064006200",
+            "byteLength": 306,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1\\inputs\\r-q-cursor-dao-main.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "-1"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Name",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809346,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002e006c006900660065002d00720065006c0065006100730065002d0077006900740068006f00750074002d0063006c006f00730065002d00640061007400610062006100730065002d0061006e0064002d0065006e00670069006e0065002e0066003700370030003200370033006300300032002e00610031005c0069006e0070007500740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002d006d00610069006e002e0061006300630064006200",
+          "byteLength": 306,
+          "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1\\inputs\\r-q-cursor-dao-main.accdb"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "files",
+        "label": "a-released",
+        "files": [
+          {
+            "relativePath": "inputs/r-q-cursor-dao-main.accdb",
+            "length": 909312,
+            "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+            "lastWriteUtc": "2026-11-17T09:47:51.5603248Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "a-released",
+        "timedOut": false,
+        "atUtc": "2026-11-17T09:50:16.9774852+00:00",
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "sync",
+        "kind": "await",
+        "name": "b-done",
+        "waitedMs": 340,
+        "timedOut": false,
+        "atUtc": "2026-11-17T09:50:17.3187069+00:00",
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "files",
+        "label": "a-end",
+        "files": [
+          {
+            "relativePath": "inputs/r-q-cursor-dao-main.accdb",
+            "length": 909312,
+            "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+            "lastWriteUtc": "2026-11-17T09:47:51.5603248Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1112,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 12,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "participantCaptures": {
+    "b": {
+      "schema": "calcdb.capture/1",
+      "attemptId": "r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+      "workerGeneration": 1,
+      "questionKey": "qk1-f770273c02334b4f617b10887e3616429ae30b3c5cf47f7a741e68513b83a52c",
+      "participant": "b",
+      "environment": {
+        "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+        "workerSha256": "0f7137ceced2fc0261526885d6aa4aec3a64990c81c807fb9713ccf28f2a2473",
+        "workerBuild": "1.0.0+86660cf4faba26ef1d17213ab29ed436617b2b32",
+        "toolingRevision": "86660cf4faba26ef1d17213ab29ed436617b2b32+dirty",
+        "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+        "runtime": ".NET 11.0.0",
+        "runtimeVersion": "11.0.0",
+        "osDescription": "Microsoft Windows 10.0.26200",
+        "osVersion": "Microsoft Windows NT 10.0.26200.0",
+        "processArchitecture": "X64",
+        "processId": 17016,
+        "threadId": 2884,
+        "apartmentType": "MainSTA (qualifier 0)",
+        "userDefaultLcid": 7177,
+        "threadLocale": 7177,
+        "ansiCodePage": 1252,
+        "oemCodePage": 437,
+        "currentCulture": "en-ZA",
+        "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+        "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1",
+        "windowStation": "WinSta0",
+        "desktop": "CalcDbOracle",
+        "sessionId": 1,
+        "userLabel": "h-53adc1a17247",
+        "machineLabel": "h-1b1b64f34534",
+        "elevated": false
+      },
+      "events": [
+        {
+          "event": "sync",
+          "kind": "await",
+          "name": "a-released",
+          "waitedMs": 852,
+          "timedOut": false,
+          "atUtc": "2026-11-17T09:50:16.9863301+00:00",
+          "seq": 1,
+          "programPath": "0"
+        },
+        {
+          "event": "create",
+          "progId": "DAO.DBEngine.120",
+          "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+          "clsidFromProgIdHresult": "0x00000000",
+          "coCreateInstanceHresult": "0x00000000",
+          "bind": "eng",
+          "object": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "eng",
+            "identity": "u1",
+            "typeName": "_DBEngine",
+            "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+          },
+          "registration": {
+            "source": "HKCR (read-only)",
+            "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "threadingModel": "apartment"
+          },
+          "seq": 2,
+          "programPath": "1"
+        },
+        {
+          "event": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "flags": 1,
+          "args": [
+            {
+              "vt": 8,
+              "vtName": "VT_BSTR",
+              "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002e006c006900660065002d00720065006c0065006100730065002d0077006900740068006f00750074002d0063006c006f00730065002d00640061007400610062006100730065002d0061006e0064002d0065006e00670069006e0065002e0066003700370030003200370033006300300032002e00610031005c0069006e0070007500740073005c0072002d0071002d0063007500720073006f0072002d00640061006f002d006d00610069006e002e0061006300630064006200",
+              "byteLength": 306,
+              "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q-cursor-dao.life-release-without-close-database-and-engine.f770273c02.a1\\inputs\\r-q-cursor-dao-main.accdb"
+            },
+            {
+              "vt": 11,
+              "vtName": "VT_BOOL",
+              "integer": "-1"
+            },
+            {
+              "vt": 11,
+              "vtName": "VT_BOOL",
+              "integer": "0"
+            }
+          ],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610809358,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "dbb",
+            "identity": "u2",
+            "typeName": "Database",
+            "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+          },
+          "bind": "dbb",
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 3,
+          "programPath": "2"
+        },
+        {
+          "event": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "flags": 2,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610809352,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "errs",
+            "identity": "u3",
+            "typeName": "Errors",
+            "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+          },
+          "bind": "errs",
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 4,
+          "programPath": "3"
+        },
+        {
+          "event": "invoke",
+          "target": "errs",
+          "member": "Count",
+          "flags": 2,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610743808,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 2,
+            "vtName": "VT_I2",
+            "integer": "0"
+          },
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 5,
+          "programPath": "4.count"
+        },
+        {
+          "event": "release",
+          "target": "errs",
+          "returnedCount": 3,
+          "implicit": false,
+          "seq": 6,
+          "programPath": "5"
+        },
+        {
+          "event": "invoke",
+          "target": "dbb",
+          "member": "OpenRecordset",
+          "flags": 1,
+          "args": [
+            {
+              "vt": 8,
+              "vtName": "VT_BSTR",
+              "bytes": "530045004c00450043005400200043004f0055004e00540028002a0029002000460052004f004d0020005400",
+              "byteLength": 44,
+              "text": "SELECT COUNT(*) FROM T"
+            },
+            {
+              "vt": 3,
+              "vtName": "VT_I4",
+              "integer": "4"
+            }
+          ],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610809383,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "rb",
+            "identity": "u4",
+            "typeName": "Recordset2",
+            "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+          },
+          "bind": "rb",
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 7,
+          "programPath": "6"
+        },
+        {
+          "event": "invoke",
+          "target": "rb",
+          "member": "Fields",
+          "flags": 2,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 0,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "flds",
+            "identity": "u5",
+            "typeName": "Fields",
+            "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+          },
+          "bind": "flds",
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 8,
+          "programPath": "7"
+        },
+        {
+          "event": "invoke",
+          "target": "flds",
+          "member": "Count",
+          "flags": 2,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610743808,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 2,
+            "vtName": "VT_I2",
+            "integer": "1"
+          },
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 9,
+          "programPath": "8.count"
+        },
+        {
+          "event": "invoke",
+          "target": "flds",
+          "member": "Item",
+          "flags": 3,
+          "args": [
+            {
+              "vt": 3,
+              "vtName": "VT_I4",
+              "integer": "0"
+            }
+          ],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 0,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "object": "f",
+            "identity": "u6",
+            "typeName": "Field3",
+            "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+          },
+          "bind": "f",
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 10,
+          "programPath": "8[0].item"
+        },
+        {
+          "event": "invoke",
+          "target": "f",
+          "member": "Value",
+          "flags": 2,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 0,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "8"
+          },
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 11,
+          "programPath": "8[0].0"
+        },
+        {
+          "event": "release",
+          "target": "f",
+          "returnedCount": 0,
+          "implicit": true,
+          "seq": 12,
+          "programPath": "8[0].release"
+        },
+        {
+          "event": "release",
+          "target": "flds",
+          "returnedCount": 2,
+          "implicit": false,
+          "seq": 13,
+          "programPath": "9"
+        },
+        {
+          "event": "invoke",
+          "target": "rb",
+          "member": "Close",
+          "flags": 1,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 133,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 0,
+            "vtName": "VT_EMPTY"
+          },
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 14,
+          "programPath": "10"
+        },
+        {
+          "event": "release",
+          "target": "rb",
+          "returnedCount": 0,
+          "implicit": false,
+          "seq": 15,
+          "programPath": "11"
+        },
+        {
+          "event": "invoke",
+          "target": "dbb",
+          "member": "Close",
+          "flags": 1,
+          "args": [],
+          "getIdsOfNamesHresult": "0x00000000",
+          "dispId": 1610809358,
+          "invokeHresult": "0x00000000",
+          "result": {
+            "vt": 0,
+            "vtName": "VT_EMPTY"
+          },
+          "observationOrder": [
+            "clearErrorInfoBefore",
+            "return"
+          ],
+          "seq": 16,
+          "programPath": "12"
+        },
+        {
+          "event": "release",
+          "target": "dbb",
+          "returnedCount": 0,
+          "implicit": false,
+          "seq": 17,
+          "programPath": "13"
+        },
+        {
+          "event": "files",
+          "label": "b-after",
+          "files": [
+            {
+              "relativePath": "inputs/r-q-cursor-dao-main.accdb",
+              "length": 909312,
+              "sha256": "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012",
+              "lastWriteUtc": "2026-11-17T09:47:51.5603248Z",
+              "attributes": "Archive"
+            }
+          ],
+          "seq": 18,
+          "programPath": "14"
+        },
+        {
+          "event": "sync",
+          "kind": "signal",
+          "name": "b-done",
+          "timedOut": false,
+          "atUtc": "2026-11-17T09:50:17.3075195+00:00",
+          "seq": 19,
+          "programPath": "15"
+        },
+        {
+          "event": "release",
+          "target": "eng",
+          "returnedCount": 0,
+          "implicit": true,
+          "seq": 20,
+          "programPath": "end"
+        },
+        {
+          "event": "modules",
+          "label": "end-implicit",
+          "complete": true,
+          "bytesNeeded": 1144,
+          "bytesProvided": 8192,
+          "modulePaths": [
+            "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe",
+            "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+            "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+            "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+            "C:\\WINDOWS\\System32\\SHELL32.dll",
+            "C:\\WINDOWS\\System32\\msvcp_win.dll",
+            "C:\\WINDOWS\\System32\\ucrtbase.dll",
+            "C:\\WINDOWS\\System32\\USER32.dll",
+            "C:\\WINDOWS\\System32\\win32u.dll",
+            "C:\\WINDOWS\\System32\\GDI32.dll",
+            "C:\\WINDOWS\\System32\\gdi32full.dll",
+            "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+            "C:\\WINDOWS\\System32\\msvcrt.dll",
+            "C:\\WINDOWS\\System32\\sechost.dll",
+            "C:\\WINDOWS\\System32\\RPCRT4.dll",
+            "C:\\WINDOWS\\System32\\IMM32.DLL",
+            "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+            "C:\\WINDOWS\\System32\\ole32.dll",
+            "C:\\WINDOWS\\System32\\combase.dll",
+            "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+            "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+            "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+            "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+            "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+            "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+            "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+            "C:\\WINDOWS\\system32\\uxtheme.dll",
+            "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Evidence.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+            "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+            "C:\\WINDOWS\\System32\\SHCORE.dll",
+            "C:\\WINDOWS\\System32\\shlwapi.dll",
+            "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+            "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+            "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+            "C:\\WINDOWS\\System32\\clbcatq.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+            "C:\\WINDOWS\\System32\\MSCTF.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+            "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+            "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+            "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.9818_none_3e071914e3359bdd\\Comctl32.dll",
+            "C:\\WINDOWS\\SYSTEM32\\d2d1.dll",
+            "C:\\WINDOWS\\SYSTEM32\\WTSAPI32.dll",
+            "C:\\WINDOWS\\System32\\CRYPT32.dll",
+            "C:\\WINDOWS\\SYSTEM32\\WINSTA.dll",
+            "C:\\WINDOWS\\SYSTEM32\\dxgi.dll",
+            "C:\\WINDOWS\\SYSTEM32\\powrprof.dll",
+            "C:\\WINDOWS\\SYSTEM32\\UMPDC.dll",
+            "C:\\WINDOWS\\SYSTEM32\\dxcore.dll",
+            "C:\\WINDOWS\\SYSTEM32\\directxdatabasehelper.dll",
+            "C:\\WINDOWS\\SYSTEM32\\cfgmgr32.dll",
+            "C:\\Windows\\System32\\twinapi.appcore.dll",
+            "C:\\Windows\\System32\\WinTypes.dll",
+            "C:\\WINDOWS\\System32\\netprofm.dll",
+            "C:\\WINDOWS\\SYSTEM32\\CRYPTBASE.dll",
+            "C:\\WINDOWS\\SYSTEM32\\DPAPI.dll",
+            "C:\\WINDOWS\\SYSTEM32\\WININET.dll",
+            "C:\\WINDOWS\\SYSTEM32\\iertutil.dll",
+            "C:\\WINDOWS\\SYSTEM32\\srvcli.dll",
+            "C:\\WINDOWS\\SYSTEM32\\netutils.dll",
+            "C:\\WINDOWS\\System32\\npmproxy.dll",
+            "C:\\WINDOWS\\System32\\Normaliz.dll",
+            "C:\\WINDOWS\\SYSTEM32\\webservices.dll",
+            "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.26100.9974_none_6ef868b23dc24782\\gdiplus.dll",
+            "C:\\WINDOWS\\SYSTEM32\\DWrite.dll",
+            "C:\\WINDOWS\\System32\\WS2_32.dll",
+            "C:\\WINDOWS\\SYSTEM32\\davclnt.dll",
+            "C:\\WINDOWS\\SYSTEM32\\ondemandconnroutehelper.dll",
+            "C:\\WINDOWS\\SYSTEM32\\d3d11.dll",
+            "C:\\WINDOWS\\SYSTEM32\\WINHTTP.dll",
+            "C:\\WINDOWS\\system32\\mswsock.dll",
+            "C:\\WINDOWS\\SYSTEM32\\apphelp.dll",
+            "C:\\WINDOWS\\SYSTEM32\\IPHLPAPI.DLL",
+            "C:\\WINDOWS\\SYSTEM32\\WINNSI.DLL",
+            "C:\\WINDOWS\\System32\\NSI.dll",
+            "C:\\WINDOWS\\SYSTEM32\\MSASN1.dll",
+            "C:\\WINDOWS\\System32\\WINTRUST.dll",
+            "C:\\WINDOWS\\system32\\rsaenh.dll",
+            "C:\\WINDOWS\\SYSTEM32\\D3DSCache.dll",
+            "C:\\WINDOWS\\SYSTEM32\\USERENV.dll",
+            "C:\\WINDOWS\\SYSTEM32\\urlmon.dll",
+            "C:\\Windows\\System32\\Windows.UI.dll",
+            "C:\\Windows\\System32\\Windows.UI.Immersive.dll",
+            "C:\\WINDOWS\\SYSTEM32\\DNSAPI.dll",
+            "C:\\WINDOWS\\SYSTEM32\\DSPARSE.dll",
+            "C:\\Windows\\System32\\rasadhlp.dll",
+            "C:\\WINDOWS\\System32\\fwpuclnt.dll",
+            "C:\\WINDOWS\\SYSTEM32\\MSVCR100.dll",
+            "C:\\WINDOWS\\system32\\schannel.DLL",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\expsrv.dll",
+            "C:\\WINDOWS\\SYSTEM32\\srpapi.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+            "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc6.DLL",
+            "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc.DLL",
+            "C:\\WINDOWS\\SYSTEM32\\ncrypt.dll",
+            "C:\\WINDOWS\\SYSTEM32\\NTASN1.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+            "C:\\WINDOWS\\system32\\ncryptsslp.dll",
+            "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+            "C:\\Windows\\System32\\cryptnet.dll",
+            "C:\\WINDOWS\\SYSTEM32\\webio.dll",
+            "C:\\WINDOWS\\System32\\psapi.dll",
+            "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+          ],
+          "identities": [
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 859552,
+              "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "000000000000000000340000003483B9",
+              "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+              "fileVersion": "14.50.35731.0",
+              "productVersion": "14.50.35731.0",
+              "fileVersionNumber": "14.50.35731.0",
+              "productName": "Microsoft® Visual Studio®",
+              "length": 57632,
+              "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "00000000000000000005000000472C32",
+              "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+              "fileVersion": "14.50.35731.0",
+              "productVersion": "14.50.35731.0",
+              "fileVersionNumber": "14.50.35731.0",
+              "productName": "Microsoft® Visual Studio®",
+              "length": 134040,
+              "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "00000000000000000005000000472C2F",
+              "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+              "fileVersion": "14.50.35731.0",
+              "productVersion": "14.50.35731.0",
+              "fileVersionNumber": "14.50.35731.0",
+              "productName": "Microsoft® Visual Studio®",
+              "length": 564000,
+              "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "00000000000000000005000000472C23",
+              "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 476952,
+              "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000001100000034C6E3",
+              "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+              "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+              "fileVersion": "16.0.20527.20016",
+              "productVersion": "16.0.20527.20016",
+              "fileVersionNumber": "16.0.20527.20016",
+              "productName": "Microsoft Office",
+              "length": 1457968,
+              "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000003000000033FF11",
+              "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+              "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 2682648,
+              "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000004B00000034088D",
+              "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 10117912,
+              "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002C00000034EB66",
+              "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+              "fileVersion": "14.50.35719.0",
+              "productVersion": "14.50.35719.0",
+              "fileVersionNumber": "14.50.35719.0",
+              "productName": "Microsoft® Visual Studio®",
+              "length": 59544,
+              "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000000A000000472F5B",
+              "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 18620696,
+              "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000003600000034ED13",
+              "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 20470120,
+              "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002700000034EE04",
+              "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 1185560,
+              "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002000000034EE0E",
+              "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 28963688,
+              "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002100000034EF24",
+              "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 40091928,
+              "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002700000034E669",
+              "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\WINDOWS\\SYSTEM32\\MSVCR100.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcr100.dll",
+              "fileVersion": "10.00.40219.325",
+              "productVersion": "10.00.40219.325",
+              "fileVersionNumber": "10.0.40219.325",
+              "productName": "Microsoft® Visual Studio® 2010",
+              "length": 839952,
+              "sha256": "87acb0f4d1ce3dc0a6d2e1649663e115c957c0f7e0300592d6528baf9c021b61",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "000000000000000000020000003F00B1",
+              "lastWriteUtc": "2026-03-24T17:02:44.7116139Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\expsrv.dll",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\EXPSRV.DLL",
+              "fileVersion": "7.1.1158",
+              "productVersion": "7.1",
+              "fileVersionNumber": "7.1.0.1158",
+              "productName": "Microsoft Visual Basic for Applications",
+              "length": 561984,
+              "sha256": "3d752559d0d96cbcc882912986ab3267d0e923641020ebbd43757be3b9401abd",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "000000000000000000140000004356D9",
+              "lastWriteUtc": "2026-07-29T19:12:27.2817394Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\1033\\ACEWSTR.DLL",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 893352,
+              "sha256": "79893a8f3b81d6c7170ab6a0cd1945875d8d1882d8c1e668b06833c7a3a6e533",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000007D000000352BA6",
+              "lastWriteUtc": "2026-11-13T09:23:00.4826023Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEES.DLL",
+              "fileVersion": "16.0.20527.20196",
+              "productVersion": "16.0.20527.20196",
+              "fileVersionNumber": "16.0.20527.20196",
+              "productName": "Microsoft Office",
+              "length": 929752,
+              "sha256": "206bca66787e8fd9daab80de845bab56fde3a052ce50152d6b06550c28c96ace",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "0000000000000000002200000034DE52",
+              "lastWriteUtc": "2026-11-13T09:22:53.4800835Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            },
+            {
+              "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+              "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\VBAJET32.DLL",
+              "fileVersion": "7.1.1158",
+              "productVersion": "7.1",
+              "fileVersionNumber": "7.0.1.1158",
+              "productName": "Microsoft Visual Basic for Applications",
+              "length": 32664,
+              "sha256": "dd3f7cc42a6d860e30fb8850beccd76e95bdc4f23f7ba661295bc1bacf9887c4",
+              "volumeSerial": "7E825A368259F35F",
+              "fileId": "00000000000000000017000000439A9D",
+              "lastWriteUtc": "2026-07-29T19:12:37.2535062Z",
+              "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+            }
+          ],
+          "deliberate": false,
+          "rounds": 2,
+          "changedDuringCollection": [
+            "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+          ],
+          "seq": 21,
+          "programPath": "end"
+        },
+        {
+          "event": "modules",
+          "label": "deliberate-truncation",
+          "complete": false,
+          "bytesNeeded": 1144,
+          "bytesProvided": 8,
+          "error": "enumeration truncated: buffer smaller than module list",
+          "modulePaths": [
+            "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-114926\\worker\\CalcDb.Oracle.Worker.exe"
+          ],
+          "identities": [],
+          "deliberate": true,
+          "rounds": 1,
+          "changedDuringCollection": [],
+          "seq": 22,
+          "programPath": "end"
+        }
+      ],
+      "artifacts": [],
+      "execution": "ReturnedSuccess",
+      "captureErrors": []
+    }
+  },
+  "artifacts": []
+}

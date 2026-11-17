@@ -1,0 +1,690 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-ado-misc/async-open-connect-polled",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-ASYNC",
+    "ADO-CONN",
+    "D-CALL-1"
+  ],
+  "description": "ADO-ASYNC, repeat: Connection.Open(Missing, Missing, Missing, adAsyncConnect) on an existing ACE file (two connections in turn) and on an absent file; State right after return and after pauses of 50, 500 and 2000 ms, Errors after each. Asks whether the early State 2 repeats and when it settles.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-async-a.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c1"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c1Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c1Pr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c1Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c1Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-async-a.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c1Ds"
+    },
+    {
+      "op": "release",
+      "target": "c1Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 500
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 2000
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c1Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c1Errs",
+      "bind": "c1Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c1Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c1Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c1Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c1Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c1Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c1Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c1Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c1Ec",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c1Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Pr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c2Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-async-a.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2Ds"
+    },
+    {
+      "op": "release",
+      "target": "c2Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 500
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 2000
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c2Errs",
+      "bind": "c2Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c2Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c2Ec",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "c3"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c3Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c3Pr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "c3Ds"
+    },
+    {
+      "op": "invoke",
+      "target": "c3Ds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-async-absent.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c3Ds"
+    },
+    {
+      "op": "release",
+      "target": "c3Pr"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 500
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "pause",
+      "ms": 2000
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c3Errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "c3Errs",
+      "bind": "c3Err",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "c3Err",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c3Errs"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c3Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c3Ec",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c3Ec"
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

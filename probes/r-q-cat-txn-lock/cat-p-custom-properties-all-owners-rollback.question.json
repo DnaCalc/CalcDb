@@ -1,0 +1,1408 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-cat-txn-lock/cat-p-custom-properties-all-owners-rollback",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-P"
+  ],
+  "description": "CAT-P, two repairs. (1) On a fresh database with the TableDefs, Fields, Indexes and QueryDefs collections refreshed (the earlier probes reused a stale collection), a custom Long property is appended to the Database, the TableDef, a Field, an Index and a QueryDef; the database is closed, reopened read-only and each property is read by name (Type, Value). (2) Reopened read/write: BeginTrans, the Database property is set to 999, a second property is appended, both are read, then Rollback; the same handle is read after Properties.Refresh and a second Workspace's Database is read. Asks whether property changes roll back, and what the held handle shows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-props-all.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(10), M MEMO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IXK ON T (K)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, M) VALUES (1, 'k', 'memo')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QP"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, K FROM T;"
+        }
+      ],
+      "bind": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdf_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdf_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdf"
+    },
+    {
+      "op": "release",
+      "target": "tdf_c"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 123456
+        }
+      ],
+      "bind": "pdb"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pdbc"
+    },
+    {
+      "op": "invoke",
+      "target": "pdbc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "pdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pdb"
+    },
+    {
+      "op": "release",
+      "target": "pdbc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTd"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ptd"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ptdc"
+    },
+    {
+      "op": "invoke",
+      "target": "ptdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ptd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ptd"
+    },
+    {
+      "op": "release",
+      "target": "ptdc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "fk"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PFk"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "pfk"
+    },
+    {
+      "op": "invoke",
+      "target": "fk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pfkc"
+    },
+    {
+      "op": "invoke",
+      "target": "pfkc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "pfk"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pfk"
+    },
+    {
+      "op": "release",
+      "target": "pfkc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdf",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixs"
+    },
+    {
+      "op": "invoke",
+      "target": "ixs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ixs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IXK"
+        }
+      ],
+      "bind": "ixk"
+    },
+    {
+      "op": "invoke",
+      "target": "ixk",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PIx"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "pix"
+    },
+    {
+      "op": "invoke",
+      "target": "ixk",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pixc"
+    },
+    {
+      "op": "invoke",
+      "target": "pixc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "pix"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pix"
+    },
+    {
+      "op": "release",
+      "target": "pixc"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PQp"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "pqp"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pqpc"
+    },
+    {
+      "op": "invoke",
+      "target": "pqpc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "pqp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pqp"
+    },
+    {
+      "op": "release",
+      "target": "pqpc"
+    },
+    {
+      "op": "release",
+      "target": "ixk"
+    },
+    {
+      "op": "release",
+      "target": "ixs"
+    },
+    {
+      "op": "release",
+      "target": "fk"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "release",
+      "target": "tdf"
+    },
+    {
+      "op": "release",
+      "target": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-props-all.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_d"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_d",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        }
+      ],
+      "bind": "rpi_d"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_d",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_d",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_d"
+    },
+    {
+      "op": "release",
+      "target": "rp_d"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "t2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t2_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "t2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "t2"
+    },
+    {
+      "op": "release",
+      "target": "t2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_t"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_t",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTd"
+        }
+      ],
+      "bind": "rpi_t"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_t",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_t",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_t"
+    },
+    {
+      "op": "release",
+      "target": "rp_t"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl2"
+    },
+    {
+      "op": "invoke",
+      "target": "fl2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "k2"
+    },
+    {
+      "op": "invoke",
+      "target": "k2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_f"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PFk"
+        }
+      ],
+      "bind": "rpi_f"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_f",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_f",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_f"
+    },
+    {
+      "op": "release",
+      "target": "rp_f"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ix2"
+    },
+    {
+      "op": "invoke",
+      "target": "ix2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IXK"
+        }
+      ],
+      "bind": "i2"
+    },
+    {
+      "op": "invoke",
+      "target": "i2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_i"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_i",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PIx"
+        }
+      ],
+      "bind": "rpi_i"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_i",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_i",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_i"
+    },
+    {
+      "op": "release",
+      "target": "rp_i"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "q2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "q2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QP"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "release",
+      "target": "q2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_q"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_q",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PQp"
+        }
+      ],
+      "bind": "rpi_q"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_q",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_q",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_q"
+    },
+    {
+      "op": "release",
+      "target": "rp_q"
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "release",
+      "target": "i2"
+    },
+    {
+      "op": "release",
+      "target": "ix2"
+    },
+    {
+      "op": "release",
+      "target": "k2"
+    },
+    {
+      "op": "release",
+      "target": "fl2"
+    },
+    {
+      "op": "release",
+      "target": "t2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-props-all.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db3"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pc3"
+    },
+    {
+      "op": "invoke",
+      "target": "pc3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        }
+      ],
+      "bind": "pi3"
+    },
+    {
+      "op": "invoke",
+      "target": "pi3",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 999
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pi3"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTx"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "ptx"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ptxc"
+    },
+    {
+      "op": "invoke",
+      "target": "ptxc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ptx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ptx"
+    },
+    {
+      "op": "release",
+      "target": "ptxc"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_in1"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_in1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        }
+      ],
+      "bind": "rpi_in1"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_in1"
+    },
+    {
+      "op": "release",
+      "target": "rp_in1"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_in2"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_in2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTx"
+        }
+      ],
+      "bind": "rpi_in2"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_in2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_in2"
+    },
+    {
+      "op": "release",
+      "target": "rp_in2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pr",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_af1"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_af1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        }
+      ],
+      "bind": "rpi_af1"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_af1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_af1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_af1"
+    },
+    {
+      "op": "release",
+      "target": "rp_af1"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_af2"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_af2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTx"
+        }
+      ],
+      "bind": "rpi_af2"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_af2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_af2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_af2"
+    },
+    {
+      "op": "release",
+      "target": "rp_af2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "rqp"
+        },
+        {
+          "type": "bstr",
+          "text": "Admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "w2"
+    },
+    {
+      "op": "invoke",
+      "target": "w2",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-props-all.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db4"
+    },
+    {
+      "op": "invoke",
+      "target": "db4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_fr1"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_fr1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PDb"
+        }
+      ],
+      "bind": "rpi_fr1"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_fr1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_fr1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_fr1"
+    },
+    {
+      "op": "release",
+      "target": "rp_fr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rp_fr2"
+    },
+    {
+      "op": "invoke",
+      "target": "rp_fr2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PTx"
+        }
+      ],
+      "bind": "rpi_fr2"
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_fr2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rpi_fr2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rpi_fr2"
+    },
+    {
+      "op": "release",
+      "target": "rp_fr2"
+    },
+    {
+      "op": "invoke",
+      "target": "db4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

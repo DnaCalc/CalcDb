@@ -1,0 +1,123 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-cursor-dao/boot-systemdb-direct-first",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-BOOT"
+  ],
+  "description": "DAO-BOOT, variant: order of the SystemDB reads. In a new process, before any session exists: DBEngine.SystemDB (direct getter), Workspaces.Count, SystemDB direct again, then Properties.Item('SystemDB').Value, IniPath and DefaultType.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "SystemDB",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "SystemDB",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "eprops"
+    },
+    {
+      "op": "invoke",
+      "target": "eprops",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SystemDB"
+        }
+      ],
+      "bind": "sp"
+    },
+    {
+      "op": "invoke",
+      "target": "sp",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sp"
+    },
+    {
+      "op": "release",
+      "target": "eprops"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "IniPath",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "DefaultType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

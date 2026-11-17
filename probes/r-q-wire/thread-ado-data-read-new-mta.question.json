@@ -1,0 +1,283 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q-wire/thread-ado-data-read-new-mta",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-THREAD",
+    "MTA-CREATE",
+    "R-ADO-1"
+  ],
+  "description": "ACT-THREAD/MTA-CREATE, ADO data path: a scratch database is made with DAO on the main STA; then on a new MTA thread an ADODB.Connection with the ACE provider opens it, executes SELECT COUNT(*) and a row read, and closes. Asks whether a real read and error channel behave alike in both apartments.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-thread-ado-read-new-mta.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, S TEXT(50))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, S) VALUES (1, 'one')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, S) VALUES (2, 'two')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, S) VALUES (3, 'three')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeModules",
+      "label": "before-ado"
+    },
+    {
+      "op": "onThread",
+      "apartment": "mta",
+      "body": [
+        {
+          "op": "create",
+          "progId": "ADODB.Connection",
+          "bind": "cn"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Provider",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Microsoft.ACE.OLEDB.12.0"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cnp",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Data Source"
+            }
+          ],
+          "bind": "cds"
+        },
+        {
+          "op": "invoke",
+          "target": "cds",
+          "member": "Value",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-thread-ado-read-new-mta.accdb"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cds"
+        },
+        {
+          "op": "release",
+          "target": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Open",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS N, MAX(ID) AS MX FROM T"
+            }
+          ],
+          "bind": "r"
+        },
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "release",
+          "target": "r"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELEC bad"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cerrs"
+        },
+        {
+          "op": "invoke",
+          "target": "cerrs",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "cerrs"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "cn"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
