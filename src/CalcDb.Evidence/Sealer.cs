@@ -29,6 +29,7 @@ public static class Sealer
             participants.Add(new ParticipantResult(peer.Participant, peerExecution, peer, peerSha));
             execution = Worse(execution, peerExecution);
         }
+        problems.AddRange(KillProvenance(attemptDir, owners));
         var manifest = new CaptureManifest
         {
             AttemptId = attempt.AttemptId,
@@ -51,6 +52,36 @@ public static class Sealer
             throw new InvalidOperationException($"Attempt {attempt.AttemptId} is already sealed.");
         }
         return manifest;
+    }
+
+    /// <summary>
+    /// R-CRASH-1 / OR-JOB: name who ended a killed participant, from the kill events in the other participants'
+    /// returned captures. A killed worker cannot say it was killed, and its exit code alone does not tell a
+    /// KillParticipant from a TerminateSelf, so the seal states it from the killer's record.
+    /// </summary>
+    private static IEnumerable<string> KillProvenance(string attemptDir, IReadOnlyList<OwnerReport> owners)
+    {
+        foreach (OwnerReport owner in owners)
+        {
+            string file = Path.Combine(attemptDir, owner.Participant == "a" ? "capture.json" : $"capture.{owner.Participant}.json");
+            if (!File.Exists(file))
+            {
+                continue;
+            }
+            Capture capture;
+            try
+            {
+                capture = EvidenceJson.Read<Capture>(file);
+            }
+            catch (Exception ex) when (ex is EvidenceFormatException or IOException or System.Text.Json.JsonException)
+            {
+                continue;
+            }
+            foreach (SyncEvent kill in capture.Events.OfType<SyncEvent>().Where(e => e.Kind == "kill"))
+            {
+                yield return $"participant {owner.Participant} ran KillParticipant: {kill.Name}";
+            }
+        }
     }
 
     private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.Terminated, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];

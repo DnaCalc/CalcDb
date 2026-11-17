@@ -36,6 +36,21 @@ raw lane, in ACCDB and MDB, TEXT and MEMO, by DAO put, SQL literal, parameter an
 The index is an ACE table too, so it lost the same values. Its display text escapes U+FEFF; the exact bytes were
 always kept in `ResultBytes`.
 
+### Erratum: twelve retention notes name the wrong kill mechanism
+The \`retentionNote\` of these records says participant a "ends itself with TerminateSelf". It did not. In every one,
+participant b ended a with \`KillParticipant\` (TerminateProcess, exit 0xDEAD), as the card source shows. The captures
+are correct: b's capture holds the kill event. The notes are an agent's label and are left as retained, with this
+correction:
+- \`r-fmt-2b/kill-after-close-fixed-update\`, \`r-fmt-2b/kill-after-close-memo-many-pages\`;
+- \`r-fix-fmt-sort/fmt2b-kill-after-close-fixed-update\`;
+- \`r-q-cat-txn-lock\`: \`crash-new-kill-mid-create-5ms\`, \`-40ms\`, \`-150ms\`,
+  \`crash-txn-kill-between-execute-and-commit\`, \`txn-flush-implicit-db-close-then-kill\`,
+  \`txn-flush-implicit-idle-refresh-then-kill\`, \`txn-flush-implicit-kill-after-500ms-return\`,
+  \`txn-flush-implicit-kill-after-750ms-return\`, \`write-fail-kill-lock-holder\`.
+
+From now on the sealer adds the kill event of the killing participant to the manifest's problems, so a seal states who
+ended a worker, and no note has to.
+
 ### The night in numbers
 2,281 retained records in 45 folders, from six waves of designed questions in the book's order (II-16 §25,
 F-223), all through the raw IDispatch lane. Counts per folder are in the register.

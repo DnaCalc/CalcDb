@@ -104,7 +104,7 @@ public sealed class RWorkerOps : ICard
             });
 
         yield return new Probe(Card, "suspend-writer-mid-insert", ["R-LOCK-3", "READ-PATH", "R-CRASH-1", "CRASH-CONTROL"],
-            "Participant a creates an ACCDB with table T (ID LONG primary key, M MEMO), signals, then runs INSERT INTO T SELECT for 2048 rows with 2000-character memos. Participant b, 30 ms after a's signal, suspends a; while a is suspended it observes the database and lock files, tries a DAO shared read-only open of the database and reads COUNT(*), then resumes a. a reports its RecordsAffected and the final count. Asks what another process sees of a database and its lock file while a writer is frozen inside a statement.",
+            "Participant a creates an ACCDB with table T (ID LONG primary key, M MEMO), closes and reopens it shared, signals, then runs INSERT INTO T SELECT for 2048 rows with 2000-character memos. Participant b, 30 ms after a's signal, suspends a; while a is suspended it observes the database and lock files, tries a DAO shared read-only open of the database and reads COUNT(*), then resumes a. a reports its RecordsAffected and the final count. Asks what another process sees of a database and its lock file while a writer is frozen inside a statement.",
             p =>
             {
                 p.EngineLite().CallBind("db", "eng", "CreateDatabase", A.Out("scratch-suspend.accdb"), A.Str(Dao.LangGeneral), A.I4(Dao.Version120))
@@ -113,7 +113,11 @@ public sealed class RWorkerOps : ICard
                 {
                     p.Call("db", "Execute", A.Str($"INSERT INTO S VALUES ({i})"));
                 }
+                // The Database CreateDatabase returns holds the file exclusively (a peer's open answers 3045), so a
+                // reopens it shared before the reader starts.
                 p.Call("db", "Execute", A.Str("CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, M MEMO)"))
+                    .Call("db", "Close").Release("db")
+                    .CallBind("db", "eng", "OpenDatabase", A.Out("scratch-suspend.accdb"), A.Bool(false), A.Bool(false))
                     .Signal("ready").Await("b-opened", 30000)
                     .Call("db", "Execute", A.Str("INSERT INTO T (ID, M) SELECT a.n * 256 + b.n * 16 + c.n, String(2000, 'x') FROM S AS a, S AS b, S AS c WHERE a.n < 8"))
                     .Signal("inserted").Await("b-done", 60000)
