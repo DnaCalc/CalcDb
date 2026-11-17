@@ -223,6 +223,9 @@ internal sealed unsafe class Run : IDisposable
                 case WriteFileBytes wf:
                     _events.Add(_native.WriteBytes(++_seq, path, wf));
                     break;
+                case KillParticipant kill:
+                    _events.Add(DoKill(kill, path));
+                    break;
                 case QueryInterfaces qi:
                     DoQueryInterfaces(qi, path);
                     break;
@@ -269,6 +272,41 @@ internal sealed unsafe class Run : IDisposable
         Trace(path, "TerminateProcess");
         Program.WriteCapture(_attemptDir, _attempt, _participant == "a" ? "" : "." + _participant, capture);
         _ = Native.TerminateProcess(Native.GetCurrentProcess(), (uint)exitCode);
+    }
+
+    /// <summary>Kill another participant of this attempt only after proving it is this attempt's own worker.</summary>
+    private SyncEvent DoKill(KillParticipant kill, string path)
+    {
+        Thread.Sleep(kill.DelayMs);
+        string receipt = Path.Combine(_attemptDir, "receipts", kill.Name == "a" ? "started.json" : $"started.{kill.Name}.json");
+        string outcome;
+        try
+        {
+            StartedReceipt started = EvidenceJson.Read<StartedReceipt>(receipt);
+            using var process = System.Diagnostics.Process.GetProcessById(started.ProcessId);
+            bool ours = started.AttemptId == _attempt.AttemptId
+                && process.ProcessName.Equals("CalcDb.Oracle.Worker", StringComparison.OrdinalIgnoreCase)
+                && process.StartTime.ToUniversalTime() >= _attempt.PreparedUtc.UtcDateTime.AddSeconds(-1);
+            if (!ours)
+            {
+                outcome = $"refused: process {started.ProcessId} is not this attempt's worker";
+            }
+            else if (process.HasExited)
+            {
+                outcome = $"process {started.ProcessId} had already exited (code {process.ExitCode})";
+            }
+            else
+            {
+                bool terminated = Native.TerminateProcess(process.Handle, 0xDEAD);
+                process.WaitForExit();
+                outcome = $"TerminateProcess({started.ProcessId}) {(terminated ? "succeeded" : "failed")}; exit observed with code 0x{process.ExitCode:X}";
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or EvidenceFormatException)
+        {
+            outcome = "kill not performed: " + ex.GetType().Name + ": " + ex.Message;
+        }
+        return new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "kill", Name = $"{kill.Name} after {kill.DelayMs} ms: {outcome}", AtUtc = DateTimeOffset.UtcNow };
     }
 
     private void DoQueryInterfaces(QueryInterfaces qi, string path)

@@ -152,6 +152,7 @@ public enum DispatchKind
 [JsonDerivedType(typeof(WriteFileBytes), "writeFile")]
 [JsonDerivedType(typeof(OnThread), "onThread")]
 [JsonDerivedType(typeof(QueryInterfaces), "queryInterfaces")]
+[JsonDerivedType(typeof(KillParticipant), "killParticipant")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -377,6 +378,16 @@ public sealed record OnThread(string Apartment, IReadOnlyList<Operation> Body) :
             op.Validate(inputRoles);
         }
     }
+}
+
+/// <summary>
+/// R-CRASH-1 mid-call kill: wait <see cref="DelayMs"/>, then TerminateProcess the named participant of this
+/// attempt (found through its started receipt, verified to be this attempt's worker process started after the
+/// attempt was prepared) and wait for its exit. The killed participant seals Uncertain.
+/// </summary>
+public sealed record KillParticipant(string Name, int DelayMs) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("killParticipant").Text("name", Name).Int32("delayMs", DelayMs);
 }
 
 /// <summary>QueryInterface a bound object for each IID (braced GUIDs) and record which succeed.</summary>

@@ -156,6 +156,9 @@ public sealed class P
         return Add(new OnThread(apartment, inner.Ops));
     }
 
+    /// <summary>Kill another participant of this attempt after a delay (R-CRASH-1 mid-call kill).</summary>
+    public P KillParticipant(string name, int delayMs) => Add(new KillParticipant(name, delayMs));
+
     /// <summary>QueryInterface a bound object for each IID and record which succeed.</summary>
     public P QueryInterfaces(string target, params string[] iids) => Add(new QueryInterfaces(target, iids));
 

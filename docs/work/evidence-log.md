@@ -62,6 +62,17 @@ images.
 - Deferred (the card's main route): recording ACE writes and flushes, offline reconstruction, power-loss and
   torn-write models, Access-first openers, and the precise classification.
 
+**Mid-call kills** (`evidence/r-crash-1-midcall`, 12 records). Participant b kills writer a with
+TerminateProcess 20, 100 or 400 ms after a signals the start of `INSERT INTO T SELECT … FROM T` (2,048 rows,
+2,000-character memos), with the implicit transaction of Execute or inside BeginTrans/CommitTrans. a always
+seals `Uncertain`; b records whether a had signalled that the call returned. ACCDB and MDB alike:
+- Implicit Execute that **had returned** before the kill (100 and 400 ms): the next opener reads 2,048 rows, the
+  original count. In these probes, the rows of a returned non-transactional Execute were not on disk when
+  the process died, which bears on TXN-FLUSH-BEHIND. The length of the window is not measured here.
+- Explicit transaction whose CommitTrans had returned (100 and 400 ms): the next opener reads 4,096 rows.
+- Killed before the call returned (20 ms), in either scope: the next opener reads 2,048 rows.
+- The next opener's open succeeded in every case.
+
 ### R-ACT-1 ACT-THREAD, SAME-STA and MTA-CREATE without a message pump — 6 records
 `evidence/r-act-1-thread`:
 - DAO.DBEngine.120 and its Database, created on the main STA, answer `E_NOINTERFACE` for IClientSecurity,
