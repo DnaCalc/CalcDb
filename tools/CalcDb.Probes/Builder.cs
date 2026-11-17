@@ -38,6 +38,12 @@ public static class A
 
     public static Arg Missing => new MissingArg();
 
+    /// <summary>
+    /// By reference (R-STRING-1 STR-BYREF, R-ERR-1 ERR-BIND): <paramref name="typed"/> passes VT_BYREF of the inner type
+    /// (scalars and BSTR), otherwise VT_BYREF|VT_VARIANT. The referenced value after the call is captured as its writeback.
+    /// </summary>
+    public static Arg ByRef(Arg inner, bool typed = false) => new ByRefArg(inner, typed);
+
     /// <summary>A BSTR with exactly these payload bytes (odd counts, embedded nulls, lone surrogates).</summary>
     public static Arg BstrBytes(params byte[] bytes) => new BstrBytesArg(Convert.ToHexStringLower(bytes));
 
@@ -158,6 +164,44 @@ public sealed class P
 
     /// <summary>Kill another participant of this attempt after a delay (R-CRASH-1 mid-call kill).</summary>
     public P KillParticipant(string name, int delayMs) => Add(new KillParticipant(name, delayMs));
+
+    /// <summary>
+    /// Suspend every thread of another participant after a delay, wherever it is, even inside an ACE call (R-LOCK-3
+    /// READ-PATH, R-CRASH-1 CRASH-CONTROL). It stays suspended until <see cref="ResumeParticipant"/> or this program ends.
+    /// </summary>
+    public P SuspendParticipant(string name, int delayMs) => Add(new SuspendParticipant(name, delayMs));
+
+    public P ResumeParticipant(string name) => Add(new ResumeParticipant(name));
+
+    /// <summary>Method call with named arguments after the positional ones (R-ERR-1 ERR-BIND).</summary>
+    public P CallNamed(string? bind, string target, string member, Arg[] positional, params (string Name, Arg Value)[] named) =>
+        Add(new Invoke(target, member, DispatchKind.Method, positional) { Bind = bind, Named = [.. named.Select(n => new NamedArg(n.Name, n.Value))] });
+
+    /// <summary>
+    /// Enumerate through _NewEnum and IEnumVARIANT (R-DAO-1 DAO-ENUM): each Next(1) recorded, an object item bound to
+    /// <paramref name="bind"/> while the body runs; afterwards Next past the end, Reset, Next, Skip(1) and Clone.
+    /// </summary>
+    public P Enumerate(string collection, string bind, int max, Action<P> body)
+    {
+        var inner = new P();
+        body(inner);
+        return Add(new Enumerate(collection, bind, max, inner.Ops));
+    }
+
+    /// <summary>
+    /// Raw activation (R-ACT-1): route "cocreate" or "classobject", CLSCTX flags, requested IID; with
+    /// <paramref name="aggregate"/> the worker passes a controlled outer IUnknown that records what it is asked for.
+    /// </summary>
+    public P Activate(string bind, string cls, string route, uint clsCtx, string iid, bool aggregate = false) =>
+        Add(new Activate(cls, route, clsCtx, iid, bind) { Aggregate = aggregate });
+
+    /// <summary>ITypeInfo::CreateInstance of a coclass found in a bound object's type library (R-ACT-1 ACT-TYPECREATE).</summary>
+    public P TypeCreate(string bind, string target, string clsid, string iid) => Add(new TypeCreate(target, clsid, iid, bind));
+
+    /// <summary>Connect the worker's recording sink to a bound object's connection point (R-ADO-1 ADO-EVENT).</summary>
+    public P Advise(string target, string eventIid, string name) => Add(new Advise(target, eventIid, name));
+
+    public P Unadvise(string name) => Add(new Unadvise(name));
 
     /// <summary>QueryInterface a bound object for each IID and record which succeed.</summary>
     public P QueryInterfaces(string target, params string[] iids) => Add(new QueryInterfaces(target, iids));

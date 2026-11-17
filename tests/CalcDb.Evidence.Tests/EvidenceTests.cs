@@ -32,6 +32,47 @@ public class QuestionKeyTests
     }
 
     [Fact]
+    public void Named_arguments_change_the_key_only_when_present()
+    {
+        Question plain = With(new I4Arg(1));
+        Question emptyNamed = plain with { Program = [plain.Program[0], new Invoke("eng", "M", DispatchKind.Method, [new I4Arg(1)]) { Named = [] }] };
+        Question named = plain with { Program = [plain.Program[0], new Invoke("eng", "M", DispatchKind.Method, [new I4Arg(1)]) { Named = [new NamedArg("Type", new I4Arg(4))] }] };
+        Assert.Equal(plain.Key(), emptyNamed.Key());
+        Assert.NotEqual(plain.Key(), named.Key());
+    }
+
+    [Fact]
+    public void By_reference_differs_from_by_value_and_typed_from_variant()
+    {
+        string byValue = With(new I4Arg(1)).Key();
+        string variant = With(new ByRefArg(new I4Arg(1), false)).Key();
+        string typed = With(new ByRefArg(new I4Arg(1), true)).Key();
+        Assert.Equal(3, new[] { byValue, variant, typed }.Distinct().Count());
+    }
+
+    [Fact]
+    public void New_operations_round_trip_through_json_with_the_same_key()
+    {
+        Question q = With() with
+        {
+            Program =
+            [
+                new CreateObject("DAO.DBEngine.120", "eng"),
+                new Enumerate("eng", "w", 4, [new Invoke("w", "Name", DispatchKind.PropertyGet, [])]),
+                new Activate("DAO.DBEngine.120", "classobject", 1, "{00020400-0000-0000-C000-000000000046}", "e2") { Aggregate = true },
+                new TypeCreate("eng", "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}", "{00020400-0000-0000-C000-000000000046}", "e3"),
+                new Advise("eng", "{00001400-0000-0010-8000-00AA006D2EA4}", "c"),
+                new Unadvise("c"),
+                new SuspendParticipant("b", 10),
+                new ResumeParticipant("b"),
+                new Invoke("eng", "M", DispatchKind.Method, [new ByRefArg(new BstrArg("x"), true)]) { Named = [new NamedArg("N", new I4Arg(2))] },
+            ],
+        };
+        Question back = EvidenceJson.Deserialize<Question>(EvidenceJson.Serialize(q));
+        Assert.Equal(q.Key(), back.Key());
+    }
+
+    [Fact]
     public void Omitted_argument_differs_from_empty_string_and_from_no_argument()
     {
         string missing = With(new MissingArg()).Key();

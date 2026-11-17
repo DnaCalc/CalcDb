@@ -38,12 +38,34 @@ internal static class Show
                     {
                         sb.AppendLine($"{"",22}EXCEPINFO scode={x.Scode} wCode={x.WCode} source={Value(x.Source)} description={Value(x.Description)} helpFile={Value(x.HelpFile)} helpContext={x.HelpContext} deferredFill={x.DeferredFillPresent}");
                     }
+                    if (i.NamedArgNames is { } names)
+                    {
+                        sb.AppendLine($"{"",22}named {string.Join(", ", names.Select((n, k) => $"{n}=dispid {(i.NamedDispIds is { } ids && k < ids.Count ? ids[k] : 0)}"))}");
+                    }
+                    foreach (ByRefWriteback b in i.ByRefAfter ?? [])
+                    {
+                        sb.AppendLine($"{"",22}byref arg {b.Index} after the call: {Value(b.After)}");
+                    }
                     if (i.ErrorInfo is { } ei)
                     {
                         sb.AppendLine(ei.Present
                             ? $"{"",22}IErrorInfo guid={ei.Guid} source={Value(ei.Source)} description={Value(ei.Description)} helpContext={ei.HelpContext}"
                             : $"{"",22}IErrorInfo absent (GetErrorInfo {ei.GetErrorInfoHresult})");
                     }
+                    break;
+                case EnumEvent en:
+                    sb.AppendLine(en.Steps.Count == 0
+                        ? $"{en.Target}._NewEnum hr={en.NewEnumHresult} -> {Value(en.NewEnumResult)}; IEnumVARIANT {en.EnumVariantHresult}"
+                        : $"{en.Target} enum: " + string.Join("; ", en.Steps.Select(st => $"{st.Op} {st.Hresult}{(st.Fetched is { } f ? $" fetched {f}" : "")}{(st.Item is null ? "" : " -> " + Value(st.Item))}")));
+                    break;
+                case ActivationEvent ac:
+                    sb.AppendLine($"activate {ac.Route} {ac.Class} {ac.Clsid} ctx=0x{ac.ClsCtx:X} iid={ac.Iid}{(ac.Aggregate ? " aggregate" : "")}: {string.Join("; ", ac.Steps)}{(ac.OuterQueries is { Count: > 0 } q ? " | outer asked for " + string.Join(", ", q) : "")}{(ac.Object is null ? "" : " -> " + Value(ac.Object))}");
+                    break;
+                case ConnectionEvent ce:
+                    sb.AppendLine($"{ce.Op} {ce.Name} {ce.Target} {ce.EventIid}: {string.Join("; ", ce.Steps)}{(ce.Cookie is { } ck ? $" cookie {ck}" : "")}{(ce.CallsRecorded is { } calls ? $", {calls} calls recorded" : "")}");
+                    break;
+                case SinkCallEvent sc:
+                    sb.AppendLine($"event {sc.Connection} dispid {sc.DispId} flags {sc.Flags}: ({string.Join(", ", sc.Args.Select((a, k) => (sc.ByRef[k] ? "byref " : "") + Value(a)))}) thread {sc.ThreadId}");
                     break;
                 case SyncEvent s:
                     sb.AppendLine($"{s.Kind} {s.Name}{(s.WaitedMs is { } w ? $" waited {w} ms" : "")}{(s.TimedOut ? " TIMED OUT" : "")} at {s.AtUtc:HH:mm:ss.fff}");

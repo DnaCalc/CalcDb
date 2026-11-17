@@ -66,7 +66,7 @@ internal static class Program
 }
 
 /// <summary>Interprets one operation program and collects its events.</summary>
-internal sealed unsafe class Run : IDisposable
+internal sealed unsafe partial class Run : IDisposable
 {
     private readonly string _attemptDir;
     private readonly AttemptRecord _attempt;
@@ -118,7 +118,15 @@ internal sealed unsafe class Run : IDisposable
         string execution;
         try
         {
-            RunProgram(MyProgram, "");
+            try
+            {
+                RunProgram(MyProgram, "");
+            }
+            finally
+            {
+                // A participant this one suspended never stays suspended past its program.
+                ResumeAllSuspended();
+            }
             ReleaseAll();
             execution = _anyFailure ? Evidence.Execution.ReturnedFailure : Evidence.Execution.ReturnedSuccess;
         }
@@ -169,13 +177,35 @@ internal sealed unsafe class Run : IDisposable
         for (int i = 0; i < program.Count; i++)
         {
             string path = prefix + i.ToString(CultureInfo.InvariantCulture);
+            _currentPath = path;
             switch (program[i])
             {
+                case Enumerate enumerate:
+                    DoEnumerate(enumerate, path);
+                    break;
+                case Activate activate:
+                    DoActivate(activate, path);
+                    break;
+                case TypeCreate typeCreate:
+                    DoTypeCreate(typeCreate, path);
+                    break;
+                case Advise advise:
+                    DoAdvise(advise, path);
+                    break;
+                case Unadvise unadvise:
+                    DoUnadvise(unadvise, path);
+                    break;
+                case SuspendParticipant suspend:
+                    _events.Add(DoSuspend(suspend, path));
+                    break;
+                case ResumeParticipant resume:
+                    _events.Add(DoResume(resume.Name, path));
+                    break;
                 case CreateObject create:
                     DoCreate(create, path);
                     break;
                 case Invoke invoke:
-                    DoInvoke(invoke.Target, invoke.Member, invoke.Kind, invoke.Args, invoke.Bind, path);
+                    DoInvoke(invoke.Target, invoke.Member, invoke.Kind, invoke.Args, invoke.Bind, path, invoke.Named);
                     break;
                 case LoopUntil loop:
                     DoLoop(loop, path);
@@ -278,33 +308,23 @@ internal sealed unsafe class Run : IDisposable
     private SyncEvent DoKill(KillParticipant kill, string path)
     {
         Thread.Sleep(kill.DelayMs);
-        string receipt = Path.Combine(_attemptDir, "receipts", kill.Name == "a" ? "started.json" : $"started.{kill.Name}.json");
         string outcome;
-        try
+        using (System.Diagnostics.Process? process = OwnParticipant(kill.Name, out string why))
         {
-            StartedReceipt started = EvidenceJson.Read<StartedReceipt>(receipt);
-            using var process = System.Diagnostics.Process.GetProcessById(started.ProcessId);
-            bool ours = started.AttemptId == _attempt.AttemptId
-                && process.ProcessName.Equals("CalcDb.Oracle.Worker", StringComparison.OrdinalIgnoreCase)
-                && process.StartTime.ToUniversalTime() >= _attempt.PreparedUtc.UtcDateTime.AddSeconds(-1);
-            if (!ours)
+            if (process is null)
             {
-                outcome = $"refused: process {started.ProcessId} is not this attempt's worker";
+                outcome = "kill " + why;
             }
             else if (process.HasExited)
             {
-                outcome = $"process {started.ProcessId} had already exited (code {process.ExitCode})";
+                outcome = $"process {process.Id} had already exited (code {process.ExitCode})";
             }
             else
             {
                 bool terminated = Native.TerminateProcess(process.Handle, 0xDEAD);
                 process.WaitForExit();
-                outcome = $"TerminateProcess({started.ProcessId}) {(terminated ? "succeeded" : "failed")}; exit observed with code 0x{process.ExitCode:X}";
+                outcome = $"TerminateProcess({process.Id}) {(terminated ? "succeeded" : "failed")}; exit observed with code 0x{process.ExitCode:X}";
             }
-        }
-        catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or EvidenceFormatException)
-        {
-            outcome = "kill not performed: " + ex.GetType().Name + ": " + ex.Message;
         }
         return new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "kill", Name = $"{kill.Name} after {kill.DelayMs} ms: {outcome}", AtUtc = DateTimeOffset.UtcNow };
     }
@@ -422,7 +442,7 @@ internal sealed unsafe class Run : IDisposable
     }
 
     /// <returns>The captured result, or null when the call did not happen or failed.</returns>
-    private CapturedValue? DoInvoke(string target, string member, DispatchKind kind, IReadOnlyList<Arg> args, string? bind, string path)
+    private CapturedValue? DoInvoke(string target, string member, DispatchKind kind, IReadOnlyList<Arg> args, string? bind, string path, IReadOnlyList<NamedArg>? named = null)
     {
         if (!_bound.TryGetValue(target, out nint dispatch))
         {
@@ -438,8 +458,25 @@ internal sealed unsafe class Run : IDisposable
             }
         }
 
-        int idHr = _dispatch.GetIdsOfNames(dispatch, member, out int dispId);
-        Variant[] variants = BuildArgs(args);
+        // R-ERR-1 ERR-BIND: with named arguments, one GetIDsOfNames call resolves the member and every name.
+        int dispId;
+        int idHr;
+        int[] namedIds = [];
+        IReadOnlyList<string>? namedNames = named is { Count: > 0 } ? [.. named.Select(n => n.Name)] : null;
+        if (namedNames is not null)
+        {
+            var ids = new int[namedNames.Count + 1];
+            idHr = _dispatch.GetIdsOfNames(dispatch, [member, .. namedNames], ids);
+            dispId = ids[0];
+            namedIds = ids[1..];
+        }
+        else
+        {
+            idHr = _dispatch.GetIdsOfNames(dispatch, member, out dispId);
+        }
+        var byRefs = new List<ByRefSlot>();
+        Variant[] variants = BuildArgs(args, byRefs, 0);
+        Variant[] namedVariants = named is { Count: > 0 } ? BuildArgs([.. named.Select(n => n.Value)], byRefs, args.Count) : [];
         var capturedArgs = new List<CapturedValue>();
         try
         {
@@ -447,7 +484,14 @@ internal sealed unsafe class Run : IDisposable
             {
                 for (int i = 0; i < variants.Length; i++)
                 {
-                    capturedArgs.Add(_dispatch.CaptureValue(p + i));
+                    capturedArgs.Add(_dispatch.CaptureMaybeByRef(p + i, out _));
+                }
+            }
+            fixed (Variant* p = namedVariants)
+            {
+                for (int i = 0; i < namedVariants.Length; i++)
+                {
+                    capturedArgs.Add(_dispatch.CaptureMaybeByRef(p + i, out _));
                 }
             }
             if (idHr < 0)
@@ -457,12 +501,13 @@ internal sealed unsafe class Run : IDisposable
                 {
                     Seq = ++_seq, ProgramPath = path, Target = target, Member = member, Flags = (int)kind, Args = capturedArgs,
                     GetIdsOfNamesHresult = Native.Hr(idHr), ObservationOrder = ["getIdsOfNames"],
+                    NamedArgNames = namedNames, NamedDispIds = namedNames is null ? null : namedIds,
                 });
                 return null;
             }
 
             Trace(path, $"{target}.{member}");
-            Dispatch.Outcome outcome = _dispatch.Invoke(dispatch, dispId, (ushort)kind, variants, _question.ObservationRecipe);
+            Dispatch.Outcome outcome = _dispatch.Invoke(dispatch, dispId, (ushort)kind, variants, _question.ObservationRecipe, namedVariants, namedIds);
             string? boundName = null;
             CapturedValue? result = outcome.Result;
             if (outcome.Hr < 0)
@@ -499,12 +544,17 @@ internal sealed unsafe class Run : IDisposable
                 ExcepInfo = outcome.ExcepInfo,
                 ErrorInfo = outcome.ErrorInfo,
                 ObservationOrder = outcome.Order,
+                NamedArgNames = namedNames,
+                NamedDispIds = namedNames is null ? null : namedIds,
+                ByRefAfter = byRefs.Count == 0 ? null : [.. byRefs.Select(b => new ByRefWriteback(b.Index, CaptureByRefSlot(b)))],
             });
             return outcome.Hr >= 0 ? result : null;
         }
         finally
         {
             FreeArgs(variants);
+            FreeArgs(namedVariants);
+            FreeByRefs(byRefs);
         }
     }
 
@@ -589,13 +639,20 @@ internal sealed unsafe class Run : IDisposable
         _bindOrder.Add(name);
     }
 
-    private Variant[] BuildArgs(IReadOnlyList<Arg> args)
+    private Variant[] BuildArgs(IReadOnlyList<Arg> args, List<ByRefSlot> byRefs, int indexBase)
     {
         var variants = new Variant[args.Count];
         for (int i = 0; i < args.Count; i++)
         {
-            variants[i] = args[i] switch
+            variants[i] = BuildOne(args[i], indexBase + i, byRefs);
+        }
+        return variants;
+    }
+
+    private Variant BuildOne(Arg arg, int index, List<ByRefSlot> byRefs) =>
+            arg switch
             {
+                ByRefArg b => MakeByRef(b, index, byRefs),
                 I2Arg a => new Variant { Vt = 2, I2 = a.Value },
                 I4Arg a => new Variant { Vt = 3, I4 = a.Value },
                 BoolArg a => new Variant { Vt = 11, I2 = a.Value ? (short)-1 : (short)0 },
@@ -613,11 +670,8 @@ internal sealed unsafe class Run : IDisposable
                 ObjectArg a => new Variant { Vt = 9, Ptr = _bound[a.Name] },
                 InputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Spell(Path.Combine(_attemptDir, "inputs", _question.Inputs.Single(x => x.Role == a.Role).FileName), a.Spelling)) },
                 OutputPathArg a => new Variant { Vt = 8, Ptr = AllocBstr(Path.Combine(_attemptDir, "work", a.FileName)) },
-                _ => throw new InvalidOperationException($"Unknown argument {args[i].GetType().Name}."),
+                _ => throw new InvalidOperationException($"Unknown argument {arg.GetType().Name}."),
             };
-        }
-        return variants;
-    }
 
     /// <summary>Only the BSTRs this worker allocated are freed; object arguments stay owned by their binding.</summary>
     private static void FreeArgs(Variant[] variants)

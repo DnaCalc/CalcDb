@@ -53,6 +53,10 @@ public sealed record ArtifactRef(string Role, string Kind, string RelativePath, 
 [JsonDerivedType(typeof(HandleEvent), "handle")]
 [JsonDerivedType(typeof(InterfacesEvent), "interfaces")]
 [JsonDerivedType(typeof(ThreadEvent), "thread")]
+[JsonDerivedType(typeof(EnumEvent), "enum")]
+[JsonDerivedType(typeof(ActivationEvent), "activation")]
+[JsonDerivedType(typeof(ConnectionEvent), "connection")]
+[JsonDerivedType(typeof(SinkCallEvent), "sinkCall")]
 public abstract record CaptureEvent
 {
     /// <summary>Monotonic sequence number within the attempt.</summary>
@@ -113,6 +117,107 @@ public sealed record InvokeEvent : CaptureEvent
 
     /// <summary>The order in which the result channels were observed (OR-OBS).</summary>
     public required IReadOnlyList<string> ObservationOrder { get; init; }
+
+    /// <summary>Named arguments: their names as passed, and the DISPIDs one GetIDsOfNames call returned for them.</summary>
+    public IReadOnlyList<string>? NamedArgNames { get; init; }
+
+    public IReadOnlyList<int>? NamedDispIds { get; init; }
+
+    /// <summary>For each by-reference argument (index in source order, named ones after the positional): the referenced value after the call.</summary>
+    public IReadOnlyList<ByRefWriteback>? ByRefAfter { get; init; }
+}
+
+/// <summary>The value a by-reference argument referred to after the call (its writeback).</summary>
+public sealed record ByRefWriteback(int Index, CapturedValue After);
+
+/// <summary>One step of an <c>IEnumVARIANT</c> walk: Next, Skip, Reset or Clone, its HRESULT and, for Next, the item.</summary>
+public sealed record EnumStep(string Op, string Hresult)
+{
+    public uint? Fetched { get; init; }
+
+    public CapturedValue? Item { get; init; }
+}
+
+/// <summary>R-DAO-1 DAO-ENUM: an enumeration through <c>_NewEnum</c> and <c>IEnumVARIANT</c>.</summary>
+public sealed record EnumEvent : CaptureEvent
+{
+    public required string Target { get; init; }
+
+    /// <summary>The HRESULT of Invoke(DISPID_NEWENUM), and what it returned.</summary>
+    public required string NewEnumHresult { get; init; }
+
+    public CapturedValue? NewEnumResult { get; init; }
+
+    /// <summary>QueryInterface of that result for IEnumVARIANT.</summary>
+    public string? EnumVariantHresult { get; init; }
+
+    public required IReadOnlyList<EnumStep> Steps { get; init; }
+}
+
+/// <summary>R-ACT-1: a raw activation or type-library creation, with each COM call's HRESULT in order.</summary>
+public sealed record ActivationEvent : CaptureEvent
+{
+    public required string Route { get; init; }
+
+    public required string Class { get; init; }
+
+    public string? Clsid { get; init; }
+
+    public uint? ClsCtx { get; init; }
+
+    public required string Iid { get; init; }
+
+    public bool Aggregate { get; init; }
+
+    /// <summary>Each call made, in order, as "name hr".</summary>
+    public required IReadOnlyList<string> Steps { get; init; }
+
+    /// <summary>IIDs the controlled outer IUnknown was asked for, in order (aggregation only).</summary>
+    public IReadOnlyList<string>? OuterQueries { get; init; }
+
+    public CapturedValue? Object { get; init; }
+
+    public string? Bind { get; init; }
+}
+
+/// <summary>R-ADO-1 ADO-EVENT: connecting or disconnecting the worker's recording sink.</summary>
+public sealed record ConnectionEvent : CaptureEvent
+{
+    public required string Op { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Target { get; init; }
+
+    public string? EventIid { get; init; }
+
+    /// <summary>Each call made, in order, as "name hr".</summary>
+    public required IReadOnlyList<string> Steps { get; init; }
+
+    public uint? Cookie { get; init; }
+
+    /// <summary>For unadvise: how many calls the sink recorded while connected.</summary>
+    public int? CallsRecorded { get; init; }
+}
+
+/// <summary>A call an event source made on the worker's sink, while the program was at <see cref="CaptureEvent.ProgramPath"/>.</summary>
+public sealed record SinkCallEvent : CaptureEvent
+{
+    public required string Connection { get; init; }
+
+    public required int DispId { get; init; }
+
+    public required int Flags { get; init; }
+
+    /// <summary>The arguments in source order (rgvarg reversed), by-reference ones dereferenced.</summary>
+    public required IReadOnlyList<CapturedValue> Args { get; init; }
+
+    /// <summary>For each argument, whether it arrived by reference.</summary>
+    public required IReadOnlyList<bool> ByRef { get; init; }
+
+    public required int ThreadId { get; init; }
+
+    public required DateTimeOffset AtUtc { get; init; }
 }
 
 /// <summary>EXCEPINFO as filled by Invoke, after at most one deferred fill (OR-REENTRY "single deferred fill").</summary>

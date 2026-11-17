@@ -159,6 +159,13 @@ public enum DispatchKind
 [JsonDerivedType(typeof(OnThread), "onThread")]
 [JsonDerivedType(typeof(QueryInterfaces), "queryInterfaces")]
 [JsonDerivedType(typeof(KillParticipant), "killParticipant")]
+[JsonDerivedType(typeof(Enumerate), "enumerate")]
+[JsonDerivedType(typeof(Activate), "activate")]
+[JsonDerivedType(typeof(TypeCreate), "typeCreate")]
+[JsonDerivedType(typeof(Advise), "advise")]
+[JsonDerivedType(typeof(Unadvise), "unadvise")]
+[JsonDerivedType(typeof(SuspendParticipant), "suspendParticipant")]
+[JsonDerivedType(typeof(ResumeParticipant), "resumeParticipant")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -182,20 +189,34 @@ public sealed record Invoke(string Target, string Member, DispatchKind Kind, IRe
 {
     public string? Bind { get; init; }
 
+    /// <summary>
+    /// R-ERR-1 ERR-BIND, R-DAO-1: named arguments after the positional ones, resolved together with the member by one
+    /// <c>GetIDsOfNames</c> call and passed through <c>rgdispidNamedArgs</c>. Null for positional-only calls.
+    /// </summary>
+    public IReadOnlyList<NamedArg>? Named { get; init; }
+
     internal override void Write(CanonicalWriter w)
     {
         w.Begin("invoke").Text("target", Target).Text("member", Member).Int32("kind", (int)Kind)
             .List("args", Args, (cw, a) => a.Write(cw)).Text("bind", Bind);
+        // Written only when present, so the keys of positional-only questions are unchanged.
+        if (Named is { Count: > 0 })
+        {
+            w.List("named", Named, (cw, n) => { cw.Begin("named").Text("name", n.Name); n.Value.Write(cw); });
+        }
     }
 
     internal override void Validate(IReadOnlySet<string> inputRoles)
     {
-        foreach (Arg arg in Args)
+        foreach (Arg arg in Args.Concat(Named?.Select(n => n.Value) ?? []))
         {
             arg.Validate(inputRoles);
         }
     }
 }
+
+/// <summary>A named argument of <see cref="Invoke"/>.</summary>
+public sealed record NamedArg(string Name, Arg Value);
 
 /// <summary>Repeat <see cref="Body"/> until the Boolean property <see cref="Member"/> of the target reads True.</summary>
 public sealed record LoopUntil(string Target, string Member, int MaxIterations, IReadOnlyList<Operation> Body) : Operation
@@ -402,6 +423,90 @@ public sealed record QueryInterfaces(string Target, IReadOnlyList<string> Iids) 
     internal override void Write(CanonicalWriter w) => w.Begin("queryInterfaces").Text("target", Target).List("iids", Iids, (cw, s) => cw.Text("iid", s));
 }
 
+/// <summary>
+/// R-DAO-1 DAO-ENUM, R-ERR-1 ERR-SNAPSHOT: enumerate a collection through <c>_NewEnum</c> (DISPID -4) and
+/// <c>IEnumVARIANT</c>. Each <c>Next(1)</c> is recorded with its HRESULT and item; an object item is bound to
+/// <see cref="Bind"/> while <see cref="Body"/> runs, then released. After the walk the enumerator is probed once more:
+/// <c>Next</c> past the end, <c>Reset</c> and a <c>Next</c>, <c>Skip(1)</c>, and <c>Clone</c>.
+/// </summary>
+public sealed record Enumerate(string Target, string Bind, int MaxItems, IReadOnlyList<Operation> Body) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("enumerate").Text("target", Target).Text("bind", Bind).Int32("max", MaxItems).List("body", Body, (cw, op) => op.Write(cw));
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        foreach (Operation op in Body)
+        {
+            op.Validate(inputRoles);
+        }
+    }
+}
+
+/// <summary>
+/// R-ACT-1 ACT-CLSID, ACT-FACTORY, ACT-AGGREGATE: activate a class by ProgID or braced CLSID through
+/// <see cref="Route"/> <c>cocreate</c> (<c>CoCreateInstance</c>) or <c>classobject</c> (<c>CoGetClassObject</c> for
+/// IClassFactory, then <c>LockServer(TRUE)</c>, <c>CreateInstance</c>, <c>LockServer(FALSE)</c>), with the given CLSCTX
+/// flags and requested IID. With <see cref="Aggregate"/> the worker passes a controlled outer IUnknown of its own,
+/// which records every QueryInterface it receives. A result answering IDispatch is bound.
+/// </summary>
+public sealed record Activate(string Class, string Route, uint ClsCtx, string Iid, string Bind) : Operation
+{
+    public bool Aggregate { get; init; }
+
+    internal override void Write(CanonicalWriter w) => w.Begin("activate").Text("class", Class).Text("route", Route).Int64("clsCtx", ClsCtx).Text("iid", Iid).Text("bind", Bind).Bool("aggregate", Aggregate);
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        if (Route is not ("cocreate" or "classobject"))
+        {
+            throw new EvidenceFormatException($"Activation route '{Route}' is not cocreate or classobject.");
+        }
+    }
+}
+
+/// <summary>
+/// R-ACT-1 ACT-TYPECREATE: from a bound object's type library, find the coclass <see cref="Clsid"/> by
+/// <c>ITypeLib::GetTypeInfoOfGuid</c> and call <c>ITypeInfo::CreateInstance</c> for <see cref="Iid"/>.
+/// </summary>
+public sealed record TypeCreate(string Target, string Clsid, string Iid, string Bind) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("typeCreate").Text("target", Target).Text("clsid", Clsid).Text("iid", Iid).Text("bind", Bind);
+}
+
+/// <summary>
+/// R-ADO-1 ADO-EVENT, ADO-REENTRY: connect a recording event sink of the worker to a bound object's connection
+/// point for the outgoing interface <see cref="EventIid"/> (<c>IConnectionPointContainer::FindConnectionPoint</c>,
+/// <c>IConnectionPoint::Advise</c>). Every call the source makes on the sink is recorded, its arguments dereferenced,
+/// and answered S_OK without changing any argument. <see cref="Name"/> names the connection for <see cref="Unadvise"/>.
+/// </summary>
+public sealed record Advise(string Target, string EventIid, string Name) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("advise").Text("target", Target).Text("eventIid", EventIid).Text("name", Name);
+}
+
+/// <summary>Disconnect the sink connected as <see cref="Name"/>.</summary>
+public sealed record Unadvise(string Name) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("unadvise").Text("name", Name);
+}
+
+/// <summary>
+/// R-LOCK-3 READ-PATH, R-CRASH-1 CRASH-CONTROL: after <see cref="DelayMs"/>, suspend every thread of the named
+/// participant of this attempt (verified as for <see cref="KillParticipant"/>), so it stops wherever it is, even inside
+/// an ACE call. It stays suspended until <see cref="ResumeParticipant"/>, or until the suspending participant's program
+/// ends, which resumes it.
+/// </summary>
+public sealed record SuspendParticipant(string Name, int DelayMs) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("suspendParticipant").Text("name", Name).Int32("delayMs", DelayMs);
+}
+
+/// <summary>Resume the threads this worker suspended in the named participant.</summary>
+public sealed record ResumeParticipant(string Name) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("resumeParticipant").Text("name", Name);
+}
+
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(I2Arg), "i2")]
@@ -421,12 +526,40 @@ public sealed record QueryInterfaces(string Target, IReadOnlyList<string> Iids) 
 [JsonDerivedType(typeof(NullArg), "null")]
 [JsonDerivedType(typeof(EmptyArg), "empty")]
 [JsonDerivedType(typeof(BstrBytesArg), "bstrBytes")]
+[JsonDerivedType(typeof(ByRefArg), "byref")]
 public abstract record Arg
 {
     internal abstract void Write(CanonicalWriter w);
 
     internal virtual void Validate(IReadOnlySet<string> inputRoles)
     {
+    }
+}
+
+/// <summary>
+/// R-STRING-1 STR-BYREF, R-ERR-1 ERR-BIND: pass <see cref="Inner"/> by reference. <see cref="Typed"/> passes
+/// <c>VT_BYREF</c> with the inner type (scalars and BSTR only); otherwise <c>VT_BYREF|VT_VARIANT</c> pointing to a
+/// VARIANT holding the inner value. The referenced value is captured again after the call, as its writeback.
+/// </summary>
+public sealed record ByRefArg(Arg Inner, bool Typed) : Arg
+{
+    internal override void Write(CanonicalWriter w)
+    {
+        w.Begin("byref").Bool("typed", Typed);
+        Inner.Write(w);
+    }
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        if (Inner is ByRefArg or ObjectArg or BytesArg or MissingArg)
+        {
+            throw new EvidenceFormatException($"A by-reference argument cannot hold {Inner.GetType().Name}.");
+        }
+        if (Typed && Inner is NullArg or EmptyArg)
+        {
+            throw new EvidenceFormatException("A typed by-reference argument needs a scalar or BSTR value.");
+        }
+        Inner.Validate(inputRoles);
     }
 }
 

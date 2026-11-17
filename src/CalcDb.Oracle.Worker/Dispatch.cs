@@ -35,6 +35,85 @@ internal sealed unsafe class Dispatch
         return hr;
     }
 
+    /// <summary>
+    /// One GetIDsOfNames call for a member and its named arguments (R-ERR-1 ERR-BIND): <paramref name="ids"/>[0] is the
+    /// member's DISPID, the rest are the arguments' DISPIDs in the order given.
+    /// </summary>
+    public int GetIdsOfNames(nint dispatch, IReadOnlyList<string> names, int[] ids)
+    {
+        var fn = (delegate* unmanaged[Stdcall]<nint, Guid*, char**, uint, int, int*, int>)(*(nint**)dispatch)[5];
+        Guid iidNull = Guid.Empty;
+        var pointers = new nint[names.Count];
+        try
+        {
+            for (int i = 0; i < names.Count; i++)
+            {
+                pointers[i] = Marshal.StringToHGlobalUni(names[i]);
+            }
+            fixed (nint* p = pointers)
+            fixed (int* pIds = ids)
+            {
+                return fn(dispatch, &iidNull, (char**)p, (uint)names.Count, _lcid, pIds);
+            }
+        }
+        finally
+        {
+            foreach (nint p in pointers)
+            {
+                Marshal.FreeHGlobal(p);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Capture a VARIANT that may be <c>VT_BYREF</c>: the referenced value is read through the pointer without being
+    /// changed. Used for by-reference arguments and for the arguments an event source passes to the worker's sink.
+    /// </summary>
+    public CapturedValue CaptureMaybeByRef(Variant* v, out bool byRef)
+    {
+        int vt = v->Vt;
+        byRef = (vt & 0x4000) != 0;
+        if (!byRef)
+        {
+            return CaptureValue(v);
+        }
+        if (v->Ptr == 0)
+        {
+            return CapturedValue.Refused(vt, "VT_BYREF with a null pointer.");
+        }
+        int baseVt = vt & ~0x4000;
+        if (baseVt == 12)
+        {
+            return CaptureValue((Variant*)v->Ptr);
+        }
+        Variant tmp = default;
+        byte* src = (byte*)v->Ptr;
+        int size = (baseVt & 0x2000) != 0 ? sizeof(nint) : baseVt switch
+        {
+            16 or 17 => 1,
+            2 or 11 or 18 => 2,
+            3 or 4 or 10 or 19 or 22 or 23 => 4,
+            5 or 6 or 7 or 20 or 21 => 8,
+            8 or 9 or 13 => sizeof(nint),
+            14 => 16,
+            _ => 0,
+        };
+        if (size == 0)
+        {
+            return CapturedValue.Refused(vt, "VT_BYREF of this type is not representable.");
+        }
+        if (baseVt == 14)
+        {
+            Buffer.MemoryCopy(src, &tmp, 16, 16);
+        }
+        else
+        {
+            Buffer.MemoryCopy(src, (byte*)&tmp + 8, 16, size);
+        }
+        tmp.Vt = (ushort)baseVt;
+        return CaptureValue(&tmp);
+    }
+
     /// <summary>The outcome of one Invoke and its observed error channels.</summary>
     public sealed record Outcome(
         int Hr,
@@ -50,7 +129,14 @@ internal sealed unsafe class Dispatch
     /// IDispatch requires. A returned object is AddRef'ed by the VARIANT and handed to the caller in
     /// <see cref="Outcome.ResultObject"/>; every other result is captured and cleared here.
     /// </summary>
-    public Outcome Invoke(nint dispatch, int dispId, ushort flags, Variant[] args, IReadOnlyList<string> recipe)
+    public Outcome Invoke(nint dispatch, int dispId, ushort flags, Variant[] args, IReadOnlyList<string> recipe) =>
+        Invoke(dispatch, dispId, flags, args, recipe, [], []);
+
+    /// <summary>
+    /// Invoke with named arguments: <c>rgvarg</c> holds the named values first, in the order of
+    /// <paramref name="namedIds"/>, then the positional ones reversed, as IDispatch requires.
+    /// </summary>
+    public Outcome Invoke(nint dispatch, int dispId, ushort flags, Variant[] args, IReadOnlyList<string> recipe, Variant[] named, int[] namedIds)
     {
         var order = new List<string>();
         if (recipe.Contains("clearErrorInfoBefore"))
@@ -59,10 +145,14 @@ internal sealed unsafe class Dispatch
             order.Add("clearErrorInfoBefore");
         }
 
-        var reversed = new Variant[args.Length];
+        var reversed = new Variant[named.Length + args.Length];
+        for (int i = 0; i < named.Length; i++)
+        {
+            reversed[i] = named[i];
+        }
         for (int i = 0; i < args.Length; i++)
         {
-            reversed[i] = args[args.Length - 1 - i];
+            reversed[named.Length + i] = args[args.Length - 1 - i];
         }
 
         Variant result = default;
@@ -73,10 +163,17 @@ internal sealed unsafe class Dispatch
         // A property put passes its value (the last source argument, first after reversal) as the named
         // argument DISPID_PROPERTYPUT.
         int putId = -3;
-        bool isPut = (flags & (4 | 8)) != 0 && args.Length > 0;
+        bool isPut = (flags & (4 | 8)) != 0 && args.Length > 0 && named.Length == 0;
         fixed (Variant* pArgs = reversed)
+        fixed (int* pNamed = namedIds)
         {
-            var dp = new DispParams { Args = args.Length == 0 ? null : pArgs, NamedArgs = isPut ? &putId : null, ArgCount = (uint)args.Length, NamedArgCount = isPut ? 1u : 0u };
+            var dp = new DispParams
+            {
+                Args = reversed.Length == 0 ? null : pArgs,
+                NamedArgs = isPut ? &putId : named.Length > 0 ? pNamed : null,
+                ArgCount = (uint)reversed.Length,
+                NamedArgCount = isPut ? 1u : (uint)named.Length,
+            };
             Guid iidNull = Guid.Empty;
             hr = fn(dispatch, dispId, &iidNull, _lcid, flags, &dp, &result, &excep, &argErr);
         }

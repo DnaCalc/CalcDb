@@ -74,7 +74,27 @@ internal static unsafe partial class Native
     public static partial int CoCreateInstance(in Guid clsid, nint outer, uint context, in Guid iid, out nint ppv);
 
     [LibraryImport("ole32.dll")]
+    public static partial int CoGetClassObject(in Guid clsid, uint context, nint serverInfo, in Guid iid, out nint ppv);
+
+    [LibraryImport("ole32.dll")]
     public static partial int CoGetApartmentType(out int aptType, out int aptQualifier);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial nint OpenThread(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint threadId);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint SuspendThread(nint thread);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint ResumeThread(nint thread);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CloseHandle(nint handle);
+
+    public static readonly Guid IidIEnumVARIANT = new("00020404-0000-0000-C000-000000000046");
+    public static readonly Guid IidIClassFactory = new("00000001-0000-0000-C000-000000000046");
+    public static readonly Guid IidIConnectionPointContainer = new("B196B284-BAB4-101A-B69C-00AA00341D07");
 
     [LibraryImport("ole32.dll")]
     public static partial int CoInitializeEx(nint reserved, uint coinit);
