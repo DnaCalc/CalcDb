@@ -191,6 +191,11 @@ public sealed class P
     /// database <paramref name="db"/>. DAO DDL refuses DECIMAL (3292, R-FMT-1); this route gives DAO's default
     /// precision and scale, which the read-back records.
     /// </summary>
+    /// <remarks>
+    /// The field gets Precision 38 and Scale 0, and DAO cannot read its values (3000, "Reserved error (-1038)");
+    /// ADO reads them with their words moved (evidence/r-dec-read). For an ordinary Decimal column use ADO DDL with
+    /// explicit precision and scale, as <c>RDecRead</c> does.
+    /// </remarks>
     public P AddDecimalField(string table, string field, string db = "db") =>
         GetBind("dtdfs", db, "TableDefs").Call("dtdfs", "Refresh").Item("dtdf", "dtdfs", A.Str(table))
             .CallBind("dfld", "dtdf", "CreateField", A.Str(field), A.I4(20)).GetBind("dfls", "dtdf", "Fields").Call("dfls", "Append", A.Obj("dfld"))

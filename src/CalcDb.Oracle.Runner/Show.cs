@@ -95,8 +95,36 @@ internal static class Show
         string payload = v.Text is not null ? "\"" + v.Text + "\""
             : v.Bytes is { Length: > 0 } raw ? $"bytes {(raw.Length > 96 ? raw[..96] + "…" : raw)} ({v.ByteLength} B)"
             : v.Integer ?? v.Display ?? v.Bits ?? v.Unsupported
-                ?? (v.Array is { } a ? $"[{string.Join(",", a.Bounds.Select(b => $"{b.LowerBound}+{b.Count}"))}] {(a.Bytes is { Length: > 96 } h ? h[..96] + "…" : a.Bytes)}" : null)
+                ?? (v.Decimal is { } d ? DecimalText(d) : null)
+                ?? (v.Array is { } a ? ArrayText(a) : null)
                 ?? (v.Identity is not null ? $"{v.Identity} {v.TypeName} {v.TypeIid}" : "");
         return $"{v.VtName} {payload}".TrimEnd();
+    }
+
+    /// <summary>A VT_DECIMAL as its exact value and its stored fields (OR-WIRE: the fields are the authority).</summary>
+    private static string DecimalText(DecimalParts d)
+    {
+        var magnitude = (new System.Numerics.BigInteger(d.Hi32) << 64) | new System.Numerics.BigInteger(d.Lo64);
+        string digits = magnitude.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(d.Scale + 1, '0');
+        string text = d.Scale == 0 ? digits : digits[..^d.Scale] + "." + digits[^d.Scale..];
+        string sign = (d.Sign & 0x80) != 0 ? "-" : "";
+        return $"{sign}{text} (scale {d.Scale} sign 0x{d.Sign:X2} hi32 0x{d.Hi32:X8} mid32 0x{d.Lo64 >> 32:X8} lo32 0x{d.Lo64 & 0xFFFFFFFF:X8})";
+    }
+
+    /// <summary>Array bounds, then UI1 bytes or the first elements in the recorded order.</summary>
+    private static string ArrayText(ArrayValue a)
+    {
+        string bounds = $"[{string.Join(",", a.Bounds.Select(b => $"{b.LowerBound}+{b.Count}"))}]";
+        if (a.Bytes is not null)
+        {
+            return $"{bounds} {(a.Bytes.Length > 96 ? a.Bytes[..96] + "…" : a.Bytes)}";
+        }
+        if (a.Elements is not { Count: > 0 } e)
+        {
+            return bounds;
+        }
+        const int Shown = 24;
+        string more = e.Count > Shown ? $", … {e.Count - Shown} more" : "";
+        return $"{bounds} {a.ElementOrder}: {string.Join(", ", e.Take(Shown).Select(Value))}{more}";
     }
 }

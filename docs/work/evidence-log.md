@@ -35,6 +35,25 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
   `smoke-opt.a1` on the private desktop recorded a visible `#32770` window titled `Select Data Source`. The call does
   not return while the dialog is open. Empty as the name argument is therefore an interactive path; R-ORACLE-1 OR-WIRE
   probes of optional arguments must not leave the name empty except on the private desktop with a short timeout.
+- **Decimal fields: precision decides the read route** (`evidence/r-dec-read/`, 18 records, ACCDB and MDB alike). Wave 4
+  captured ADO reads of stored Decimals such as 7 as `Mid32 = 7, Lo32 = 0`. The discriminator writes seven values whose
+  32-bit words are distinct, by SQL literal, DAO `Field.Value` put and ADO `Field.Value` put, and reads them back
+  through DAO `Value`, SQL `CStr`/`CDbl`, filters and aggregates, ADO `Value` and ADO `GetRows`.
+  - Columns made by ADO DDL as `DECIMAL(28,0)` and `DECIMAL(18,4)`: every route returns every stored value exactly,
+    words included (for example `2^64+5` as `hi32 1, mid32 0, lo32 5`). The 29-digit maximum is refused with 3761
+    ("precision is too small"), through DAO as `0x800A0EB1` and through ADO as `0x80040E21`.
+  - Columns made by DAO `TableDef.CreateField(name, 20)` with no precision (the form `P.AddDecimalField` and the wave-4
+    fixtures use) report `Precision` 38 and `Scale` 0. SQL literal inserts into them succeed, the 29-digit maximum
+    included. DAO `Field.Value` reads of a non-Null value fail with 3000 "Reserved error (-1038)" (`0x800A0BB8`). ADO
+    reads, including ADO SQL `CStr(N)` and `CDbl(N)`, return the stored integer with `Hi32` kept, `Lo32` moved into
+    `Mid32`, the original `Mid32` gone and `Lo32` zero: 7 reads as `30064771072`, `2^32` as 0, `2^64+5` as
+    `18446744095184388096`. Fractions were truncated toward zero by scale 0 before that (1.5 and 3.125 read as 1·2^32
+    and 3·2^32). Which layer moves the words is not shown by these records.
+  - DAO `Field.Value` puts into the precision-38 fields fail (3000 and `0x800A0EAF`), and every ADO put fails.
+  - The capture of VT_DECIMAL was correct throughout. `calcdb-oracle show` now prints a Decimal's exact value and its
+    words, and array elements.
+  - Consequence: Decimal results of wave-1 to wave-4 fixtures built with `AddDecimalField` describe precision-38
+    fields, not ordinary Decimal columns.
 - **ACE fault in `Recordset.Requery(QueryDef)`** (`evidence/r-crash-requery/`). First seen as a worker death in
   `r-cat-1/parameter-values`. Five discriminating probes on a fresh fixture copy each: opening and reading,
   and `Requery()` without arguments, complete normally; `Requery(qd)` with the recordset's own QueryDef, with
