@@ -195,3 +195,32 @@ report. The machine crashed during the first phase.
 
 **Next candidates.** The worker operations in the report's table (`IEnumVARIANT`, ByRef and named arguments, raw
 activation, an event sink, pause points): small, and they turn many T rows into F.
+
+## 2026-11-17 afternoon · worker operations and the second follow-up round
+
+**Work observed.** Seven new worker operations, two native COM objects of our own (a controlled outer and a recording
+sink), a sampling write recorder, 196 follow-up probes, and the report updated: F rows from 30 to 10, T rows from 122 to
+104, and the read path up to W-08/native-read down to one follow-up.
+
+**What worked.**
+- *Building the capability instead of classifying around it.* The first report showed that most T rows were missing
+  worker operations. One batch of them, each first exercised once in a smoke card on a scratch store, settled ten
+  branches outright and narrowed others.
+- *A cheap partial route before the expensive one.* Freezing a participant made a sampling write recorder possible
+  without a kernel driver; page hashes made it cheap enough to commit.
+- *The same six agent sessions for every phase.* Their context carried over: each phase was one short message.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| I "corrected" twelve kill notes from the exit code, without reading the card source | All twelve now name the wrong mechanism, and they were committed | Erratum in the evidence log; the seal now names the kill from the killer's capture, so notes need not |
+| `show` skipped the other participants when participant a had no capture | The kill event was invisible; I read raw JSON to check | `show` prints them |
+| A kept image over 100 MB | GitHub refused the push | Undid the unpushed commit with a soft reset; retain now keeps artifacts over 95 MB outside git |
+| My smoke probe held the database from CreateDatabase, which is exclusive | The suspended-writer probe saw 3045 instead of the frozen file | Probes reopen shared; the lesson went into the agents' brief |
+
+**Rule.** A statement about what a probe did is taken from the probe's source or a capture event, never from an exit
+code or a name.
+
+**Next candidates.** Repeats of the sampling recorder per mutation class; a pre-push size check is no longer needed
+since retain enforces it.
