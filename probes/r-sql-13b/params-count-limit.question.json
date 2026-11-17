@@ -1,0 +1,1055 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sql-13b/params-count-limit",
+  "bookRefs": [
+    "R-SQL-3",
+    "SQL-B"
+  ],
+  "description": "Where does the number of declared parameters stop being accepted, and at which call? Only the count varies (n = 50, 254, 255, 256, 257, 300) with type Long: PARAMETERS p1 Long, ..., pn Long, used only as p1 in one text and in an OR chain of all n in another. For each temporary QueryDef the error channels of CreateQueryDef, Parameters.Count and DBEngine.Errors are read; nothing is assigned or opened. Runs on a fresh copy of r-sql-13b-main (ACCDB) opened read-only through ACE DAO; each text goes into a temporary QueryDef (CreateQueryDef with an empty name, then DBEngine.Errors).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sql-13b-main.accdb",
+      "sha256": "930a84695c32fb2984135ed60e828bf6f54288bcac39ced94ff8abeeb401100a",
+      "length": 409600,
+      "provenance": "r-sql-13b.create-main.6e0ba373ae.a1 qk1-6e0ba373ae51efe5c82132ca24dc18d8068b02a3895f4662f95d540c3e0eae86 output:r-sql-13b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco50"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco50",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco50_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco50_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco50_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco50"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50;"
+        }
+      ],
+      "bind": "pca50"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca50",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca50_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca50_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca50_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca50"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco254"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco254",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco254_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco254_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco254_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco254"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50 OR x = p51 OR x = p52 OR x = p53 OR x = p54 OR x = p55 OR x = p56 OR x = p57 OR x = p58 OR x = p59 OR x = p60 OR x = p61 OR x = p62 OR x = p63 OR x = p64 OR x = p65 OR x = p66 OR x = p67 OR x = p68 OR x = p69 OR x = p70 OR x = p71 OR x = p72 OR x = p73 OR x = p74 OR x = p75 OR x = p76 OR x = p77 OR x = p78 OR x = p79 OR x = p80 OR x = p81 OR x = p82 OR x = p83 OR x = p84 OR x = p85 OR x = p86 OR x = p87 OR x = p88 OR x = p89 OR x = p90 OR x = p91 OR x = p92 OR x = p93 OR x = p94 OR x = p95 OR x = p96 OR x = p97 OR x = p98 OR x = p99 OR x = p100 OR x = p101 OR x = p102 OR x = p103 OR x = p104 OR x = p105 OR x = p106 OR x = p107 OR x = p108 OR x = p109 OR x = p110 OR x = p111 OR x = p112 OR x = p113 OR x = p114 OR x = p115 OR x = p116 OR x = p117 OR x = p118 OR x = p119 OR x = p120 OR x = p121 OR x = p122 OR x = p123 OR x = p124 OR x = p125 OR x = p126 OR x = p127 OR x = p128 OR x = p129 OR x = p130 OR x = p131 OR x = p132 OR x = p133 OR x = p134 OR x = p135 OR x = p136 OR x = p137 OR x = p138 OR x = p139 OR x = p140 OR x = p141 OR x = p142 OR x = p143 OR x = p144 OR x = p145 OR x = p146 OR x = p147 OR x = p148 OR x = p149 OR x = p150 OR x = p151 OR x = p152 OR x = p153 OR x = p154 OR x = p155 OR x = p156 OR x = p157 OR x = p158 OR x = p159 OR x = p160 OR x = p161 OR x = p162 OR x = p163 OR x = p164 OR x = p165 OR x = p166 OR x = p167 OR x = p168 OR x = p169 OR x = p170 OR x = p171 OR x = p172 OR x = p173 OR x = p174 OR x = p175 OR x = p176 OR x = p177 OR x = p178 OR x = p179 OR x = p180 OR x = p181 OR x = p182 OR x = p183 OR x = p184 OR x = p185 OR x = p186 OR x = p187 OR x = p188 OR x = p189 OR x = p190 OR x = p191 OR x = p192 OR x = p193 OR x = p194 OR x = p195 OR x = p196 OR x = p197 OR x = p198 OR x = p199 OR x = p200 OR x = p201 OR x = p202 OR x = p203 OR x = p204 OR x = p205 OR x = p206 OR x = p207 OR x = p208 OR x = p209 OR x = p210 OR x = p211 OR x = p212 OR x = p213 OR x = p214 OR x = p215 OR x = p216 OR x = p217 OR x = p218 OR x = p219 OR x = p220 OR x = p221 OR x = p222 OR x = p223 OR x = p224 OR x = p225 OR x = p226 OR x = p227 OR x = p228 OR x = p229 OR x = p230 OR x = p231 OR x = p232 OR x = p233 OR x = p234 OR x = p235 OR x = p236 OR x = p237 OR x = p238 OR x = p239 OR x = p240 OR x = p241 OR x = p242 OR x = p243 OR x = p244 OR x = p245 OR x = p246 OR x = p247 OR x = p248 OR x = p249 OR x = p250 OR x = p251 OR x = p252 OR x = p253 OR x = p254;"
+        }
+      ],
+      "bind": "pca254"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca254",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca254_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca254_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca254_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca254"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco255"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco255",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco255_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco255_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco255_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco255"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50 OR x = p51 OR x = p52 OR x = p53 OR x = p54 OR x = p55 OR x = p56 OR x = p57 OR x = p58 OR x = p59 OR x = p60 OR x = p61 OR x = p62 OR x = p63 OR x = p64 OR x = p65 OR x = p66 OR x = p67 OR x = p68 OR x = p69 OR x = p70 OR x = p71 OR x = p72 OR x = p73 OR x = p74 OR x = p75 OR x = p76 OR x = p77 OR x = p78 OR x = p79 OR x = p80 OR x = p81 OR x = p82 OR x = p83 OR x = p84 OR x = p85 OR x = p86 OR x = p87 OR x = p88 OR x = p89 OR x = p90 OR x = p91 OR x = p92 OR x = p93 OR x = p94 OR x = p95 OR x = p96 OR x = p97 OR x = p98 OR x = p99 OR x = p100 OR x = p101 OR x = p102 OR x = p103 OR x = p104 OR x = p105 OR x = p106 OR x = p107 OR x = p108 OR x = p109 OR x = p110 OR x = p111 OR x = p112 OR x = p113 OR x = p114 OR x = p115 OR x = p116 OR x = p117 OR x = p118 OR x = p119 OR x = p120 OR x = p121 OR x = p122 OR x = p123 OR x = p124 OR x = p125 OR x = p126 OR x = p127 OR x = p128 OR x = p129 OR x = p130 OR x = p131 OR x = p132 OR x = p133 OR x = p134 OR x = p135 OR x = p136 OR x = p137 OR x = p138 OR x = p139 OR x = p140 OR x = p141 OR x = p142 OR x = p143 OR x = p144 OR x = p145 OR x = p146 OR x = p147 OR x = p148 OR x = p149 OR x = p150 OR x = p151 OR x = p152 OR x = p153 OR x = p154 OR x = p155 OR x = p156 OR x = p157 OR x = p158 OR x = p159 OR x = p160 OR x = p161 OR x = p162 OR x = p163 OR x = p164 OR x = p165 OR x = p166 OR x = p167 OR x = p168 OR x = p169 OR x = p170 OR x = p171 OR x = p172 OR x = p173 OR x = p174 OR x = p175 OR x = p176 OR x = p177 OR x = p178 OR x = p179 OR x = p180 OR x = p181 OR x = p182 OR x = p183 OR x = p184 OR x = p185 OR x = p186 OR x = p187 OR x = p188 OR x = p189 OR x = p190 OR x = p191 OR x = p192 OR x = p193 OR x = p194 OR x = p195 OR x = p196 OR x = p197 OR x = p198 OR x = p199 OR x = p200 OR x = p201 OR x = p202 OR x = p203 OR x = p204 OR x = p205 OR x = p206 OR x = p207 OR x = p208 OR x = p209 OR x = p210 OR x = p211 OR x = p212 OR x = p213 OR x = p214 OR x = p215 OR x = p216 OR x = p217 OR x = p218 OR x = p219 OR x = p220 OR x = p221 OR x = p222 OR x = p223 OR x = p224 OR x = p225 OR x = p226 OR x = p227 OR x = p228 OR x = p229 OR x = p230 OR x = p231 OR x = p232 OR x = p233 OR x = p234 OR x = p235 OR x = p236 OR x = p237 OR x = p238 OR x = p239 OR x = p240 OR x = p241 OR x = p242 OR x = p243 OR x = p244 OR x = p245 OR x = p246 OR x = p247 OR x = p248 OR x = p249 OR x = p250 OR x = p251 OR x = p252 OR x = p253 OR x = p254 OR x = p255;"
+        }
+      ],
+      "bind": "pca255"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca255",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca255_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca255_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca255_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca255"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco256"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco256",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco256_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco256_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco256_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco256"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50 OR x = p51 OR x = p52 OR x = p53 OR x = p54 OR x = p55 OR x = p56 OR x = p57 OR x = p58 OR x = p59 OR x = p60 OR x = p61 OR x = p62 OR x = p63 OR x = p64 OR x = p65 OR x = p66 OR x = p67 OR x = p68 OR x = p69 OR x = p70 OR x = p71 OR x = p72 OR x = p73 OR x = p74 OR x = p75 OR x = p76 OR x = p77 OR x = p78 OR x = p79 OR x = p80 OR x = p81 OR x = p82 OR x = p83 OR x = p84 OR x = p85 OR x = p86 OR x = p87 OR x = p88 OR x = p89 OR x = p90 OR x = p91 OR x = p92 OR x = p93 OR x = p94 OR x = p95 OR x = p96 OR x = p97 OR x = p98 OR x = p99 OR x = p100 OR x = p101 OR x = p102 OR x = p103 OR x = p104 OR x = p105 OR x = p106 OR x = p107 OR x = p108 OR x = p109 OR x = p110 OR x = p111 OR x = p112 OR x = p113 OR x = p114 OR x = p115 OR x = p116 OR x = p117 OR x = p118 OR x = p119 OR x = p120 OR x = p121 OR x = p122 OR x = p123 OR x = p124 OR x = p125 OR x = p126 OR x = p127 OR x = p128 OR x = p129 OR x = p130 OR x = p131 OR x = p132 OR x = p133 OR x = p134 OR x = p135 OR x = p136 OR x = p137 OR x = p138 OR x = p139 OR x = p140 OR x = p141 OR x = p142 OR x = p143 OR x = p144 OR x = p145 OR x = p146 OR x = p147 OR x = p148 OR x = p149 OR x = p150 OR x = p151 OR x = p152 OR x = p153 OR x = p154 OR x = p155 OR x = p156 OR x = p157 OR x = p158 OR x = p159 OR x = p160 OR x = p161 OR x = p162 OR x = p163 OR x = p164 OR x = p165 OR x = p166 OR x = p167 OR x = p168 OR x = p169 OR x = p170 OR x = p171 OR x = p172 OR x = p173 OR x = p174 OR x = p175 OR x = p176 OR x = p177 OR x = p178 OR x = p179 OR x = p180 OR x = p181 OR x = p182 OR x = p183 OR x = p184 OR x = p185 OR x = p186 OR x = p187 OR x = p188 OR x = p189 OR x = p190 OR x = p191 OR x = p192 OR x = p193 OR x = p194 OR x = p195 OR x = p196 OR x = p197 OR x = p198 OR x = p199 OR x = p200 OR x = p201 OR x = p202 OR x = p203 OR x = p204 OR x = p205 OR x = p206 OR x = p207 OR x = p208 OR x = p209 OR x = p210 OR x = p211 OR x = p212 OR x = p213 OR x = p214 OR x = p215 OR x = p216 OR x = p217 OR x = p218 OR x = p219 OR x = p220 OR x = p221 OR x = p222 OR x = p223 OR x = p224 OR x = p225 OR x = p226 OR x = p227 OR x = p228 OR x = p229 OR x = p230 OR x = p231 OR x = p232 OR x = p233 OR x = p234 OR x = p235 OR x = p236 OR x = p237 OR x = p238 OR x = p239 OR x = p240 OR x = p241 OR x = p242 OR x = p243 OR x = p244 OR x = p245 OR x = p246 OR x = p247 OR x = p248 OR x = p249 OR x = p250 OR x = p251 OR x = p252 OR x = p253 OR x = p254 OR x = p255 OR x = p256;"
+        }
+      ],
+      "bind": "pca256"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca256",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca256_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca256_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca256_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca256"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long, p257 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco257"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco257",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco257_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco257_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco257_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco257"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long, p257 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50 OR x = p51 OR x = p52 OR x = p53 OR x = p54 OR x = p55 OR x = p56 OR x = p57 OR x = p58 OR x = p59 OR x = p60 OR x = p61 OR x = p62 OR x = p63 OR x = p64 OR x = p65 OR x = p66 OR x = p67 OR x = p68 OR x = p69 OR x = p70 OR x = p71 OR x = p72 OR x = p73 OR x = p74 OR x = p75 OR x = p76 OR x = p77 OR x = p78 OR x = p79 OR x = p80 OR x = p81 OR x = p82 OR x = p83 OR x = p84 OR x = p85 OR x = p86 OR x = p87 OR x = p88 OR x = p89 OR x = p90 OR x = p91 OR x = p92 OR x = p93 OR x = p94 OR x = p95 OR x = p96 OR x = p97 OR x = p98 OR x = p99 OR x = p100 OR x = p101 OR x = p102 OR x = p103 OR x = p104 OR x = p105 OR x = p106 OR x = p107 OR x = p108 OR x = p109 OR x = p110 OR x = p111 OR x = p112 OR x = p113 OR x = p114 OR x = p115 OR x = p116 OR x = p117 OR x = p118 OR x = p119 OR x = p120 OR x = p121 OR x = p122 OR x = p123 OR x = p124 OR x = p125 OR x = p126 OR x = p127 OR x = p128 OR x = p129 OR x = p130 OR x = p131 OR x = p132 OR x = p133 OR x = p134 OR x = p135 OR x = p136 OR x = p137 OR x = p138 OR x = p139 OR x = p140 OR x = p141 OR x = p142 OR x = p143 OR x = p144 OR x = p145 OR x = p146 OR x = p147 OR x = p148 OR x = p149 OR x = p150 OR x = p151 OR x = p152 OR x = p153 OR x = p154 OR x = p155 OR x = p156 OR x = p157 OR x = p158 OR x = p159 OR x = p160 OR x = p161 OR x = p162 OR x = p163 OR x = p164 OR x = p165 OR x = p166 OR x = p167 OR x = p168 OR x = p169 OR x = p170 OR x = p171 OR x = p172 OR x = p173 OR x = p174 OR x = p175 OR x = p176 OR x = p177 OR x = p178 OR x = p179 OR x = p180 OR x = p181 OR x = p182 OR x = p183 OR x = p184 OR x = p185 OR x = p186 OR x = p187 OR x = p188 OR x = p189 OR x = p190 OR x = p191 OR x = p192 OR x = p193 OR x = p194 OR x = p195 OR x = p196 OR x = p197 OR x = p198 OR x = p199 OR x = p200 OR x = p201 OR x = p202 OR x = p203 OR x = p204 OR x = p205 OR x = p206 OR x = p207 OR x = p208 OR x = p209 OR x = p210 OR x = p211 OR x = p212 OR x = p213 OR x = p214 OR x = p215 OR x = p216 OR x = p217 OR x = p218 OR x = p219 OR x = p220 OR x = p221 OR x = p222 OR x = p223 OR x = p224 OR x = p225 OR x = p226 OR x = p227 OR x = p228 OR x = p229 OR x = p230 OR x = p231 OR x = p232 OR x = p233 OR x = p234 OR x = p235 OR x = p236 OR x = p237 OR x = p238 OR x = p239 OR x = p240 OR x = p241 OR x = p242 OR x = p243 OR x = p244 OR x = p245 OR x = p246 OR x = p247 OR x = p248 OR x = p249 OR x = p250 OR x = p251 OR x = p252 OR x = p253 OR x = p254 OR x = p255 OR x = p256 OR x = p257;"
+        }
+      ],
+      "bind": "pca257"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca257",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca257_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca257_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca257_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca257"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long, p257 Long, p258 Long, p259 Long, p260 Long, p261 Long, p262 Long, p263 Long, p264 Long, p265 Long, p266 Long, p267 Long, p268 Long, p269 Long, p270 Long, p271 Long, p272 Long, p273 Long, p274 Long, p275 Long, p276 Long, p277 Long, p278 Long, p279 Long, p280 Long, p281 Long, p282 Long, p283 Long, p284 Long, p285 Long, p286 Long, p287 Long, p288 Long, p289 Long, p290 Long, p291 Long, p292 Long, p293 Long, p294 Long, p295 Long, p296 Long, p297 Long, p298 Long, p299 Long, p300 Long; SELECT x FROM CX WHERE x = p1;"
+        }
+      ],
+      "bind": "pco300"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pco300",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pco300_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pco300_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pco300_ps"
+    },
+    {
+      "op": "release",
+      "target": "pco300"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p1 Long, p2 Long, p3 Long, p4 Long, p5 Long, p6 Long, p7 Long, p8 Long, p9 Long, p10 Long, p11 Long, p12 Long, p13 Long, p14 Long, p15 Long, p16 Long, p17 Long, p18 Long, p19 Long, p20 Long, p21 Long, p22 Long, p23 Long, p24 Long, p25 Long, p26 Long, p27 Long, p28 Long, p29 Long, p30 Long, p31 Long, p32 Long, p33 Long, p34 Long, p35 Long, p36 Long, p37 Long, p38 Long, p39 Long, p40 Long, p41 Long, p42 Long, p43 Long, p44 Long, p45 Long, p46 Long, p47 Long, p48 Long, p49 Long, p50 Long, p51 Long, p52 Long, p53 Long, p54 Long, p55 Long, p56 Long, p57 Long, p58 Long, p59 Long, p60 Long, p61 Long, p62 Long, p63 Long, p64 Long, p65 Long, p66 Long, p67 Long, p68 Long, p69 Long, p70 Long, p71 Long, p72 Long, p73 Long, p74 Long, p75 Long, p76 Long, p77 Long, p78 Long, p79 Long, p80 Long, p81 Long, p82 Long, p83 Long, p84 Long, p85 Long, p86 Long, p87 Long, p88 Long, p89 Long, p90 Long, p91 Long, p92 Long, p93 Long, p94 Long, p95 Long, p96 Long, p97 Long, p98 Long, p99 Long, p100 Long, p101 Long, p102 Long, p103 Long, p104 Long, p105 Long, p106 Long, p107 Long, p108 Long, p109 Long, p110 Long, p111 Long, p112 Long, p113 Long, p114 Long, p115 Long, p116 Long, p117 Long, p118 Long, p119 Long, p120 Long, p121 Long, p122 Long, p123 Long, p124 Long, p125 Long, p126 Long, p127 Long, p128 Long, p129 Long, p130 Long, p131 Long, p132 Long, p133 Long, p134 Long, p135 Long, p136 Long, p137 Long, p138 Long, p139 Long, p140 Long, p141 Long, p142 Long, p143 Long, p144 Long, p145 Long, p146 Long, p147 Long, p148 Long, p149 Long, p150 Long, p151 Long, p152 Long, p153 Long, p154 Long, p155 Long, p156 Long, p157 Long, p158 Long, p159 Long, p160 Long, p161 Long, p162 Long, p163 Long, p164 Long, p165 Long, p166 Long, p167 Long, p168 Long, p169 Long, p170 Long, p171 Long, p172 Long, p173 Long, p174 Long, p175 Long, p176 Long, p177 Long, p178 Long, p179 Long, p180 Long, p181 Long, p182 Long, p183 Long, p184 Long, p185 Long, p186 Long, p187 Long, p188 Long, p189 Long, p190 Long, p191 Long, p192 Long, p193 Long, p194 Long, p195 Long, p196 Long, p197 Long, p198 Long, p199 Long, p200 Long, p201 Long, p202 Long, p203 Long, p204 Long, p205 Long, p206 Long, p207 Long, p208 Long, p209 Long, p210 Long, p211 Long, p212 Long, p213 Long, p214 Long, p215 Long, p216 Long, p217 Long, p218 Long, p219 Long, p220 Long, p221 Long, p222 Long, p223 Long, p224 Long, p225 Long, p226 Long, p227 Long, p228 Long, p229 Long, p230 Long, p231 Long, p232 Long, p233 Long, p234 Long, p235 Long, p236 Long, p237 Long, p238 Long, p239 Long, p240 Long, p241 Long, p242 Long, p243 Long, p244 Long, p245 Long, p246 Long, p247 Long, p248 Long, p249 Long, p250 Long, p251 Long, p252 Long, p253 Long, p254 Long, p255 Long, p256 Long, p257 Long, p258 Long, p259 Long, p260 Long, p261 Long, p262 Long, p263 Long, p264 Long, p265 Long, p266 Long, p267 Long, p268 Long, p269 Long, p270 Long, p271 Long, p272 Long, p273 Long, p274 Long, p275 Long, p276 Long, p277 Long, p278 Long, p279 Long, p280 Long, p281 Long, p282 Long, p283 Long, p284 Long, p285 Long, p286 Long, p287 Long, p288 Long, p289 Long, p290 Long, p291 Long, p292 Long, p293 Long, p294 Long, p295 Long, p296 Long, p297 Long, p298 Long, p299 Long, p300 Long; SELECT x FROM CX WHERE x = p1 OR x = p2 OR x = p3 OR x = p4 OR x = p5 OR x = p6 OR x = p7 OR x = p8 OR x = p9 OR x = p10 OR x = p11 OR x = p12 OR x = p13 OR x = p14 OR x = p15 OR x = p16 OR x = p17 OR x = p18 OR x = p19 OR x = p20 OR x = p21 OR x = p22 OR x = p23 OR x = p24 OR x = p25 OR x = p26 OR x = p27 OR x = p28 OR x = p29 OR x = p30 OR x = p31 OR x = p32 OR x = p33 OR x = p34 OR x = p35 OR x = p36 OR x = p37 OR x = p38 OR x = p39 OR x = p40 OR x = p41 OR x = p42 OR x = p43 OR x = p44 OR x = p45 OR x = p46 OR x = p47 OR x = p48 OR x = p49 OR x = p50 OR x = p51 OR x = p52 OR x = p53 OR x = p54 OR x = p55 OR x = p56 OR x = p57 OR x = p58 OR x = p59 OR x = p60 OR x = p61 OR x = p62 OR x = p63 OR x = p64 OR x = p65 OR x = p66 OR x = p67 OR x = p68 OR x = p69 OR x = p70 OR x = p71 OR x = p72 OR x = p73 OR x = p74 OR x = p75 OR x = p76 OR x = p77 OR x = p78 OR x = p79 OR x = p80 OR x = p81 OR x = p82 OR x = p83 OR x = p84 OR x = p85 OR x = p86 OR x = p87 OR x = p88 OR x = p89 OR x = p90 OR x = p91 OR x = p92 OR x = p93 OR x = p94 OR x = p95 OR x = p96 OR x = p97 OR x = p98 OR x = p99 OR x = p100 OR x = p101 OR x = p102 OR x = p103 OR x = p104 OR x = p105 OR x = p106 OR x = p107 OR x = p108 OR x = p109 OR x = p110 OR x = p111 OR x = p112 OR x = p113 OR x = p114 OR x = p115 OR x = p116 OR x = p117 OR x = p118 OR x = p119 OR x = p120 OR x = p121 OR x = p122 OR x = p123 OR x = p124 OR x = p125 OR x = p126 OR x = p127 OR x = p128 OR x = p129 OR x = p130 OR x = p131 OR x = p132 OR x = p133 OR x = p134 OR x = p135 OR x = p136 OR x = p137 OR x = p138 OR x = p139 OR x = p140 OR x = p141 OR x = p142 OR x = p143 OR x = p144 OR x = p145 OR x = p146 OR x = p147 OR x = p148 OR x = p149 OR x = p150 OR x = p151 OR x = p152 OR x = p153 OR x = p154 OR x = p155 OR x = p156 OR x = p157 OR x = p158 OR x = p159 OR x = p160 OR x = p161 OR x = p162 OR x = p163 OR x = p164 OR x = p165 OR x = p166 OR x = p167 OR x = p168 OR x = p169 OR x = p170 OR x = p171 OR x = p172 OR x = p173 OR x = p174 OR x = p175 OR x = p176 OR x = p177 OR x = p178 OR x = p179 OR x = p180 OR x = p181 OR x = p182 OR x = p183 OR x = p184 OR x = p185 OR x = p186 OR x = p187 OR x = p188 OR x = p189 OR x = p190 OR x = p191 OR x = p192 OR x = p193 OR x = p194 OR x = p195 OR x = p196 OR x = p197 OR x = p198 OR x = p199 OR x = p200 OR x = p201 OR x = p202 OR x = p203 OR x = p204 OR x = p205 OR x = p206 OR x = p207 OR x = p208 OR x = p209 OR x = p210 OR x = p211 OR x = p212 OR x = p213 OR x = p214 OR x = p215 OR x = p216 OR x = p217 OR x = p218 OR x = p219 OR x = p220 OR x = p221 OR x = p222 OR x = p223 OR x = p224 OR x = p225 OR x = p226 OR x = p227 OR x = p228 OR x = p229 OR x = p230 OR x = p231 OR x = p232 OR x = p233 OR x = p234 OR x = p235 OR x = p236 OR x = p237 OR x = p238 OR x = p239 OR x = p240 OR x = p241 OR x = p242 OR x = p243 OR x = p244 OR x = p245 OR x = p246 OR x = p247 OR x = p248 OR x = p249 OR x = p250 OR x = p251 OR x = p252 OR x = p253 OR x = p254 OR x = p255 OR x = p256 OR x = p257 OR x = p258 OR x = p259 OR x = p260 OR x = p261 OR x = p262 OR x = p263 OR x = p264 OR x = p265 OR x = p266 OR x = p267 OR x = p268 OR x = p269 OR x = p270 OR x = p271 OR x = p272 OR x = p273 OR x = p274 OR x = p275 OR x = p276 OR x = p277 OR x = p278 OR x = p279 OR x = p280 OR x = p281 OR x = p282 OR x = p283 OR x = p284 OR x = p285 OR x = p286 OR x = p287 OR x = p288 OR x = p289 OR x = p290 OR x = p291 OR x = p292 OR x = p293 OR x = p294 OR x = p295 OR x = p296 OR x = p297 OR x = p298 OR x = p299 OR x = p300;"
+        }
+      ],
+      "bind": "pca300"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pca300",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pca300_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pca300_ps",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pca300_ps"
+    },
+    {
+      "op": "release",
+      "target": "pca300"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

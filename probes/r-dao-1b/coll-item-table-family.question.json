@@ -1,0 +1,745 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/coll-item-table-family",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-ID",
+    "ERR-BIND"
+  ],
+  "description": "DAO-COLL: Item(0), Item(99), Item(-1) and Item by name, with Name read from each result, on the Fields of Parent ('Name', 'name', 'NoSuchField'), the Indexes of Parent ('PK_Parent', 'pk_parent', 'NoSuchIndex'), the Fields of Index UX_Parent_Name ('Name', 'NoSuchField'), the Relations of the Database ('RelMain', 'relmain', 'NoSuchRelation') and the Fields of Relation RelMain ('ID', 'PID', 'NoSuchField').",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tf"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UX_Parent_Name"
+        }
+      ],
+      "bind": "ux"
+    },
+    {
+      "op": "invoke",
+      "target": "ux",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "uf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "RelMain"
+        }
+      ],
+      "bind": "rm"
+    },
+    {
+      "op": "invoke",
+      "target": "rm",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rf"
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "f-0"
+    },
+    {
+      "op": "invoke",
+      "target": "f-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "f-99"
+    },
+    {
+      "op": "invoke",
+      "target": "f-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "f-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "f-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "f-s-Name"
+    },
+    {
+      "op": "invoke",
+      "target": "f-s-Name",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "name"
+        }
+      ],
+      "bind": "f-s-name"
+    },
+    {
+      "op": "invoke",
+      "target": "f-s-name",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ],
+      "bind": "f-s-NoSuchField"
+    },
+    {
+      "op": "invoke",
+      "target": "f-s-NoSuchField",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "i-0"
+    },
+    {
+      "op": "invoke",
+      "target": "i-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "i-99"
+    },
+    {
+      "op": "invoke",
+      "target": "i-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "i-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "i-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PK_Parent"
+        }
+      ],
+      "bind": "i-s-PK_Parent"
+    },
+    {
+      "op": "invoke",
+      "target": "i-s-PK_Parent",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pk_parent"
+        }
+      ],
+      "bind": "i-s-pk_parent"
+    },
+    {
+      "op": "invoke",
+      "target": "i-s-pk_parent",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchIndex"
+        }
+      ],
+      "bind": "i-s-NoSuchIndex"
+    },
+    {
+      "op": "invoke",
+      "target": "i-s-NoSuchIndex",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "if-0"
+    },
+    {
+      "op": "invoke",
+      "target": "if-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "if-99"
+    },
+    {
+      "op": "invoke",
+      "target": "if-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "if-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "if-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "if-s-Name"
+    },
+    {
+      "op": "invoke",
+      "target": "if-s-Name",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ],
+      "bind": "if-s-NoSuchField"
+    },
+    {
+      "op": "invoke",
+      "target": "if-s-NoSuchField",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "r-0"
+    },
+    {
+      "op": "invoke",
+      "target": "r-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "r-99"
+    },
+    {
+      "op": "invoke",
+      "target": "r-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "r-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "r-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "RelMain"
+        }
+      ],
+      "bind": "r-s-RelMain"
+    },
+    {
+      "op": "invoke",
+      "target": "r-s-RelMain",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "relmain"
+        }
+      ],
+      "bind": "r-s-relmain"
+    },
+    {
+      "op": "invoke",
+      "target": "r-s-relmain",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchRelation"
+        }
+      ],
+      "bind": "r-s-NoSuchRelation"
+    },
+    {
+      "op": "invoke",
+      "target": "r-s-NoSuchRelation",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rf-0"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "rf-99"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "rf-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rf-s-ID"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-s-ID",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ],
+      "bind": "rf-s-PID"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-s-PID",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ],
+      "bind": "rf-s-NoSuchField"
+    },
+    {
+      "op": "invoke",
+      "target": "rf-s-NoSuchField",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

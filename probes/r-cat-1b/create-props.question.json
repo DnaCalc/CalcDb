@@ -1,0 +1,1110 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/create-props",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P",
+    "CAT-D"
+  ],
+  "description": "R-CAT-1 fixture r-cat-1b-props: table TP made with TableDefs.CreateTableDef and Field.CreateField, with DefaultValue, Required, AllowZeroLength, ValidationRule and ValidationText set on fields before Append, table ValidationRule, ValidationText and Description set after Append, and Caption, Format, InputMask and Description created as Properties on fields. Built through DAO in one program on a new ACCDB (DBEngine.CreateDatabase, dbLangGeneral, dbVersion120); each call's outcome is recorded and the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-cat-1b-props.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TP"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Attributes",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f1c"
+    },
+    {
+      "op": "invoke",
+      "target": "f1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f1c"
+    },
+    {
+      "op": "release",
+      "target": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TxtDef"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "DefaultValue",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\"abc\""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f2c"
+    },
+    {
+      "op": "invoke",
+      "target": "f2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f2c"
+    },
+    {
+      "op": "release",
+      "target": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NumDef"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "f3"
+    },
+    {
+      "op": "invoke",
+      "target": "f3",
+      "member": "DefaultValue",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f3c"
+    },
+    {
+      "op": "invoke",
+      "target": "f3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f3c"
+    },
+    {
+      "op": "release",
+      "target": "f3"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Req"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ],
+      "bind": "f4"
+    },
+    {
+      "op": "invoke",
+      "target": "f4",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f4c"
+    },
+    {
+      "op": "invoke",
+      "target": "f4c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f4"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f4c"
+    },
+    {
+      "op": "release",
+      "target": "f4"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ZlOn"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ],
+      "bind": "f5"
+    },
+    {
+      "op": "invoke",
+      "target": "f5",
+      "member": "AllowZeroLength",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f5c"
+    },
+    {
+      "op": "invoke",
+      "target": "f5c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f5c"
+    },
+    {
+      "op": "release",
+      "target": "f5"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ZlOff"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ],
+      "bind": "f6"
+    },
+    {
+      "op": "invoke",
+      "target": "f6",
+      "member": "AllowZeroLength",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f6c"
+    },
+    {
+      "op": "invoke",
+      "target": "f6c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f6"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f6c"
+    },
+    {
+      "op": "release",
+      "target": "f6"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qty"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "f7"
+    },
+    {
+      "op": "invoke",
+      "target": "f7",
+      "member": "ValidationRule",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "> 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f7",
+      "member": "ValidationText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qty must be positive"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f7c"
+    },
+    {
+      "op": "invoke",
+      "target": "f7c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f7"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f7c"
+    },
+    {
+      "op": "release",
+      "target": "f7"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Fmt"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ],
+      "bind": "f8"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f8c"
+    },
+    {
+      "op": "invoke",
+      "target": "f8c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f8"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f8c"
+    },
+    {
+      "op": "release",
+      "target": "f8"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Memo1"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ],
+      "bind": "f9"
+    },
+    {
+      "op": "invoke",
+      "target": "f9",
+      "member": "AllowZeroLength",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f9c"
+    },
+    {
+      "op": "invoke",
+      "target": "f9c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f9"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f9c"
+    },
+    {
+      "op": "release",
+      "target": "f9"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DateF"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ],
+      "bind": "f10"
+    },
+    {
+      "op": "invoke",
+      "target": "f10",
+      "member": "DefaultValue",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Date()"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f10c"
+    },
+    {
+      "op": "invoke",
+      "target": "f10c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f10"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f10c"
+    },
+    {
+      "op": "release",
+      "target": "f10"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "BoolF"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "f11"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "f11c"
+    },
+    {
+      "op": "invoke",
+      "target": "f11c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f11"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f11c"
+    },
+    {
+      "op": "release",
+      "target": "f11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "tp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "ValidationRule",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[Qty] < 1000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "ValidationText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qty too large"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "TP table description"
+        }
+      ],
+      "bind": "tpd"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpdc"
+    },
+    {
+      "op": "invoke",
+      "target": "tpdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "tpd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tpd"
+    },
+    {
+      "op": "release",
+      "target": "tpdc"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpf"
+    },
+    {
+      "op": "invoke",
+      "target": "tpf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Fmt"
+        }
+      ],
+      "bind": "ffmt"
+    },
+    {
+      "op": "invoke",
+      "target": "tpf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "BoolF"
+        }
+      ],
+      "bind": "fbool"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "Format column"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fcc"
+    },
+    {
+      "op": "invoke",
+      "target": "fcc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fc"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "fcc"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "@"
+        }
+      ],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffc"
+    },
+    {
+      "op": "invoke",
+      "target": "ffc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "ff"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "release",
+      "target": "ffc"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InputMask"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "LLL000"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fic"
+    },
+    {
+      "op": "invoke",
+      "target": "fic",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fi"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "release",
+      "target": "fic"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "format column description"
+        }
+      ],
+      "bind": "fd"
+    },
+    {
+      "op": "invoke",
+      "target": "ffmt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fdc"
+    },
+    {
+      "op": "invoke",
+      "target": "fdc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fd"
+    },
+    {
+      "op": "release",
+      "target": "fdc"
+    },
+    {
+      "op": "invoke",
+      "target": "fbool",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "Yes/No"
+        }
+      ],
+      "bind": "bf"
+    },
+    {
+      "op": "invoke",
+      "target": "fbool",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "bfc"
+    },
+    {
+      "op": "invoke",
+      "target": "bfc",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "bf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "bf"
+    },
+    {
+      "op": "release",
+      "target": "bfc"
+    },
+    {
+      "op": "release",
+      "target": "fbool"
+    },
+    {
+      "op": "release",
+      "target": "ffmt"
+    },
+    {
+      "op": "release",
+      "target": "tpf"
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

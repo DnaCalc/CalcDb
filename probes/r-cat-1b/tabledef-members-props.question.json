@@ -1,0 +1,258 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/tabledef-members-props",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "Read-only open of the props fixture. TableDef TP is read for ValidationRule, ValidationText, Attributes, Updatable, RecordCount and Fields.Count; Properties.Item(\"Description\") is read (Type, Value); then every Property of TP is listed (Name, Type, Value, Inherited).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-props.accdb",
+      "sha256": "be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4",
+      "length": 184320,
+      "provenance": "r-cat-1b.create-props.7bebee222a.a1 qk1-7bebee222a91711532d092f2659235f065e1d6eaefa801a379a9b1e19c24677d output:r-cat-1b-props.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tp_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tp_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TP"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "release",
+      "target": "tp_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "ValidationRule",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "ValidationText",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpf"
+    },
+    {
+      "op": "invoke",
+      "target": "tpf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "tpf"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpp"
+    },
+    {
+      "op": "invoke",
+      "target": "tpp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        }
+      ],
+      "bind": "dsc"
+    },
+    {
+      "op": "invoke",
+      "target": "dsc",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dsc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dsc"
+    },
+    {
+      "op": "release",
+      "target": "tpp"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpl"
+    },
+    {
+      "op": "forEachItem",
+      "target": "tpl",
+      "bind": "tpli",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "tpli",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tpli",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tpli",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "tpli",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tpl"
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

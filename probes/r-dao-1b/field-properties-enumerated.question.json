@@ -1,0 +1,887 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/field-properties-enumerated",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP",
+    "DAO-META"
+  ],
+  "description": "DAO-PROP: Properties of the table-level Fields Typed.K (AutoNumber), TText, TMemo, TLong, TInt (validation rule), TDate, TOle, TDec (Decimal, ACCDB only) and Parent.Name (appended user property Description): Name, Type, Inherited and Value of each member, each read separately.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft0"
+    },
+    {
+      "op": "invoke",
+      "target": "ft0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl0"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl0",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "ff0"
+    },
+    {
+      "op": "invoke",
+      "target": "ff0",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp0s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp0s",
+      "bind": "fp0",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp0",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp0",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp0",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp0",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp0s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft1"
+    },
+    {
+      "op": "invoke",
+      "target": "ft1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl1"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TText"
+        }
+      ],
+      "bind": "ff1"
+    },
+    {
+      "op": "invoke",
+      "target": "ff1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp1s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp1s",
+      "bind": "fp1",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp1",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp1",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp1",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp1s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft2"
+    },
+    {
+      "op": "invoke",
+      "target": "ft2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl2"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TMemo"
+        }
+      ],
+      "bind": "ff2"
+    },
+    {
+      "op": "invoke",
+      "target": "ff2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp2s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp2s",
+      "bind": "fp2",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp2",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp2",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp2",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp2s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft3"
+    },
+    {
+      "op": "invoke",
+      "target": "ft3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl3"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TLong"
+        }
+      ],
+      "bind": "ff3"
+    },
+    {
+      "op": "invoke",
+      "target": "ff3",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp3s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp3s",
+      "bind": "fp3",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp3",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp3",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp3",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp3s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft4"
+    },
+    {
+      "op": "invoke",
+      "target": "ft4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl4"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TInt"
+        }
+      ],
+      "bind": "ff4"
+    },
+    {
+      "op": "invoke",
+      "target": "ff4",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp4s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp4s",
+      "bind": "fp4",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp4",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp4",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp4",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp4",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp4s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft5"
+    },
+    {
+      "op": "invoke",
+      "target": "ft5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl5"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl5",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TDate"
+        }
+      ],
+      "bind": "ff5"
+    },
+    {
+      "op": "invoke",
+      "target": "ff5",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp5s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp5s",
+      "bind": "fp5",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp5",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp5",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp5",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp5",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp5s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft6"
+    },
+    {
+      "op": "invoke",
+      "target": "ft6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl6"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl6",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TOle"
+        }
+      ],
+      "bind": "ff6"
+    },
+    {
+      "op": "invoke",
+      "target": "ff6",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp6s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp6s",
+      "bind": "fp6",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp6",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp6",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp6",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp6",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp6s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "ft7"
+    },
+    {
+      "op": "invoke",
+      "target": "ft7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl7"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl7",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TDec"
+        }
+      ],
+      "bind": "ff7"
+    },
+    {
+      "op": "invoke",
+      "target": "ff7",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp7s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp7s",
+      "bind": "fp7",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp7",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp7",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp7",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp7",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp7s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "ft8"
+    },
+    {
+      "op": "invoke",
+      "target": "ft8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ffl8"
+    },
+    {
+      "op": "invoke",
+      "target": "ffl8",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "ff8"
+    },
+    {
+      "op": "invoke",
+      "target": "ff8",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fp8s"
+    },
+    {
+      "op": "forEachItem",
+      "target": "fp8s",
+      "bind": "fp8",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fp8",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp8",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp8",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fp8",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fp8s"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

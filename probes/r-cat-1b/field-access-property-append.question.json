@@ -1,0 +1,1453 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/field-access-property-append",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "On a writable copy of the base fixture, Properties are created and appended on T.A (Caption Text 'A caption', Format Text '>', InputMask Text 'LLL', DisplayControl Integer 109), on T.B (DecimalPlaces Byte 2, Format Text 'Fixed', ColumnWidth Integer 1440) and on T.C (Caption as Long 5, DecimalPlaces as Long 2), with DBEngine.Errors after each Append. Every Property of the three Fields is then listed (Name, Type, Value, Inherited); after Close and reopen they are listed again.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-base.accdb",
+      "sha256": "c875186a30d15756bfd03332da860ad60a9f6e14c470d0cf585e5617d8ae08a3",
+      "length": 221184,
+      "provenance": "r-cat-1b.create-base.a1bfa3fb28.a1 qk1-a1bfa3fb28c46982675dd3b0f6fee66e4f6b4ad4062147bf84f2b7bf04e7cbf1 output:r-cat-1b-base.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "t_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "t_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "release",
+      "target": "t_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fa_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fa_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "release",
+      "target": "fa_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fb_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fb_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "fb"
+    },
+    {
+      "op": "release",
+      "target": "fb_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fc_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fc_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "release",
+      "target": "fc_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "A caption"
+        }
+      ],
+      "bind": "a1"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a1c"
+    },
+    {
+      "op": "invoke",
+      "target": "a1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "a1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a1"
+    },
+    {
+      "op": "release",
+      "target": "a1c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": ">"
+        }
+      ],
+      "bind": "a2"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a2c"
+    },
+    {
+      "op": "invoke",
+      "target": "a2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "a2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a2"
+    },
+    {
+      "op": "release",
+      "target": "a2c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InputMask"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "LLL"
+        }
+      ],
+      "bind": "a3"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a3c"
+    },
+    {
+      "op": "invoke",
+      "target": "a3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "a3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a3"
+    },
+    {
+      "op": "release",
+      "target": "a3c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DisplayControl"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i2",
+          "value": 109
+        }
+      ],
+      "bind": "a4"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a4c"
+    },
+    {
+      "op": "invoke",
+      "target": "a4c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "a4"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a4"
+    },
+    {
+      "op": "release",
+      "target": "a4c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DecimalPlaces"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        },
+        {
+          "type": "ui1",
+          "value": 2
+        }
+      ],
+      "bind": "b1"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "b1c"
+    },
+    {
+      "op": "invoke",
+      "target": "b1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "b1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "b1"
+    },
+    {
+      "op": "release",
+      "target": "b1c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "Fixed"
+        }
+      ],
+      "bind": "b2"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "b2c"
+    },
+    {
+      "op": "invoke",
+      "target": "b2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "b2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "b2"
+    },
+    {
+      "op": "release",
+      "target": "b2c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnWidth"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i2",
+          "value": 1440
+        }
+      ],
+      "bind": "b3"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "b3c"
+    },
+    {
+      "op": "invoke",
+      "target": "b3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "b3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "b3"
+    },
+    {
+      "op": "release",
+      "target": "b3c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "c1"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c1c"
+    },
+    {
+      "op": "invoke",
+      "target": "c1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "c1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c1"
+    },
+    {
+      "op": "release",
+      "target": "c1c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DecimalPlaces"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c2c"
+    },
+    {
+      "op": "invoke",
+      "target": "c2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "c2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "release",
+      "target": "c2c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pa"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pa",
+      "bind": "pai",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pai",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pai",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pai",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pai",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pa"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pb"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pb",
+      "bind": "pbi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pbi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pbi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pbi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pbi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pb"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pc"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pc",
+      "bind": "pci",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pci",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pci",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pci",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pci",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pc"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "fb"
+    },
+    {
+      "op": "release",
+      "target": "fa"
+    },
+    {
+      "op": "release",
+      "target": "t"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "t2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t2_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "t2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "t2"
+    },
+    {
+      "op": "release",
+      "target": "t2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gA_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gA_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ],
+      "bind": "gA"
+    },
+    {
+      "op": "release",
+      "target": "gA_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gA",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qA"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qA",
+      "bind": "qAi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qAi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qAi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qAi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qAi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qA"
+    },
+    {
+      "op": "release",
+      "target": "gA"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gB_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gB_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "gB"
+    },
+    {
+      "op": "release",
+      "target": "gB_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gB",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qB"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qB",
+      "bind": "qBi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qBi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qBi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qBi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qBi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qB"
+    },
+    {
+      "op": "release",
+      "target": "gB"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gC_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gC_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ],
+      "bind": "gC"
+    },
+    {
+      "op": "release",
+      "target": "gC_c"
+    },
+    {
+      "op": "invoke",
+      "target": "gC",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qC"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qC",
+      "bind": "qCi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qCi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qCi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qCi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qCi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qC"
+    },
+    {
+      "op": "release",
+      "target": "gC"
+    },
+    {
+      "op": "release",
+      "target": "t2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

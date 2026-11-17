@@ -1,0 +1,238 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/tabledef-members-each",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-META"
+  ],
+  "description": "DAO-MANIFEST applicability: every TableDef in TableDefs (bounded at 32, in collection order, system and linked entries included if listed): each of Attributes, ConflictTable, Connect, DateCreated, LastUpdated, Name, RecordCount, ReplicaFilter, SourceTableName, Updatable, ValidationRule and ValidationText by its own call, then Count of Fields, Indexes and Properties.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "tds",
+      "bind": "t",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "ConflictTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Connect",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "DateCreated",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "LastUpdated",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "RecordCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "ReplicaFilter",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "SourceTableName",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Updatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "ValidationText",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tFields"
+        },
+        {
+          "op": "invoke",
+          "target": "tFields",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "tFields"
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Indexes",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tIndexes"
+        },
+        {
+          "op": "invoke",
+          "target": "tIndexes",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "tIndexes"
+        },
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tProperties"
+        },
+        {
+          "op": "invoke",
+          "target": "tProperties",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "tProperties"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

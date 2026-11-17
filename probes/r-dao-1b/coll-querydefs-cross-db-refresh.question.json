@@ -1,0 +1,333 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/coll-querydefs-cross-db-refresh",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-QUERY"
+  ],
+  "description": "DAO-COLL on a writable copy: two writable Databases on one file in Workspaces(0). A QueryDefs held from db is read (Count, Item('QDel'), names). Through db2 a QueryDef QNew2 is created and QDel is deleted. The held collection is read again (Count, names, Item('QNew2'), Item('QDel')), then Refresh, then read again. A fresh QueryDefs from db is read last.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        }
+      ],
+      "bind": "dq"
+    },
+    {
+      "op": "invoke",
+      "target": "dq",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qds",
+      "bind": "n0",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n0",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QNew2"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Parent;"
+        }
+      ],
+      "bind": "qn"
+    },
+    {
+      "op": "invoke",
+      "target": "qds2",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qds",
+      "bind": "n1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QNew2"
+        }
+      ],
+      "bind": "qa"
+    },
+    {
+      "op": "invoke",
+      "target": "qa",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        }
+      ],
+      "bind": "qb"
+    },
+    {
+      "op": "invoke",
+      "target": "qb",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qds",
+      "bind": "n2",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QNew2"
+        }
+      ],
+      "bind": "qc"
+    },
+    {
+      "op": "invoke",
+      "target": "qc",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds3"
+    },
+    {
+      "op": "invoke",
+      "target": "qds3",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qds3",
+      "bind": "n3",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

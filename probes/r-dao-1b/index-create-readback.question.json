@@ -1,0 +1,402 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/index-create-readback",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-DRAFT",
+    "DAO-COLL",
+    "II-05"
+  ],
+  "description": "DAO-DRAFT/II-05 on a writable copy: on table Typed, an Index IX_Typed_New with fields TText (Attributes dbDescending 1) and TLong, IgnoreNulls True and Unique True set on the draft, is appended. The draft's and the re-fetched Index's members (Clustered, DistinctCount, Foreign, IgnoreNulls, Name, Primary, Required, Unique) are read, then the Name and Attributes of each Index.Fields member, then Indexes.Refresh and DistinctCount again.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "idxs"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "CreateIndex",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_Typed_New"
+        }
+      ],
+      "bind": "nx"
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TText"
+        }
+      ],
+      "bind": "nxa"
+    },
+    {
+      "op": "invoke",
+      "target": "nxa",
+      "member": "Attributes",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TLong"
+        }
+      ],
+      "bind": "nxb"
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "nxf"
+    },
+    {
+      "op": "invoke",
+      "target": "nxf",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nxa"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nxf",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nxb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "IgnoreNulls",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Unique",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "idxs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "nx"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Clustered",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Foreign",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "IgnoreNulls",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Primary",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Required",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "Unique",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "idxs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_Typed_New"
+        }
+      ],
+      "bind": "rx"
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Clustered",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Foreign",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "IgnoreNulls",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Primary",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Required",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Unique",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rxf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rxf",
+      "bind": "y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "y",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "idxs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rx",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "nx",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

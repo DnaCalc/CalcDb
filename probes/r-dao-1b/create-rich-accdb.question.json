@@ -1,0 +1,1301 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/create-rich-accdb",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP",
+    "DAO-META",
+    "DAO-COLL",
+    "DAO-QUERY",
+    "II-05"
+  ],
+  "description": "R-DAO-1 fixture, created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128): table Parent (Long key PK_Parent, Text [Name], Long Qty, Double [Value]; five rows; unique index UX_Parent_Name, descending composite index IX_Parent_QtyDesc, IGNORE NULL index IX_Parent_Ignore, DISALLOW NULL index IX_Parent_Required); table Child (AutoNumber CID, PID, [Text]; four rows) related to Parent by relation RelMain with update-cascade attribute; table Grand whose CID references Child through FK_Grand; table Typed with one field of each common type, one row, and for the ACCDB a Decimal field TDec added through Fields.Append; field attribute edits on Typed; eight saved queries (select, parameter, update, delete, append, make-table, crosstab, union); user properties of six types on the database, Description on table Parent and on its field [Name]. The closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-dao-1b-rich.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Parent (ID LONG CONSTRAINT PK_Parent PRIMARY KEY, [Name] TEXT(30) NOT NULL, Qty LONG, [Value] DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UX_Parent_Name ON Parent ([Name])"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_Parent_QtyDesc ON Parent (Qty DESC, [Value] ASC)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_Parent_Ignore ON Parent ([Value]) WITH IGNORE NULL"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_Parent_Required ON Parent (Qty) WITH DISALLOW NULL"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent VALUES (1, 'one', 10, 1.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent VALUES (2, 'two', 20, 2.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent VALUES (3, 'three', 30, NULL)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent VALUES (4, 'four', 40, 4.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent VALUES (5, 'five', 50, 5.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Child (CID COUNTER CONSTRAINT PK_Child PRIMARY KEY, PID LONG, [Text] TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, [Text]) VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, [Text]) VALUES (1, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, [Text]) VALUES (2, 'c')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, [Text]) VALUES (3, 'd')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Grand (GID LONG CONSTRAINT PK_Grand PRIMARY KEY, CID LONG CONSTRAINT FK_Grand REFERENCES Child (CID))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Grand VALUES (1, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Grand VALUES (2, 2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Typed (K COUNTER CONSTRAINT PK_Typed PRIMARY KEY, TText TEXT(25), TMemo MEMO, TByte BYTE, TInt SHORT, TLong LONG, TSingle SINGLE, TDouble DOUBLE, TCur CURRENCY, TDate DATETIME, TBool YESNO, TOle LONGBINARY, TGuid GUID)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Typed (TText, TMemo, TByte, TInt, TLong, TSingle, TDouble, TCur, TDate, TBool) VALUES ('t', 'm', 7, -3, 70000, 1.5, 2.25, 3.75, #01/02/2026#, True)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dtdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "dtdf"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TDec"
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ],
+      "bind": "dfld"
+    },
+    {
+      "op": "invoke",
+      "target": "dtdf",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dfls"
+    },
+    {
+      "op": "invoke",
+      "target": "dfls",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "dfld"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dfls"
+    },
+    {
+      "op": "release",
+      "target": "dfld"
+    },
+    {
+      "op": "release",
+      "target": "dtdf"
+    },
+    {
+      "op": "release",
+      "target": "dtdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "RelMain"
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        },
+        {
+          "type": "bstr",
+          "text": "Child"
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Typed"
+        }
+      ],
+      "bind": "tt"
+    },
+    {
+      "op": "invoke",
+      "target": "tt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfl"
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TText"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "AllowZeroLength",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "DefaultValue",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\"dflt\""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TLong"
+        }
+      ],
+      "bind": "fb"
+    },
+    {
+      "op": "invoke",
+      "target": "fb",
+      "member": "Required",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TInt"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "ValidationRule",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">= -10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "ValidationText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TInt must be at least -10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TDouble"
+        }
+      ],
+      "bind": "fd"
+    },
+    {
+      "op": "invoke",
+      "target": "fd",
+      "member": "DefaultValue",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1.5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fd"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "fb"
+    },
+    {
+      "op": "release",
+      "target": "fa"
+    },
+    {
+      "op": "release",
+      "target": "tfl"
+    },
+    {
+      "op": "release",
+      "target": "tt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSel"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, [Name] FROM Parent ORDER BY ID;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pId Long, pName Text (20); SELECT ID, [Name] FROM Parent WHERE ID = pId OR [Name] = pName;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpd"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pDelta Long; UPDATE Parent SET Qty = Qty + pDelta;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QDel"
+        },
+        {
+          "type": "bstr",
+          "text": "DELETE FROM Child WHERE CID < 0;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QApp"
+        },
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Grand (GID) SELECT CID FROM Child WHERE CID < 0;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QMake"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, [Name] INTO Made FROM Parent;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QCross"
+        },
+        {
+          "type": "bstr",
+          "text": "TRANSFORM Sum(Qty) AS SumQty SELECT [Name] FROM Parent GROUP BY [Name] PIVOT ID;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUnion"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Parent UNION SELECT PID FROM Child;"
+        }
+      ],
+      "bind": "q"
+    },
+    {
+      "op": "release",
+      "target": "q"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPText"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "alpha"
+        }
+      ],
+      "bind": "u1n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u1c"
+    },
+    {
+      "op": "invoke",
+      "target": "u1c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u1n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u1c"
+    },
+    {
+      "op": "release",
+      "target": "u1n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPLong"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 42
+        }
+      ],
+      "bind": "u2n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u2c"
+    },
+    {
+      "op": "invoke",
+      "target": "u2c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u2n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u2c"
+    },
+    {
+      "op": "release",
+      "target": "u2n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPBool"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "u3n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u3c"
+    },
+    {
+      "op": "invoke",
+      "target": "u3c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u3n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u3c"
+    },
+    {
+      "op": "release",
+      "target": "u3n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDate"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        },
+        {
+          "type": "date",
+          "bits": "40e6790000000000"
+        }
+      ],
+      "bind": "u4n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u4c"
+    },
+    {
+      "op": "invoke",
+      "target": "u4c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u4n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u4c"
+    },
+    {
+      "op": "release",
+      "target": "u4n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDouble"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ],
+      "bind": "u5n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u5c"
+    },
+    {
+      "op": "invoke",
+      "target": "u5c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u5n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u5c"
+    },
+    {
+      "op": "release",
+      "target": "u5n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPMemo"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        },
+        {
+          "type": "bstr",
+          "text": "memo text"
+        }
+      ],
+      "bind": "u6n"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u6c"
+    },
+    {
+      "op": "invoke",
+      "target": "u6c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u6n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u6c"
+    },
+    {
+      "op": "release",
+      "target": "u6n"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "parent table"
+        }
+      ],
+      "bind": "u7n"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u7c"
+    },
+    {
+      "op": "invoke",
+      "target": "u7c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u7n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u7c"
+    },
+    {
+      "op": "release",
+      "target": "u7n"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tpf"
+    },
+    {
+      "op": "invoke",
+      "target": "tpf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ],
+      "bind": "tpn"
+    },
+    {
+      "op": "invoke",
+      "target": "tpn",
+      "member": "CreateProperty",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "bstr",
+          "text": "name column"
+        }
+      ],
+      "bind": "u8n"
+    },
+    {
+      "op": "invoke",
+      "target": "tpn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "u8c"
+    },
+    {
+      "op": "invoke",
+      "target": "u8c",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "u8n"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "u8c"
+    },
+    {
+      "op": "release",
+      "target": "u8n"
+    },
+    {
+      "op": "release",
+      "target": "tpn"
+    },
+    {
+      "op": "release",
+      "target": "tpf"
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

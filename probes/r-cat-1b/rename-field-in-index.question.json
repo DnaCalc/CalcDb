@@ -1,0 +1,596 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/rename-field-in-index",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-D"
+  ],
+  "description": "On a writable copy of the idx fixture Field TI.A (in ixU and ixMulti) is renamed to A2 and Field TI.ID (the primary key) to ID2, each through Field.Name with Name and DBEngine.Errors read. TI's Indexes (after Refresh) are then listed with Name, Primary, Unique, Clustered, IgnoreNulls, Required, Foreign, DistinctCount and Fields (Name, Attributes). After Close and reopen the Indexes are listed again.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-idx.accdb",
+      "sha256": "cc095f8e207636d049b8d5e8afcff06625121cad872eca665dd1dd4e4779e86a",
+      "length": 221184,
+      "provenance": "r-cat-1b.create-idx.0232696dc9.a1 qk1-0232696dc972ea593308e6fa5bd77a7b3afecf6ed0aefbaf4b88f984747273b2 output:r-cat-1b-idx.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TI"
+        }
+      ],
+      "bind": "ti"
+    },
+    {
+      "op": "release",
+      "target": "ti_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fa_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fa_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ],
+      "bind": "fa"
+    },
+    {
+      "op": "release",
+      "target": "fa_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Name",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fa",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fa"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fid_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fid_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fid"
+    },
+    {
+      "op": "release",
+      "target": "fid_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fid",
+      "member": "Name",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fid",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "fid"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ix1"
+    },
+    {
+      "op": "invoke",
+      "target": "ix1",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ix1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ix1",
+      "bind": "ix1i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix1i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ix1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ix1f",
+          "bind": "ix1fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ix1fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix1fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ix1f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ix1"
+    },
+    {
+      "op": "release",
+      "target": "ti"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti2_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TI"
+        }
+      ],
+      "bind": "ti2"
+    },
+    {
+      "op": "release",
+      "target": "ti2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti2",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ix2"
+    },
+    {
+      "op": "invoke",
+      "target": "ix2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ix2",
+      "bind": "ix2i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix2i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ix2f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ix2f",
+          "bind": "ix2fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ix2fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ix2fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ix2f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ix2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

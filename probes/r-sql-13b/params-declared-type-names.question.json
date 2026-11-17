@@ -1,0 +1,5699 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sql-13b/params-declared-type-names",
+  "bookRefs": [
+    "R-SQL-3",
+    "SQL-B"
+  ],
+  "description": "Which type names does a PARAMETERS declaration accept, with which Parameters Type and QueryDef.Fields Type/Size of the output (SELECT pX AS v FROM ONE), and with which error number where refused? Names: Bit; Byte; Short; Long; Currency; IEEESingle; IEEEDouble; DateTime; Text; Text ( 10 ); LongText; LongBinary; Binary; Binary ( 4 ); Guid; Decimal; Decimal ( 10, 2 ); Value; Integer; Single; Double; Float; Real; Memo; Counter; Date; Boolean; YesNo; Numeric; Char; VarChar ( 5 ); BigInt; Variant; Object; OLEObject; TinyInt; SmallInt; Int; Money. For each temporary QueryDef the Parameters (Name, Type, Direction) and Fields (Name, Type, Size) are read; no value is assigned and nothing is opened. Runs on a fresh copy of r-sql-13b-main (ACCDB) opened read-only through ACE DAO; each text goes into a temporary QueryDef (CreateQueryDef with an empty name, then DBEngine.Errors).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sql-13b-main.accdb",
+      "sha256": "930a84695c32fb2984135ed60e828bf6f54288bcac39ced94ff8abeeb401100a",
+      "length": 409600,
+      "provenance": "r-sql-13b.create-main.6e0ba373ae.a1 qk1-6e0ba373ae51efe5c82132ca24dc18d8068b02a3895f4662f95d540c3e0eae86 output:r-sql-13b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Bit; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt0_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt0_ps",
+      "bind": "pt0_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt0_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt0_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt0_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt0_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt0_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt0_f",
+      "bind": "pt0_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt0_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt0_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt0_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt0_f"
+    },
+    {
+      "op": "release",
+      "target": "pt0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Byte; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt1_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt1_ps",
+      "bind": "pt1_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt1_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt1_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt1_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt1_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt1_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt1_f",
+      "bind": "pt1_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt1_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt1_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt1_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt1_f"
+    },
+    {
+      "op": "release",
+      "target": "pt1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Short; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt2_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt2_ps",
+      "bind": "pt2_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt2_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt2_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt2_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt2_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt2_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt2_f",
+      "bind": "pt2_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt2_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt2_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt2_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt2_f"
+    },
+    {
+      "op": "release",
+      "target": "pt2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Long; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt3_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt3_ps",
+      "bind": "pt3_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt3_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt3_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt3_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt3_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt3_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt3_f",
+      "bind": "pt3_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt3_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt3_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt3_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt3_f"
+    },
+    {
+      "op": "release",
+      "target": "pt3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Currency; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt4_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt4_ps",
+      "bind": "pt4_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt4_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt4_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt4_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt4_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt4_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt4_f",
+      "bind": "pt4_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt4_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt4_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt4_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt4_f"
+    },
+    {
+      "op": "release",
+      "target": "pt4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX IEEESingle; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt5_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt5_ps",
+      "bind": "pt5_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt5_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt5_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt5_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt5_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt5_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt5_f",
+      "bind": "pt5_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt5_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt5_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt5_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt5_f"
+    },
+    {
+      "op": "release",
+      "target": "pt5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX IEEEDouble; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt6",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt6_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt6_ps",
+      "bind": "pt6_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt6_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt6_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt6_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt6_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt6_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt6_f",
+      "bind": "pt6_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt6_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt6_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt6_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt6_f"
+    },
+    {
+      "op": "release",
+      "target": "pt6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX DateTime; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt7"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt7",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt7_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt7_ps",
+      "bind": "pt7_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt7_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt7_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt7_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt7_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt7_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt7_f",
+      "bind": "pt7_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt7_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt7_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt7_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt7_f"
+    },
+    {
+      "op": "release",
+      "target": "pt7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Text; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt8"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt8",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt8_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt8_ps",
+      "bind": "pt8_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt8_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt8_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt8_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt8_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt8_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt8_f",
+      "bind": "pt8_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt8_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt8_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt8_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt8_f"
+    },
+    {
+      "op": "release",
+      "target": "pt8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Text ( 10 ); SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt9"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt9",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt9_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt9_ps",
+      "bind": "pt9_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt9_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt9_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt9_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt9_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt9_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt9_f",
+      "bind": "pt9_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt9_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt9_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt9_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt9_f"
+    },
+    {
+      "op": "release",
+      "target": "pt9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX LongText; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt10"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt10",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt10_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt10_ps",
+      "bind": "pt10_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt10_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt10_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt10_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt10_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt10",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt10_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt10_f",
+      "bind": "pt10_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt10_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt10_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt10_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt10_f"
+    },
+    {
+      "op": "release",
+      "target": "pt10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX LongBinary; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt11"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt11",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt11_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt11_ps",
+      "bind": "pt11_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt11_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt11_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt11_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt11_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt11_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt11_f",
+      "bind": "pt11_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt11_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt11_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt11_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt11_f"
+    },
+    {
+      "op": "release",
+      "target": "pt11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Binary; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt12"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt12",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt12_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt12_ps",
+      "bind": "pt12_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt12_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt12_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt12_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt12_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt12",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt12_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt12_f",
+      "bind": "pt12_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt12_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt12_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt12_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt12_f"
+    },
+    {
+      "op": "release",
+      "target": "pt12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Binary ( 4 ); SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt13"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt13",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt13_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt13_ps",
+      "bind": "pt13_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt13_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt13_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt13_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt13_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt13_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt13_f",
+      "bind": "pt13_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt13_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt13_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt13_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt13_f"
+    },
+    {
+      "op": "release",
+      "target": "pt13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Guid; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt14"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt14",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt14_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt14_ps",
+      "bind": "pt14_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt14_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt14_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt14_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt14_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt14",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt14_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt14_f",
+      "bind": "pt14_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt14_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt14_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt14_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt14_f"
+    },
+    {
+      "op": "release",
+      "target": "pt14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Decimal; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt15"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt15",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt15_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt15_ps",
+      "bind": "pt15_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt15_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt15_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt15_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt15_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt15",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt15_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt15_f",
+      "bind": "pt15_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt15_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt15_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt15_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt15_f"
+    },
+    {
+      "op": "release",
+      "target": "pt15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Decimal ( 10, 2 ); SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt16"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt16",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt16_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt16_ps",
+      "bind": "pt16_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt16_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt16_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt16_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt16_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt16",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt16_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt16_f",
+      "bind": "pt16_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt16_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt16_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt16_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt16_f"
+    },
+    {
+      "op": "release",
+      "target": "pt16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Value; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt17"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt17",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt17_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt17_ps",
+      "bind": "pt17_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt17_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt17_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt17_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt17_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt17",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt17_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt17_f",
+      "bind": "pt17_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt17_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt17_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt17_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt17_f"
+    },
+    {
+      "op": "release",
+      "target": "pt17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Integer; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt18"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt18",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt18_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt18_ps",
+      "bind": "pt18_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt18_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt18_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt18_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt18_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt18",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt18_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt18_f",
+      "bind": "pt18_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt18_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt18_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt18_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt18_f"
+    },
+    {
+      "op": "release",
+      "target": "pt18"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Single; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt19"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt19",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt19_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt19_ps",
+      "bind": "pt19_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt19_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt19_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt19_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt19_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt19",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt19_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt19_f",
+      "bind": "pt19_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt19_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt19_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt19_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt19_f"
+    },
+    {
+      "op": "release",
+      "target": "pt19"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Double; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt20"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt20",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt20_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt20_ps",
+      "bind": "pt20_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt20_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt20_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt20_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt20_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt20",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt20_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt20_f",
+      "bind": "pt20_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt20_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt20_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt20_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt20_f"
+    },
+    {
+      "op": "release",
+      "target": "pt20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Float; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt21"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt21",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt21_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt21_ps",
+      "bind": "pt21_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt21_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt21_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt21_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt21_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt21",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt21_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt21_f",
+      "bind": "pt21_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt21_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt21_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt21_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt21_f"
+    },
+    {
+      "op": "release",
+      "target": "pt21"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Real; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt22"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt22",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt22_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt22_ps",
+      "bind": "pt22_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt22_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt22_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt22_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt22_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt22",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt22_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt22_f",
+      "bind": "pt22_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt22_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt22_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt22_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt22_f"
+    },
+    {
+      "op": "release",
+      "target": "pt22"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Memo; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt23"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt23",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt23_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt23_ps",
+      "bind": "pt23_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt23_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt23_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt23_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt23_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt23",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt23_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt23_f",
+      "bind": "pt23_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt23_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt23_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt23_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt23_f"
+    },
+    {
+      "op": "release",
+      "target": "pt23"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Counter; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt24"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt24",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt24_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt24_ps",
+      "bind": "pt24_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt24_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt24_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt24_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt24_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt24",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt24_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt24_f",
+      "bind": "pt24_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt24_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt24_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt24_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt24_f"
+    },
+    {
+      "op": "release",
+      "target": "pt24"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Date; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt25"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt25",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt25_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt25_ps",
+      "bind": "pt25_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt25_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt25_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt25_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt25_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt25",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt25_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt25_f",
+      "bind": "pt25_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt25_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt25_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt25_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt25_f"
+    },
+    {
+      "op": "release",
+      "target": "pt25"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Boolean; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt26"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt26",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt26_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt26_ps",
+      "bind": "pt26_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt26_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt26_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt26_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt26_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt26",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt26_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt26_f",
+      "bind": "pt26_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt26_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt26_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt26_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt26_f"
+    },
+    {
+      "op": "release",
+      "target": "pt26"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX YesNo; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt27"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt27",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt27_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt27_ps",
+      "bind": "pt27_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt27_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt27_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt27_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt27_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt27",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt27_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt27_f",
+      "bind": "pt27_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt27_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt27_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt27_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt27_f"
+    },
+    {
+      "op": "release",
+      "target": "pt27"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Numeric; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt28"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt28",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt28_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt28_ps",
+      "bind": "pt28_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt28_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt28_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt28_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt28_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt28",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt28_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt28_f",
+      "bind": "pt28_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt28_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt28_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt28_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt28_f"
+    },
+    {
+      "op": "release",
+      "target": "pt28"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Char; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt29"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt29",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt29_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt29_ps",
+      "bind": "pt29_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt29_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt29_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt29_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt29_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt29",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt29_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt29_f",
+      "bind": "pt29_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt29_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt29_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt29_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt29_f"
+    },
+    {
+      "op": "release",
+      "target": "pt29"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX VarChar ( 5 ); SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt30"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt30",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt30_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt30_ps",
+      "bind": "pt30_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt30_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt30_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt30_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt30_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt30",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt30_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt30_f",
+      "bind": "pt30_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt30_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt30_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt30_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt30_f"
+    },
+    {
+      "op": "release",
+      "target": "pt30"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX BigInt; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt31"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt31",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt31_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt31_ps",
+      "bind": "pt31_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt31_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt31_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt31_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt31_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt31",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt31_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt31_f",
+      "bind": "pt31_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt31_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt31_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt31_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt31_f"
+    },
+    {
+      "op": "release",
+      "target": "pt31"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Variant; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt32"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt32",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt32_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt32_ps",
+      "bind": "pt32_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt32_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt32_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt32_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt32_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt32",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt32_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt32_f",
+      "bind": "pt32_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt32_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt32_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt32_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt32_f"
+    },
+    {
+      "op": "release",
+      "target": "pt32"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Object; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt33"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt33",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt33_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt33_ps",
+      "bind": "pt33_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt33_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt33_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt33_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt33_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt33",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt33_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt33_f",
+      "bind": "pt33_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt33_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt33_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt33_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt33_f"
+    },
+    {
+      "op": "release",
+      "target": "pt33"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX OLEObject; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt34"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt34",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt34_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt34_ps",
+      "bind": "pt34_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt34_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt34_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt34_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt34_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt34",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt34_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt34_f",
+      "bind": "pt34_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt34_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt34_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt34_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt34_f"
+    },
+    {
+      "op": "release",
+      "target": "pt34"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX TinyInt; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt35"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt35",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt35_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt35_ps",
+      "bind": "pt35_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt35_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt35_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt35_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt35_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt35",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt35_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt35_f",
+      "bind": "pt35_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt35_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt35_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt35_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt35_f"
+    },
+    {
+      "op": "release",
+      "target": "pt35"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX SmallInt; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt36"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt36",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt36_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt36_ps",
+      "bind": "pt36_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt36_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt36_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt36_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt36_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt36",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt36_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt36_f",
+      "bind": "pt36_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt36_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt36_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt36_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt36_f"
+    },
+    {
+      "op": "release",
+      "target": "pt36"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Int; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt37"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt37",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt37_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt37_ps",
+      "bind": "pt37_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt37_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt37_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt37_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt37_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt37",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt37_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt37_f",
+      "bind": "pt37_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt37_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt37_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt37_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt37_f"
+    },
+    {
+      "op": "release",
+      "target": "pt37"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Money; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pt38"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pt38",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt38_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt38_ps",
+      "bind": "pt38_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt38_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt38_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt38_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt38_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pt38",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pt38_f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pt38_f",
+      "bind": "pt38_fi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pt38_fi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt38_fi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pt38_fi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pt38_f"
+    },
+    {
+      "op": "release",
+      "target": "pt38"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

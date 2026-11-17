@@ -78,6 +78,22 @@ file. Adopt.
   two-process question, with no human step between definition and retained record.
 - First-contact defects surfaced at once because every outcome is sealed with explicit problems.
 
-**Next candidates.** Add the DAO DDL limits to the design brief. Add a fixture-review step that reads the
+**Change tried and measured the same night.** The third design wave's brief carried the DDL limits, the
+fixture report and the light opening, and fixture creations ran as their own round before any dependent.
+Result: 15 of 15 wave-3 fixtures created with zero failed creation calls. In waves 1 and 2, 9 of about 40
+fixtures had lost tables. Adopt both: the limits belong in every design brief, and creations get their own
+round.
+
+**A wrong diagnosis, caught by a designed probe.** When fixtures failed, I changed two things at once (the
+foreign-key form, and implicitly nothing about a column named Note). I then wrote "DAO DDL refuses REFERENCES"
+into comments, logs and a commit message. A discriminator varying one element per statement
+(`evidence/r-ddl-limits`) showed the opposite, and the claim was corrected everywhere it appeared. Rule for
+next time: one change per retry, or run the discriminator before writing the explanation down.
+
+**A tempting false finding, caught by repetition.** One run of `dbFlushTransactionTimeout = 1` suggested a format
+difference between ACCDB and MDB. Three attempts each showed a race at the kill boundary in both formats.
+Rule: repeat any single-sample result at a timing boundary before recording it.
+
+**Next candidates.** Add a fixture-review step that reads the
 creation capture and fails a fixture whose required tables did not appear. Store the environment once per
 worker, as proposed in oracle-service.md.

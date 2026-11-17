@@ -1,0 +1,1607 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/rel-index-ownership",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-D"
+  ],
+  "description": "Read-only open of the rel fixture. For each of the TableDefs Parent, Parent2, Child1, Child2, Child3, Child4, Child5, Child6, ChildMC, Self every Index is read for Name, Primary, Unique, Clustered, IgnoreNulls, Required, Foreign, DistinctCount and its Fields (Name, Attributes).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-rel.accdb",
+      "sha256": "476bf9ec945ded0309c840bdffcd19ee8d2211039e1674ac4a0b4d5590231587",
+      "length": 327680,
+      "provenance": "r-cat-1b.create-rel.21b7e0b11d.a1 qk1-21b7e0b11d636ef022bd955e316c64ceeed73dbb1063942fa997cec9d8abff83 output:r-cat-1b-rel.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tParent_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tParent_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tParent_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "tParent"
+    },
+    {
+      "op": "release",
+      "target": "tParent_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tParent",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixParent"
+    },
+    {
+      "op": "invoke",
+      "target": "ixParent",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixParent",
+      "bind": "ixParenti",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParenti",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixParentf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixParentf",
+          "bind": "ixParentfi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixParentfi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixParentfi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixParentf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixParent"
+    },
+    {
+      "op": "release",
+      "target": "tParent"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tParent2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tParent2_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tParent2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent2"
+        }
+      ],
+      "bind": "tParent2"
+    },
+    {
+      "op": "release",
+      "target": "tParent2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tParent2",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixParent2"
+    },
+    {
+      "op": "invoke",
+      "target": "ixParent2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixParent2",
+      "bind": "ixParent2i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixParent2i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixParent2f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixParent2f",
+          "bind": "ixParent2fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixParent2fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixParent2fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixParent2f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixParent2"
+    },
+    {
+      "op": "release",
+      "target": "tParent2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild1_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild1_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild1_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child1"
+        }
+      ],
+      "bind": "tChild1"
+    },
+    {
+      "op": "release",
+      "target": "tChild1_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild1",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild1"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild1",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild1",
+      "bind": "ixChild1i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild1i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild1f",
+          "bind": "ixChild1fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild1fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild1fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild1f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild1"
+    },
+    {
+      "op": "release",
+      "target": "tChild1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild2_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild2_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child2"
+        }
+      ],
+      "bind": "tChild2"
+    },
+    {
+      "op": "release",
+      "target": "tChild2_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild2",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild2"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild2",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild2",
+      "bind": "ixChild2i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild2i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild2f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild2f",
+          "bind": "ixChild2fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild2fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild2fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild2f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild2"
+    },
+    {
+      "op": "release",
+      "target": "tChild2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild3_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild3_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild3_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child3"
+        }
+      ],
+      "bind": "tChild3"
+    },
+    {
+      "op": "release",
+      "target": "tChild3_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild3",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild3"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild3",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild3",
+      "bind": "ixChild3i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild3i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild3f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild3f",
+          "bind": "ixChild3fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild3fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild3fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild3f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild3"
+    },
+    {
+      "op": "release",
+      "target": "tChild3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild4_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild4_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild4_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child4"
+        }
+      ],
+      "bind": "tChild4"
+    },
+    {
+      "op": "release",
+      "target": "tChild4_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild4",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild4"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild4",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild4",
+      "bind": "ixChild4i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild4i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild4f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild4f",
+          "bind": "ixChild4fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild4fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild4fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild4f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild4"
+    },
+    {
+      "op": "release",
+      "target": "tChild4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild5_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild5_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild5_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child5"
+        }
+      ],
+      "bind": "tChild5"
+    },
+    {
+      "op": "release",
+      "target": "tChild5_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild5",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild5"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild5",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild5",
+      "bind": "ixChild5i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild5i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild5f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild5f",
+          "bind": "ixChild5fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild5fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild5fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild5f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild5"
+    },
+    {
+      "op": "release",
+      "target": "tChild5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChild6_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild6_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChild6_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child6"
+        }
+      ],
+      "bind": "tChild6"
+    },
+    {
+      "op": "release",
+      "target": "tChild6_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChild6",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChild6"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChild6",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChild6",
+      "bind": "ixChild6i",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChild6i",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChild6f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChild6f",
+          "bind": "ixChild6fi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChild6fi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChild6fi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChild6f"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChild6"
+    },
+    {
+      "op": "release",
+      "target": "tChild6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tChildMC_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChildMC_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tChildMC_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ChildMC"
+        }
+      ],
+      "bind": "tChildMC"
+    },
+    {
+      "op": "release",
+      "target": "tChildMC_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tChildMC",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixChildMC"
+    },
+    {
+      "op": "invoke",
+      "target": "ixChildMC",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixChildMC",
+      "bind": "ixChildMCi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixChildMCi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixChildMCf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixChildMCf",
+          "bind": "ixChildMCfi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixChildMCfi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixChildMCfi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixChildMCf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixChildMC"
+    },
+    {
+      "op": "release",
+      "target": "tChildMC"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tSelf_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tSelf_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tSelf_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Self"
+        }
+      ],
+      "bind": "tSelf"
+    },
+    {
+      "op": "release",
+      "target": "tSelf_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tSelf",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixSelf"
+    },
+    {
+      "op": "invoke",
+      "target": "ixSelf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixSelf",
+      "bind": "ixSelfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixSelfi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixSelff"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixSelff",
+          "bind": "ixSelffi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixSelffi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixSelffi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixSelff"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixSelf"
+    },
+    {
+      "op": "release",
+      "target": "tSelf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

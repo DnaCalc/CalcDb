@@ -1,0 +1,980 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/field-access-properties-lookup",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "Read-only open of the props fixture. On Fields Fmt (given Caption, Format, InputMask and Description), NumDef and BoolF (given Format) of TP, Properties.Item is called for each of Caption, Format, InputMask, Description, DecimalPlaces, DisplayControl, ColumnWidth, ColumnHidden; each Property found is read for Type and Value, each not found is an outcome.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-props.accdb",
+      "sha256": "be06e19621bcda37f44443957e7765d2e0df92472ccdeca0a2b1697704944cc4",
+      "length": 184320,
+      "provenance": "r-cat-1b.create-props.7bebee222a.a1 qk1-7bebee222a91711532d092f2659235f065e1d6eaefa801a379a9b1e19c24677d output:r-cat-1b-props.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tp_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tp_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tp_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TP"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "release",
+      "target": "tp_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_Fmt_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_Fmt_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Fmt"
+        }
+      ],
+      "bind": "fl_Fmt"
+    },
+    {
+      "op": "release",
+      "target": "fl_Fmt_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_Fmt",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pc_Fmt"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        }
+      ],
+      "bind": "pp_Fmt_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Caption",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Caption",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        }
+      ],
+      "bind": "pp_Fmt_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Format",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Format",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InputMask"
+        }
+      ],
+      "bind": "pp_Fmt_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_InputMask",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_InputMask",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        }
+      ],
+      "bind": "pp_Fmt_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Description",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_Description",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DecimalPlaces"
+        }
+      ],
+      "bind": "pp_Fmt_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_DecimalPlaces",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_DecimalPlaces",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DisplayControl"
+        }
+      ],
+      "bind": "pp_Fmt_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_DisplayControl",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_DisplayControl",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnWidth"
+        }
+      ],
+      "bind": "pp_Fmt_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_ColumnWidth",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_ColumnWidth",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_Fmt",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnHidden"
+        }
+      ],
+      "bind": "pp_Fmt_ColumnHidden"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_ColumnHidden",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_Fmt_ColumnHidden",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_Fmt_ColumnHidden"
+    },
+    {
+      "op": "release",
+      "target": "pc_Fmt"
+    },
+    {
+      "op": "release",
+      "target": "fl_Fmt"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_NumDef_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_NumDef_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NumDef"
+        }
+      ],
+      "bind": "fl_NumDef"
+    },
+    {
+      "op": "release",
+      "target": "fl_NumDef_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_NumDef",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pc_NumDef"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        }
+      ],
+      "bind": "pp_NumDef_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Caption",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Caption",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        }
+      ],
+      "bind": "pp_NumDef_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Format",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Format",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InputMask"
+        }
+      ],
+      "bind": "pp_NumDef_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_InputMask",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_InputMask",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        }
+      ],
+      "bind": "pp_NumDef_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Description",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_Description",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DecimalPlaces"
+        }
+      ],
+      "bind": "pp_NumDef_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_DecimalPlaces",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_DecimalPlaces",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DisplayControl"
+        }
+      ],
+      "bind": "pp_NumDef_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_DisplayControl",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_DisplayControl",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnWidth"
+        }
+      ],
+      "bind": "pp_NumDef_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_ColumnWidth",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_ColumnWidth",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_NumDef",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnHidden"
+        }
+      ],
+      "bind": "pp_NumDef_ColumnHidden"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_ColumnHidden",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_NumDef_ColumnHidden",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_NumDef_ColumnHidden"
+    },
+    {
+      "op": "release",
+      "target": "pc_NumDef"
+    },
+    {
+      "op": "release",
+      "target": "fl_NumDef"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl_BoolF_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_BoolF_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "BoolF"
+        }
+      ],
+      "bind": "fl_BoolF"
+    },
+    {
+      "op": "release",
+      "target": "fl_BoolF_c"
+    },
+    {
+      "op": "invoke",
+      "target": "fl_BoolF",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pc_BoolF"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Caption"
+        }
+      ],
+      "bind": "pp_BoolF_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Caption",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Caption",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_Caption"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format"
+        }
+      ],
+      "bind": "pp_BoolF_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Format",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Format",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_Format"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InputMask"
+        }
+      ],
+      "bind": "pp_BoolF_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_InputMask",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_InputMask",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_InputMask"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Description"
+        }
+      ],
+      "bind": "pp_BoolF_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Description",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_Description",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_Description"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DecimalPlaces"
+        }
+      ],
+      "bind": "pp_BoolF_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_DecimalPlaces",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_DecimalPlaces",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_DecimalPlaces"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DisplayControl"
+        }
+      ],
+      "bind": "pp_BoolF_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_DisplayControl",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_DisplayControl",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_DisplayControl"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnWidth"
+        }
+      ],
+      "bind": "pp_BoolF_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_ColumnWidth",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_ColumnWidth",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_ColumnWidth"
+    },
+    {
+      "op": "invoke",
+      "target": "pc_BoolF",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ColumnHidden"
+        }
+      ],
+      "bind": "pp_BoolF_ColumnHidden"
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_ColumnHidden",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pp_BoolF_ColumnHidden",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pp_BoolF_ColumnHidden"
+    },
+    {
+      "op": "release",
+      "target": "pc_BoolF"
+    },
+    {
+      "op": "release",
+      "target": "fl_BoolF"
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

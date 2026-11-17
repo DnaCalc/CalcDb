@@ -1,0 +1,154 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/eng-members-each",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-BOOT"
+  ],
+  "description": "DAO-MANIFEST applicability: on a fresh DBEngine, each of Name, Version, IniPath, DefaultUser, DefaultPassword, LoginTimeout, SystemDB and DefaultType is read by its own call, then Count of Workspaces, Errors and Properties. Which members answer, which are refused and with what HRESULT, in this first-touch order.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "IniPath",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "DefaultUser",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "DefaultPassword",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "LoginTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "SystemDB",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "DefaultType",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "eWorkspaces"
+    },
+    {
+      "op": "invoke",
+      "target": "eWorkspaces",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "eWorkspaces"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "eErrors"
+    },
+    {
+      "op": "invoke",
+      "target": "eErrors",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "eErrors"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "eProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "eProperties",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "eProperties"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

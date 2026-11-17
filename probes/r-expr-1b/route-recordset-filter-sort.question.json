@@ -1,0 +1,2583 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-expr-1b/route-recordset-filter-sort",
+  "bookRefs": [
+    "R-EXPR-1",
+    "Branch E",
+    "EXPR-STAGE",
+    "EXPR-INVENTORY"
+  ],
+  "description": "Asks which functions the expression service evaluates in a Recordset.Filter and Recordset.Sort on a dynaset over Mx, and the rows a recordset opened from each Filter returns: Null and Nz tests, Len, InStr, Mid, Format, CInt on a text column that does not convert, an unknown function, CurDir and Environ, IIf, DateDiff, and a Sort with a plain field, a descending field, a field list and a function. A rejected Filter or Sort is an observation; the Filter is cleared before each Sort. Fixture r-expr-1b-main is opened read-only through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-main.accdb",
+      "sha256": "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337",
+      "length": 229376,
+      "provenance": "r-expr-1b.create-main.141f77b461.a1 qk1-141f77b46191e9a552ba893cbea5d7261e388f3302c8ffe0d70d04f8871292e5 output:r-expr-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N, T FROM Mx ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fr"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IsNull(N)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt0",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt0f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt0f",
+          "bind": "flt0x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt0x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt0x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt0x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt0f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt0"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nz(N, 0) > 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt1",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt1f",
+          "bind": "flt1x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt1x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt1x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt1x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt1f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt1"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Len(T) > 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt2",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt2f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt2f",
+          "bind": "flt2x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt2x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt2x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt2x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt2f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt2"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "InStr(T, 'b') > 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt3",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt3f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt3f",
+          "bind": "flt3x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt3x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt3x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt3x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt3f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt3"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mid(T, 1, 1) = 'a'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt4"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt4",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt4f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt4f",
+          "bind": "flt4x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt4x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt4x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt4x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt4f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt4"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Format(D, '0') = '3'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt5"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt5",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt5f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt5f",
+          "bind": "flt5x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt5x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt5x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt5x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt5f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt5"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CInt(T) = 7"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt6"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt6",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt6f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt6f",
+          "bind": "flt6x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt6x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt6x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt6x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt6f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt6"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchFunc(N) = 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt7"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt7",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt7f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt7f",
+          "bind": "flt7x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt7x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt7x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt7x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt7f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt7"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CurDir() <> ''"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt8"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt8",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt8",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt8f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt8f",
+          "bind": "flt8x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt8x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt8x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt8x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt8f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt8",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt8"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Environ('R_EXPR_1B_NOVAR') = ''"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt9"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt9",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt9f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt9f",
+          "bind": "flt9x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt9x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt9x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt9x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt9f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt9"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IIf(IsNull(N), 0, N) < 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt10"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt10",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt10",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt10f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt10f",
+          "bind": "flt10x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt10x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt10x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt10x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt10f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt10",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt10",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt10"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DateDiff('d', DT, #2024-03-05#) > 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt11"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt11",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt11",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt11f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt11f",
+          "bind": "flt11x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt11x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt11x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt11x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt11f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt11",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt11",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt11"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Val(T) = 12"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt12"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt12",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt12",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt12f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt12f",
+          "bind": "flt12x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt12x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt12x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt12x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt12f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt12",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt12",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt12"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T = ''"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt13"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt13",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt13",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt13f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt13f",
+          "bind": "flt13x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt13x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt13x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt13x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt13f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt13",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt13",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt13"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T Is Null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt14"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt14",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt14",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt14f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt14f",
+          "bind": "flt14x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt14x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt14x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt14x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt14f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt14",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt14",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt14"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N Between -5 And 5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt15"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt15",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt15",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt15f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt15f",
+          "bind": "flt15x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt15x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt15x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt15x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt15f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt15",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt15",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt15"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N In (7, 0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt16"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt16",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt16",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt16f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt16f",
+          "bind": "flt16x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt16x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt16x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt16x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt16f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt16",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt16",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt16"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Not (N > 0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt17"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt17",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt17",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt17f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt17f",
+          "bind": "flt17x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt17x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt17x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt17x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt17f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt17",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt17",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt17"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1/0 = 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "flt18"
+    },
+    {
+      "op": "loopUntil",
+      "target": "flt18",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "flt18",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flt18f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flt18f",
+          "bind": "flt18x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "flt18x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt18x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "flt18x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flt18f"
+        },
+        {
+          "op": "invoke",
+          "target": "flt18",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flt18",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "flt18"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Filter",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt19"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt19",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt19",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt19f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt19f",
+          "bind": "srt19x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt19x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt19x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt19x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt19f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt19",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt19",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt19"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N DESC"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt20"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt20",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt20",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt20f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt20f",
+          "bind": "srt20x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt20x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt20x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt20x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt20f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt20",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt20",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt20"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T, N"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt21"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt21",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt21",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt21f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt21f",
+          "bind": "srt21x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt21x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt21x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt21x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt21f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt21",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt21",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt21"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T DESC, ID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt22"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt22",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt22",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt22f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt22f",
+          "bind": "srt22x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt22x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt22x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt22x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt22f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt22",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt22",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt22"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Len(T)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt23"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt23",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt23",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt23f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt23f",
+          "bind": "srt23x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt23x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt23x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt23x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt23f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt23",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt23",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt23"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nz(N, 0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt24"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt24",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt24",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt24f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt24f",
+          "bind": "srt24x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt24x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt24x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt24x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt24f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt24",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt24",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt24"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [],
+      "bind": "srt25"
+    },
+    {
+      "op": "loopUntil",
+      "target": "srt25",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "srt25",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "srt25f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "srt25f",
+          "bind": "srt25x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "srt25x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt25x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "srt25x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "srt25f"
+        },
+        {
+          "op": "invoke",
+          "target": "srt25",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "srt25",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "srt25"
+    },
+    {
+      "op": "invoke",
+      "target": "fr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

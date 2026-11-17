@@ -1,0 +1,445 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/documents-lookup-by-live-names",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-META",
+    "DAO-COLL"
+  ],
+  "description": "DAO-META: Documents.Item(name), with Name and Container read, in the Tables container for the table Parent, the saved queries QSel and QMake, the system table MSysObjects, the make-table target Made (never created), and a lower-case 'parent'; in the Relationships container for RelMain, FK_Grand and a missing name; in the Databases container for 'MSysDb' and a missing name.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tables"
+        }
+      ],
+      "bind": "cTables"
+    },
+    {
+      "op": "invoke",
+      "target": "cTables",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dTables"
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "Tables-Parent"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-Parent",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-Parent",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSel"
+        }
+      ],
+      "bind": "Tables-QSel"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-QSel",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-QSel",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QMake"
+        }
+      ],
+      "bind": "Tables-QMake"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-QMake",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-QMake",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysObjects"
+        }
+      ],
+      "bind": "Tables-MSysObjects"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-MSysObjects",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-MSysObjects",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Made"
+        }
+      ],
+      "bind": "Tables-Made"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-Made",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-Made",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dTables",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "parent"
+        }
+      ],
+      "bind": "Tables-parent"
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-parent",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Tables-parent",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Relationships"
+        }
+      ],
+      "bind": "cRelationships"
+    },
+    {
+      "op": "invoke",
+      "target": "cRelationships",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dRelationships"
+    },
+    {
+      "op": "invoke",
+      "target": "dRelationships",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "RelMain"
+        }
+      ],
+      "bind": "Relationships-RelMain"
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-RelMain",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-RelMain",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dRelationships",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FK_Grand"
+        }
+      ],
+      "bind": "Relationships-FK_Grand"
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-FK_Grand",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-FK_Grand",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dRelationships",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchRelation"
+        }
+      ],
+      "bind": "Relationships-NoSuchRelation"
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-NoSuchRelation",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Relationships-NoSuchRelation",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Databases"
+        }
+      ],
+      "bind": "cDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "cDatabases",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "dDatabases",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysDb"
+        }
+      ],
+      "bind": "Databases-MSysDb"
+    },
+    {
+      "op": "invoke",
+      "target": "Databases-MSysDb",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Databases-MSysDb",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dDatabases",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchDocument"
+        }
+      ],
+      "bind": "Databases-NoSuchDocument"
+    },
+    {
+      "op": "invoke",
+      "target": "Databases-NoSuchDocument",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "Databases-NoSuchDocument",
+      "member": "Container",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

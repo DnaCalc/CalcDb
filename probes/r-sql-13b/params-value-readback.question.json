@@ -1,0 +1,2747 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sql-13b/params-value-readback",
+  "bookRefs": [
+    "R-SQL-3",
+    "SQL-KEY-01"
+  ],
+  "description": "Is a value coerced when it is assigned to Parameter.Value, or only at open? For parameters declared Long, Byte, Bit, DateTime, Currency and Text(5) (PARAMETERS pX <type>; SELECT pX AS v FROM ONE;), the values Text '5', Double 2.5, Boolean True, Null, Empty, Long -1 and Text 'abc' are assigned in turn and Parameter.Value is read back after each (VARIANT tag and value); nothing is opened. Runs on a fresh copy of r-sql-13b-main (ACCDB) opened read-only through ACE DAO; each text goes into a temporary QueryDef (CreateQueryDef with an empty name, then DBEngine.Errors).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sql-13b-main.accdb",
+      "sha256": "930a84695c32fb2984135ed60e828bf6f54288bcac39ced94ff8abeeb401100a",
+      "length": 409600,
+      "provenance": "r-sql-13b.create-main.6e0ba373ae.a1 qk1-6e0ba373ae51efe5c82132ca24dc18d8068b02a3895f4662f95d540c3e0eae86 output:r-sql-13b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Long; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr0_ps",
+      "bind": "pr0_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr0_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr0_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr0_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr0_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr0_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr0_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr0_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr0_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr0_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr0_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Byte; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr1_ps",
+      "bind": "pr1_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr1_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr1_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr1_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr1_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr1_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr1_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr1_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr1_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr1_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr1_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Bit; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr2_ps",
+      "bind": "pr2_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr2_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr2_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr2_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr2_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr2_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr2_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr2_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr2_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr2_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr2_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX DateTime; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr3_ps",
+      "bind": "pr3_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr3_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr3_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr3_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr3_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr3_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr3_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr3_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr3_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr3_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr3_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Currency; SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr4_ps",
+      "bind": "pr4_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr4_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr4_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr4_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr4_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr4_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr4_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr4_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr4_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr4_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr4_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS pX Text ( 5 ); SELECT pX AS v FROM ONE;"
+        }
+      ],
+      "bind": "pr5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_ps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "pr5_ps",
+      "bind": "pr5_pi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pr5_pi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr5_pi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr5_pi",
+          "member": "Direction",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pr5_pi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "pr5_ps"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pr5_pset"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pset",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "pX"
+        }
+      ],
+      "bind": "pr5_pv_pX"
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "pr5_pv_pX",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "pr5_pv_pX"
+    },
+    {
+      "op": "release",
+      "target": "pr5_pset"
+    },
+    {
+      "op": "release",
+      "target": "pr5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,367 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/coll-newenum-get",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-ENUM"
+  ],
+  "description": "DAO-ENUM: the hidden member _NewEnum read as a property get on each collection: Workspaces, Databases, TableDefs, Fields of Parent, Indexes of Parent, Index.Fields, Relations, QueryDefs, Parameters of QParam, Properties of the Database, Containers, Documents of Tables, Errors, Users and Groups. Only the returned VARIANT (type, interface pointer) is captured; no enumerator method is called.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "us"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tf"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UX_Parent_Name"
+        }
+      ],
+      "bind": "ux"
+    },
+    {
+      "op": "invoke",
+      "target": "ux",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "uf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qp"
+    },
+    {
+      "op": "invoke",
+      "target": "qp",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pms"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dprops"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctrs"
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tables"
+        }
+      ],
+      "bind": "ct"
+    },
+    {
+      "op": "invoke",
+      "target": "ct",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cd"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "uf",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "pms",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dprops",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cd",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "errs",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "_NewEnum",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

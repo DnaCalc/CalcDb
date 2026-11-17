@@ -1,0 +1,384 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/index-members-ddl",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P",
+    "CAT-D"
+  ],
+  "description": "Read-only open of the idx fixture. For TableDefs TI and TJ, every Index is read for Name, Primary, Unique, Clustered, IgnoreNulls, Required, Foreign, DistinctCount and its Fields (Name, Attributes).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-idx.accdb",
+      "sha256": "cc095f8e207636d049b8d5e8afcff06625121cad872eca665dd1dd4e4779e86a",
+      "length": 221184,
+      "provenance": "r-cat-1b.create-idx.0232696dc9.a1 qk1-0232696dc972ea593308e6fa5bd77a7b3afecf6ed0aefbaf4b88f984747273b2 output:r-cat-1b-idx.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tTI_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tTI_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tTI_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TI"
+        }
+      ],
+      "bind": "tTI"
+    },
+    {
+      "op": "release",
+      "target": "tTI_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tTI",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixTI"
+    },
+    {
+      "op": "invoke",
+      "target": "ixTI",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixTI",
+      "bind": "ixTIi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTIi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixTIf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixTIf",
+          "bind": "ixTIfi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixTIfi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixTIfi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixTIf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixTI"
+    },
+    {
+      "op": "release",
+      "target": "tTI"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tTJ_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tTJ_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tTJ_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TJ"
+        }
+      ],
+      "bind": "tTJ"
+    },
+    {
+      "op": "release",
+      "target": "tTJ_c"
+    },
+    {
+      "op": "invoke",
+      "target": "tTJ",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixTJ"
+    },
+    {
+      "op": "invoke",
+      "target": "ixTJ",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixTJ",
+      "bind": "ixTJi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Clustered",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "DistinctCount",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixTJi",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixTJf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixTJf",
+          "bind": "ixTJfi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixTJfi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixTJfi",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixTJf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixTJ"
+    },
+    {
+      "op": "release",
+      "target": "tTJ"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

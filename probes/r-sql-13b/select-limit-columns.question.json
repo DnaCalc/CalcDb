@@ -1,0 +1,473 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sql-13b/select-limit-columns",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B"
+  ],
+  "description": "Where does the number of output columns stop being accepted, and at which phase? Only the count varies (n = 255, 256, 257): SELECT x AS c1, ..., x AS cn FROM ONE. Each text is opened as a snapshot; Fields.Count is read before the first row, then the single row's values, then Close and DBEngine.Errors.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-sql-13b-main.accdb",
+      "sha256": "930a84695c32fb2984135ed60e828bf6f54288bcac39ced94ff8abeeb401100a",
+      "length": 409600,
+      "provenance": "r-sql-13b.create-main.6e0ba373ae.a1 qk1-6e0ba373ae51efe5c82132ca24dc18d8068b02a3895f4662f95d540c3e0eae86 output:r-sql-13b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT x AS c1, x AS c2, x AS c3, x AS c4, x AS c5, x AS c6, x AS c7, x AS c8, x AS c9, x AS c10, x AS c11, x AS c12, x AS c13, x AS c14, x AS c15, x AS c16, x AS c17, x AS c18, x AS c19, x AS c20, x AS c21, x AS c22, x AS c23, x AS c24, x AS c25, x AS c26, x AS c27, x AS c28, x AS c29, x AS c30, x AS c31, x AS c32, x AS c33, x AS c34, x AS c35, x AS c36, x AS c37, x AS c38, x AS c39, x AS c40, x AS c41, x AS c42, x AS c43, x AS c44, x AS c45, x AS c46, x AS c47, x AS c48, x AS c49, x AS c50, x AS c51, x AS c52, x AS c53, x AS c54, x AS c55, x AS c56, x AS c57, x AS c58, x AS c59, x AS c60, x AS c61, x AS c62, x AS c63, x AS c64, x AS c65, x AS c66, x AS c67, x AS c68, x AS c69, x AS c70, x AS c71, x AS c72, x AS c73, x AS c74, x AS c75, x AS c76, x AS c77, x AS c78, x AS c79, x AS c80, x AS c81, x AS c82, x AS c83, x AS c84, x AS c85, x AS c86, x AS c87, x AS c88, x AS c89, x AS c90, x AS c91, x AS c92, x AS c93, x AS c94, x AS c95, x AS c96, x AS c97, x AS c98, x AS c99, x AS c100, x AS c101, x AS c102, x AS c103, x AS c104, x AS c105, x AS c106, x AS c107, x AS c108, x AS c109, x AS c110, x AS c111, x AS c112, x AS c113, x AS c114, x AS c115, x AS c116, x AS c117, x AS c118, x AS c119, x AS c120, x AS c121, x AS c122, x AS c123, x AS c124, x AS c125, x AS c126, x AS c127, x AS c128, x AS c129, x AS c130, x AS c131, x AS c132, x AS c133, x AS c134, x AS c135, x AS c136, x AS c137, x AS c138, x AS c139, x AS c140, x AS c141, x AS c142, x AS c143, x AS c144, x AS c145, x AS c146, x AS c147, x AS c148, x AS c149, x AS c150, x AS c151, x AS c152, x AS c153, x AS c154, x AS c155, x AS c156, x AS c157, x AS c158, x AS c159, x AS c160, x AS c161, x AS c162, x AS c163, x AS c164, x AS c165, x AS c166, x AS c167, x AS c168, x AS c169, x AS c170, x AS c171, x AS c172, x AS c173, x AS c174, x AS c175, x AS c176, x AS c177, x AS c178, x AS c179, x AS c180, x AS c181, x AS c182, x AS c183, x AS c184, x AS c185, x AS c186, x AS c187, x AS c188, x AS c189, x AS c190, x AS c191, x AS c192, x AS c193, x AS c194, x AS c195, x AS c196, x AS c197, x AS c198, x AS c199, x AS c200, x AS c201, x AS c202, x AS c203, x AS c204, x AS c205, x AS c206, x AS c207, x AS c208, x AS c209, x AS c210, x AS c211, x AS c212, x AS c213, x AS c214, x AS c215, x AS c216, x AS c217, x AS c218, x AS c219, x AS c220, x AS c221, x AS c222, x AS c223, x AS c224, x AS c225, x AS c226, x AS c227, x AS c228, x AS c229, x AS c230, x AS c231, x AS c232, x AS c233, x AS c234, x AS c235, x AS c236, x AS c237, x AS c238, x AS c239, x AS c240, x AS c241, x AS c242, x AS c243, x AS c244, x AS c245, x AS c246, x AS c247, x AS c248, x AS c249, x AS c250, x AS c251, x AS c252, x AS c253, x AS c254, x AS c255 FROM ONE"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cl255"
+    },
+    {
+      "op": "invoke",
+      "target": "cl255",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cl255_f"
+    },
+    {
+      "op": "invoke",
+      "target": "cl255_f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl255_f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "cl255",
+      "member": "EOF",
+      "maxIterations": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl255",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 300,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "cl255",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cl255",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl255"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT x AS c1, x AS c2, x AS c3, x AS c4, x AS c5, x AS c6, x AS c7, x AS c8, x AS c9, x AS c10, x AS c11, x AS c12, x AS c13, x AS c14, x AS c15, x AS c16, x AS c17, x AS c18, x AS c19, x AS c20, x AS c21, x AS c22, x AS c23, x AS c24, x AS c25, x AS c26, x AS c27, x AS c28, x AS c29, x AS c30, x AS c31, x AS c32, x AS c33, x AS c34, x AS c35, x AS c36, x AS c37, x AS c38, x AS c39, x AS c40, x AS c41, x AS c42, x AS c43, x AS c44, x AS c45, x AS c46, x AS c47, x AS c48, x AS c49, x AS c50, x AS c51, x AS c52, x AS c53, x AS c54, x AS c55, x AS c56, x AS c57, x AS c58, x AS c59, x AS c60, x AS c61, x AS c62, x AS c63, x AS c64, x AS c65, x AS c66, x AS c67, x AS c68, x AS c69, x AS c70, x AS c71, x AS c72, x AS c73, x AS c74, x AS c75, x AS c76, x AS c77, x AS c78, x AS c79, x AS c80, x AS c81, x AS c82, x AS c83, x AS c84, x AS c85, x AS c86, x AS c87, x AS c88, x AS c89, x AS c90, x AS c91, x AS c92, x AS c93, x AS c94, x AS c95, x AS c96, x AS c97, x AS c98, x AS c99, x AS c100, x AS c101, x AS c102, x AS c103, x AS c104, x AS c105, x AS c106, x AS c107, x AS c108, x AS c109, x AS c110, x AS c111, x AS c112, x AS c113, x AS c114, x AS c115, x AS c116, x AS c117, x AS c118, x AS c119, x AS c120, x AS c121, x AS c122, x AS c123, x AS c124, x AS c125, x AS c126, x AS c127, x AS c128, x AS c129, x AS c130, x AS c131, x AS c132, x AS c133, x AS c134, x AS c135, x AS c136, x AS c137, x AS c138, x AS c139, x AS c140, x AS c141, x AS c142, x AS c143, x AS c144, x AS c145, x AS c146, x AS c147, x AS c148, x AS c149, x AS c150, x AS c151, x AS c152, x AS c153, x AS c154, x AS c155, x AS c156, x AS c157, x AS c158, x AS c159, x AS c160, x AS c161, x AS c162, x AS c163, x AS c164, x AS c165, x AS c166, x AS c167, x AS c168, x AS c169, x AS c170, x AS c171, x AS c172, x AS c173, x AS c174, x AS c175, x AS c176, x AS c177, x AS c178, x AS c179, x AS c180, x AS c181, x AS c182, x AS c183, x AS c184, x AS c185, x AS c186, x AS c187, x AS c188, x AS c189, x AS c190, x AS c191, x AS c192, x AS c193, x AS c194, x AS c195, x AS c196, x AS c197, x AS c198, x AS c199, x AS c200, x AS c201, x AS c202, x AS c203, x AS c204, x AS c205, x AS c206, x AS c207, x AS c208, x AS c209, x AS c210, x AS c211, x AS c212, x AS c213, x AS c214, x AS c215, x AS c216, x AS c217, x AS c218, x AS c219, x AS c220, x AS c221, x AS c222, x AS c223, x AS c224, x AS c225, x AS c226, x AS c227, x AS c228, x AS c229, x AS c230, x AS c231, x AS c232, x AS c233, x AS c234, x AS c235, x AS c236, x AS c237, x AS c238, x AS c239, x AS c240, x AS c241, x AS c242, x AS c243, x AS c244, x AS c245, x AS c246, x AS c247, x AS c248, x AS c249, x AS c250, x AS c251, x AS c252, x AS c253, x AS c254, x AS c255, x AS c256 FROM ONE"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cl256"
+    },
+    {
+      "op": "invoke",
+      "target": "cl256",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cl256_f"
+    },
+    {
+      "op": "invoke",
+      "target": "cl256_f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl256_f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "cl256",
+      "member": "EOF",
+      "maxIterations": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl256",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 300,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "cl256",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cl256",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl256"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT x AS c1, x AS c2, x AS c3, x AS c4, x AS c5, x AS c6, x AS c7, x AS c8, x AS c9, x AS c10, x AS c11, x AS c12, x AS c13, x AS c14, x AS c15, x AS c16, x AS c17, x AS c18, x AS c19, x AS c20, x AS c21, x AS c22, x AS c23, x AS c24, x AS c25, x AS c26, x AS c27, x AS c28, x AS c29, x AS c30, x AS c31, x AS c32, x AS c33, x AS c34, x AS c35, x AS c36, x AS c37, x AS c38, x AS c39, x AS c40, x AS c41, x AS c42, x AS c43, x AS c44, x AS c45, x AS c46, x AS c47, x AS c48, x AS c49, x AS c50, x AS c51, x AS c52, x AS c53, x AS c54, x AS c55, x AS c56, x AS c57, x AS c58, x AS c59, x AS c60, x AS c61, x AS c62, x AS c63, x AS c64, x AS c65, x AS c66, x AS c67, x AS c68, x AS c69, x AS c70, x AS c71, x AS c72, x AS c73, x AS c74, x AS c75, x AS c76, x AS c77, x AS c78, x AS c79, x AS c80, x AS c81, x AS c82, x AS c83, x AS c84, x AS c85, x AS c86, x AS c87, x AS c88, x AS c89, x AS c90, x AS c91, x AS c92, x AS c93, x AS c94, x AS c95, x AS c96, x AS c97, x AS c98, x AS c99, x AS c100, x AS c101, x AS c102, x AS c103, x AS c104, x AS c105, x AS c106, x AS c107, x AS c108, x AS c109, x AS c110, x AS c111, x AS c112, x AS c113, x AS c114, x AS c115, x AS c116, x AS c117, x AS c118, x AS c119, x AS c120, x AS c121, x AS c122, x AS c123, x AS c124, x AS c125, x AS c126, x AS c127, x AS c128, x AS c129, x AS c130, x AS c131, x AS c132, x AS c133, x AS c134, x AS c135, x AS c136, x AS c137, x AS c138, x AS c139, x AS c140, x AS c141, x AS c142, x AS c143, x AS c144, x AS c145, x AS c146, x AS c147, x AS c148, x AS c149, x AS c150, x AS c151, x AS c152, x AS c153, x AS c154, x AS c155, x AS c156, x AS c157, x AS c158, x AS c159, x AS c160, x AS c161, x AS c162, x AS c163, x AS c164, x AS c165, x AS c166, x AS c167, x AS c168, x AS c169, x AS c170, x AS c171, x AS c172, x AS c173, x AS c174, x AS c175, x AS c176, x AS c177, x AS c178, x AS c179, x AS c180, x AS c181, x AS c182, x AS c183, x AS c184, x AS c185, x AS c186, x AS c187, x AS c188, x AS c189, x AS c190, x AS c191, x AS c192, x AS c193, x AS c194, x AS c195, x AS c196, x AS c197, x AS c198, x AS c199, x AS c200, x AS c201, x AS c202, x AS c203, x AS c204, x AS c205, x AS c206, x AS c207, x AS c208, x AS c209, x AS c210, x AS c211, x AS c212, x AS c213, x AS c214, x AS c215, x AS c216, x AS c217, x AS c218, x AS c219, x AS c220, x AS c221, x AS c222, x AS c223, x AS c224, x AS c225, x AS c226, x AS c227, x AS c228, x AS c229, x AS c230, x AS c231, x AS c232, x AS c233, x AS c234, x AS c235, x AS c236, x AS c237, x AS c238, x AS c239, x AS c240, x AS c241, x AS c242, x AS c243, x AS c244, x AS c245, x AS c246, x AS c247, x AS c248, x AS c249, x AS c250, x AS c251, x AS c252, x AS c253, x AS c254, x AS c255, x AS c256, x AS c257 FROM ONE"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cl257"
+    },
+    {
+      "op": "invoke",
+      "target": "cl257",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cl257_f"
+    },
+    {
+      "op": "invoke",
+      "target": "cl257_f",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl257_f"
+    },
+    {
+      "op": "loopUntil",
+      "target": "cl257",
+      "member": "EOF",
+      "maxIterations": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl257",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 300,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "cl257",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cl257",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cl257"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

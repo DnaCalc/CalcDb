@@ -1,0 +1,758 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/coll-delete-field-indexed",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-DRAFT",
+    "II-05"
+  ],
+  "description": "DAO-COLL/II-05 on a writable copy: Fields.Delete on Parent of 'Qty' (in two indexes), 'NoSuchField', 'Name' (in the unique index) and 'ID' (the key RelMain refers to), then Refresh; on Child Fields.Delete('PID') (RelMain's foreign column). After each step: Fields Count and names of the table, Indexes Count and names, Relations Count.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Parent"
+        }
+      ],
+      "bind": "t"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tf"
+    },
+    {
+      "op": "invoke",
+      "target": "t",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Child"
+        }
+      ],
+      "bind": "c"
+    },
+    {
+      "op": "invoke",
+      "target": "c",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cf"
+    },
+    {
+      "op": "invoke",
+      "target": "c",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cx"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f0",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f0",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i0",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i0",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x0",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x0",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f1",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i1",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x1",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchField"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f2",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i2",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x2",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Name"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f3",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i3",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x3",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f4",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f4",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i4",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i4",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x4",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x4",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f5",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f5",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i5",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i5",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x5",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x5",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cx",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "tf",
+      "bind": "f6",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f6",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "ti",
+      "bind": "i6",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "i6",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "forEachItem",
+      "target": "cx",
+      "bind": "x6",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "x6",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

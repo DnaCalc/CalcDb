@@ -1,0 +1,407 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/document-properties",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P",
+    "CAT-Q"
+  ],
+  "description": "Read-only open of the qd fixture. In Containers.Item(\"Tables\").Documents, Documents.Item is called for T, QSel, QUpd and QPass; each Document found is read for Name and every Property is listed (Name, Type, Value, Inherited).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-qd.accdb",
+      "sha256": "54d09662048f566a7c2de5f0128cf3b8891a6e0452d18f60ec7a6f247b552616",
+      "length": 229376,
+      "provenance": "r-cat-1b.create-qd.a52b45f36f.a1 qk1-a52b45f36f3815d4bfade1e71b79c681a4192a3cf9d16ff7045704da50aa5038 output:r-cat-1b-qd.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tables"
+        }
+      ],
+      "bind": "ct"
+    },
+    {
+      "op": "invoke",
+      "target": "ct",
+      "member": "Documents",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "docs"
+    },
+    {
+      "op": "invoke",
+      "target": "docs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dT"
+    },
+    {
+      "op": "invoke",
+      "target": "dT",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dT",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dpT"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dpT",
+      "bind": "dpTi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dpTi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpTi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpTi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpTi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dpT"
+    },
+    {
+      "op": "release",
+      "target": "dT"
+    },
+    {
+      "op": "invoke",
+      "target": "docs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QSel"
+        }
+      ],
+      "bind": "dQSel"
+    },
+    {
+      "op": "invoke",
+      "target": "dQSel",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dQSel",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dpQSel"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dpQSel",
+      "bind": "dpQSeli",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dpQSeli",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQSeli",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQSeli",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQSeli",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dpQSel"
+    },
+    {
+      "op": "release",
+      "target": "dQSel"
+    },
+    {
+      "op": "invoke",
+      "target": "docs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpd"
+        }
+      ],
+      "bind": "dQUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "dQUpd",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dQUpd",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dpQUpd"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dpQUpd",
+      "bind": "dpQUpdi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dpQUpdi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQUpdi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQUpdi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQUpdi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dpQUpd"
+    },
+    {
+      "op": "release",
+      "target": "dQUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "docs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QPass"
+        }
+      ],
+      "bind": "dQPass"
+    },
+    {
+      "op": "invoke",
+      "target": "dQPass",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dQPass",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dpQPass"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dpQPass",
+      "bind": "dpQPassi",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dpQPassi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQPassi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQPassi",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dpQPassi",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dpQPass"
+    },
+    {
+      "op": "release",
+      "target": "dQPass"
+    },
+    {
+      "op": "release",
+      "target": "docs"
+    },
+    {
+      "op": "release",
+      "target": "ct"
+    },
+    {
+      "op": "release",
+      "target": "cs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

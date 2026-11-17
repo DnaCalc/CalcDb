@@ -1,0 +1,711 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/coll-item-top-level",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-ID",
+    "ERR-BIND"
+  ],
+  "description": "DAO-COLL: Item(0), Item(99), Item(-1) and Item by name, with Name read from each result, on Workspaces ('#Default Workspace#', its lower-case form, 'NoSuchWs'), Databases ('NoSuchDb'), Users ('Admin', 'ADMIN', 'NoSuchUser'), Groups ('Admins', 'admins', 'NoSuchGroup') and Containers ('Tables', 'tables', 'Relationships', 'NoSuchContainer'). The Item call's own record shows how each lookup resolved.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "us"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctrs"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w-0"
+    },
+    {
+      "op": "invoke",
+      "target": "w-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "w-99"
+    },
+    {
+      "op": "invoke",
+      "target": "w-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "w-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "w-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "#Default Workspace#"
+        }
+      ],
+      "bind": "w-s-#Default Workspace#"
+    },
+    {
+      "op": "invoke",
+      "target": "w-s-#Default Workspace#",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "#default workspace#"
+        }
+      ],
+      "bind": "w-s-#default workspace#"
+    },
+    {
+      "op": "invoke",
+      "target": "w-s-#default workspace#",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchWs"
+        }
+      ],
+      "bind": "w-s-NoSuchWs"
+    },
+    {
+      "op": "invoke",
+      "target": "w-s-NoSuchWs",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "d-0"
+    },
+    {
+      "op": "invoke",
+      "target": "d-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "d-99"
+    },
+    {
+      "op": "invoke",
+      "target": "d-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "d-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "d-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchDb"
+        }
+      ],
+      "bind": "d-s-NoSuchDb"
+    },
+    {
+      "op": "invoke",
+      "target": "d-s-NoSuchDb",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "u-0"
+    },
+    {
+      "op": "invoke",
+      "target": "u-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "u-99"
+    },
+    {
+      "op": "invoke",
+      "target": "u-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "u-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "u-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Admin"
+        }
+      ],
+      "bind": "u-s-Admin"
+    },
+    {
+      "op": "invoke",
+      "target": "u-s-Admin",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ADMIN"
+        }
+      ],
+      "bind": "u-s-ADMIN"
+    },
+    {
+      "op": "invoke",
+      "target": "u-s-ADMIN",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchUser"
+        }
+      ],
+      "bind": "u-s-NoSuchUser"
+    },
+    {
+      "op": "invoke",
+      "target": "u-s-NoSuchUser",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "g-0"
+    },
+    {
+      "op": "invoke",
+      "target": "g-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "g-99"
+    },
+    {
+      "op": "invoke",
+      "target": "g-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "g-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "g-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Admins"
+        }
+      ],
+      "bind": "g-s-Admins"
+    },
+    {
+      "op": "invoke",
+      "target": "g-s-Admins",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "admins"
+        }
+      ],
+      "bind": "g-s-admins"
+    },
+    {
+      "op": "invoke",
+      "target": "g-s-admins",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchGroup"
+        }
+      ],
+      "bind": "g-s-NoSuchGroup"
+    },
+    {
+      "op": "invoke",
+      "target": "g-s-NoSuchGroup",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "c-0"
+    },
+    {
+      "op": "invoke",
+      "target": "c-0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 99
+        }
+      ],
+      "bind": "c-99"
+    },
+    {
+      "op": "invoke",
+      "target": "c-99",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ],
+      "bind": "c-neg1"
+    },
+    {
+      "op": "invoke",
+      "target": "c-neg1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tables"
+        }
+      ],
+      "bind": "c-s-Tables"
+    },
+    {
+      "op": "invoke",
+      "target": "c-s-Tables",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "tables"
+        }
+      ],
+      "bind": "c-s-tables"
+    },
+    {
+      "op": "invoke",
+      "target": "c-s-tables",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Relationships"
+        }
+      ],
+      "bind": "c-s-Relationships"
+    },
+    {
+      "op": "invoke",
+      "target": "c-s-Relationships",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ctrs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchContainer"
+        }
+      ],
+      "bind": "c-s-NoSuchContainer"
+    },
+    {
+      "op": "invoke",
+      "target": "c-s-NoSuchContainer",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

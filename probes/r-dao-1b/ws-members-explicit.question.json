@@ -1,0 +1,424 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/ws-members-explicit",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-BOOT"
+  ],
+  "description": "DAO-MANIFEST applicability: a Workspace from CreateWorkspace('WX', 'admin', '', dbUseJet), first unappended and then appended to Workspaces. The same member and collection-count reads as for Workspaces(0), once before and once after Append; Workspaces.Count after.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "WX"
+        },
+        {
+          "type": "bstr",
+          "text": "admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "UserName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "IsolateODBCTrans",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "DefaultCursorDriver",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "LoginTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "hDbc",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "waDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "waDatabases",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "waDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "waUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "waUsers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "waUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "waGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "waGroups",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "waGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Connections",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "waConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "waConnections",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "waConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "waProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "waProperties",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "waProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "w"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "UserName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "IsolateODBCTrans",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "DefaultCursorDriver",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "LoginTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "hDbc",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wbDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "wbDatabases",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wbDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wbUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "wbUsers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wbUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wbGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "wbGroups",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wbGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Connections",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wbConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "wbConnections",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wbConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wbProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "wbProperties",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wbProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -35,6 +35,19 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
   reads (3112), `MSysObjects` included; one Database property refuses `Value` (3251).
 - Open: byte-level interpretation of the kept images is W-04/description-inspector work.
 
+### Wave 3: deeper coverage of the large cards — 359 probes, 356 complete
+`evidence/r-expr-1b`, `r-sql-13b`, `r-dao-1b`, `r-cursor-1b`, `r-err-1b`, `r-cat-1b` (function library and
+conversions, relational semantics, member-by-member DAO properties, Filter/Sort/Find/Seek/GetRows, error identity
+breadth, catalog and QueryDef types). All 15 fixtures were created without a failed call. The three
+incomplete attempts are retained as `Uncertain`, with their lifecycle trace:
+- `SELECT Array() FROM One` kills the process with an access violation inside `Database.OpenRecordset`
+  (`r-expr-1b/sandbox-array-functions`).
+- A nest of 31 parenthesised `INNER JOIN`s over a one-row table (32 table occurrences) did not return within the
+  300 s timeout; the 32-table comma cross join before it returned (`r-sql-13b/join-limit-tables`). Lower bound
+  only.
+- `Recordset.Requery` on a parameter query recordset: access violation (`r-cursor-1b/requery-parameter-query`),
+  the same fault as `r-crash-requery`.
+
 ### DAO DDL limits seen while building fixtures (R-CAT-1 CAT-D, R-SQL-2 SQL-ACT-DDL)
 `evidence/r-ddl-limits`, one element varied per statement, each on a fresh database, ACCDB and MDB alike:
 - Refused with 3292 (`0x800A0CDC`, syntax error in field definition): `DECIMAL(18,4)`, plain `DECIMAL`, and a column

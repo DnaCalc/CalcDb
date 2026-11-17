@@ -1,0 +1,124 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/db-properties-enumerated-mdb",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP"
+  ],
+  "description": "DAO-PROP on the rich MDB: Database.Properties enumerated, Name, Type, Inherited and Value of each member read by separate calls.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich-mdb.mdb",
+      "sha256": "c0c012762114c7d6a0ab6369e1ffac46cea8718f22c86152dce1f8ba3c3a7c75",
+      "length": 180224,
+      "provenance": "r-dao-1b.create-rich-mdb.2ea87a6f59.a1 qk1-2ea87a6f5917dc716e6aa99dc4bd98adbd6dc264ea5767834ea808a9f93366f1 output:r-dao-1b-rich-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "dps",
+      "bind": "dp",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "dp",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dps"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/index-properties-enum",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-P"
+  ],
+  "description": "Read-only open of the idx fixture. For each Index of TableDef TI (up to 16) the Name is read and every Property is listed (Name, Type, Value, Inherited).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-idx.accdb",
+      "sha256": "cc095f8e207636d049b8d5e8afcff06625121cad872eca665dd1dd4e4779e86a",
+      "length": 221184,
+      "provenance": "r-cat-1b.create-idx.0232696dc9.a1 qk1-0232696dc972ea593308e6fa5bd77a7b3afecf6ed0aefbaf4b88f984747273b2 output:r-cat-1b-idx.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ti_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ti_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TI"
+        }
+      ],
+      "bind": "ti"
+    },
+    {
+      "op": "release",
+      "target": "ti_c"
+    },
+    {
+      "op": "invoke",
+      "target": "ti",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixs",
+      "bind": "ix",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ix",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ixp"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ixp",
+          "bind": "ixpi",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ixpi",
+              "member": "Inherited",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ixp"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixs"
+    },
+    {
+      "op": "release",
+      "target": "ti"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

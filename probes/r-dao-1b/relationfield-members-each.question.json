@@ -1,0 +1,304 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/relationfield-members-each",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-META"
+  ],
+  "description": "DAO-MANIFEST applicability: every member of Relation.Fields (bounded at 8) of every Relation, with each of AllowZeroLength, Attributes, CollatingOrder, CollectionIndex, ComplexType, DataUpdatable, DefaultValue, Expression, FieldSize, ForeignName, Name, OrdinalPosition, OriginalValue, Required, Size, SourceField, SourceTable, Type, ValidateOnSet, ValidationRule, ValidationText, Value and VisibleValue by its own call, then Properties Count.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rels",
+      "bind": "r",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rf",
+          "bind": "y",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "AllowZeroLength",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "CollatingOrder",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "CollectionIndex",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "ComplexType",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "DataUpdatable",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "DefaultValue",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Expression",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "FieldSize",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "OrdinalPosition",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "OriginalValue",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Required",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Size",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "SourceField",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "SourceTable",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "ValidateOnSet",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "ValidationRule",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "ValidationText",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "VisibleValue",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "y",
+              "member": "Properties",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "yProperties"
+            },
+            {
+              "op": "invoke",
+              "target": "yProperties",
+              "member": "Count",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "release",
+              "target": "yProperties"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

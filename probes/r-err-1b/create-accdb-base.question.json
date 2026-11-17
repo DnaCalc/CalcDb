@@ -1,0 +1,485 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-err-1b/create-accdb-base",
+  "bookRefs": [
+    "R-ERR-1",
+    "ERR-BASE",
+    "ERR-PARTIAL",
+    "ERR-CLOSE"
+  ],
+  "description": "R-ERR-1 fixture: table P (Long key PK_P, Text Code with unique index UX_P_Code, Text Req NOT NULL with AllowZeroLength set False through DAO, Byte Bt, Integer Cnt, Currency Amt, Double Dbl, Single Sng, Date Dt, Text(5) Txt, Yes/No Flg, Memo Mm; three rows, Cnt 10, 10, 20), Q (Long key, Text V; two rows), Ch (PID references P.ID through FK_Ch; two rows for P row 1), Orph (two rows, PID 1 and 99, no relation), VR (Long key, Pv, A, B2; one row; field ValidationRule '> 0' with ValidationText on Pv and table ValidationRule '[A] < [B2]' with ValidationText, both set through DAO after the row), Au (AutoNumber key, Text V; one row). Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, dbVersion120); the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-err-1b-accdb-base.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY, Code TEXT(10), Req TEXT(10) NOT NULL, Bt BYTE, Cnt SHORT, Amt CURRENCY, Dbl DOUBLE, Sng SINGLE, Dt DATETIME, Txt TEXT(5), Flg YESNO, Mm MEMO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE UNIQUE INDEX UX_P_Code ON P (Code)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P (ID, Code, Req, Bt, Cnt, Amt, Dbl, Sng, Dt, Txt, Flg) VALUES (1, 'c1', 'r1', 1, 10, 1.5, 2.5, 3.5, #2020-01-02#, 'abc', True)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P (ID, Code, Req, Bt, Cnt, Amt, Dbl, Sng, Dt, Txt, Flg) VALUES (2, 'c2', 'r2', 2, 10, 2.5, 3.5, 4.5, #2020-02-03#, 'def', False)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO P (ID, Code, Req, Bt, Cnt, Amt, Dbl, Sng, Dt, Txt, Flg) VALUES (3, 'c3', 'r3', 3, 20, 3.5, 4.5, 5.5, #2020-03-04#, 'ghi', True)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Q (ID LONG CONSTRAINT PK_Q PRIMARY KEY, V TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Q (ID, V) VALUES (1, 'one')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Q (ID, V) VALUES (2, 'two')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Ch (CID LONG CONSTRAINT PK_Ch PRIMARY KEY, PID LONG, CONSTRAINT FK_Ch FOREIGN KEY (PID) REFERENCES P (ID))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Ch (CID, PID) VALUES (1, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Ch (CID, PID) VALUES (2, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Orph (CID LONG CONSTRAINT PK_Orph PRIMARY KEY, PID LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Orph (CID, PID) VALUES (1, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Orph (CID, PID) VALUES (2, 99)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE VR (ID LONG CONSTRAINT PK_VR PRIMARY KEY, Pv LONG, A LONG, B2 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO VR (ID, Pv, A, B2) VALUES (1, 5, 1, 2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Au (ID COUNTER CONSTRAINT PK_Au PRIMARY KEY, V TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Au (V) VALUES ('a1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "VR"
+        }
+      ],
+      "bind": "tvr"
+    },
+    {
+      "op": "invoke",
+      "target": "tvr",
+      "member": "ValidationRule",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[A] < [B2]"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tvr",
+      "member": "ValidationText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A must be below B2"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tvr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "vfl"
+    },
+    {
+      "op": "invoke",
+      "target": "vfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Pv"
+        }
+      ],
+      "bind": "vpv"
+    },
+    {
+      "op": "invoke",
+      "target": "vpv",
+      "member": "ValidationRule",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "> 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "vpv",
+      "member": "ValidationText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Pv must be positive"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P"
+        }
+      ],
+      "bind": "tp"
+    },
+    {
+      "op": "invoke",
+      "target": "tp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "pfl"
+    },
+    {
+      "op": "invoke",
+      "target": "pfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Req"
+        }
+      ],
+      "bind": "preq"
+    },
+    {
+      "op": "invoke",
+      "target": "preq",
+      "member": "AllowZeroLength",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "preq",
+      "member": "AllowZeroLength",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "preq",
+      "member": "Required",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "vpv",
+      "member": "ValidationRule",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "tvr",
+      "member": "ValidationRule",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "preq"
+    },
+    {
+      "op": "release",
+      "target": "pfl"
+    },
+    {
+      "op": "release",
+      "target": "tp"
+    },
+    {
+      "op": "release",
+      "target": "vpv"
+    },
+    {
+      "op": "release",
+      "target": "vfl"
+    },
+    {
+      "op": "release",
+      "target": "tvr"
+    },
+    {
+      "op": "release",
+      "target": "tdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

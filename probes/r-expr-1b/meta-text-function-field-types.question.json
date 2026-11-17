@@ -1,0 +1,3003 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-expr-1b/meta-text-function-field-types",
+  "bookRefs": [
+    "R-EXPR-1",
+    "Branch B",
+    "EXPR-INVENTORY"
+  ],
+  "description": "Asks the DAO Field Type, Size and Attributes (and first-row Value) of the column that a text-producing function or concatenation yields, including results of 255, 256, 300 and 5000 characters, Replace that grows past 255, $ forms, Null-returning forms, and text from Nz and IIf. Each expression is its own snapshot SELECT expr AS v FROM One. Fixture r-expr-1b-main is opened read-only through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-expr-1b-main.accdb",
+      "sha256": "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337",
+      "length": 229376,
+      "provenance": "r-expr-1b.create-main.141f77b461.a1 qk1-141f77b46191e9a552ba893cbea5d7261e388f3302c8ffe0d70d04f8871292e5 output:r-expr-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Left('abc', 2) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs0"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs0f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs0f",
+      "bind": "mrs0x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs0x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs0x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs0x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs0x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs0x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs0f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Left$('abc', 2) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs1"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs1f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs1f",
+      "bind": "mrs1x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs1x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs1x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs1x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs1x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs1x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs1f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Space(3) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs2"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs2f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs2f",
+      "bind": "mrs2x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs2x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs2x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs2x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs2x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs2x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs2f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Space(300) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs3"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs3f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs3f",
+      "bind": "mrs3x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs3x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs3x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs3x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs3x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs3x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs3f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(255, 'a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs4"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs4f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs4f",
+      "bind": "mrs4x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs4x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs4x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs4x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs4x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs4x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs4f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(256, 'a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs5"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs5f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs5f",
+      "bind": "mrs5x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs5x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs5x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs5x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs5x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs5x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs5f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(5000, 'a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs6"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs6f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs6f",
+      "bind": "mrs6x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs6x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs6x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs6x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs6x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs6x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs6f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(1, '0') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs7"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs7f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs7f",
+      "bind": "mrs7x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs7x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs7x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs7x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs7x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs7x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs7f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Chr(65) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs8"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs8f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs8f",
+      "bind": "mrs8x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs8x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs8x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs8x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs8x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs8x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs8f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT CStr(1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs9"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs9f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs9f",
+      "bind": "mrs9x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs9x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs9x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs9x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs9x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs9x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs9f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT UCase('a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs10"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs10",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs10f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs10f",
+      "bind": "mrs10x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs10x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs10x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs10x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs10x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs10x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs10f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs10",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Hex(1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs11"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs11f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs11f",
+      "bind": "mrs11x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs11x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs11x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs11x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs11x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs11x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs11f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs11",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Str(1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs12"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs12",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs12f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs12f",
+      "bind": "mrs12x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs12x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs12x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs12x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs12x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs12x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs12f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs12",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Trim('a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs13"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs13f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs13f",
+      "bind": "mrs13x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs13x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs13x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs13x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs13x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs13x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs13f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs13",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Replace('abc', 'a', 'b') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs14"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs14",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs14f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs14f",
+      "bind": "mrs14x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs14x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs14x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs14x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs14x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs14x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs14f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs14",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Replace(String(200, 'a'), 'a', 'bb') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs15"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs15",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs15f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs15f",
+      "bind": "mrs15x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs15x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs15x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs15x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs15x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs15x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs15f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs15",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT 'a' & 'b' AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs16"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs16",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs16f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs16f",
+      "bind": "mrs16x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs16x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs16x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs16x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs16x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs16x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs16f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs16",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(200, 'a') & String(100, 'b') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs17"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs17",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs17f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs17f",
+      "bind": "mrs17x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs17x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs17x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs17x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs17x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs17x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs17f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs17",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Mid('abc', 1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs18"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs18",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs18f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs18f",
+      "bind": "mrs18x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs18x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs18x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs18x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs18x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs18x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs18f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs18",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs18"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT IIf(True, 'a', 'b') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs19"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs19",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs19f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs19f",
+      "bind": "mrs19x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs19x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs19x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs19x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs19x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs19x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs19f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs19",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs19"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Nz(Null, '') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs20"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs20",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs20f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs20f",
+      "bind": "mrs20x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs20x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs20x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs20x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs20x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs20x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs20f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs20",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Switch(True, 'a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs21"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs21",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs21f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs21f",
+      "bind": "mrs21x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs21x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs21x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs21x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs21x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs21x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs21f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs21",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs21"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Choose(1, 'a') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs22"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs22",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs22f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs22f",
+      "bind": "mrs22x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs22x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs22x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs22x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs22x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs22x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs22f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs22",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs22"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT MonthName(1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs23"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs23",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs23f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs23f",
+      "bind": "mrs23x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs23x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs23x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs23x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs23x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs23x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs23f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs23",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs23"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT WeekdayName(1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs24"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs24",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs24f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs24f",
+      "bind": "mrs24x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs24x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs24x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs24x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs24x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs24x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs24f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs24",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs24"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT StrConv('a', 1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs25"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs25",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs25f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs25f",
+      "bind": "mrs25x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs25x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs25x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs25x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs25x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs25x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs25f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs25",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs25"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT StrReverse('abc') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs26"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs26",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs26f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs26f",
+      "bind": "mrs26x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs26x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs26x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs26x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs26x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs26x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs26f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs26",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs26"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Left(Null, 1) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs27"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs27",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs27f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs27f",
+      "bind": "mrs27x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs27x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs27x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs27x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs27x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs27x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs27f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs27",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs27"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT 'a' & Null AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs28"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs28",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs28f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs28f",
+      "bind": "mrs28x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs28x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs28x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs28x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs28x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs28x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs28f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs28",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs28"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT 'abc' AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs29"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs29",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs29f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs29f",
+      "bind": "mrs29x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs29x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs29x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs29x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs29x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs29x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs29f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs29",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs29"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(255, 'a') & 'b' AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs30"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs30",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs30f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs30f",
+      "bind": "mrs30x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs30x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs30x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs30x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs30x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs30x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs30f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs30",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs30"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT String(250, 'a') & String(5, 'b') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs31"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs31",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs31f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs31f",
+      "bind": "mrs31x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs31x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs31x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs31x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs31x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs31x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs31f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs31",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs31"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Format(1.5) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs32"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs32",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs32f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs32f",
+      "bind": "mrs32x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs32x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs32x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs32x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs32x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs32x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs32f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs32",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs32"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT FormatNumber(1.5) AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs33"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs33",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs33f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs33f",
+      "bind": "mrs33x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs33x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs33x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs33x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs33x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs33x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs33f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs33",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs33"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Join(Split('a b', ' '), '-') AS v FROM One WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mrs34"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs34",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mrs34f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mrs34f",
+      "bind": "mrs34x",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mrs34x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs34x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs34x",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs34x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mrs34x",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mrs34f"
+    },
+    {
+      "op": "invoke",
+      "target": "mrs34",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mrs34"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

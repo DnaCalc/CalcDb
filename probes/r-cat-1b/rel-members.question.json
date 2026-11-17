@@ -1,0 +1,173 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-cat-1b/rel-members",
+  "bookRefs": [
+    "R-CAT-1",
+    "II-06",
+    "CAT-D"
+  ],
+  "description": "Read-only open of the rel fixture. Relations (after Refresh) are listed with Name, Table, ForeignTable, Attributes and Fields (Name, ForeignName).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1b-rel.accdb",
+      "sha256": "476bf9ec945ded0309c840bdffcd19ee8d2211039e1674ac4a0b4d5590231587",
+      "length": 327680,
+      "provenance": "r-cat-1b.create-rel.21b7e0b11d.a1 qk1-21b7e0b11d636ef022bd955e316c64ceeed73dbb1063942fa997cec9d8abff83 output:r-cat-1b-rel.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rl"
+    },
+    {
+      "op": "invoke",
+      "target": "rl",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rl",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "rl",
+      "bind": "rli",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rli",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rli",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rli",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rli",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rli",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rlf"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rlf",
+          "bind": "rlfi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rlfi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rlfi",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rlf"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rl"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

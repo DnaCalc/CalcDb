@@ -1,0 +1,242 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/ws-members-default",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-BOOT"
+  ],
+  "description": "DAO-MANIFEST applicability: on Workspaces(0), each of Name, UserName, Type, IsolateODBCTrans, DefaultCursorDriver, LoginTimeout and hDbc by its own call, then Count of Databases, Users, Groups, Connections and Properties.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "UserName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "IsolateODBCTrans",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "DefaultCursorDriver",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "LoginTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "hDbc",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "wDatabases",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wDatabases"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "wUsers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wUsers"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "wGroups",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wGroups"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Connections",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "wConnections",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wConnections"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "wProperties",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wProperties"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

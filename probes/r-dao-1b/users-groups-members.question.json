@@ -1,0 +1,431 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/users-groups-members",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-MANIFEST",
+    "DAO-SEC"
+  ],
+  "description": "DAO-MANIFEST/DAO-SEC recognition: Workspaces(0).Users and Groups enumerated; each User by Name, Password, PID, Groups (Count and names) and Properties Count; each Group by Name, PID, Users (Count and names) and Properties Count. Item lookups of 'Admin', 'ADMIN', 'Nobody' in Users and 'Admins', 'admins', 'Users', 'Guests', 'Nobody' in Groups, Name read from each.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "us"
+    },
+    {
+      "op": "forEachItem",
+      "target": "us",
+      "bind": "u",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "Password",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "PID",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "Groups",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ug"
+        },
+        {
+          "op": "invoke",
+          "target": "ug",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "forEachItem",
+          "target": "ug",
+          "bind": "ugi",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ugi",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ug"
+        },
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "up"
+        },
+        {
+          "op": "invoke",
+          "target": "up",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "up"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "gs",
+      "bind": "g",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "g",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "g",
+          "member": "PID",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "g",
+          "member": "Users",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "gu"
+        },
+        {
+          "op": "invoke",
+          "target": "gu",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "forEachItem",
+          "target": "gu",
+          "bind": "gui",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gui",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "gu"
+        },
+        {
+          "op": "invoke",
+          "target": "g",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "gp"
+        },
+        {
+          "op": "invoke",
+          "target": "gp",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gp"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Admin"
+        }
+      ],
+      "bind": "ul-Admin"
+    },
+    {
+      "op": "invoke",
+      "target": "ul-Admin",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ADMIN"
+        }
+      ],
+      "bind": "ul-ADMIN"
+    },
+    {
+      "op": "invoke",
+      "target": "ul-ADMIN",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "us",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nobody"
+        }
+      ],
+      "bind": "ul-Nobody"
+    },
+    {
+      "op": "invoke",
+      "target": "ul-Nobody",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Admins"
+        }
+      ],
+      "bind": "gl-Admins"
+    },
+    {
+      "op": "invoke",
+      "target": "gl-Admins",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "admins"
+        }
+      ],
+      "bind": "gl-admins"
+    },
+    {
+      "op": "invoke",
+      "target": "gl-admins",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Users"
+        }
+      ],
+      "bind": "gl-Users"
+    },
+    {
+      "op": "invoke",
+      "target": "gl-Users",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Guests"
+        }
+      ],
+      "bind": "gl-Guests"
+    },
+    {
+      "op": "invoke",
+      "target": "gl-Guests",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "gs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nobody"
+        }
+      ],
+      "bind": "gl-Nobody"
+    },
+    {
+      "op": "invoke",
+      "target": "gl-Nobody",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

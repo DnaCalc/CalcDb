@@ -1,0 +1,261 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/parameter-properties-enumerated",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP",
+    "DAO-QUERY"
+  ],
+  "description": "DAO-PROP: Properties of each Parameter of QParam and QUpd (bounded at 8): Name, Type, Inherited and Value of each member, each read separately.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-dao-1b-rich.accdb",
+      "sha256": "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95",
+      "length": 274432,
+      "provenance": "r-dao-1b.create-rich-accdb.0ec864275e.a1 qk1-0ec864275ecb68a470ff53bfd84046834103f4b6d610dcc639017f7802c399b1 output:r-dao-1b-rich.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QParam"
+        }
+      ],
+      "bind": "qdQParam"
+    },
+    {
+      "op": "invoke",
+      "target": "qdQParam",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qpQParam"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qpQParam",
+      "bind": "pm",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pm",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pm",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "pps"
+        },
+        {
+          "op": "forEachItem",
+          "target": "pps",
+          "bind": "pp",
+          "maxItems": 96,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Inherited",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "pps"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qpQParam"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QUpd"
+        }
+      ],
+      "bind": "qdQUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "qdQUpd",
+      "member": "Parameters",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qpQUpd"
+    },
+    {
+      "op": "forEachItem",
+      "target": "qpQUpd",
+      "bind": "pm",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pm",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "pm",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "pps"
+        },
+        {
+          "op": "forEachItem",
+          "target": "pps",
+          "bind": "pp",
+          "maxItems": 96,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Inherited",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "pp",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "pps"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qpQUpd"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

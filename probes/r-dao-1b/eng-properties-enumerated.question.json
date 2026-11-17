@@ -1,0 +1,88 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-dao-1b/eng-properties-enumerated",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP"
+  ],
+  "description": "DAO-PROP: DBEngine.Properties enumerated, Name, Type, Inherited and Value of each member read by separate calls.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "eps"
+    },
+    {
+      "op": "forEachItem",
+      "target": "eps",
+      "bind": "ep",
+      "maxItems": 96,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ep",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ep",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ep",
+          "member": "Inherited",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ep",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "eps"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

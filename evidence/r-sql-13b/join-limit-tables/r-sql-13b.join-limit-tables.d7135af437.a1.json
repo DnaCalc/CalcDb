@@ -1,0 +1,1646 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-sql-13b.join-limit-tables.d7135af437.a1",
+  "retainedUtc": "2026-11-17T01:19:12.9308978+00:00",
+  "probe": "r-sql-13b/join-limit-tables",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B"
+  ],
+  "description": "Where does the number of table occurrences in one query stop being accepted, and at which phase? Only the count varies (n = 16, 32, 33, 34, 50) over aliases of the one-row table ONE: a comma cross join, and a nest of parenthesized INNER JOINs on x. Each text is opened directly with the standard capture. Runs on a fresh copy of r-sql-13b-main (ACCDB) opened read-only through ACE DAO; each text is opened as a snapshot with Database.OpenRecordset, Fields Name/Type/Size are read before the first row, then every row's Field values to EOF (each MoveNext captured), then Close and DBEngine.Errors.",
+  "retentionNote": "Database.OpenRecordset of a 32-table nest of parenthesized INNER JOINs over the one-row table ONE (31 joins, program op 35) did not return within the 300 s attempt timeout; the owned worker was terminated. The preceding 32-table comma cross join returned. Lower bound only, not a measured duration.",
+  "token": "r-sql-13b.join-limit-tables.d7135af437",
+  "questionKey": "qk1-d7135af437fbd8c97f5b8077ad1792da28ee25439d9f81a107c0d8a15139124e",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-sql-13b/join-limit-tables",
+    "bookRefs": [
+      "R-SQL-1",
+      "SQL-B"
+    ],
+    "description": "Where does the number of table occurrences in one query stop being accepted, and at which phase? Only the count varies (n = 16, 32, 33, 34, 50) over aliases of the one-row table ONE: a comma cross join, and a nest of parenthesized INNER JOINs on x. Each text is opened directly with the standard capture. Runs on a fresh copy of r-sql-13b-main (ACCDB) opened read-only through ACE DAO; each text is opened as a snapshot with Database.OpenRecordset, Fields Name/Type/Size are read before the first row, then every row's Field values to EOF (each MoveNext captured), then Close and DBEngine.Errors.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-sql-13b-main.accdb",
+        "sha256": "930a84695c32fb2984135ed60e828bf6f54288bcac39ced94ff8abeeb401100a",
+        "length": 409600,
+        "provenance": "r-sql-13b.create-main.6e0ba373ae.a1 qk1-6e0ba373ae51efe5c82132ca24dc18d8068b02a3895f4662f95d540c3e0eae86 output:r-sql-13b-main.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": true
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ONE AS t1, ONE AS t2, ONE AS t3, ONE AS t4, ONE AS t5, ONE AS t6, ONE AS t7, ONE AS t8, ONE AS t9, ONE AS t10, ONE AS t11, ONE AS t12, ONE AS t13, ONE AS t14, ONE AS t15, ONE AS t16"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qc16"
+      },
+      {
+        "op": "invoke",
+        "target": "qc16",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qc16_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qc16_mf",
+        "bind": "qc16_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc16_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc16_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc16_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qc16_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qc16",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc16",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qc16",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qc16",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qc16"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ((((((((((((((ONE AS t1 INNER JOIN ONE AS t2 ON t1.x = t2.x) INNER JOIN ONE AS t3 ON t1.x = t3.x) INNER JOIN ONE AS t4 ON t1.x = t4.x) INNER JOIN ONE AS t5 ON t1.x = t5.x) INNER JOIN ONE AS t6 ON t1.x = t6.x) INNER JOIN ONE AS t7 ON t1.x = t7.x) INNER JOIN ONE AS t8 ON t1.x = t8.x) INNER JOIN ONE AS t9 ON t1.x = t9.x) INNER JOIN ONE AS t10 ON t1.x = t10.x) INNER JOIN ONE AS t11 ON t1.x = t11.x) INNER JOIN ONE AS t12 ON t1.x = t12.x) INNER JOIN ONE AS t13 ON t1.x = t13.x) INNER JOIN ONE AS t14 ON t1.x = t14.x) INNER JOIN ONE AS t15 ON t1.x = t15.x) INNER JOIN ONE AS t16 ON t1.x = t16.x"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qn16"
+      },
+      {
+        "op": "invoke",
+        "target": "qn16",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qn16_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qn16_mf",
+        "bind": "qn16_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn16_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn16_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn16_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qn16_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qn16",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn16",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qn16",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qn16",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qn16"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ONE AS t1, ONE AS t2, ONE AS t3, ONE AS t4, ONE AS t5, ONE AS t6, ONE AS t7, ONE AS t8, ONE AS t9, ONE AS t10, ONE AS t11, ONE AS t12, ONE AS t13, ONE AS t14, ONE AS t15, ONE AS t16, ONE AS t17, ONE AS t18, ONE AS t19, ONE AS t20, ONE AS t21, ONE AS t22, ONE AS t23, ONE AS t24, ONE AS t25, ONE AS t26, ONE AS t27, ONE AS t28, ONE AS t29, ONE AS t30, ONE AS t31, ONE AS t32"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qc32"
+      },
+      {
+        "op": "invoke",
+        "target": "qc32",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qc32_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qc32_mf",
+        "bind": "qc32_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc32_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc32_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc32_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qc32_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qc32",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc32",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qc32",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qc32",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qc32"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ((((((((((((((((((((((((((((((ONE AS t1 INNER JOIN ONE AS t2 ON t1.x = t2.x) INNER JOIN ONE AS t3 ON t1.x = t3.x) INNER JOIN ONE AS t4 ON t1.x = t4.x) INNER JOIN ONE AS t5 ON t1.x = t5.x) INNER JOIN ONE AS t6 ON t1.x = t6.x) INNER JOIN ONE AS t7 ON t1.x = t7.x) INNER JOIN ONE AS t8 ON t1.x = t8.x) INNER JOIN ONE AS t9 ON t1.x = t9.x) INNER JOIN ONE AS t10 ON t1.x = t10.x) INNER JOIN ONE AS t11 ON t1.x = t11.x) INNER JOIN ONE AS t12 ON t1.x = t12.x) INNER JOIN ONE AS t13 ON t1.x = t13.x) INNER JOIN ONE AS t14 ON t1.x = t14.x) INNER JOIN ONE AS t15 ON t1.x = t15.x) INNER JOIN ONE AS t16 ON t1.x = t16.x) INNER JOIN ONE AS t17 ON t1.x = t17.x) INNER JOIN ONE AS t18 ON t1.x = t18.x) INNER JOIN ONE AS t19 ON t1.x = t19.x) INNER JOIN ONE AS t20 ON t1.x = t20.x) INNER JOIN ONE AS t21 ON t1.x = t21.x) INNER JOIN ONE AS t22 ON t1.x = t22.x) INNER JOIN ONE AS t23 ON t1.x = t23.x) INNER JOIN ONE AS t24 ON t1.x = t24.x) INNER JOIN ONE AS t25 ON t1.x = t25.x) INNER JOIN ONE AS t26 ON t1.x = t26.x) INNER JOIN ONE AS t27 ON t1.x = t27.x) INNER JOIN ONE AS t28 ON t1.x = t28.x) INNER JOIN ONE AS t29 ON t1.x = t29.x) INNER JOIN ONE AS t30 ON t1.x = t30.x) INNER JOIN ONE AS t31 ON t1.x = t31.x) INNER JOIN ONE AS t32 ON t1.x = t32.x"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qn32"
+      },
+      {
+        "op": "invoke",
+        "target": "qn32",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qn32_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qn32_mf",
+        "bind": "qn32_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn32_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn32_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn32_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qn32_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qn32",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn32",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qn32",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qn32",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qn32"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ONE AS t1, ONE AS t2, ONE AS t3, ONE AS t4, ONE AS t5, ONE AS t6, ONE AS t7, ONE AS t8, ONE AS t9, ONE AS t10, ONE AS t11, ONE AS t12, ONE AS t13, ONE AS t14, ONE AS t15, ONE AS t16, ONE AS t17, ONE AS t18, ONE AS t19, ONE AS t20, ONE AS t21, ONE AS t22, ONE AS t23, ONE AS t24, ONE AS t25, ONE AS t26, ONE AS t27, ONE AS t28, ONE AS t29, ONE AS t30, ONE AS t31, ONE AS t32, ONE AS t33"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qc33"
+      },
+      {
+        "op": "invoke",
+        "target": "qc33",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qc33_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qc33_mf",
+        "bind": "qc33_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc33_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc33_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc33_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qc33_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qc33",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc33",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qc33",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qc33",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qc33"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM (((((((((((((((((((((((((((((((ONE AS t1 INNER JOIN ONE AS t2 ON t1.x = t2.x) INNER JOIN ONE AS t3 ON t1.x = t3.x) INNER JOIN ONE AS t4 ON t1.x = t4.x) INNER JOIN ONE AS t5 ON t1.x = t5.x) INNER JOIN ONE AS t6 ON t1.x = t6.x) INNER JOIN ONE AS t7 ON t1.x = t7.x) INNER JOIN ONE AS t8 ON t1.x = t8.x) INNER JOIN ONE AS t9 ON t1.x = t9.x) INNER JOIN ONE AS t10 ON t1.x = t10.x) INNER JOIN ONE AS t11 ON t1.x = t11.x) INNER JOIN ONE AS t12 ON t1.x = t12.x) INNER JOIN ONE AS t13 ON t1.x = t13.x) INNER JOIN ONE AS t14 ON t1.x = t14.x) INNER JOIN ONE AS t15 ON t1.x = t15.x) INNER JOIN ONE AS t16 ON t1.x = t16.x) INNER JOIN ONE AS t17 ON t1.x = t17.x) INNER JOIN ONE AS t18 ON t1.x = t18.x) INNER JOIN ONE AS t19 ON t1.x = t19.x) INNER JOIN ONE AS t20 ON t1.x = t20.x) INNER JOIN ONE AS t21 ON t1.x = t21.x) INNER JOIN ONE AS t22 ON t1.x = t22.x) INNER JOIN ONE AS t23 ON t1.x = t23.x) INNER JOIN ONE AS t24 ON t1.x = t24.x) INNER JOIN ONE AS t25 ON t1.x = t25.x) INNER JOIN ONE AS t26 ON t1.x = t26.x) INNER JOIN ONE AS t27 ON t1.x = t27.x) INNER JOIN ONE AS t28 ON t1.x = t28.x) INNER JOIN ONE AS t29 ON t1.x = t29.x) INNER JOIN ONE AS t30 ON t1.x = t30.x) INNER JOIN ONE AS t31 ON t1.x = t31.x) INNER JOIN ONE AS t32 ON t1.x = t32.x) INNER JOIN ONE AS t33 ON t1.x = t33.x"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qn33"
+      },
+      {
+        "op": "invoke",
+        "target": "qn33",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qn33_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qn33_mf",
+        "bind": "qn33_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn33_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn33_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn33_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qn33_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qn33",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn33",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qn33",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qn33",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qn33"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ONE AS t1, ONE AS t2, ONE AS t3, ONE AS t4, ONE AS t5, ONE AS t6, ONE AS t7, ONE AS t8, ONE AS t9, ONE AS t10, ONE AS t11, ONE AS t12, ONE AS t13, ONE AS t14, ONE AS t15, ONE AS t16, ONE AS t17, ONE AS t18, ONE AS t19, ONE AS t20, ONE AS t21, ONE AS t22, ONE AS t23, ONE AS t24, ONE AS t25, ONE AS t26, ONE AS t27, ONE AS t28, ONE AS t29, ONE AS t30, ONE AS t31, ONE AS t32, ONE AS t33, ONE AS t34"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qc34"
+      },
+      {
+        "op": "invoke",
+        "target": "qc34",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qc34_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qc34_mf",
+        "bind": "qc34_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc34_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc34_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc34_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qc34_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qc34",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc34",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qc34",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qc34",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qc34"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ((((((((((((((((((((((((((((((((ONE AS t1 INNER JOIN ONE AS t2 ON t1.x = t2.x) INNER JOIN ONE AS t3 ON t1.x = t3.x) INNER JOIN ONE AS t4 ON t1.x = t4.x) INNER JOIN ONE AS t5 ON t1.x = t5.x) INNER JOIN ONE AS t6 ON t1.x = t6.x) INNER JOIN ONE AS t7 ON t1.x = t7.x) INNER JOIN ONE AS t8 ON t1.x = t8.x) INNER JOIN ONE AS t9 ON t1.x = t9.x) INNER JOIN ONE AS t10 ON t1.x = t10.x) INNER JOIN ONE AS t11 ON t1.x = t11.x) INNER JOIN ONE AS t12 ON t1.x = t12.x) INNER JOIN ONE AS t13 ON t1.x = t13.x) INNER JOIN ONE AS t14 ON t1.x = t14.x) INNER JOIN ONE AS t15 ON t1.x = t15.x) INNER JOIN ONE AS t16 ON t1.x = t16.x) INNER JOIN ONE AS t17 ON t1.x = t17.x) INNER JOIN ONE AS t18 ON t1.x = t18.x) INNER JOIN ONE AS t19 ON t1.x = t19.x) INNER JOIN ONE AS t20 ON t1.x = t20.x) INNER JOIN ONE AS t21 ON t1.x = t21.x) INNER JOIN ONE AS t22 ON t1.x = t22.x) INNER JOIN ONE AS t23 ON t1.x = t23.x) INNER JOIN ONE AS t24 ON t1.x = t24.x) INNER JOIN ONE AS t25 ON t1.x = t25.x) INNER JOIN ONE AS t26 ON t1.x = t26.x) INNER JOIN ONE AS t27 ON t1.x = t27.x) INNER JOIN ONE AS t28 ON t1.x = t28.x) INNER JOIN ONE AS t29 ON t1.x = t29.x) INNER JOIN ONE AS t30 ON t1.x = t30.x) INNER JOIN ONE AS t31 ON t1.x = t31.x) INNER JOIN ONE AS t32 ON t1.x = t32.x) INNER JOIN ONE AS t33 ON t1.x = t33.x) INNER JOIN ONE AS t34 ON t1.x = t34.x"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qn34"
+      },
+      {
+        "op": "invoke",
+        "target": "qn34",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qn34_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qn34_mf",
+        "bind": "qn34_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn34_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn34_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn34_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qn34_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qn34",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn34",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qn34",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qn34",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qn34"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ONE AS t1, ONE AS t2, ONE AS t3, ONE AS t4, ONE AS t5, ONE AS t6, ONE AS t7, ONE AS t8, ONE AS t9, ONE AS t10, ONE AS t11, ONE AS t12, ONE AS t13, ONE AS t14, ONE AS t15, ONE AS t16, ONE AS t17, ONE AS t18, ONE AS t19, ONE AS t20, ONE AS t21, ONE AS t22, ONE AS t23, ONE AS t24, ONE AS t25, ONE AS t26, ONE AS t27, ONE AS t28, ONE AS t29, ONE AS t30, ONE AS t31, ONE AS t32, ONE AS t33, ONE AS t34, ONE AS t35, ONE AS t36, ONE AS t37, ONE AS t38, ONE AS t39, ONE AS t40, ONE AS t41, ONE AS t42, ONE AS t43, ONE AS t44, ONE AS t45, ONE AS t46, ONE AS t47, ONE AS t48, ONE AS t49, ONE AS t50"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qc50"
+      },
+      {
+        "op": "invoke",
+        "target": "qc50",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qc50_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qc50_mf",
+        "bind": "qc50_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc50_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc50_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qc50_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qc50_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qc50",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qc50",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qc50",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qc50",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qc50"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT t1.x FROM ((((((((((((((((((((((((((((((((((((((((((((((((ONE AS t1 INNER JOIN ONE AS t2 ON t1.x = t2.x) INNER JOIN ONE AS t3 ON t1.x = t3.x) INNER JOIN ONE AS t4 ON t1.x = t4.x) INNER JOIN ONE AS t5 ON t1.x = t5.x) INNER JOIN ONE AS t6 ON t1.x = t6.x) INNER JOIN ONE AS t7 ON t1.x = t7.x) INNER JOIN ONE AS t8 ON t1.x = t8.x) INNER JOIN ONE AS t9 ON t1.x = t9.x) INNER JOIN ONE AS t10 ON t1.x = t10.x) INNER JOIN ONE AS t11 ON t1.x = t11.x) INNER JOIN ONE AS t12 ON t1.x = t12.x) INNER JOIN ONE AS t13 ON t1.x = t13.x) INNER JOIN ONE AS t14 ON t1.x = t14.x) INNER JOIN ONE AS t15 ON t1.x = t15.x) INNER JOIN ONE AS t16 ON t1.x = t16.x) INNER JOIN ONE AS t17 ON t1.x = t17.x) INNER JOIN ONE AS t18 ON t1.x = t18.x) INNER JOIN ONE AS t19 ON t1.x = t19.x) INNER JOIN ONE AS t20 ON t1.x = t20.x) INNER JOIN ONE AS t21 ON t1.x = t21.x) INNER JOIN ONE AS t22 ON t1.x = t22.x) INNER JOIN ONE AS t23 ON t1.x = t23.x) INNER JOIN ONE AS t24 ON t1.x = t24.x) INNER JOIN ONE AS t25 ON t1.x = t25.x) INNER JOIN ONE AS t26 ON t1.x = t26.x) INNER JOIN ONE AS t27 ON t1.x = t27.x) INNER JOIN ONE AS t28 ON t1.x = t28.x) INNER JOIN ONE AS t29 ON t1.x = t29.x) INNER JOIN ONE AS t30 ON t1.x = t30.x) INNER JOIN ONE AS t31 ON t1.x = t31.x) INNER JOIN ONE AS t32 ON t1.x = t32.x) INNER JOIN ONE AS t33 ON t1.x = t33.x) INNER JOIN ONE AS t34 ON t1.x = t34.x) INNER JOIN ONE AS t35 ON t1.x = t35.x) INNER JOIN ONE AS t36 ON t1.x = t36.x) INNER JOIN ONE AS t37 ON t1.x = t37.x) INNER JOIN ONE AS t38 ON t1.x = t38.x) INNER JOIN ONE AS t39 ON t1.x = t39.x) INNER JOIN ONE AS t40 ON t1.x = t40.x) INNER JOIN ONE AS t41 ON t1.x = t41.x) INNER JOIN ONE AS t42 ON t1.x = t42.x) INNER JOIN ONE AS t43 ON t1.x = t43.x) INNER JOIN ONE AS t44 ON t1.x = t44.x) INNER JOIN ONE AS t45 ON t1.x = t45.x) INNER JOIN ONE AS t46 ON t1.x = t46.x) INNER JOIN ONE AS t47 ON t1.x = t47.x) INNER JOIN ONE AS t48 ON t1.x = t48.x) INNER JOIN ONE AS t49 ON t1.x = t49.x) INNER JOIN ONE AS t50 ON t1.x = t50.x"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "qn50"
+      },
+      {
+        "op": "invoke",
+        "target": "qn50",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "qn50_mf"
+      },
+      {
+        "op": "forEachItem",
+        "target": "qn50_mf",
+        "bind": "qn50_mfi",
+        "maxItems": 32,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn50_mfi",
+            "member": "Name",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn50_mfi",
+            "member": "Type",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "qn50_mfi",
+            "member": "Size",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "qn50_mf"
+      },
+      {
+        "op": "loopUntil",
+        "target": "qn50",
+        "member": "EOF",
+        "maxIterations": 48,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "qn50",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "qn50",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "qn50",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "qn50"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-sql-13b.join-limit-tables.d7135af437.a1",
+    "token": "r-sql-13b.join-limit-tables.d7135af437",
+    "questionKey": "qk1-d7135af437fbd8c97f5b8077ad1792da28ee25439d9f81a107c0d8a15139124e",
+    "workerGeneration": 1,
+    "execution": "Uncertain",
+    "capture": "Incomplete",
+    "problems": [
+      "Started without a returned receipt: native effects may or may not have happened.",
+      "Last native call entered (lifecycle trace): {\"seq\":75,\"path\":\"35\",\"call\":\"db.OpenRecordset\",\"utc\":\"2026-11-17T01:05:32.1397567+00:00\"}",
+      "The owned worker exceeded its timeout and was terminated."
+    ],
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 25692,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": -1,
+      "timedOut": true,
+      "killed": true,
+      "exitObserved": true
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T01:10:30.2135649+00:00",
+    "sealSha256": "ac6030bb27391486c4db0f80663365fb69b07852225e8c6066567d58a188d022"
+  },
+  "artifacts": []
+}
