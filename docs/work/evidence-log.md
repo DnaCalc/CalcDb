@@ -100,6 +100,9 @@ for the others:
 - Explicit transaction, killed 0 ms after CommitTrans returned: rows present (3 of 3). With
   `SetOption(dbUserCommitSync, "No")` (58): rows absent.
 - Option values are from the captured DAO type library; SetOption affects this process only.
+- In the lost-rows cases the frozen database had already grown from 8.6 MB to 11 to 13 MB (varying between
+  attempts), yet the next opener saw none of the inserted rows. Pages were written without the rows becoming
+  visible; this is for byte-level follow-up (W-04 inspector, R-CRASH-1 recording route).
 
 ### R-ACT-1 ACT-THREAD, SAME-STA and MTA-CREATE without a message pump — 6 records
 `evidence/r-act-1-thread`:

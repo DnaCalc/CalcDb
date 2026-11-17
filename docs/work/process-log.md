@@ -94,6 +94,13 @@ next time: one change per retry, or run the discriminator before writing the exp
 difference between ACCDB and MDB. Three attempts each showed a race at the kill boundary in both formats.
 Rule: repeat any single-sample result at a timing boundary before recording it.
 
+**Measure before optimising.** Evidence grew to 1.57 GB of working-tree JSON. I first blamed duplicate BSTR
+hex and re-captured constant arguments, and built a lossless compaction for them; it saved 3 to 8 %. The real
+costs are the per-call event structure and indentation. Git's packed size was 372 MB, about four times smaller,
+because the repetitive JSON compresses well. The compaction was reverted before commit, so one night's
+evidence keeps one format. The storage decision (a compact capture encoding, environment once per worker, or a
+separate evidence repository, The Plan §2.4) is the owner's.
+
 **Next candidates.** Add a fixture-review step that reads the
 creation capture and fails a fixture whose required tables did not appear. Store the environment once per
 worker, as proposed in oracle-service.md.
