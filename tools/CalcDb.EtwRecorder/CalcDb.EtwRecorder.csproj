@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- R-CRASH-1 CRASH-ORDER, CRASH-OBS, R-TXN-1 TXN-FLUSH, R-LOCK-2 RO-NATIVE: the ETW file-I/O recorder. It runs
+       elevated through an owner-installed scheduled task (tools/etw-setup), so it is a WinExe: no console window. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>calcdb-etw-recorder</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.*" />
+  </ItemGroup>
+</Project>

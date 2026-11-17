@@ -37,6 +37,10 @@ internal static class Program
         {
             return DesktopRun.Run(args);
         }
+        if (args[0] == "etw-check" && OperatingSystem.IsWindows())
+        {
+            return EtwCheck(RepositoryRoot());
+        }
         var options = Options.Parse(args.Skip(1));
         string repo = RepositoryRoot();
         string evidenceDir = Path.Combine(repo, "evidence");
@@ -384,6 +388,39 @@ internal static class Program
             throw new InvalidOperationException($"{path} already exists; retained records are not rewritten.");
         }
         return path;
+    }
+
+    /// <summary>
+    /// <c>calcdb-oracle etw-check</c>: record one known file write in a scratch directory under the attempts root
+    /// through the ETW recorder, and print what it saw (tools/etw-setup).
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static int EtwCheck(string repo)
+    {
+        string dir = Path.Combine(repo, ".oracle-runs", "attempts", "etw-check-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(dir);
+        EtwBridge etw = EtwBridge.Start(dir, 60);
+        string probe = Path.Combine(dir, "probe.bin");
+        using (var f = new FileStream(probe, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough))
+        {
+            f.Write(new byte[8192]);
+            f.Flush(flushToDisk: true);
+        }
+        etw.Stop();
+        string status = Path.Combine(dir, "artifacts", EtwBridge.StatusFile);
+        string trace = Path.Combine(dir, "artifacts", EtwBridge.TraceFile);
+        Console.WriteLine("status: " + (File.Exists(status) ? File.ReadAllText(status) : "none"));
+        if (!File.Exists(trace))
+        {
+            return 1;
+        }
+        string[] lines = File.ReadAllLines(trace);
+        Console.WriteLine($"trace: {lines.Length} events in {trace}");
+        foreach (string line in lines.Take(12))
+        {
+            Console.WriteLine("  " + line);
+        }
+        return lines.Any(l => l.Contains("probe.bin", StringComparison.OrdinalIgnoreCase)) ? 0 : 1;
     }
 
     private static int ShowAttempt(JobStore store, Options options)

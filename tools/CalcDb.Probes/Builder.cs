@@ -15,6 +15,12 @@ public sealed record Probe(string Card, string Name, string[] Refs, string Descr
     public bool CreatesFixture { get; init; }
 
     /// <summary>
+    /// R-CRASH-1 CRASH-ORDER: record every file operation on the attempt's files through the owner-installed ETW
+    /// recorder (observation channel <c>etwFileIo</c>, part of the question key). The trace is an artifact of the attempt.
+    /// </summary>
+    public bool RecordFileIo { get; init; }
+
+    /// <summary>
     /// Further participants (b, c, ...), each run at the same time in its own owned worker process on the same
     /// attempt files; order them with Signal/Await only. Participant a (Program) keeps the final files, so it
     /// should await the others' last signal before it ends.

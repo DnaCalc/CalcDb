@@ -30,6 +30,7 @@ public static class Sealer
             execution = Worse(execution, peerExecution);
         }
         problems.AddRange(KillProvenance(attemptDir, owners));
+        EtwArtifact(attemptDir, problems, artifacts);
         var manifest = new CaptureManifest
         {
             AttemptId = attempt.AttemptId,
@@ -82,6 +83,32 @@ public static class Sealer
                 yield return $"participant {owner.Participant} ran KillParticipant: {kill.Name}";
             }
         }
+    }
+
+    /// <summary>
+    /// R-CRASH-1 CRASH-ORDER: a question with the observation channel <c>etwFileIo</c> must have its ETW file-I/O trace;
+    /// when it is present it becomes an artifact of the attempt, and when it is missing the recorder's status is a problem.
+    /// </summary>
+    private static void EtwArtifact(string attemptDir, List<string> problems, List<ArtifactRef> artifacts)
+    {
+        string questionFile = Path.Combine(attemptDir, "question.json");
+        if (!File.Exists(questionFile) || !EvidenceJson.Read<Question>(questionFile).ObservationRecipe.Contains("etwFileIo"))
+        {
+            return;
+        }
+        string trace = Path.Combine(attemptDir, "artifacts", "etw-file-io.jsonl");
+        string status = Path.Combine(attemptDir, "artifacts", "etw-status.txt");
+        string statusText = File.Exists(status) ? File.ReadAllText(status) : "no status";
+        if (!File.Exists(trace))
+        {
+            problems.Add("ETW file-I/O recording requested but no trace was produced: " + statusText);
+            return;
+        }
+        if (!statusText.StartsWith("recorder: ok", StringComparison.Ordinal))
+        {
+            problems.Add("ETW file-I/O recorder did not finish cleanly: " + statusText);
+        }
+        artifacts.Add(new ArtifactRef("etw:file-io", "etw-file-io", "artifacts/etw-file-io.jsonl", new FileInfo(trace).Length, Hashing.Sha256File(trace)));
     }
 
     private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.Terminated, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];

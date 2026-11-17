@@ -133,7 +133,7 @@ qualified from repeated kills and page timelines.
 | --- | --- | --- |
 | Worker operations: enumeration, ByRef and named arguments, raw activation, aggregation, `ITypeInfo::CreateInstance`, an event sink, suspend and resume | DAO-ENUM, ACT-*, STR-BYREF, ADO-EVENT, ADO-RESULTS, READ-PATH, ERR-SNAPSHOT and others | **done** (`b2be2637`) |
 | A sampling write recorder (suspend, page hashes, resume) | CRASH-ORDER at the file-cache level, CRASH-OBS | **done** (`r-sample-rec`); needs repeats per mutation class |
-| A per-write and flush recorder (ETW or a file-system filter) | exact write and flush order, RO-NATIVE, CRASH-TRACE | owner-approved setup (AGENTS.md) |
+| A per-write and flush recorder (ETW, Microsoft-Windows-Kernel-File) | exact write and flush order, RO-NATIVE, CRASH-TRACE | **built**, approved 2026-11-17; waits for the one elevated install step (tools/etw-setup), then card `r-etw-rec` runs |
 | Fault injection (I/O failures, memory, temp space) | ERR-OOM, ENC-FAIL, RB-FAIL, CX-FAIL, the injected parts of SQL-ACT-FAIL | large; not started |
 | An owned Access host with dialog handling (UI Automation on the private desktop) | R-UDF-1, EXPR-SANDBOX, the Access contexts of R-EXPR-1 and R-SQL-1, CAT-X, RB-OPAQUE, the VBA lane of OR-OBS | large; task `b8sx` |
 | Managed caller lanes (ExcelDna.Interop.Dao on .NET Framework 4.8 and .NET 10) | the OR-OBS managed lanes, OLE-MANAGED, ACT-MANAGED | medium; task `9fkt` |

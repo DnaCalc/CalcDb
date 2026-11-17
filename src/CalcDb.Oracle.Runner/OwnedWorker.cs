@@ -28,6 +28,11 @@ internal static partial class OwnedWorker
     [SupportedOSPlatform("windows")]
     private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
     {
+        // R-CRASH-1 CRASH-ORDER: a question that asks for ETW file-I/O records every file operation on its attempt files.
+        string questionFile = Path.Combine(attemptDir, "question.json");
+        EtwBridge? etw = File.Exists(questionFile) && EvidenceJson.Read<Question>(questionFile).ObservationRecipe.Contains(EtwBridge.Channel)
+            ? EtwBridge.Start(attemptDir, (int)Math.Ceiling(timeout.TotalSeconds) + 30)
+            : null;
         using var job = JobObject.CreateKillOnClose();
         var started = new List<Started>();
         foreach (string participant in participants)
@@ -110,6 +115,7 @@ internal static partial class OwnedWorker
                 WindowsOnPrivateDesktop = onPrivate.TryGetValue(process.ProcessId, out var p) ? [.. p] : [],
             });
         }
+        etw?.Stop();
         return reports;
     }
 

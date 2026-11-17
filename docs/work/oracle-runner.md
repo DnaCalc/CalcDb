@@ -109,6 +109,12 @@ ARGS` runs the command on the private desktop inside a kill-on-close job and rep
 process in the job, children included. Use `--container-desktop` for AppContainer processes such as an mxc process
 container: that second private desktop also admits the AppContainer groups (isolated-environments.md, M2).
 
+A question whose observation recipe holds `etwFileIo` (probe property `RecordFileIo`) is recorded by the ETW
+file-I/O recorder: every create, read, write and flush on the attempt's files, with offsets and sizes, becomes the
+artifact `etw:file-io`. The recorder needs an elevated token, so it runs through a scheduled task installed once by the
+owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check` tests it. Without it, such a
+question seals Incomplete with the reason.
+
 The store lives in `.oracle-runs/` (ignored by git): transient attempts, dry runs and
 failures stay there. Only `retain` writes to `evidence/`, and it never overwrites a record.
 Retain a capture because it shows something about ACE, including surprising or negative

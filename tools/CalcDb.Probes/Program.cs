@@ -75,7 +75,7 @@ internal static class Program
                 CreatesFixture = p.CreatesFixture ? true : null,
                 CallerSurface = "native-idispatch/x64",
                 InvokeLcid = 1033,
-                ObservationRecipe = Recipe,
+                ObservationRecipe = p.RecordFileIo ? [.. Recipe, "etwFileIo"] : Recipe,
                 Inputs = p.Fixtures.Select(f => fixtures[f.Fixture] with { Role = f.Role }).ToList(),
                 Program = builder.Ops,
                 Participants = p.Participants.Length == 0 ? null : p.Participants.Select(pt =>
