@@ -1,0 +1,218 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/ole-act-datasource-interfaces",
+  "bookRefs": [
+    "R-OLEDB-1",
+    "OLE-ACT",
+    "OLE-PROP"
+  ],
+  "description": "OLE-ACT interface inventory by QueryInterface: on a raw ACE OLE DB data source object (CoCreateInstance, IUnknown) the answers for IUnknown, IDispatch, IDBInitialize, IDBProperties, IDBCreateSession, IDBInfo, IDBDataSourceAdmin, IPersist, ISupportErrorInfo and IConnectionPointContainer; the same list on an ADODB.Connection object; and, on an open ADO connection, the same list again. Asks which OLE DB interfaces the provider exposes before initialization and what ADO's own object answers.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-ole.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "activate",
+      "class": "Microsoft.ACE.OLEDB.12.0",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "d1",
+      "aggregate": false
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "d1",
+      "iids": [
+        "{00000000-0000-0000-C000-000000000046}",
+        "{00020400-0000-0000-C000-000000000046}",
+        "{0C733A8B-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A8A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A5D-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A89-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A7A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}"
+      ]
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "cn",
+      "iids": [
+        "{00000000-0000-0000-C000-000000000046}",
+        "{00020400-0000-0000-C000-000000000046}",
+        "{0C733A8B-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A8A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A5D-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A89-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A7A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cnPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-ole.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "cn",
+      "iids": [
+        "{00000000-0000-0000-C000-000000000046}",
+        "{00020400-0000-0000-C000-000000000046}",
+        "{0C733A8B-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A8A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A5D-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A89-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0C733A7A-2A1C-11CE-ADE5-00AA0044773D}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

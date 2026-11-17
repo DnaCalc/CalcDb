@@ -1,0 +1,859 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-flush-idle-and-close-timeline",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-FLUSH-LIVE",
+    "TXN-FLUSH-BEHIND",
+    "TXN-FLUSH-OP",
+    "TXN-FLUSH-COMMIT"
+  ],
+  "description": "TXN-FLUSH-BEHIND, what ends the window (the first card had one kill sample each for Idle and Close). Three implicit INSERT...SELECT runs on the big fixture, each followed at once by one action and the file read right after and every 50 ms for 300 ms: (1) DBEngine.Idle(dbRefreshCache); (2) DBEngine.Idle(dbFreeLocks, 1); (3) a Recordset open/close on a small snapshot. Then a fourth run followed by Database.Close and the file reads. Asks which call makes the file image change at once and which leave it to the timer.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-big-accdb.accdb",
+      "sha256": "45484a6bf90e1106746e0587e14f1ed6e440970fb774f3a002859fdae9a83c81",
+      "length": 8663040,
+      "provenance": "r-q2-cat-txn-lock.create-big-accdb.c2e14c2a98.a1 qk1-c2e14c2a98967f1f8cb78180db3023104961db2dda8dba1fabbf90b0018dc39e output:r-q2-cat-txn-lock-big-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Idle",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-acted"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t50",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t100",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t150",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t250",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-refresh-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-refresh-t300",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Idle",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-acted"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t50",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t100",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t150",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t250",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "idle-freelocks-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "idle-freelocks-t300",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "oc"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "oc"
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-acted"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t50",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t100",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t150",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t250",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "open-close-rs-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "open-close-rs-t300",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "signal",
+      "name": "close-closed"
+    },
+    {
+      "op": "observeFiles",
+      "label": "close-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 100
+    },
+    {
+      "op": "observeFiles",
+      "label": "close-t100",
+      "keep": false
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

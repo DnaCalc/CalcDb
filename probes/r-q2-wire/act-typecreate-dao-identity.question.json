@@ -1,0 +1,207 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-typecreate-dao-identity",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-TYPECREATE",
+    "ACT-THREAD",
+    "ENGINE-IDENTITY"
+  ],
+  "description": "ACT-TYPECREATE, DAO: an engine created by the ordinary Create gets a Workspace 'rq2ws' appended; ITypeInfo::CreateInstance of the DBEngine coclass from its type information (IDispatch) gives t1, and again t2. Workspaces.Count and names are read through all three. Asks whether type-information creation returns the engine the process already has or a new one.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "rq2ws"
+        },
+        {
+          "type": "bstr",
+          "text": "admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "wsx"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "wsx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wsx"
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "typeCreate",
+      "target": "eng",
+      "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t1"
+    },
+    {
+      "op": "typeCreate",
+      "target": "eng",
+      "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "t1",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

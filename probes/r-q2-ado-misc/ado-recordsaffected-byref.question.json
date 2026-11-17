@@ -1,0 +1,1812 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/ado-recordsaffected-byref",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-RESULTS"
+  ],
+  "description": "ADO-RESULTS, RecordsAffected written back through a by-reference argument: Connection.Execute with RecordsAffected passed as VT_BYREF|VT_VARIANT holding Empty and as typed VT_BYREF|VT_I4 holding -5, for an UPDATE of three rows (L = 10), an UPDATE of none, an INSERT, a DELETE of two rows, a SELECT, a CREATE TABLE and a DROP TABLE; and Command.Execute(RecordsAffected, Parameters, Options) for an UPDATE. The value written back after each call is captured. Asks what ADO reports for each statement kind and whether a failing call writes back.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-ado-misc-main.accdb",
+      "sha256": "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b",
+      "length": 200704,
+      "provenance": "r-q2-ado-misc.create-main.3640810e22.a1 qk1-3640810e2233e545b71eb891d498bd8497e5cb62a2101a065684f2192480b9d3 output:r-q2-ado-misc-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cnPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET T = T WHERE L = 10"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET T = T WHERE L = 10"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET T = T WHERE ID = 999"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET T = T WHERE ID = 999"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO K (Code, T, L) VALUES ('r11', 'n', 1)"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO K (Code, T, L) VALUES ('r12', 'n', 1)"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM K WHERE ID >= 9 AND ID <= 10"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM K WHERE ID >= 9 AND ID <= 10"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM K"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM K"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE ZZ (A LONG)"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE ZZ (A LONG)"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE ZZ"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE ZZ"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET NoSuchColumn = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET NoSuchColumn = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -5
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmd"
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET T = T WHERE L = 20"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,776 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/cx-hold-bookmark-reuse",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-HOLD"
+  ],
+  "description": "CX-HOLD with bookmark values passed back as constants: the child Bookmark of p1's two children is read (the earlier record read 00030000 for the first); the parent moves (the held child dies); the group of p1 is read again as a fresh child and given Bookmark 00030000 as a byte array (does it select the first child? read its Value); the same constant is given to p2's child (cross-group) and a made-up 09090909 is given to p1's child; then after the parent's Requery the constant is given to a fresh p1 child. Asks whether a child bookmark is valid across incarnations and groups.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "cx",
+      "fileName": "r-q2-ado-misc-cx.accdb",
+      "sha256": "7391ca9d00849fadfc817b9cada3e6bbac51f544df98522eba5fa5e4ec447bf1",
+      "length": 221184,
+      "provenance": "r-q2-ado-misc.create-cx.8ecb63d16d.a1 qk1-8ecb63d16d373c72a141571a6d32b27d80e1537d5758d2f4d94c1b617de19248 output:r-q2-ado-misc-cx.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-marker.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "dm"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "cx"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Name, Tags FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cf1"
+    },
+    {
+      "op": "invoke",
+      "target": "cf1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "ct1"
+    },
+    {
+      "op": "invoke",
+      "target": "ct1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ch1"
+    },
+    {
+      "op": "invoke",
+      "target": "ch1",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ch1",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ch1",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RqNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ch1",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "ch1"
+    },
+    {
+      "op": "release",
+      "target": "ct1"
+    },
+    {
+      "op": "release",
+      "target": "cf1"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cf2"
+    },
+    {
+      "op": "invoke",
+      "target": "cf2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "ct2"
+    },
+    {
+      "op": "invoke",
+      "target": "ct2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ch2"
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RqNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ch2",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "00030000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ch2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfv2"
+    },
+    {
+      "op": "invoke",
+      "target": "cfv2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "cv2"
+    },
+    {
+      "op": "invoke",
+      "target": "cv2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cv2"
+    },
+    {
+      "op": "release",
+      "target": "cfv2"
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RqNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ch2",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "09090909"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "ch2"
+    },
+    {
+      "op": "release",
+      "target": "ct2"
+    },
+    {
+      "op": "release",
+      "target": "cf2"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cf3"
+    },
+    {
+      "op": "invoke",
+      "target": "cf3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "ct3"
+    },
+    {
+      "op": "invoke",
+      "target": "ct3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ch3"
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RqNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ch3",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "00030000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ch3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfv3"
+    },
+    {
+      "op": "invoke",
+      "target": "cfv3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "cv3"
+    },
+    {
+      "op": "invoke",
+      "target": "cv3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cv3"
+    },
+    {
+      "op": "release",
+      "target": "cfv3"
+    },
+    {
+      "op": "release",
+      "target": "ch3"
+    },
+    {
+      "op": "release",
+      "target": "ct3"
+    },
+    {
+      "op": "release",
+      "target": "cf3"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cf4"
+    },
+    {
+      "op": "invoke",
+      "target": "cf4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "ct4"
+    },
+    {
+      "op": "invoke",
+      "target": "ct4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ch4"
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE RqNoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ch4",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "00030000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ch4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfv4"
+    },
+    {
+      "op": "invoke",
+      "target": "cfv4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "cv4"
+    },
+    {
+      "op": "invoke",
+      "target": "cv4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cv4"
+    },
+    {
+      "op": "release",
+      "target": "cfv4"
+    },
+    {
+      "op": "release",
+      "target": "ch4"
+    },
+    {
+      "op": "release",
+      "target": "ct4"
+    },
+    {
+      "op": "release",
+      "target": "cf4"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dm",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

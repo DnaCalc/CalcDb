@@ -1,0 +1,1985 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q2-wire.named-ado-methods.370d7a34b1.a1",
+  "retainedUtc": "2026-11-17T12:27:09.4269567+00:00",
+  "probe": "r-q2-wire/named-ado-methods",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-ABI",
+    "R-ADO-1",
+    "R-ERR-1",
+    "ERR-BIND"
+  ],
+  "description": "ACT-ABI named arguments, ADO: Connection.Execute with CommandText positional and Options:= named, skipping RecordsAffected; both named (Options:=, CommandText:=); with RecordsAffected:= named as a by-reference variant; Recordset.Open(Source:=, ActiveConnection:=, CursorType:=, LockType:=, Options:=) fully named in a different order; with a misspelled name (ActiveConn:=). Asks how ADO's dispatch resolves names, skipped optionals and by-reference named arguments.",
+  "retentionNote": "Designed r-q2-wire probe (A-02); complete capture of the ACE answer.",
+  "token": "r-q2-wire.named-ado-methods.370d7a34b1",
+  "questionKey": "qk1-370d7a34b16b9406514abddbba5722e13c8f0323704ee21647df557bc9b39d98",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q2-wire/named-ado-methods",
+    "bookRefs": [
+      "R-ACT-1",
+      "ACT-ABI",
+      "R-ADO-1",
+      "R-ERR-1",
+      "ERR-BIND"
+    ],
+    "description": "ACT-ABI named arguments, ADO: Connection.Execute with CommandText positional and Options:= named, skipping RecordsAffected; both named (Options:=, CommandText:=); with RecordsAffected:= named as a by-reference variant; Recordset.Open(Source:=, ActiveConnection:=, CursorType:=, LockType:=, Options:=) fully named in a different order; with a misspelled name (ActiveConn:=). Asks how ADO's dispatch resolves names, skipped optionals and by-reference named arguments.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "scratch-q2-named-ado.accdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (1, 'a')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (2, 'b')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "db"
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Connection",
+        "bind": "cn"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Provider",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Properties",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "cnp"
+      },
+      {
+        "op": "invoke",
+        "target": "cnp",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Data Source"
+          }
+        ],
+        "bind": "cds"
+      },
+      {
+        "op": "invoke",
+        "target": "cds",
+        "member": "Value",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "scratch-q2-named-ado.accdb"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "cds"
+      },
+      {
+        "op": "release",
+        "target": "cnp"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Open",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "UPDATE T SET N = 'a'"
+          }
+        ],
+        "named": [
+          {
+            "name": "Options",
+            "value": {
+              "type": "i4",
+              "value": 129
+            }
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "kind": "method",
+        "args": [],
+        "named": [
+          {
+            "name": "Options",
+            "value": {
+              "type": "i4",
+              "value": 129
+            }
+          },
+          {
+            "name": "CommandText",
+            "value": {
+              "type": "bstr",
+              "text": "UPDATE T SET N = 'b'"
+            }
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "UPDATE T SET N = 'c'"
+          }
+        ],
+        "named": [
+          {
+            "name": "RecordsAffected",
+            "value": {
+              "type": "byref",
+              "inner": {
+                "type": "empty"
+              },
+              "typed": false
+            }
+          },
+          {
+            "name": "Options",
+            "value": {
+              "type": "i4",
+              "value": 129
+            }
+          }
+        ]
+      },
+      {
+        "op": "create",
+        "progId": "ADODB.Recordset",
+        "bind": "ar"
+      },
+      {
+        "op": "invoke",
+        "target": "ar",
+        "member": "Open",
+        "kind": "method",
+        "args": [],
+        "named": [
+          {
+            "name": "LockType",
+            "value": {
+              "type": "i4",
+              "value": 1
+            }
+          },
+          {
+            "name": "Source",
+            "value": {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T ORDER BY ID"
+            }
+          },
+          {
+            "name": "Options",
+            "value": {
+              "type": "i4",
+              "value": 1
+            }
+          },
+          {
+            "name": "ActiveConnection",
+            "value": {
+              "type": "object",
+              "name": "cn"
+            }
+          },
+          {
+            "name": "CursorType",
+            "value": {
+              "type": "i4",
+              "value": 3
+            }
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "ar",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "loopUntil",
+        "target": "ar",
+        "member": "EOF",
+        "maxIterations": 4,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "ar",
+            "member": "Fields",
+            "kind": "propertyGet",
+            "args": [],
+            "bind": "flds"
+          },
+          {
+            "op": "forEachItem",
+            "target": "flds",
+            "bind": "f",
+            "maxItems": 32,
+            "body": [
+              {
+                "op": "invoke",
+                "target": "f",
+                "member": "Value",
+                "kind": "propertyGet",
+                "args": []
+              }
+            ]
+          },
+          {
+            "op": "release",
+            "target": "flds"
+          },
+          {
+            "op": "invoke",
+            "target": "ar",
+            "member": "MoveNext",
+            "kind": "method",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "ar",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "ar",
+        "member": "Open",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT ID FROM T"
+          }
+        ],
+        "named": [
+          {
+            "name": "ActiveConn",
+            "value": {
+              "type": "object",
+              "name": "cn"
+            }
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "ar"
+      },
+      {
+        "op": "invoke",
+        "target": "cn",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q2-wire.named-ado-methods.370d7a34b1.a1",
+    "token": "r-q2-wire.named-ado-methods.370d7a34b1",
+    "questionKey": "qk1-370d7a34b16b9406514abddbba5722e13c8f0323704ee21647df557bc9b39d98",
+    "workerGeneration": 1,
+    "execution": "ReturnedFailure",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "493e78c630c1777f6201f8e05c0033d11fd26eedb4c31125e8db3cb4a68cde94",
+    "artifacts": [
+      {
+        "role": "output:scratch-q2-named-ado.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-q2-named-ado.accdb",
+        "length": 188416,
+        "sha256": "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 25032,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T12:27:09.3971357+00:00",
+    "sealSha256": "34978f917e20f889bfd7b0704010db558de9b16fc72a6c75259163c2ee2d3141"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q2-wire.named-ado-methods.370d7a34b1.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-370d7a34b16b9406514abddbba5722e13c8f0323704ee21647df557bc9b39d98",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "c943ad3c3eae51e5f5b747f83dd172ce351b28989e201591878ca266b7b49ebc",
+      "workerBuild": "1.0.0+8433b216f1a90c387e7d955cba72b91b39d8faa0",
+      "toolingRevision": "8433b216f1a90c387e7d955cba72b91b39d8faa0+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 25032,
+      "threadId": 34176,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-wire.named-ado-methods.370d7a34b1.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00710032002d0077006900720065002e006e0061006d00650064002d00610064006f002d006d006500740068006f00640073002e0033003700300064003700610033003400620031002e00610031005c0077006f0072006b005c0073006300720061007400630068002d00710032002d006e0061006d00650064002d00610064006f002e0061006300630064006200",
+            "byteLength": 236,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-wire.named-ado-methods.370d7a34b1.a1\\work\\scratch-q2-named-ado.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020005400200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f00540020005000520049004d0041005200590020004b00450059002c0020004e002000540045005800540028003100300029002900",
+            "byteLength": 128,
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280031002c0020002700610027002900",
+            "byteLength": 58,
+            "text": "INSERT INTO T VALUES (1, 'a')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280032002c0020002700620027002900",
+            "byteLength": 58,
+            "text": "INSERT INTO T VALUES (2, 'b')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Connection",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "cn",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cn",
+          "identity": "u3",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Apartment"
+        },
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Provider",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+            "byteLength": 48,
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Properties",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 500,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cnp",
+          "identity": "u4",
+          "typeName": "Properties",
+          "typeIid": "{00000504-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cnp",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "invoke",
+        "target": "cnp",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4400610074006100200053006f007500720063006500",
+            "byteLength": 22,
+            "text": "Data Source"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "cds",
+          "identity": "u5",
+          "typeName": "Property",
+          "typeIid": "{00000503-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "cds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "cds",
+        "member": "Value",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00710032002d0077006900720065002e006e0061006d00650064002d00610064006f002d006d006500740068006f00640073002e0033003700300064003700610033003400620031002e00610031005c0077006f0072006b005c0073006300720061007400630068002d00710032002d006e0061006d00650064002d00610064006f002e0061006300630064006200",
+            "byteLength": 236,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-wire.named-ado-methods.370d7a34b1.a1\\work\\scratch-q2-named-ado.accdb"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "release",
+        "target": "cds",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "release",
+        "target": "cnp",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Open",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 10,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "55005000440041005400450020005400200053004500540020004e0020003d002000270061002700",
+            "byteLength": 40,
+            "text": "UPDATE T SET N = 'a'"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "129"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "display": "null interface pointer"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "namedArgNames": [
+          "Options"
+        ],
+        "namedDispIds": [
+          2
+        ],
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "129"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "55005000440041005400450020005400200053004500540020004e0020003d002000270062002700",
+            "byteLength": 40,
+            "text": "UPDATE T SET N = 'b'"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "display": "null interface pointer"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "namedArgNames": [
+          "Options",
+          "CommandText"
+        ],
+        "namedDispIds": [
+          2,
+          0
+        ],
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "55005000440041005400450020005400200053004500540020004e0020003d002000270063002700",
+            "byteLength": 40,
+            "text": "UPDATE T SET N = 'c'"
+          },
+          {
+            "vt": 0,
+            "vtName": "VT_EMPTY"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "129"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "display": "null interface pointer"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "namedArgNames": [
+          "RecordsAffected",
+          "Options"
+        ],
+        "namedDispIds": [
+          1,
+          2
+        ],
+        "byRefAfter": [
+          {
+            "index": 1,
+            "after": {
+              "vt": 3,
+              "vtName": "VT_I4",
+              "integer": "2"
+            }
+          }
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "create",
+        "progId": "ADODB.Recordset",
+        "clsid": "{00000535-0000-0010-8000-00AA006D2EA4}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "ar",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "ar",
+          "identity": "u6",
+          "typeName": "_Recordset",
+          "typeIid": "{00001556-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "threadingModel": "Both"
+        },
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "Open",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c004500430054002000490044002c0020004e002000460052004f004d002000540020004f005200440045005200200042005900200049004400",
+            "byteLength": 62,
+            "text": "SELECT ID, N FROM T ORDER BY ID"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          },
+          {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "identity": "u3",
+            "typeName": "_Connection",
+            "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "3"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1022,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "namedArgNames": [
+          "LockType",
+          "Source",
+          "Options",
+          "ActiveConnection",
+          "CursorType"
+        ],
+        "namedDispIds": [
+          3,
+          0,
+          4,
+          1,
+          2
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1054,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "EOF",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1006,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23[0].check"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u7",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 25,
+        "programPath": "23[0].0"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "23[0].1.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u8",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "23[0].1[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 28,
+        "programPath": "23[0].1[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 29,
+        "programPath": "23[0].1[0].release"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u9",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "23[0].1[1].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "6300",
+          "byteLength": 2,
+          "text": "c"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "23[0].1[1].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 32,
+        "programPath": "23[0].1[1].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 33,
+        "programPath": "23[0].2"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "MoveNext",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1018,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "23[0].3"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "EOF",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1006,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "23[1].check"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "flds",
+          "identity": "u7",
+          "typeName": "Fields",
+          "typeIid": "{00001564-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "flds",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 36,
+        "programPath": "23[1].0"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 37,
+        "programPath": "23[1].1.count"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u8",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "23[1].1[0].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "23[1].1[0].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 40,
+        "programPath": "23[1].1[0].release"
+      },
+      {
+        "event": "invoke",
+        "target": "flds",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "f",
+          "identity": "u9",
+          "typeName": "Field",
+          "typeIid": "{00001569-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "f",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "23[1].1[1].item"
+      },
+      {
+        "event": "invoke",
+        "target": "f",
+        "member": "Value",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "6300",
+          "byteLength": 2,
+          "text": "c"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "23[1].1[1].0"
+      },
+      {
+        "event": "release",
+        "target": "f",
+        "returnedCount": 1,
+        "implicit": true,
+        "seq": 43,
+        "programPath": "23[1].1[1].release"
+      },
+      {
+        "event": "release",
+        "target": "flds",
+        "returnedCount": 1,
+        "implicit": false,
+        "seq": 44,
+        "programPath": "23[1].2"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "MoveNext",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1018,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "23[1].3"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "EOF",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1006,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 11,
+          "vtName": "VT_BOOL",
+          "integer": "-1"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 46,
+        "programPath": "23[2].check"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1014,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 47,
+        "programPath": "24"
+      },
+      {
+        "event": "invoke",
+        "target": "ar",
+        "member": "Open",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c004500430054002000490044002000460052004f004d0020005400",
+            "byteLength": 32,
+            "text": "SELECT ID FROM T"
+          },
+          {
+            "vt": 9,
+            "vtName": "VT_DISPATCH",
+            "identity": "u3",
+            "typeName": "_Connection",
+            "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x80020006",
+        "observationOrder": [
+          "getIdsOfNames"
+        ],
+        "namedArgNames": [
+          "ActiveConn"
+        ],
+        "namedDispIds": [
+          -1
+        ],
+        "seq": 48,
+        "programPath": "25"
+      },
+      {
+        "event": "release",
+        "target": "ar",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 49,
+        "programPath": "26"
+      },
+      {
+        "event": "invoke",
+        "target": "cn",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 5,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 50,
+        "programPath": "27"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "work/scratch-q2-named-ado.accdb",
+            "length": 188416,
+            "sha256": "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8",
+            "lastWriteUtc": "2026-11-17T12:27:09.1425401Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 51,
+        "programPath": "28"
+      },
+      {
+        "event": "release",
+        "target": "cn",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 52,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 53,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1304,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 54,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "output:scratch-q2-named-ado.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_scratch-q2-named-ado.accdb",
+        "length": 188416,
+        "sha256": "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8"
+      }
+    ],
+    "execution": "ReturnedFailure",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "output:scratch-q2-named-ado.accdb",
+      "kind": "output-file",
+      "length": 188416,
+      "sha256": "fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8",
+      "path": "evidence/artifacts/fed3d94ab55051ee4b6ddf19da5d64ed5a86f5946ec7dcaad33a95a2de7fefb8"
+    }
+  ]
+}

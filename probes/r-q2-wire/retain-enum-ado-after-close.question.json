@@ -1,0 +1,320 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/retain-enum-ado-after-close",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-RETAIN",
+    "R-ADO-1"
+  ],
+  "description": "ACT-RETAIN, ADO enumerators: while the Fields enumerator of an ADO Recordset on T is mid-walk, Recordset.Close is called in the loop body after the first item; then, with a second Recordset, Connection.Close. The walk continues with Next, Next past the end, Reset, Next, Skip(1), Clone. Asks what an ADO enumerator and its remaining items answer after the parent is closed.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-retain-enum-ado.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-retain-enum-ado.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "af"
+    },
+    {
+      "op": "enumerate",
+      "target": "af",
+      "bind": "f",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ar",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "af"
+    },
+    {
+      "op": "release",
+      "target": "ar"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar2"
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "af2"
+    },
+    {
+      "op": "enumerate",
+      "target": "af2",
+      "bind": "f2",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "af2"
+    },
+    {
+      "op": "release",
+      "target": "ar2"
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-aggregate-classobject",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-AGGREGATE",
+    "ACT-FACTORY"
+  ],
+  "description": "ACT-AGGREGATE through the class factory: CoGetClassObject then CreateInstance with a non-null controlled outer and IID_IUnknown for DAO.DBEngine.120 and for ADODB.Connection, Recordset, Command and Stream; and with IID_IDispatch for the engine and the Connection. Asks which classes accept an outer through the factory (the smoke run gave E_UNEXPECTED 0x8000FFFF for the engine) and what the outer is asked.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "d-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "d-d",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "c-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "c-d",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{00000535-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "r-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{00000507-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "m-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{00000566-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "s-u",
+      "aggregate": true
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

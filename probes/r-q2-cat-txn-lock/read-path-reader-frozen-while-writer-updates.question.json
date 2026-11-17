@@ -1,0 +1,483 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/read-path-reader-frozen-while-writer-updates",
+  "bookRefs": [
+    "R-LOCK-3",
+    "READ-PATH",
+    "READ-LIFE"
+  ],
+  "description": "READ-PATH from the other side: the reader is frozen. Reader a opens the idx fixture shared read-only and runs SELECT COUNT(*), SUM(N), SUM(LEN(M)) FROM T; b suspends a 15 ms after the start signal and checks a had not returned, then opens shared read/write and runs UPDATE T SET N = N + 1000000 (dbFailOnError, Errors before/after, RecordsAffected), then resumes a. a reports its aggregates (the original SUM(N) is 83,906,560; a mixed value would be between it and 83,906,560 + 4,096,000,000). b finally reads fresh after a pause. Asks whether a reader stopped inside a scan blocks the writer, and whether its result is old, new or mixed.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-idx-accdb.accdb",
+      "sha256": "e981b1a2e6d3919763205d85f7f8214180b56432bc662358d767514357133f61",
+      "length": 17231872,
+      "provenance": "r-q2-cat-txn-lock.create-idx-accdb.575b3d3508.a1 qk1-575b3d35089d97767cbdb2fd432d89df99d7aab3aee282b409a418c8b995fd24 output:r-q2-cat-txn-lock-idx-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "b-opened",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS c, SUM(N) AS sn, SUM(LEN(M)) AS sl FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "scan"
+    },
+    {
+      "op": "loopUntil",
+      "target": "scan",
+      "member": "EOF",
+      "maxIterations": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "scan",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "scan",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "scan",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "scan"
+    },
+    {
+      "op": "signal",
+      "name": "done"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "signal",
+          "name": "b-opened"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 15
+        },
+        {
+          "op": "await",
+          "name": "done",
+          "timeoutMs": 50
+        },
+        {
+          "op": "observeFiles",
+          "label": "while-suspended",
+          "keep": true
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "w"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET N = N + 1000000"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "RecordsAffected",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-update",
+          "keep": false
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "await",
+          "name": "done",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "pause",
+          "ms": 7000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Idle",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS c, SUM(N) AS sn FROM T"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "bfin"
+        },
+        {
+          "op": "loopUntil",
+          "target": "bfin",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "bfin",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "bfin",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "bfin",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "bfin"
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

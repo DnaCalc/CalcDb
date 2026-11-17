@@ -1,0 +1,725 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-sample-rec/pages-large-implicit",
+  "bookRefs": [
+    "R-CRASH-1",
+    "CRASH-ORDER",
+    "CRASH-OBS",
+    "R-TXN-1",
+    "TXN-FLUSH-COMMIT",
+    "TXN-FLUSH-OP"
+  ],
+  "description": "As insert-implicit, but the INSERT writes 4096 rows (INSERT INTO T (ID, K, V) SELECT a.n * 256 + b.n * 16 + c.n, CStr(c.n) & '-' & CStr(b.n) & '-' & CStr(a.n), a.n FROM S AS a, S AS b, S AS c) and T also has a MEMO column filled by UPDATE T SET M = String(1000, 'm') in the same program, as a second implicit statement. Participant b takes 20 samples 25 ms apart, each a suspension of a with per-page (4096-byte) hashes of the database, then resumes it; one more after a's statements returned, and a takes one after Close. Asks which pages change in which sample, and in which order data pages, index pages and the file's growth appear.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false,
+      "pageSize": 0
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-pages-large-implicit.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE S (n LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (4)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (6)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (8)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (9)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (10)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (11)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (12)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (13)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (14)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO S VALUES (15)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(20), V LONG, M MEMO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_K ON T (K)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-pages-large-implicit.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "before-write",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "b-sampling",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT a.n * 256 + b.n * 16 + c.n, CStr(c.n) & '-' & CStr(b.n) & '-' & CStr(a.n), a.n FROM S AS a, S AS b, S AS c"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET M = String(1000, 'm')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "written"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 60000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 4096
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 30000
+        },
+        {
+          "op": "signal",
+          "name": "b-sampling"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-00",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-01",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-02",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-03",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-04",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-05",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-06",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-07",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-08",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-09",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-10",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-11",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-12",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-13",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-14",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-15",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-16",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-17",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-18",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 25
+        },
+        {
+          "op": "observeFiles",
+          "label": "sample-19",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "await",
+          "name": "written",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-return",
+          "keep": false,
+          "pageSize": 4096
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

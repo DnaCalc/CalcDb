@@ -326,6 +326,9 @@ internal static class Program
     private static string RecordPath(string evidenceDir, Question question, string attemptId) =>
         Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
 
+    /// <summary>Artifacts above this size are kept outside git (GitHub's hard limit is 100 MB per file).</summary>
+    private const long LargeArtifactBytes = 95L * 1024 * 1024;
+
     private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir)
     {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
@@ -341,7 +344,12 @@ internal static class Program
         var retained = new List<RetainedArtifact>();
         foreach (ArtifactRef artifact in manifest.Artifacts)
         {
-            string target = Path.Combine(artifactsDir, artifact.Sha256);
+            // GitHub refuses files over 100 MB, so a larger artifact is kept in evidence/artifacts-large/, which git
+            // ignores: it stays on the machine that retained it, and the record names where it is.
+            bool large = artifact.Length > LargeArtifactBytes;
+            string dir = large ? Path.Combine(Path.GetDirectoryName(artifactsDir)!, "artifacts-large") : artifactsDir;
+            Directory.CreateDirectory(dir);
+            string target = Path.Combine(dir, artifact.Sha256);
             if (!File.Exists(target))
             {
                 File.Copy(Path.Combine(attemptDir, artifact.RelativePath), target);
@@ -350,7 +358,7 @@ internal static class Program
             {
                 throw new IOException($"Retained artifact {artifact.Sha256} does not match its digest.");
             }
-            retained.Add(new RetainedArtifact(artifact.Role, artifact.Kind, artifact.Length, artifact.Sha256, "evidence/artifacts/" + artifact.Sha256));
+            retained.Add(new RetainedArtifact(artifact.Role, artifact.Kind, artifact.Length, artifact.Sha256, (large ? "evidence/artifacts-large/" : "evidence/artifacts/") + artifact.Sha256));
         }
 
         var record = new EvidenceRecord
@@ -393,12 +401,21 @@ internal static class Program
         }
         string attemptId = options.Require("attempt");
         string capturePath = Path.Combine(store.AttemptDirectory(attemptId), "capture.json");
-        if (!File.Exists(capturePath))
+        CaptureManifest? manifest = store.GetManifest(attemptId);
+        if (File.Exists(capturePath))
         {
-            Console.WriteLine(EvidenceJson.Serialize(store.GetManifest(attemptId)));
-            return 3;
+            Console.Write(Show.Render(manifest, EvidenceJson.Read<Capture>(capturePath), options.Has("all-modules")));
         }
-        Console.Write(Show.Render(store.GetManifest(attemptId), EvidenceJson.Read<Capture>(capturePath), options.Has("all-modules")));
+        else
+        {
+            // Participant a returned no capture (for example it was killed); the other participants' captures,
+            // which may hold the kill, still show.
+            Console.WriteLine(manifest is null ? $"attempt {attemptId}: not sealed; participant a returned no capture" : $"attempt {attemptId}: execution={manifest.Execution} capture={manifest.Capture}; participant a returned no capture");
+            foreach (string p in manifest?.Problems ?? [])
+            {
+                Console.WriteLine("  problem: " + p);
+            }
+        }
         foreach (string peer in Directory.EnumerateFiles(store.AttemptDirectory(attemptId), "capture.*.json").Order(StringComparer.Ordinal))
         {
             Console.WriteLine($"===== participant {Path.GetFileNameWithoutExtension(peer)["capture.".Length..]}");

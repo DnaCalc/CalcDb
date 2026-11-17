@@ -419,6 +419,11 @@ public sealed record FileObservation
     /// <summary>Artifact role of the bytes, when they were kept (lock files, outputs).</summary>
     public string? ArtifactRole { get; init; }
 
+    /// <summary>With a page size requested: the page size, and the first 8 hex digits of each page's SHA-256, in order.</summary>
+    public int? PageSize { get; init; }
+
+    public IReadOnlyList<string>? PageHashes { get; init; }
+
     public string? Error { get; init; }
 }
 

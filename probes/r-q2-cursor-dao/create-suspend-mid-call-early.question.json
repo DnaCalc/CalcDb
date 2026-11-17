@@ -1,0 +1,324 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cursor-dao/create-suspend-mid-call-early",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-CREATE",
+    "R-CRASH-1",
+    "CRASH-CONTROL"
+  ],
+  "description": "DAO-CREATE (T: partial outcomes at the creation boundaries, addressable by freezing), variant: participant a calls DBEngine.CreateDatabase for a new ACCDB; participant b freezes a 5 ms after arming, records the destination file and lock file, tries a DAO shared read-only OpenDatabase of the destination (Errors), waits, records the files again, resumes a, then after a has closed the new database (a closes it before signalling) records the files and opens it again, reading TableDefs.Count. Asks what a second process sees of the destination while the creator is frozen inside the call. The delay is a timing probe: the first card measured no creation time.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "armed",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "qc2-suspended.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "dbc"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "dbc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbc"
+    },
+    {
+      "op": "signal",
+      "name": "created"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 60000
+    },
+    {
+      "op": "observeFiles",
+      "label": "a-end",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "observeFiles",
+          "label": "before-open",
+          "keep": false
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 30000
+        },
+        {
+          "op": "signal",
+          "name": "armed"
+        },
+        {
+          "op": "suspendParticipant",
+          "name": "a",
+          "delayMs": 5
+        },
+        {
+          "op": "observeFiles",
+          "label": "while-suspended",
+          "keep": false
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "qc2-suspended.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "dbb"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "dbb",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "dbb"
+        },
+        {
+          "op": "pause",
+          "ms": 400
+        },
+        {
+          "op": "observeFiles",
+          "label": "still-suspended",
+          "keep": false
+        },
+        {
+          "op": "resumeParticipant",
+          "name": "a"
+        },
+        {
+          "op": "await",
+          "name": "created",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-resume",
+          "keep": false
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "qc2-suspended.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "dbb2"
+        },
+        {
+          "op": "invoke",
+          "target": "dbb2",
+          "member": "TableDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "tds"
+        },
+        {
+          "op": "invoke",
+          "target": "tds",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "tds"
+        },
+        {
+          "op": "invoke",
+          "target": "dbb2",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "dbb2"
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

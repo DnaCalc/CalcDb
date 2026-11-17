@@ -1,0 +1,716 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q2-wire.act-factory-ado-classes.1906c32892.a1",
+  "retainedUtc": "2026-11-17T12:26:16.8232025+00:00",
+  "probe": "r-q2-wire/act-factory-ado-classes",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-FACTORY",
+    "R-ADO-1"
+  ],
+  "description": "ACT-FACTORY, ADO: CoGetClassObject with LockServer and CreateInstance (IDispatch) for ADODB.Connection twice, Recordset, Command and Stream by CLSID; Version or State is read; Provider is set on the first Connection and read on both. Asks whether the ADO factories hand out independent objects and what the factory accounting records.",
+  "retentionNote": "Designed r-q2-wire probe (A-02); complete capture of the ACE answer.",
+  "token": "r-q2-wire.act-factory-ado-classes.1906c32892",
+  "questionKey": "qk1-1906c32892c2de0a3b5cca8f35cf4620a0faea3985cfa462ed348806dd634aa3",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q2-wire/act-factory-ado-classes",
+    "bookRefs": [
+      "R-ACT-1",
+      "ACT-FACTORY",
+      "R-ADO-1"
+    ],
+    "description": "ACT-FACTORY, ADO: CoGetClassObject with LockServer and CreateInstance (IDispatch) for ADODB.Connection twice, Recordset, Command and Stream by CLSID; Version or State is read; Provider is set on the first Connection and read on both. Asks whether the ADO factories hand out independent objects and what the factory accounting records.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "activate",
+        "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "route": "classobject",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "k1",
+        "aggregate": false
+      },
+      {
+        "op": "invoke",
+        "target": "k1",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "activate",
+        "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "route": "classobject",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "k2",
+        "aggregate": false
+      },
+      {
+        "op": "invoke",
+        "target": "k2",
+        "member": "Version",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "k1",
+        "member": "Provider",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "k1",
+        "member": "Provider",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "k2",
+        "member": "Provider",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "activate",
+        "class": "{00000535-0000-0010-8000-00AA006D2EA4}",
+        "route": "classobject",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "k3",
+        "aggregate": false
+      },
+      {
+        "op": "invoke",
+        "target": "k3",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "activate",
+        "class": "{00000507-0000-0010-8000-00AA006D2EA4}",
+        "route": "classobject",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "k4",
+        "aggregate": false
+      },
+      {
+        "op": "invoke",
+        "target": "k4",
+        "member": "CommandTimeout",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "activate",
+        "class": "{00000566-0000-0010-8000-00AA006D2EA4}",
+        "route": "classobject",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "bind": "k5",
+        "aggregate": false
+      },
+      {
+        "op": "invoke",
+        "target": "k5",
+        "member": "State",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q2-wire.act-factory-ado-classes.1906c32892.a1",
+    "token": "r-q2-wire.act-factory-ado-classes.1906c32892",
+    "questionKey": "qk1-1906c32892c2de0a3b5cca8f35cf4620a0faea3985cfa462ed348806dd634aa3",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "cd7f1c8d5e53560fd0b0e90a5d36a32812d0ddae87206a051ad80d1d82f80c5e",
+    "artifacts": [],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 9164,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T12:26:16.8094354+00:00",
+    "sealSha256": "a2a6d08f96e5da4bfd418e111a71483db240429cdc30618d2431e74c527d07b8"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q2-wire.act-factory-ado-classes.1906c32892.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-1906c32892c2de0a3b5cca8f35cf4620a0faea3985cfa462ed348806dd634aa3",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "c943ad3c3eae51e5f5b747f83dd172ce351b28989e201591878ca266b7b49ebc",
+      "workerBuild": "1.0.0+8433b216f1a90c387e7d955cba72b91b39d8faa0",
+      "toolingRevision": "8433b216f1a90c387e7d955cba72b91b39d8faa0+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 9164,
+      "threadId": 27680,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-wire.act-factory-ado-classes.1906c32892.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "activation",
+        "route": "classobject",
+        "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "aggregate": false,
+        "steps": [
+          "CoGetClassObject(IClassFactory) 0x00000000",
+          "LockServer(TRUE) 0x00000000",
+          "CreateInstance 0x00000000",
+          "LockServer(FALSE) 0x00000000",
+          "QueryInterface(IDispatch) 0x00000000",
+          "Release 1"
+        ],
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "k1",
+          "identity": "u1",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "k1",
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "invoke",
+        "target": "k1",
+        "member": "Version",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 4,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "310030002e003000",
+          "byteLength": 8,
+          "text": "10.0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "activation",
+        "route": "classobject",
+        "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "aggregate": false,
+        "steps": [
+          "CoGetClassObject(IClassFactory) 0x00000000",
+          "LockServer(TRUE) 0x00000000",
+          "CreateInstance 0x00000000",
+          "LockServer(FALSE) 0x00000000",
+          "QueryInterface(IDispatch) 0x00000000",
+          "Release 1"
+        ],
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "k2",
+          "identity": "u2",
+          "typeName": "_Connection",
+          "typeIid": "{00001550-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "k2",
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "k2",
+        "member": "Version",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 4,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "310030002e003000",
+          "byteLength": 8,
+          "text": "10.0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "k1",
+        "member": "Provider",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+            "byteLength": 48,
+            "text": "Microsoft.ACE.OLEDB.12.0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "k1",
+        "member": "Provider",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "4d006900630072006f0073006f00660074002e004100430045002e004f004c004500440042002e00310032002e003000",
+          "byteLength": 48,
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "k2",
+        "member": "Provider",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 17,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 8,
+          "vtName": "VT_BSTR",
+          "bytes": "4d00530044004100530051004c00",
+          "byteLength": 14,
+          "text": "MSDASQL"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "activation",
+        "route": "classobject",
+        "class": "{00000535-0000-0010-8000-00AA006D2EA4}",
+        "clsid": "{00000535-0000-0010-8000-00AA006D2EA4}",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "aggregate": false,
+        "steps": [
+          "CoGetClassObject(IClassFactory) 0x00000000",
+          "LockServer(TRUE) 0x00000000",
+          "CreateInstance 0x00000000",
+          "LockServer(FALSE) 0x00000000",
+          "QueryInterface(IDispatch) 0x00000000",
+          "Release 1"
+        ],
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "k3",
+          "identity": "u3",
+          "typeName": "_Recordset",
+          "typeIid": "{00001556-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "k3",
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "k3",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1054,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "activation",
+        "route": "classobject",
+        "class": "{00000507-0000-0010-8000-00AA006D2EA4}",
+        "clsid": "{00000507-0000-0010-8000-00AA006D2EA4}",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "aggregate": false,
+        "steps": [
+          "CoGetClassObject(IClassFactory) 0x00000000",
+          "LockServer(TRUE) 0x00000000",
+          "CreateInstance 0x00000000",
+          "LockServer(FALSE) 0x00000000",
+          "QueryInterface(IDispatch) 0x00000000",
+          "Release 1"
+        ],
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "k4",
+          "identity": "u4",
+          "typeName": "_Command",
+          "typeIid": "{986761E8-7269-4890-AA65-AD7C03697A6D}"
+        },
+        "bind": "k4",
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "k4",
+        "member": "CommandTimeout",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 3,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "30"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "activation",
+        "route": "classobject",
+        "class": "{00000566-0000-0010-8000-00AA006D2EA4}",
+        "clsid": "{00000566-0000-0010-8000-00AA006D2EA4}",
+        "clsCtx": 1,
+        "iid": "{00020400-0000-0000-C000-000000000046}",
+        "aggregate": false,
+        "steps": [
+          "CoGetClassObject(IClassFactory) 0x00000000",
+          "LockServer(TRUE) 0x00000000",
+          "CreateInstance 0x00000000",
+          "LockServer(FALSE) 0x00000000",
+          "QueryInterface(IDispatch) 0x00000000",
+          "Release 1"
+        ],
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "k5",
+          "identity": "u5",
+          "typeName": "_Stream",
+          "typeIid": "{00001565-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "k5",
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "k5",
+        "member": "State",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 6,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 512,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSDART.DLL",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\System\\ado\\msado15.dll",
+            "fileVersion": "10.0.26100.5074 (WinBuild.160101.0800)",
+            "productVersion": "10.0.26100.5074",
+            "fileVersionNumber": "6.2.26100.5074",
+            "productName": "Microsoft® Windows® Operating System",
+            "length": 1347584,
+            "sha256": "dd30eea1494e8c26c26b951e5bbe359b900ea27bb685902ea88e3d19d141a79d",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000020000000258A3",
+            "lastWriteUtc": "2025-11-06T12:42:28.1427029Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "release",
+        "target": "k5",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 17,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "k4",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 18,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "k3",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 19,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "k2",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 20,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "k1",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 21,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 512,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142600\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 22,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "artifacts": []
+}

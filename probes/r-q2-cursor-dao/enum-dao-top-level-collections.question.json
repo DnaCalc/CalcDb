@@ -1,0 +1,436 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cursor-dao/enum-dao-top-level-collections",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-ENUM",
+    "DAO-COLL"
+  ],
+  "description": "DAO-ENUM (T: IEnumVARIANT), variant: _NewEnum of the top-level collections, each walk followed by the worker's Next past the end, Reset, Next, Skip(1) and Clone: DBEngine.Workspaces, Workspace.Databases, Users, Groups, Database.TableDefs (after Refresh), QueryDefs, Relations, Containers, Database.Properties and DBEngine.Errors after a marker failure; each item's Name (Number for Errors) is read.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cursor-dao-main.accdb",
+      "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+      "length": 786432,
+      "provenance": "r-q2-cursor-dao.create-main.05ea7b34fc.a1 qk1-05ea7b34fc2f38a65b95662ffe98f14aaf03e29857bb840f086986d4cc8fc474 output:r-q2-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE Q2NoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "enumerate",
+      "target": "wss",
+      "bind": "w",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w0"
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs"
+    },
+    {
+      "op": "enumerate",
+      "target": "dbs",
+      "bind": "d",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "d",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dbs"
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "Users",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "us"
+    },
+    {
+      "op": "enumerate",
+      "target": "us",
+      "bind": "u",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "u",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "us"
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "Groups",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "gs"
+    },
+    {
+      "op": "enumerate",
+      "target": "gs",
+      "bind": "g",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "g",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "gs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "enumerate",
+      "target": "tds",
+      "bind": "t",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds"
+    },
+    {
+      "op": "enumerate",
+      "target": "qds",
+      "bind": "q",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rls"
+    },
+    {
+      "op": "enumerate",
+      "target": "rls",
+      "bind": "r",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rls"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Containers",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cs"
+    },
+    {
+      "op": "enumerate",
+      "target": "cs",
+      "bind": "c",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dps"
+    },
+    {
+      "op": "enumerate",
+      "target": "dps",
+      "bind": "pp",
+      "maxItems": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dps"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE Q2NoSuchMarker"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "enumerate",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "w0"
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

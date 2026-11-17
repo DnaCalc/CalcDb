@@ -1,0 +1,305 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/events-ado-recordset",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-REENTRY",
+    "R-ADO-1",
+    "ADO-EVENT"
+  ],
+  "description": "OR-REENTRY callbacks from a Recordset: a recording sink on RecordsetEvents of an ADO keyset optimistic Recordset on T (opened over a connection), then Open, MoveNext twice, an edit of N and Update, MovePrevious, and Close. Asks which RecordsetEvents ADO raises for each call, in which order and with which arguments, and whether the sink is called while the call is still in flight.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-events-rs.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-events-rs.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar"
+    },
+    {
+      "op": "advise",
+      "target": "ar",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "evr"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "af"
+    },
+    {
+      "op": "invoke",
+      "target": "af",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "fn"
+    },
+    {
+      "op": "invoke",
+      "target": "fn",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "edited"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fn"
+    },
+    {
+      "op": "release",
+      "target": "af"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "evr"
+    },
+    {
+      "op": "release",
+      "target": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

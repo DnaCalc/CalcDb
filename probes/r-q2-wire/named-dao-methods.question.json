@@ -1,0 +1,303 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/named-dao-methods",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-ABI",
+    "R-ORACLE-1",
+    "OR-WIRE",
+    "R-ERR-1",
+    "ERR-BIND"
+  ],
+  "description": "ACT-ABI named arguments, DAO: Database.Execute(Query:=, Options:=) both named and in reverse order; Execute with Query positional and Options:= named; DBEngine.CreateWorkspace(UserName:=, Name:=, Password:=) in non-positional order; DBEngine.CreateDatabase(Option:=, Name:=, Locale:=) in reverse order to a scratch file; Execute with a misspelled name (Quer:=) and with Options named twice. Asks how DAO resolves names to positions and refuses unknown or repeated ones.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-named-dao.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [],
+      "named": [
+        {
+          "name": "Query",
+          "value": {
+            "type": "bstr",
+            "text": "UPDATE T SET N = 'a' WHERE ID = 1"
+          }
+        },
+        {
+          "name": "Options",
+          "value": {
+            "type": "i4",
+            "value": 128
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [],
+      "named": [
+        {
+          "name": "Options",
+          "value": {
+            "type": "i4",
+            "value": 128
+          }
+        },
+        {
+          "name": "Query",
+          "value": {
+            "type": "bstr",
+            "text": "UPDATE T SET N = 'b' WHERE ID = 1"
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET N = 'c' WHERE ID = 99"
+        }
+      ],
+      "named": [
+        {
+          "name": "Options",
+          "value": {
+            "type": "i4",
+            "value": 128
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [],
+      "bind": "w1",
+      "named": [
+        {
+          "name": "UserName",
+          "value": {
+            "type": "bstr",
+            "text": "admin"
+          }
+        },
+        {
+          "name": "Name",
+          "value": {
+            "type": "bstr",
+            "text": "rq2ws"
+          }
+        },
+        {
+          "name": "Password",
+          "value": {
+            "type": "bstr",
+            "text": ""
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w1",
+      "member": "UserName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [],
+      "bind": "d2",
+      "named": [
+        {
+          "name": "Option",
+          "value": {
+            "type": "i4",
+            "value": 128
+          }
+        },
+        {
+          "name": "Name",
+          "value": {
+            "type": "outputPath",
+            "fileName": "scratch-q2-named-created.accdb"
+          }
+        },
+        {
+          "name": "Locale",
+          "value": {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [],
+      "named": [
+        {
+          "name": "Quer",
+          "value": {
+            "type": "bstr",
+            "text": "UPDATE T SET N = 'd'"
+          }
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET N = 'e'"
+        }
+      ],
+      "named": [
+        {
+          "name": "Options",
+          "value": {
+            "type": "i4",
+            "value": 128
+          }
+        },
+        {
+          "name": "Options",
+          "value": {
+            "type": "i4",
+            "value": 0
+          }
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "d2"
+    },
+    {
+      "op": "release",
+      "target": "w1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

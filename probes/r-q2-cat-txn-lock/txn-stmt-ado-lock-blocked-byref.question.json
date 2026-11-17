@@ -1,0 +1,518 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-stmt-ado-lock-blocked-byref",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-STMT",
+    "R-ADO-1"
+  ],
+  "description": "TXN-STMT through the ACE OLE DB provider (the DAO lane is qualified). Process a holds a pessimistic DAO Edit on row 40 (the middle candidate, on its own page); process b runs, on an ADODB.Connection with the event sink, UPDATE T SET V = V + 1 WHERE ID IN (1, 20, 40, 64) with RecordsAffected passed by reference (typed VT_BYREF|VT_I4 starting at -9) and adExecuteNoRecords, then the same inside an ADO BeginTrans, reads the rows, and finally a cancels the Edit and b repeats. Asks the ADO error number and wait, whether the unblocked candidates change, and what ADO writes into the by-reference RecordsAffected.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-lock-accdb.accdb",
+      "sha256": "1e3aea374a49fc3e9d66270f0cacae0ecc6b6d926112607d59e88f182560912c",
+      "length": 299008,
+      "provenance": "r-q2-cat-txn-lock.create-lock-accdb.8aa318a8c0.a1 qk1-8aa318a8c08f5490d532dbf2ea465cac8011c094c8a79c48d333c58695076db9 output:r-q2-cat-txn-lock-lock-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE ID = 40"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "e40"
+    },
+    {
+      "op": "invoke",
+      "target": "e40",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "signal",
+      "name": "held"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "e40",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "signal",
+      "name": "released"
+    },
+    {
+      "op": "await",
+      "name": "b-final",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "held",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "create",
+          "progId": "ADODB.Connection",
+          "bind": "cn"
+        },
+        {
+          "op": "advise",
+          "target": "cn",
+          "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+          "name": "ev"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Provider",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Microsoft.ACE.OLEDB.12.0"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cnp",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Data Source"
+            }
+          ],
+          "bind": "cds"
+        },
+        {
+          "op": "invoke",
+          "target": "cds",
+          "member": "Value",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cds"
+        },
+        {
+          "op": "release",
+          "target": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Open",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET V = V + 1 WHERE ID IN (1, 20, 40, 64)"
+            },
+            {
+              "type": "byref",
+              "inner": {
+                "type": "i4",
+                "value": -9
+              },
+              "typed": true
+            },
+            {
+              "type": "i4",
+              "value": 129
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "BeginTrans",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET V = V + 1 WHERE ID IN (1, 20, 40, 64)"
+            },
+            {
+              "type": "byref",
+              "inner": {
+                "type": "i4",
+                "value": -9
+              },
+              "typed": true
+            },
+            {
+              "type": "i4",
+              "value": 129
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "CommitTrans",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, V FROM T WHERE ID IN (1, 20, 40, 64) ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "r1"
+        },
+        {
+          "op": "loopUntil",
+          "target": "r1",
+          "member": "EOF",
+          "maxIterations": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "r1",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "r1",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "r1",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "r1"
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        },
+        {
+          "op": "await",
+          "name": "released",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET V = V + 1 WHERE ID IN (1, 20, 40, 64)"
+            },
+            {
+              "type": "byref",
+              "inner": {
+                "type": "i4",
+                "value": -9
+              },
+              "typed": true
+            },
+            {
+              "type": "i4",
+              "value": 129
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "ms": 7000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Idle",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, V FROM T WHERE ID IN (1, 20, 40, 64) ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "r2"
+        },
+        {
+          "op": "loopUntil",
+          "target": "r2",
+          "member": "EOF",
+          "maxIterations": 6,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "r2",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "r2",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "r2"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "unadvise",
+          "name": "ev"
+        },
+        {
+          "op": "signal",
+          "name": "b-final"
+        }
+      ]
+    }
+  ]
+}

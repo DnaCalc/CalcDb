@@ -1,0 +1,1608 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/resync-underlying-clean-row",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-RESYNC",
+    "ADO-VALUES"
+  ],
+  "description": "ADO-RESYNC, the unexplained UnderlyingValue: a client batch-optimistic recordset of K IDs 1 to 4. Round A (clean row ID 1): connection B sets L to 701, 8 s, then Value/OriginalValue/UnderlyingValue before and after Resync(adAffectAll, adResyncUnderlyingValues) and after Resync(adAffectCurrent, adResyncUnderlyingValues). Round B repeats it with L 702 and no pause. Round C (control, pending edit on row ID 2: L put to 555, then B sets L to 703): the same channels before and after Resync(adAffectAll, adResyncUnderlyingValues). Recordset.Status is read at each point. Asks when ADO refreshes UnderlyingValue and whether the 777 versus 888 answer repeats.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-ado-misc-main.accdb",
+      "sha256": "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b",
+      "length": 200704,
+      "provenance": "r-q2-ado-misc.create-main.3640810e22.a1 qk1-3640810e2233e545b71eb891d498bd8497e5cb62a2101a065684f2192480b9d3 output:r-q2-ado-misc-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cnPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cb"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cbPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cbDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cbDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbDs"
+    },
+    {
+      "op": "release",
+      "target": "cbPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, L FROM K WHERE ID <= 4 ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET L = 701 WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cbErrs",
+      "bind": "cbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cbEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cbEc"
+    },
+    {
+      "op": "pause",
+      "ms": 8000
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Resync",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Resync",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET L = 702 WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cbErrs",
+      "bind": "cbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cbEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cbEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Resync",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Resync",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsSf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsSf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsSx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsSx",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 555
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rsSx"
+    },
+    {
+      "op": "release",
+      "target": "rsSf"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET L = 703 WHERE ID = 2"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cbErrs",
+      "bind": "cbErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cbErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cbErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cbEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cbEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cbEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Resync",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "OriginalValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "UnderlyingValue",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Status",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CancelBatch",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -268,12 +268,22 @@ public sealed record ObserveFiles(string Label) : Operation
 {
     public bool Keep { get; init; }
 
+    /// <summary>
+    /// R-CRASH-1 CRASH-ORDER sampling: when set, the size in bytes of the pages each database file is hashed in, so a
+    /// series of observations shows which pages changed between samples without keeping whole images.
+    /// </summary>
+    public int PageSize { get; init; }
+
     internal override void Write(CanonicalWriter w)
     {
         w.Begin("observeFiles").Text("label", Label);
         if (Keep)
         {
             w.Bool("keep", true); // written only when set, so earlier question keys are unchanged
+        }
+        if (PageSize > 0)
+        {
+            w.Int32("pageSize", PageSize); // likewise
         }
     }
 }

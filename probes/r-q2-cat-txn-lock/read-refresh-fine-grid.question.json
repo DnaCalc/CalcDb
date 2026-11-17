@@ -1,0 +1,4395 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/read-refresh-fine-grid",
+  "bookRefs": [
+    "R-LOCK-3",
+    "READ-REFRESH",
+    "R-TXN-1",
+    "TXN-VIEW"
+  ],
+  "description": "READ-REFRESH and TXN-VIEW, the exact boundary and its dependence on dbPageTimeout (both first-card samples were 4.1 s old and 5.5 s new; with PageTimeout 1000 the change appeared between 2.1 and 4.1 s). Process b holds a dynaset and a table cursor on rows 1, 2, 64; a updates N of row 1 by an implicit statement; b waits 3 s and looks every 250 ms until 6 s (Move 0, read, a new snapshot of row 1, each look bracketed by a Signal mark). b then sets SetOption(dbPageTimeout, 2000), opens a second held set, a updates again, and b looks at 0.5 s steps (and 250 ms steps from 1.5 to 2.5 s) up to 5.5 s. Asks the first look at which each cursor kind shows the new value in both settings. Each look is an observation that may itself refresh.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-lock-accdb.accdb",
+      "sha256": "1e3aea374a49fc3e9d66270f0cacae0ecc6b6d926112607d59e88f182560912c",
+      "length": 299008,
+      "provenance": "r-q2-cat-txn-lock.create-lock-accdb.8aa318a8c0.a1 qk1-8aa318a8c08f5490d532dbf2ea465cac8011c094c8a79c48d333c58695076db9 output:r-q2-cat-txn-lock-lock-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "s0",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET N = N + 1000 WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "s1"
+    },
+    {
+      "op": "await",
+      "name": "s2",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET N = N + 1000 WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "s3"
+    },
+    {
+      "op": "await",
+      "name": "s4",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Workspaces",
+          "kind": "propertyGet",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ],
+          "bind": "ws"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N, V FROM T WHERE ID IN (1, 2, 64) ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 2
+            }
+          ],
+          "bind": "gd"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "T"
+            },
+            {
+              "type": "i4",
+              "value": 1
+            }
+          ],
+          "bind": "gt"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Index",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "PK_T"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "signal",
+          "name": "s0"
+        },
+        {
+          "op": "await",
+          "name": "s1",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "pause",
+          "ms": 3000
+        },
+        {
+          "op": "pause",
+          "ms": 0
+        },
+        {
+          "op": "signal",
+          "name": "g1-0"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn3000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn3000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn3000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn3000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn3000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn3000"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-1"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn3250"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn3250",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn3250",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn3250",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn3250",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn3250"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-2"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn3500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn3500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn3500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn3500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn3500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn3500"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-3"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn3750"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn3750",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn3750",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn3750",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn3750",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn3750"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-4"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn4000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn4000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn4000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn4000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn4000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn4000"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-5"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn4250"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn4250",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn4250",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn4250",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn4250",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn4250"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-6"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn4500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn4500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn4500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn4500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn4500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn4500"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-7"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn4750"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn4750",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn4750",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn4750",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn4750",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn4750"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-8"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn5000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn5000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn5000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn5000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn5000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn5000"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-9"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn5250"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn5250",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn5250",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn5250",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn5250",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn5250"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-10"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn5500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn5500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn5500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn5500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn5500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn5500"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-11"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn5750"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn5750",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn5750",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn5750",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn5750",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn5750"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g1-12"
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gt",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "gn6000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "gn6000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "gn6000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "gn6000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "gn6000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "gn6000"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "SetOption",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 6
+            },
+            {
+              "type": "i4",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N, V FROM T WHERE ID IN (1, 2, 64) ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 2
+            }
+          ],
+          "bind": "hd"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "T"
+            },
+            {
+              "type": "i4",
+              "value": 1
+            }
+          ],
+          "bind": "ht"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Index",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "PK_T"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "MoveFirst",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "signal",
+          "name": "s2"
+        },
+        {
+          "op": "await",
+          "name": "s3",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-0"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp500"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-1"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp1000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp1000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp1000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp1000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp1000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp1000"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-2"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp1500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp1500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp1500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp1500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp1500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp1500"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g2-3"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp1750"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp1750",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp1750",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp1750",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp1750",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp1750"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g2-4"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp2000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp2000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp2000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp2000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp2000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp2000"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g2-5"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp2250"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp2250",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp2250",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp2250",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp2250",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp2250"
+        },
+        {
+          "op": "pause",
+          "ms": 250
+        },
+        {
+          "op": "signal",
+          "name": "g2-6"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp2500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp2500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp2500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp2500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp2500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp2500"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-7"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp3000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp3000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp3000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp3000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp3000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp3000"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-8"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp3500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp3500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp3500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp3500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp3500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp3500"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-9"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp4000"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp4000",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp4000",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp4000",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp4000",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp4000"
+        },
+        {
+          "op": "pause",
+          "ms": 500
+        },
+        {
+          "op": "signal",
+          "name": "g2-10"
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Move",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "ht",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT ID, N FROM T WHERE ID = 1"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "hnp4500"
+        },
+        {
+          "op": "loopUntil",
+          "target": "hnp4500",
+          "member": "EOF",
+          "maxIterations": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "hnp4500",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 2,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "hnp4500",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "hnp4500",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "hnp4500"
+        },
+        {
+          "op": "signal",
+          "name": "s4"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-close",
+          "keep": false
+        }
+      ]
+    }
+  ]
+}

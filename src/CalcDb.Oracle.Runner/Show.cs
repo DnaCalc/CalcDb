@@ -19,6 +19,7 @@ internal static class Show
         }
         EnvironmentReceipt env = capture.Environment;
         sb.AppendLine($"env: {env.Runtime} {env.ProcessArchitecture} {env.ApartmentType} desktop={env.WindowStation}\\{env.Desktop} lcid={env.UserDefaultLcid} acp={env.AnsiCodePage} tooling={env.ToolingRevision}");
+        var previousPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (CaptureEvent e in capture.Events)
         {
             sb.Append($"{e.Seq,4} {e.ProgramPath,-16} ");
@@ -80,7 +81,11 @@ internal static class Show
                     sb.AppendLine("note: " + s.Reason);
                     break;
                 case FilesEvent f:
-                    sb.AppendLine($"files[{f.Label}]: " + string.Join(", ", f.Files.Select(o => $"{o.RelativePath} {o.Length}B {(o.Sha256 is null ? "unread: " + o.Error : o.Sha256[..12])}")));
+                    sb.AppendLine($"files[{f.Label}]: " + string.Join(", ", f.Files.Select(o => $"{o.RelativePath} {o.Length}B {(o.Sha256 is null ? "unread: " + o.Error : o.Sha256[..12])}{PageDelta(o, previousPages)}")));
+                    foreach (FileObservation o in f.Files.Where(o => o.PageHashes is not null))
+                    {
+                        previousPages[o.RelativePath] = o.PageHashes!;
+                    }
                     break;
                 case ModulesEvent m:
                     sb.AppendLine($"modules[{m.Label}]: complete={m.Complete} rounds={m.Rounds} loaded={m.ModulePaths.Count} identified={m.Identities.Count} changedDuring={m.ChangedDuringCollection.Count}{(m.Error is null ? "" : " error=" + m.Error)}");
@@ -100,6 +105,21 @@ internal static class Show
             sb.AppendLine($"artifact {a.Role} {a.Length}B sha256 {a.Sha256}");
         }
         return sb.ToString();
+    }
+
+    /// <summary>For a page-hashed file: its page count, and the pages that differ from its previous page-hashed observation.</summary>
+    private static string PageDelta(FileObservation o, Dictionary<string, IReadOnlyList<string>> previous)
+    {
+        if (o.PageHashes is not { } pages)
+        {
+            return "";
+        }
+        if (!previous.TryGetValue(o.RelativePath, out IReadOnlyList<string>? before))
+        {
+            return $" ({pages.Count} pages of {o.PageSize})";
+        }
+        var changed = Enumerable.Range(0, Math.Max(pages.Count, before.Count)).Where(i => i >= pages.Count || i >= before.Count || pages[i] != before[i]).ToList();
+        return changed.Count == 0 ? $" ({pages.Count} pages, none changed)" : $" ({pages.Count} pages, changed: {string.Join(",", changed.Take(40))}{(changed.Count > 40 ? $", … {changed.Count - 40} more" : "")})";
     }
 
     private static bool IsEngine(string path)

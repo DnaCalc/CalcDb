@@ -1,0 +1,678 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-local-two-ado-connections-events",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-LOCAL",
+    "R-ADO-1",
+    "ADO-EVENT"
+  ],
+  "description": "TXN-LOCAL, two ACE OLE DB Connections in one process (not yet asked), each with the event sink. cn1 and cn2 open the main copy; both BeginTrans; cn1 updates V of row 1 and cn2 updates V of row 1 (same row), V of row 2 (same page), V of row 64 (far, unindexed) and U row 1, each Execute with RecordsAffected by reference and adExecuteNoRecords (errors, timings by event timestamps); cn1 Rollback, cn2 CommitTrans; a third phase repeats with cn2 resolving first. The connections close and DAO reads rows 1, 2, 64 and U row 1. Asks the ADO conflict number and wait per footprint, the event order across the two Connections, and which accepted changes survive each order.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-lock-accdb.accdb",
+      "sha256": "1e3aea374a49fc3e9d66270f0cacae0ecc6b6d926112607d59e88f182560912c",
+      "length": 299008,
+      "provenance": "r-q2-cat-txn-lock.create-lock-accdb.8aa318a8c0.a1 qk1-8aa318a8c08f5490d532dbf2ea465cac8011c094c8a79c48d333c58695076db9 output:r-q2-cat-txn-lock-lock-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn1"
+    },
+    {
+      "op": "advise",
+      "target": "cn1",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "evcn1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnpcn1"
+    },
+    {
+      "op": "invoke",
+      "target": "cnpcn1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdscn1"
+    },
+    {
+      "op": "invoke",
+      "target": "cdscn1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdscn1"
+    },
+    {
+      "op": "release",
+      "target": "cnpcn1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn2"
+    },
+    {
+      "op": "advise",
+      "target": "cn2",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "evcn2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnpcn2"
+    },
+    {
+      "op": "invoke",
+      "target": "cnpcn2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdscn2"
+    },
+    {
+      "op": "invoke",
+      "target": "cdscn2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdscn2"
+    },
+    {
+      "op": "release",
+      "target": "cnpcn2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 1 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 2"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 64"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE U SET N = N + 2 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 1 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 2"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 2 WHERE ID = 64"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE U SET N = N + 2 WHERE ID = 1"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "evcn1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "evcn2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V FROM T WHERE ID IN (1, 2, 64) ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fin"
+    },
+    {
+      "op": "loopUntil",
+      "target": "fin",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fin",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "fin",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fin",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM U WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fin2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "fin2",
+      "member": "EOF",
+      "maxIterations": 2,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fin2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "fin2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fin2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fin2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

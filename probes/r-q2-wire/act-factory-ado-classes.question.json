@@ -1,0 +1,142 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-factory-ado-classes",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-FACTORY",
+    "R-ADO-1"
+  ],
+  "description": "ACT-FACTORY, ADO: CoGetClassObject with LockServer and CreateInstance (IDispatch) for ADODB.Connection twice, Recordset, Command and Stream by CLSID; Version or State is read; Provider is set on the first Connection and read on both. Asks whether the ADO factories hand out independent objects and what the factory accounting records.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "k1",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "k1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "k2",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "k2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "k1",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k1",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "k2",
+      "member": "Provider",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "{00000535-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "k3",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "k3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "{00000507-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "k4",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "k4",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "{00000566-0000-0010-8000-00AA006D2EA4}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "k5",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "k5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

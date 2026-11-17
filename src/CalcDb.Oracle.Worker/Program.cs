@@ -217,7 +217,7 @@ internal sealed unsafe partial class Run : IDisposable
                     DoRelease(release.Target, path, isImplicit: false);
                     break;
                 case ObserveFiles files:
-                    _events.Add(_files.Observe(++_seq, path, files.Label, files.Keep));
+                    _events.Add(_files.Observe(++_seq, path, files.Label, files.Keep, files.PageSize));
                     break;
                 case DescribeType describe:
                     if (_bound.TryGetValue(describe.Target, out nint described))

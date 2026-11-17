@@ -1,0 +1,1273 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-fmt-sort/ntail-bracket-sharp-s-accdb",
+  "bookRefs": [
+    "R-SORT-3",
+    "SORT-CHECK",
+    "Length510 boundary",
+    "Compound framing"
+  ],
+  "description": "Branch R-SORT-3 Length510 boundary, locating the length where a trailing key field stops deciding order (public side), one character kind per probe (this one: U+00DF), on an ACCDB. LA(ID, K Text(255), N Long) with non-unique IX_KN on (K, N) built before the rows; for each length 248 to 255 two rows with K = the character repeated to that length, N = 2 inserted first (ID 10k+1) and N = 1 second (ID 10k+2), k = 1 to 8. Reads the IX_KN walk (a pair listed with the N = 1 row first keeps N in the key; the N = 2 row first means the tie fell to insertion order), the backward walk, and SQL ORDER BY K, N. The first card found the loss at 253 and 255 but not 254 for the acute e, so every length from 248 to 255 is asked separately. Asks the first length at which N stops deciding order, whether it is monotonic in length, and whether the answer depends on the index (SQL order is read on the same table).",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-ntail-sharp-s.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE LA (ID LONG CONSTRAINT PK_LA PRIMARY KEY, K TEXT(255), N LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_KN ON LA (K, N)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LA"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "f0"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "K"
+        }
+      ],
+      "bind": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "fl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 21
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 22
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 31
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 32
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 41
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 42
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 51
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 52
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 61
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 62
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 71
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 72
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 81
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 82
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstrBytes",
+          "hex": "df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00df00"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "f2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "f0"
+    },
+    {
+      "op": "release",
+      "target": "f1"
+    },
+    {
+      "op": "release",
+      "target": "f2"
+    },
+    {
+      "op": "release",
+      "target": "fl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LA"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_KN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "EOF",
+      "maxIterations": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LA"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_KN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "wfl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "wid"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "w",
+      "member": "BOF",
+      "maxIterations": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wid",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "MovePrevious",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wid"
+    },
+    {
+      "op": "release",
+      "target": "wfl"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM LA ORDER BY K, N"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q119"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q119",
+      "member": "EOF",
+      "maxIterations": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q119",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 1,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "q119",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q119",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q119"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

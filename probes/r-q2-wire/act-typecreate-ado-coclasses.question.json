@@ -1,0 +1,104 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-typecreate-ado-coclasses",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-TYPECREATE",
+    "R-ADO-1"
+  ],
+  "description": "ACT-TYPECREATE, ADO: from an ADODB.Connection's type information, ITypeInfo::CreateInstance of the coclasses Connection, Recordset, Command and Stream for IDispatch (State, Version or CommandTimeout read), and of Connection for IUnknown. Asks whether type-information creation reaches the same classes as CoCreateInstance and which interfaces it hands out.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "typeCreate",
+      "target": "cn",
+      "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t1"
+    },
+    {
+      "op": "invoke",
+      "target": "t1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "typeCreate",
+      "target": "cn",
+      "clsid": "{00000535-0000-0010-8000-00AA006D2EA4}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t2"
+    },
+    {
+      "op": "invoke",
+      "target": "t2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "typeCreate",
+      "target": "cn",
+      "clsid": "{00000507-0000-0010-8000-00AA006D2EA4}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t3"
+    },
+    {
+      "op": "invoke",
+      "target": "t3",
+      "member": "CommandTimeout",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "typeCreate",
+      "target": "cn",
+      "clsid": "{00000566-0000-0010-8000-00AA006D2EA4}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "t4"
+    },
+    {
+      "op": "invoke",
+      "target": "t4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "typeCreate",
+      "target": "cn",
+      "clsid": "{00000514-0000-0010-8000-00AA006D2EA4}",
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "t5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

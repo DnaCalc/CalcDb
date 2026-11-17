@@ -6,7 +6,7 @@ namespace CalcDb.Oracle.Worker;
 /// <summary>Observes the attempt's input and work files, keeping lock-file bytes as artifacts.</summary>
 internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
 {
-    public FilesEvent Observe(int seq, string path, string label, bool keep = false)
+    public FilesEvent Observe(int seq, string path, string label, bool keep = false, int pageSize = 0)
     {
         var files = new List<FileObservation>();
         foreach (string sub in (string[])["inputs", "work"])
@@ -14,13 +14,27 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
             string dir = Path.Combine(attemptDir, sub);
             foreach (string file in Directory.EnumerateFiles(dir).Order(StringComparer.Ordinal))
             {
-                files.Add(ObserveFile(file, label, keep));
+                files.Add(ObserveFile(file, label, keep, pageSize));
             }
         }
         return new FilesEvent { Seq = seq, ProgramPath = path, Label = label, Files = files };
     }
 
-    private FileObservation ObserveFile(string file, string label, bool keep)
+    /// <summary>The first 8 hex digits of the SHA-256 of each page, read through one shared-read pass.</summary>
+    private static List<string> PageHashes(string file, int pageSize)
+    {
+        var hashes = new List<string>();
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var buffer = new byte[pageSize];
+        int read;
+        while ((read = stream.ReadAtLeast(buffer, pageSize, throwOnEndOfStream: false)) > 0)
+        {
+            hashes.Add(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(buffer.AsSpan(0, read)))[..8]);
+        }
+        return hashes;
+    }
+
+    private FileObservation ObserveFile(string file, string label, bool keep, int pageSize)
     {
         string relative = Path.GetRelativePath(attemptDir, file).Replace('\\', '/');
         var info = new FileInfo(file);
@@ -47,6 +61,8 @@ internal sealed class FileObserver(string attemptDir, ArtifactWriter artifacts)
                 LastWriteUtc = info.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture),
                 Attributes = info.Attributes.ToString(),
                 ArtifactRole = role,
+                PageSize = pageSize > 0 && !isLock ? pageSize : null,
+                PageHashes = pageSize > 0 && !isLock ? PageHashes(file, pageSize) : null,
             };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

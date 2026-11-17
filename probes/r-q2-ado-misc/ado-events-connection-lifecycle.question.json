@@ -1,0 +1,362 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/ado-events-connection-lifecycle",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-EVENT",
+    "ADO-REENTRY"
+  ],
+  "description": "ADO-EVENT, ConnectionEvents: two recording sinks (ev1, ev2) are connected to one Connection before Provider and Data Source are set; Open; an UPDATE; a failing SELECT of a missing table; BeginTrans and CommitTrans; BeginTrans and RollbackTrans; Close; ev1 is disconnected; the connection is opened and closed again (does ev2 still receive?); ev2 is disconnected. Asks which events ADO raises per call, in which order, with which arguments, whether two sinks are both served and in which order, and the calling thread.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-ado-misc-main.accdb",
+      "sha256": "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b",
+      "length": 200704,
+      "provenance": "r-q2-ado-misc.create-main.3640810e22.a1 qk1-3640810e2233e545b71eb891d498bd8497e5cb62a2101a065684f2192480b9d3 output:r-q2-ado-misc-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "advise",
+      "target": "cn",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "ev1"
+    },
+    {
+      "op": "advise",
+      "target": "cn",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "ev2"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cnPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE K SET L = L WHERE ID = 1"
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM NoSuchTable"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "RollbackTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "ev1"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "ev2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

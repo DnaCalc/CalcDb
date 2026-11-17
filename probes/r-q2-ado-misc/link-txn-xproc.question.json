@@ -1,0 +1,944 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/link-txn-xproc",
+  "bookRefs": [
+    "R-LINK-1",
+    "LINK-TXN",
+    "LINK-SESSION"
+  ],
+  "description": "LINK-TXN from a second process: a creates a source file (table SRC, 4 rows) and a host with a link LK, closes both, then opens the host shared, BeginTrans and inserts through LK; process b opens the SOURCE file directly (shared, read-only, reopened for each read) and counts SRC and records any error, once while a's transaction is open, once after a's Rollback, once after a's second transaction commits and again 8 s later. Asks what another process sees of a link participant's uncommitted, rolled back and committed rows.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-lx-src.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "s"
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE SRC (ID LONG CONSTRAINT PK_SRC PRIMARY KEY, V TEXT(20))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SRC VALUES (1, 'a')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SRC VALUES (2, 'b')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SRC VALUES (3, 'c')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SRC VALUES (4, 'd')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-lx-host.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "h"
+    },
+    {
+      "op": "invoke",
+      "target": "h",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LK"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "SRC"
+        },
+        {
+          "type": "bstr",
+          "text": ";DATABASE=work\\scratch-lx-src.accdb"
+        }
+      ],
+      "bind": "lkd"
+    },
+    {
+      "op": "invoke",
+      "target": "h",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "lktd"
+    },
+    {
+      "op": "invoke",
+      "target": "lktd",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "lkd"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "lktd"
+    },
+    {
+      "op": "release",
+      "target": "lkd"
+    },
+    {
+      "op": "invoke",
+      "target": "h",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "h"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-lx-host.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "h2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w0"
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO LK VALUES (101, 'in-txn')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N FROM LK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "csa1"
+    },
+    {
+      "op": "invoke",
+      "target": "csa1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "csa1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "csa1"
+    },
+    {
+      "op": "signal",
+      "name": "inserted"
+    },
+    {
+      "op": "await",
+      "name": "b-read1",
+      "timeoutMs": 60000
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N FROM LK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "csa2"
+    },
+    {
+      "op": "invoke",
+      "target": "csa2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "csa2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "csa2"
+    },
+    {
+      "op": "signal",
+      "name": "rolled"
+    },
+    {
+      "op": "await",
+      "name": "b-read2",
+      "timeoutMs": 60000
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO LK VALUES (102, 'commit')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) AS N FROM LK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "csa3"
+    },
+    {
+      "op": "invoke",
+      "target": "csa3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "csa3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "csa3"
+    },
+    {
+      "op": "signal",
+      "name": "committed"
+    },
+    {
+      "op": "await",
+      "name": "b-read3",
+      "timeoutMs": 60000
+    },
+    {
+      "op": "invoke",
+      "target": "h2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "observeFiles",
+          "label": "before-open",
+          "keep": false
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "await",
+          "name": "inserted",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-lx-src.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "sb1"
+        },
+        {
+          "op": "invoke",
+          "target": "sb1",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS N FROM SRC"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "csb1"
+        },
+        {
+          "op": "invoke",
+          "target": "csb1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "csb1",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "csb1"
+        },
+        {
+          "op": "invoke",
+          "target": "sb1",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "sb1"
+        },
+        {
+          "op": "signal",
+          "name": "b-read1"
+        },
+        {
+          "op": "await",
+          "name": "rolled",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-lx-src.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "sb2"
+        },
+        {
+          "op": "invoke",
+          "target": "sb2",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS N FROM SRC"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "csb2"
+        },
+        {
+          "op": "invoke",
+          "target": "csb2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "csb2",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "csb2"
+        },
+        {
+          "op": "invoke",
+          "target": "sb2",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "sb2"
+        },
+        {
+          "op": "signal",
+          "name": "b-read2"
+        },
+        {
+          "op": "await",
+          "name": "committed",
+          "timeoutMs": 60000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-lx-src.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "sb3"
+        },
+        {
+          "op": "invoke",
+          "target": "sb3",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS N FROM SRC"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "csb3"
+        },
+        {
+          "op": "invoke",
+          "target": "csb3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "csb3",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "csb3"
+        },
+        {
+          "op": "invoke",
+          "target": "sb3",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "sb3"
+        },
+        {
+          "op": "pause",
+          "ms": 8000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-lx-src.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "sb4"
+        },
+        {
+          "op": "invoke",
+          "target": "sb4",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) AS N FROM SRC"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "csb4"
+        },
+        {
+          "op": "invoke",
+          "target": "csb4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "csb4",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "csb4"
+        },
+        {
+          "op": "invoke",
+          "target": "sb4",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-read3"
+        }
+      ]
+    }
+  ]
+}

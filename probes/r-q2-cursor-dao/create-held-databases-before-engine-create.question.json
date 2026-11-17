@@ -1,0 +1,261 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cursor-dao/create-held-databases-before-engine-create",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-CREATE",
+    "DAO-COLL"
+  ],
+  "description": "DAO-CREATE (F: a Databases collection held BEFORE DBEngine.CreateDatabase), variant: Workspaces(0).Databases is retrieved first and its Count read (0); DBEngine.CreateDatabase of a new file: the held Count, Refresh, Count, member names; the returned Database is closed and Count read again; Workspaces(0).CreateDatabase of a second file: held Count, Refresh, Count; the first card showed that a collection fetched AFTER the engine route holds the Database.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "w0"
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "Databases",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dbs"
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "qc2-eng-created.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "dbe"
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "dbs",
+      "bind": "dbm",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dbm",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dbe",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbe"
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "dbs",
+      "bind": "dbm",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dbm",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w0",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "qc2-ws-created.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "dbw"
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "dbs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "dbs",
+      "bind": "dbm",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "dbm",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "dbw",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbw"
+    },
+    {
+      "op": "release",
+      "target": "dbs"
+    },
+    {
+      "op": "release",
+      "target": "w0"
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

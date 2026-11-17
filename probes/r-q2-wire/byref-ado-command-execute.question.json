@@ -1,0 +1,286 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/byref-ado-command-execute",
+  "bookRefs": [
+    "R-STRING-1",
+    "STR-BYREF",
+    "R-ADO-1",
+    "ACT-ABI"
+  ],
+  "description": "STR-BYREF, ADO Command: Command.Execute(RecordsAffected, Parameters, Options) with RecordsAffected a by-reference variant Empty and Parameters Missing; with both by-reference variants Empty; with RecordsAffected typed I4 -7 and Options 129 (adCmdText | adExecuteNoRecords). The Command is bound to the connection with a put by reference of ActiveConnection and CommandText UPDATE T SET N = 'c'. Asks what is written back for the Command route and how a by-reference Parameters Empty is treated.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-byref-cmd.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-byref-cmd.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmd"
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "ActiveConnection",
+      "kind": "propertyPutRef",
+      "args": [
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "CommandText",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET N = 'c'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "empty"
+          },
+          "typed": false
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cmd",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -7
+          },
+          "typed": true
+        },
+        {
+          "type": "missing"
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cmd"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

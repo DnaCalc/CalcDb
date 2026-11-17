@@ -1,0 +1,804 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-expr-sql/demand-ado-events-shapes",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-DEMAND"
+  ],
+  "description": "SQL-DEMAND, missing variant: which population boundary ADO's recordset events expose for each query shape. For a plain scan, ORDER BY, GROUP BY, DISTINCT, TOP 10 with ORDER BY and a crosstab over Nm (256 rows), each on its own ADODB.Recordset with the recording sink connected to RecordsetEvents before Open (static cursor, read-only), then RecordCount, MoveLast, MoveFirst, MoveNext twice and Close; and the plain scan and the sort once more with a forward-only cursor, read by MoveNext three times. Asks which events (WillMove, MoveComplete, FetchProgress, FetchComplete, EndOfRecordset, WillChangeRecordset, RecordsetChangeComplete) arrive, with which arguments, in which order relative to each call and on which thread. Follow-up probe (round 2) for SQL-DEMAND; works on a fresh writable copy of fixture r-q2-expr-sql-main. Each DAO statement is preceded by a marker (a DROP TABLE of a table that does not exist, which always fails), so DBEngine.Errors read after the statement shows that statement's own failure or the marker's, never an older one.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-expr-sql-main.accdb",
+      "sha256": "d5b9ea177ac4d13c17561932e1c0a73240f06639a0fd1446ea319155bbf7ff3d",
+      "length": 253952,
+      "provenance": "r-q2-expr-sql.create-main.c09647fb9e.a1 qk1-c09647fb9eb3d5acde6287790aba224cb9c2d6fcdb3a713cef17a0f443ed0199 output:r-q2-expr-sql-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar0"
+    },
+    {
+      "op": "advise",
+      "target": "ar0",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev0"
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT n FROM Nm"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev0"
+    },
+    {
+      "op": "release",
+      "target": "ar0"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar1"
+    },
+    {
+      "op": "advise",
+      "target": "ar1",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev1"
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT n FROM Nm ORDER BY n DESC"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev1"
+    },
+    {
+      "op": "release",
+      "target": "ar1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar2"
+    },
+    {
+      "op": "advise",
+      "target": "ar2",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev2"
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT n Mod 7 AS k, Count(*) AS c FROM Nm GROUP BY n Mod 7"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev2"
+    },
+    {
+      "op": "release",
+      "target": "ar2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar3"
+    },
+    {
+      "op": "advise",
+      "target": "ar3",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev3"
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT DISTINCT n Mod 7 AS k FROM Nm"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev3"
+    },
+    {
+      "op": "release",
+      "target": "ar3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar4"
+    },
+    {
+      "op": "advise",
+      "target": "ar4",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev4"
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT TOP 10 n FROM Nm ORDER BY n DESC"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev4"
+    },
+    {
+      "op": "release",
+      "target": "ar4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar5"
+    },
+    {
+      "op": "advise",
+      "target": "ar5",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev5"
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "TRANSFORM Count(n) SELECT n Mod 3 AS k FROM Nm GROUP BY n Mod 3 PIVOT n Mod 2"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev5"
+    },
+    {
+      "op": "release",
+      "target": "ar5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar6"
+    },
+    {
+      "op": "advise",
+      "target": "ar6",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev6"
+    },
+    {
+      "op": "invoke",
+      "target": "ar6",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT n FROM Nm"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar6",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar6",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar6",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev6"
+    },
+    {
+      "op": "release",
+      "target": "ar6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar7"
+    },
+    {
+      "op": "advise",
+      "target": "ar7",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev7"
+    },
+    {
+      "op": "invoke",
+      "target": "ar7",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT n FROM Nm ORDER BY n DESC"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar7",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar7",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar7",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev7"
+    },
+    {
+      "op": "release",
+      "target": "ar7"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

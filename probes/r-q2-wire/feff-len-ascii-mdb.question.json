@@ -1,0 +1,2087 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/feff-len-ascii-mdb",
+  "bookRefs": [
+    "R-STRING-1",
+    "R-ORACLE-1",
+    "OR-WIRE"
+  ],
+  "description": "U+FEFF residual F: the same sixteen lengths as len-ascii-accdb in an MDB (format variation of the trigger). Rows: ID 1 x1, ID 2 x2, ID 3 x3, ID 4 x4, ID 5 x5, ID 6 x6, ID 7 x8, ID 8 x10, ID 9 x12, ID 10 x16, ID 11 x20, ID 12 x32, ID 13 x50, ID 14 x64, ID 15 x80, ID 16 x100.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-feff-len-ascii-mdb.mdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 64
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W (ID LONG CONSTRAINT PK_W PRIMARY KEY, T TEXT(255), M MEMO)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "W"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wf"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 14
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "fi",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fi"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "ft",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ft"
+    },
+    {
+      "op": "invoke",
+      "target": "wf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        }
+      ],
+      "bind": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "fm",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "\uFEFFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fm"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wf"
+    },
+    {
+      "op": "invoke",
+      "target": "w",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-feff-len-ascii-mdb.mdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T, M, Len(T) AS LT, Len(M) AS LM, AscW(Mid(T,1,1)) AS T1, AscW(Mid(T,2,1)) AS T2, AscW(Mid(T,3,1)) AS T3, AscW(Mid(M,1,1)) AS M1, AscW(Mid(M,2,1)) AS M2 FROM W ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-feff-len-ascii-mdb.mdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T, M, Len(T) AS LT, Len(M) AS LM FROM W ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "loopUntil",
+      "target": "ar",
+      "member": "EOF",
+      "maxIterations": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ar",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "ar",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

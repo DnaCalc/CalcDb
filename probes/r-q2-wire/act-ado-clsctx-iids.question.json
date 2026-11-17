@@ -1,0 +1,149 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-ado-clsctx-iids",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-CLSID",
+    "R-ADO-1"
+  ],
+  "description": "ACT-CLSID, ADO classes: CoCreateInstance with CLSCTX_INPROC_SERVER of ADODB.Connection for _Connection, Connection15, IDispatch, IUnknown and IMarshal; with CLSCTX_LOCAL_SERVER and IDispatch; with 0x17 and IDispatch; of Recordset for _Recordset, of Command for _Command, of Stream for _Stream; and of Connection for _Recordset (a wrong interface of the right class). Version or State is read on the IDispatch results. Asks which requested IIDs the ADO classes answer and the HRESULT of a refused one.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00001550-0000-0010-8000-00AA006D2EA4}",
+      "bind": "c1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000515-0000-0010-8000-00AA006D2EA4}",
+      "bind": "c2",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "c3",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "c3",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "c4",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000003-0000-0000-C000-000000000046}",
+      "bind": "c5",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 4,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "c6",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 23,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "c7",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "c7",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Recordset",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00001556-0000-0010-8000-00AA006D2EA4}",
+      "bind": "r1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Command",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{986761E8-7269-4890-AA65-AD7C03697A6D}",
+      "bind": "m1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Stream",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00001565-0000-0010-8000-00AA006D2EA4}",
+      "bind": "s1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00001556-0000-0010-8000-00AA006D2EA4}",
+      "bind": "w1",
+      "aggregate": false
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

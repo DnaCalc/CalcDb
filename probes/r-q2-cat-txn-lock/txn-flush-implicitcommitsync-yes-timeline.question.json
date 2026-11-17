@@ -1,0 +1,625 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-flush-implicitcommitsync-yes-timeline",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-FLUSH-LIVE",
+    "TXN-FLUSH-BEHIND",
+    "TXN-FLUSH-OP",
+    "TXN-FLUSH-COMMIT"
+  ],
+  "description": "TXN-FLUSH-OP, dbImplicitCommitSync = \"Yes\" without a kill (the first card's evidence was one kill per format). After DBEngine.SetOption(59, \"Yes\") the implicit INSERT...SELECT runs on the big fixture and the main file's size and hash are read right after the return and every 50 ms for 500 ms; then SetOption(59, \"No\") and the same statement with the same timeline. Asks whether the file image has changed when Execute returns under Yes and when it changes under No.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-big-accdb.accdb",
+      "sha256": "45484a6bf90e1106746e0587e14f1ed6e440970fb774f3a002859fdae9a83c81",
+      "length": 8663040,
+      "provenance": "r-q2-cat-txn-lock.create-big-accdb.c2e14c2a98.a1 qk1-c2e14c2a98967f1f8cb78180db3023104961db2dda8dba1fabbf90b0018dc39e output:r-q2-cat-txn-lock-big-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "t-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "SetOption",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 59
+        },
+        {
+          "type": "bstr",
+          "text": "Yes"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "yes-returned"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t50",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t100",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t150",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t250",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t300",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t350",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m8"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t400",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m9"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t450",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "yes-t-m10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "yes-t500",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "SetOption",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 59
+        },
+        {
+          "type": "bstr",
+          "text": "No"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "no-returned"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t50",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t100",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t150",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t250",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t300",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t350",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m8"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t400",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m9"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t450",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 50
+    },
+    {
+      "op": "signal",
+      "name": "no-t-m10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "no-t500",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

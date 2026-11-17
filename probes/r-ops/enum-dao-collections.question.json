@@ -1,0 +1,289 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ops/enum-dao-collections",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-ENUM",
+    "R-ERR-1",
+    "ERR-SNAPSHOT"
+  ],
+  "description": "On a new ACCDB with table T (2 rows), enumerates through _NewEnum and IEnumVARIANT: DBEngine.Workspaces, Database.TableDefs after Refresh (reading each Name), the Fields of T (each Name), Database.Properties (each Name), and DBEngine.Errors after a failed DROP TABLE of a missing table (each Number). Each walk ends with Next past the end, Reset, Next, Skip(1) and Clone. Asks what _NewEnum returns for each DAO collection and how its enumerator answers.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-enum.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "enumerate",
+      "target": "wss",
+      "bind": "w",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "enumerate",
+      "target": "tds",
+      "bind": "t",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "t",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds2"
+    },
+    {
+      "op": "invoke",
+      "target": "tds2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "td"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fs"
+    },
+    {
+      "op": "enumerate",
+      "target": "fs",
+      "bind": "f",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fs"
+    },
+    {
+      "op": "release",
+      "target": "td"
+    },
+    {
+      "op": "release",
+      "target": "tds2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dps"
+    },
+    {
+      "op": "enumerate",
+      "target": "dps",
+      "bind": "pp",
+      "maxItems": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "pp",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "dps"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP TABLE NoSuchTable"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "enumerate",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

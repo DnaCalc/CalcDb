@@ -103,6 +103,9 @@ public sealed class P
 
     public P Files(string label, bool keep = false) => Add(new ObserveFiles(label) { Keep = keep });
 
+    /// <summary>Observe files with per-page hashes (R-CRASH-1 CRASH-ORDER sampling), without keeping whole images.</summary>
+    public P FilePages(string label, int pageSize = 4096) => Add(new ObserveFiles(label) { PageSize = pageSize });
+
     /// <summary>Method call; the result is captured, and bound when <paramref name="bind"/> is given.</summary>
     public P Call(string target, string member, params Arg[] args) => Add(new Invoke(target, member, DispatchKind.Method, args));
 

@@ -1,0 +1,2106 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-ado-misc/book-static-exchange",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-BOOK",
+    "R-OLEDB-1",
+    "OLE-ROWLIFE"
+  ],
+  "description": "ADO-BOOK with runtime bookmark values passed back (static bookmarks are the row position, VT_R8, from the earlier records): on a client static batch-optimistic recordset of K, Bookmark put to R8 3 (the ID read back), a Clone given R8 3 (its ID), CompareBookmarks(R8 1, R8 3) and (R8 3, R8 3), a bookmark from a second independent recordset of the same text; then pending Delete of row 2 and UpdateBatch, R8 3 put again (does the bookmark follow the row or the position), and Requery then R8 3; the same sequence on a server static read-only recordset. Asks the bookmark identity across clone, independent recordset, delete and Requery.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-ado-misc-main.accdb",
+      "sha256": "dfe5bf3ce6e08aeb6e9f3b4edb71b33feda26e2cd4b1380709b9bfb6ef642c5b",
+      "length": 200704,
+      "provenance": "r-q2-ado-misc.create-main.3640810e22.a1 qk1-3640810e2233e545b71eb891d498bd8497e5cb62a2101a065684f2192480b9d3 output:r-q2-ado-misc-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cnPr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnDs"
+    },
+    {
+      "op": "invoke",
+      "target": "cnDs",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnDs"
+    },
+    {
+      "op": "release",
+      "target": "cnPr"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T FROM K WHERE ID <= 6 ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 4
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "oc"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T FROM K WHERE ID <= 6 ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rcUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rcUx"
+    },
+    {
+      "op": "release",
+      "target": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Clone",
+      "kind": "method",
+      "args": [],
+      "bind": "cc"
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ccUf"
+    },
+    {
+      "op": "invoke",
+      "target": "ccUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "ccUx"
+    },
+    {
+      "op": "invoke",
+      "target": "ccUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ccUx"
+    },
+    {
+      "op": "release",
+      "target": "ccUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "CompareBookmarks",
+      "kind": "method",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        },
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "CompareBookmarks",
+      "kind": "method",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        },
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ocUf"
+    },
+    {
+      "op": "invoke",
+      "target": "ocUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "ocUx"
+    },
+    {
+      "op": "invoke",
+      "target": "ocUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ocUx"
+    },
+    {
+      "op": "release",
+      "target": "ocUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4000000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Delete",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "UpdateBatch",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rcUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rcUx"
+    },
+    {
+      "op": "release",
+      "target": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rcUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rcUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rcUx"
+    },
+    {
+      "op": "release",
+      "target": "rcUf"
+    },
+    {
+      "op": "invoke",
+      "target": "cc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "oc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rc",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T FROM K WHERE ID <= 6 ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "os"
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, T FROM K WHERE ID <= 6 ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Clone",
+      "kind": "method",
+      "args": [],
+      "bind": "cs"
+    },
+    {
+      "op": "invoke",
+      "target": "cs",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "csUf"
+    },
+    {
+      "op": "invoke",
+      "target": "csUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "csUx"
+    },
+    {
+      "op": "invoke",
+      "target": "csUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "csUx"
+    },
+    {
+      "op": "release",
+      "target": "csUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CompareBookmarks",
+      "kind": "method",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        },
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CompareBookmarks",
+      "kind": "method",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        },
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "osUf"
+    },
+    {
+      "op": "invoke",
+      "target": "osUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "osUx"
+    },
+    {
+      "op": "invoke",
+      "target": "osUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "osUx"
+    },
+    {
+      "op": "release",
+      "target": "osUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4000000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Bookmark",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4008000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnErrs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cnErrs",
+      "bind": "cnErr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cnErr",
+          "member": "NativeError",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnErrs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "cnEc",
+      "member": "Clear",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cnEc"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "rsUx"
+    },
+    {
+      "op": "invoke",
+      "target": "rsUx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsUx"
+    },
+    {
+      "op": "release",
+      "target": "rsUf"
+    },
+    {
+      "op": "invoke",
+      "target": "cs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "os",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

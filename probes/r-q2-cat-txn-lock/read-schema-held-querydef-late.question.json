@@ -1,0 +1,1060 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/read-schema-held-querydef-late",
+  "bookRefs": [
+    "R-LOCK-3",
+    "READ-SCHEMA",
+    "R-CAT-1",
+    "CAT-V"
+  ],
+  "description": "READ-SCHEMA, the held QueryDef part the first card never exercised (its changing process had an unrefreshed QueryDefs collection). Process b creates a saved query QT over U and holds the QueryDef and its Parameters; process a (after a pause and Idle, QueryDefs refreshed, Errors before/after) sets QT's SQL to a different WHERE; b (after 7 s and Idle) reads the held QueryDef's SQL, a fresh Item() from a refreshed collection, and opens a recordset through the held QueryDef; a then deletes QT and creates a new QT with other SQL; b (after a pause) reads the held QueryDef again (expect 3420), a fresh Item and an OpenRecordset. Asks what a held QueryDef shows after another process changes, then replaces its saved definition.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-lock-accdb.accdb",
+      "sha256": "1e3aea374a49fc3e9d66270f0cacae0ecc6b6d926112607d59e88f182560912c",
+      "length": 299008,
+      "provenance": "r-q2-cat-txn-lock.create-lock-accdb.8aa318a8c0.a1 qk1-8aa318a8c08f5490d532dbf2ea465cac8011c094c8a79c48d333c58695076db9 output:r-q2-cat-txn-lock-lock-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "ready"
+    },
+    {
+      "op": "await",
+      "name": "s0",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "pause",
+      "ms": 7000
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Idle",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aq_c"
+    },
+    {
+      "op": "invoke",
+      "target": "aq_c",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "aq_c",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QT"
+        }
+      ],
+      "bind": "aq"
+    },
+    {
+      "op": "release",
+      "target": "aq_c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "aq",
+      "member": "SQL",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM U WHERE ID <= 3;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "aq",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "aq"
+    },
+    {
+      "op": "signal",
+      "name": "s1"
+    },
+    {
+      "op": "await",
+      "name": "s2",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qds"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "qds",
+      "member": "Delete",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QT"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QT"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID, W FROM U;"
+        }
+      ],
+      "bind": "qn"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "qn"
+    },
+    {
+      "op": "release",
+      "target": "qds"
+    },
+    {
+      "op": "signal",
+      "name": "s3"
+    },
+    {
+      "op": "await",
+      "name": "s4",
+      "timeoutMs": 90000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "ready",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Workspaces",
+          "kind": "propertyGet",
+          "args": [
+            {
+              "type": "i4",
+              "value": 0
+            }
+          ],
+          "bind": "ws"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "CreateQueryDef",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "QT"
+            },
+            {
+              "type": "bstr",
+              "text": "SELECT ID FROM U WHERE ID <= 10;"
+            }
+          ],
+          "bind": "qt"
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "Parameters",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "qpr"
+        },
+        {
+          "op": "invoke",
+          "target": "qpr",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "s0"
+        },
+        {
+          "op": "await",
+          "name": "s1",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "pause",
+          "ms": 7000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Idle",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "QueryDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "bq_c"
+        },
+        {
+          "op": "invoke",
+          "target": "bq_c",
+          "member": "Refresh",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "bq_c",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "QT"
+            }
+          ],
+          "bind": "bq"
+        },
+        {
+          "op": "release",
+          "target": "bq_c"
+        },
+        {
+          "op": "invoke",
+          "target": "bq",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "bq"
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "rq"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "rq",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rq",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rq"
+        },
+        {
+          "op": "signal",
+          "name": "s2"
+        },
+        {
+          "op": "await",
+          "name": "s3",
+          "timeoutMs": 90000
+        },
+        {
+          "op": "pause",
+          "ms": 7000
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Idle",
+          "kind": "method",
+          "args": [
+            {
+              "type": "i4",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "qt",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "QueryDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cq_c"
+        },
+        {
+          "op": "invoke",
+          "target": "cq_c",
+          "member": "Refresh",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cq_c",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "QT"
+            }
+          ],
+          "bind": "cq"
+        },
+        {
+          "op": "release",
+          "target": "cq_c"
+        },
+        {
+          "op": "invoke",
+          "target": "cq",
+          "member": "SQL",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "cq"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT * FROM QT"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "rn"
+        },
+        {
+          "op": "loopUntil",
+          "target": "rn",
+          "member": "EOF",
+          "maxIterations": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rn",
+              "member": "Fields",
+              "kind": "propertyGet",
+              "args": [],
+              "bind": "flds"
+            },
+            {
+              "op": "forEachItem",
+              "target": "flds",
+              "bind": "f",
+              "maxItems": 4,
+              "body": [
+                {
+                  "op": "invoke",
+                  "target": "f",
+                  "member": "Value",
+                  "kind": "propertyGet",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "op": "release",
+              "target": "flds"
+            },
+            {
+              "op": "invoke",
+              "target": "rn",
+              "member": "MoveNext",
+              "kind": "method",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "rn",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rn"
+        },
+        {
+          "op": "signal",
+          "name": "s4"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "observeFiles",
+          "label": "after-close",
+          "keep": false
+        }
+      ]
+    }
+  ]
+}

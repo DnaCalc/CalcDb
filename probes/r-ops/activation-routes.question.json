@@ -1,0 +1,136 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-ops/activation-routes",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-CLSID",
+    "ACT-FACTORY",
+    "ACT-AGGREGATE",
+    "ACT-TYPECREATE"
+  ],
+  "description": "Activates DAO.DBEngine.120 by raw routes: CoCreateInstance with CLSCTX_INPROC_SERVER for IDispatch and for IUnknown; with CLSCTX_LOCAL_SERVER; with CLSCTX_INPROC_SERVER and a controlled outer IUnknown for IUnknown and for IDispatch (aggregation); CoGetClassObject for IClassFactory with LockServer and CreateInstance, plain and aggregated; and ITypeInfo::CreateInstance of the DBEngine coclass found in an engine's type library. Each object that answers IDispatch reads Version. Asks how DAO's class answers each activation route, whether it can be aggregated, and what an outer is asked for.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "e1",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "e2",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "e2",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 4,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "e3",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "e4",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "e5",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "e6",
+      "aggregate": false
+    },
+    {
+      "op": "invoke",
+      "target": "e6",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "e7",
+      "aggregate": true
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "typeCreate",
+      "target": "e1",
+      "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "e8"
+    },
+    {
+      "op": "invoke",
+      "target": "e8",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

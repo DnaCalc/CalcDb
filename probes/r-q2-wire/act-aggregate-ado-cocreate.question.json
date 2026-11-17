@@ -1,0 +1,104 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-aggregate-ado-cocreate",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-AGGREGATE",
+    "R-ADO-1"
+  ],
+  "description": "ACT-AGGREGATE, ADO by CoCreateInstance: for each of ADODB.Connection, Recordset, Command and Stream, a non-null controlled outer with IID_IUnknown, then a non-null outer with IID_IDispatch. The outer records what it is asked for. Asks the HRESULT per class (CLASS_E_NOAGGREGATION, E_NOINTERFACE or success) and whether an aggregated object calls the outer.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "connection-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Connection",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "connection-d",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Recordset",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "recordset-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Recordset",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "recordset-d",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Command",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "command-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Command",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "command-d",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Stream",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00000000-0000-0000-C000-000000000046}",
+      "bind": "stream-u",
+      "aggregate": true
+    },
+    {
+      "op": "activate",
+      "class": "ADODB.Stream",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "stream-d",
+      "aggregate": true
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

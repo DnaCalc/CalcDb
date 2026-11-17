@@ -1,0 +1,262 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/events-ado-connection-new-mta",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-THREAD",
+    "MTA-CREATE",
+    "R-ORACLE-1",
+    "OR-REENTRY",
+    "R-ADO-1",
+    "ADO-EVENT"
+  ],
+  "description": "ACT-THREAD sink entry and OR-REENTRY callbacks: a recording sink on an ADODB.Connection's ConnectionEvents, the connection created, advised and used on a new MTA thread: Open, Execute of an UPDATE and of a failing statement, BeginTrans and CommitTrans, Close. Asks, per event, the order, the arguments, the thread of the callback against the thread of the call, and whether the original failing call's error survives the ExecuteComplete callback.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "scratch-q2-events-new-mta.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 'a')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 'b')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "onThread",
+      "apartment": "mta",
+      "body": [
+        {
+          "op": "create",
+          "progId": "ADODB.Connection",
+          "bind": "cn"
+        },
+        {
+          "op": "advise",
+          "target": "cn",
+          "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+          "name": "ev"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Provider",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Microsoft.ACE.OLEDB.12.0"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cnp",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Data Source"
+            }
+          ],
+          "bind": "cds"
+        },
+        {
+          "op": "invoke",
+          "target": "cds",
+          "member": "Value",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "scratch-q2-events-new-mta.accdb"
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cds"
+        },
+        {
+          "op": "release",
+          "target": "cnp"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Open",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET N = 'z'"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT * FROM NoSuchTable"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cerrs"
+        },
+        {
+          "op": "invoke",
+          "target": "cerrs",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "cerrs"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "BeginTrans",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "CommitTrans",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "unadvise",
+          "name": "ev"
+        },
+        {
+          "op": "release",
+          "target": "cn"
+        }
+      ]
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

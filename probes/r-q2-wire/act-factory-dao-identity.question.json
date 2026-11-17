@@ -1,0 +1,264 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-wire/act-factory-dao-identity",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-FACTORY",
+    "ACT-THREAD",
+    "ENGINE-IDENTITY"
+  ],
+  "description": "ACT-FACTORY, DAO: DAO.DBEngine.120 activated by CoCreateInstance (a1), then by CoGetClassObject with LockServer and CreateInstance twice (b1, b2), then by the ordinary Create (eng). A Workspace 'rq2ws' is appended through a1; Workspaces.Count and names are read through a1, b1, b2 and eng. Asks whether the class factory hands out one engine or several, and whether all routes share its state.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "activate",
+      "class": "DAO.DBEngine.120",
+      "route": "cocreate",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "a1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "b1",
+      "aggregate": false
+    },
+    {
+      "op": "activate",
+      "class": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+      "route": "classobject",
+      "clsCtx": 1,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "b2",
+      "aggregate": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wa"
+    },
+    {
+      "op": "invoke",
+      "target": "wa",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "CreateWorkspace",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "rq2ws"
+        },
+        {
+          "type": "bstr",
+          "text": "admin"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "wsx"
+    },
+    {
+      "op": "invoke",
+      "target": "wa",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "wsx"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "wa",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "wsx"
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "b1",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "b2",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wq"
+    },
+    {
+      "op": "invoke",
+      "target": "wq",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "wq",
+      "bind": "wi",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "wi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "wq"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

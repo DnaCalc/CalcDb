@@ -1,0 +1,371 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cursor-dao/errnest-ado-recordset-event-error",
+  "bookRefs": [
+    "R-ERR-1",
+    "ERR-NEST",
+    "ERR-ADO",
+    "R-ADO-1"
+  ],
+  "description": "ERR-NEST (T: recordset events with an error), variant: a recording sink on RecordsetEvents of an ADODB.Recordset (keyset, optimistic) opened on T through an ADODB.Connection (Provider Microsoft.ACE.OLEDB.12.0, read-write): AddNew, set ID 1 (a duplicate primary key), Update (provider failure), Connection.Errors read, CancelUpdate; MoveNext twice past the end. Asks which RecordsetEvents (WillChangeField, WillChangeRecord, RecordChangeComplete, FieldChangeComplete, WillMove, MoveComplete, EndOfRecordset) fire with which pError and adStatus.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cursor-dao-main.accdb",
+      "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+      "length": 786432,
+      "provenance": "r-q2-cursor-dao.create-main.05ea7b34fc.a1 qk1-05ea7b34fc2f38a65b95662ffe98f14aaf03e29857bb840f086986d4cc8fc474 output:r-q2-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cpcn"
+    },
+    {
+      "op": "invoke",
+      "target": "cpcn",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdscn"
+    },
+    {
+      "op": "invoke",
+      "target": "cdscn",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdscn"
+    },
+    {
+      "op": "release",
+      "target": "cpcn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "ars"
+    },
+    {
+      "op": "advise",
+      "target": "ars",
+      "eventIid": "{00001266-0000-0010-8000-00AA006D2EA4}",
+      "name": "rev"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "CursorType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "LockType",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "arf"
+    },
+    {
+      "op": "invoke",
+      "target": "arf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "aid"
+    },
+    {
+      "op": "invoke",
+      "target": "aid",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aid"
+    },
+    {
+      "op": "release",
+      "target": "arf"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aecn"
+    },
+    {
+      "op": "invoke",
+      "target": "aecn",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aecn",
+      "bind": "aercn",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aecn"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "aecn"
+    },
+    {
+      "op": "invoke",
+      "target": "aecn",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "aecn",
+      "bind": "aercn",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "aercn",
+          "member": "SQLState",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "aecn"
+    },
+    {
+      "op": "invoke",
+      "target": "ars",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "rev"
+    },
+    {
+      "op": "release",
+      "target": "ars"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

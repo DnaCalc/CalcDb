@@ -1,0 +1,3603 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa.a1",
+  "retainedUtc": "2026-11-17T12:45:39.065568+00:00",
+  "probe": "r-q2-cat-txn-lock/txn-flush-idle-and-close-timeline",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-FLUSH-LIVE",
+    "TXN-FLUSH-BEHIND",
+    "TXN-FLUSH-OP",
+    "TXN-FLUSH-COMMIT"
+  ],
+  "description": "TXN-FLUSH-BEHIND, what ends the window (the first card had one kill sample each for Idle and Close). Three implicit INSERT...SELECT runs on the big fixture, each followed at once by one action and the file read right after and every 50 ms for 300 ms: (1) DBEngine.Idle(dbRefreshCache); (2) DBEngine.Idle(dbFreeLocks, 1); (3) a Recordset open/close on a small snapshot. Then a fourth run followed by Database.Close and the file reads. Asks which call makes the file image change at once and which leave it to the timer.",
+  "retentionNote": "Designed R-TXN-1 TXN-FLUSH probe of the second follow-up card (r-q2-cat-txn-lock); complete capture of the ACE answer. One kept database image is larger than 100 MB and is kept in evidence/artifacts-large/ on the oracle machine, outside git.",
+  "token": "r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa",
+  "questionKey": "qk1-84533a4efad1a17655d3ebbb23db6ff705d6ed127e5ad69f0e70163003835397",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-q2-cat-txn-lock/txn-flush-idle-and-close-timeline",
+    "bookRefs": [
+      "R-TXN-1",
+      "TXN-FLUSH-LIVE",
+      "TXN-FLUSH-BEHIND",
+      "TXN-FLUSH-OP",
+      "TXN-FLUSH-COMMIT"
+    ],
+    "description": "TXN-FLUSH-BEHIND, what ends the window (the first card had one kill sample each for Idle and Close). Three implicit INSERT...SELECT runs on the big fixture, each followed at once by one action and the file read right after and every 50 ms for 300 ms: (1) DBEngine.Idle(dbRefreshCache); (2) DBEngine.Idle(dbFreeLocks, 1); (3) a Recordset open/close on a small snapshot. Then a fourth run followed by Database.Close and the file reads. Asks which call makes the file image change at once and which leave it to the timer.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [
+      {
+        "role": "main",
+        "fileName": "r-q2-cat-txn-lock-big-accdb.accdb",
+        "sha256": "45484a6bf90e1106746e0587e14f1ed6e440970fb774f3a002859fdae9a83c81",
+        "length": 8663040,
+        "provenance": "r-q2-cat-txn-lock.create-big-accdb.c2e14c2a98.a1 qk1-c2e14c2a98967f1f8cb78180db3023104961db2dda8dba1fabbf90b0018dc39e output:r-q2-cat-txn-lock-big-accdb.accdb"
+      }
+    ],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Workspaces",
+        "kind": "propertyGet",
+        "args": [
+          {
+            "type": "i4",
+            "value": 0
+          }
+        ],
+        "bind": "ws"
+      },
+      {
+        "op": "invoke",
+        "target": "ws",
+        "member": "OpenDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "inputPath",
+            "role": "main"
+          },
+          {
+            "type": "bool",
+            "value": false
+          },
+          {
+            "type": "bool",
+            "value": false
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "pause",
+        "ms": 1500
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Idle",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 8
+          }
+        ]
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-acted"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t0",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m1"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t50",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m2"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t100",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m3"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t150",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m4"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t200",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m5"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t250",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-refresh-t-m6"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-refresh-t300",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 1500
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Idle",
+        "kind": "method",
+        "args": [
+          {
+            "type": "i4",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-acted"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t0",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m1"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t50",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m2"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t100",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m3"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t150",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m4"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t200",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m5"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t250",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "idle-freelocks-t-m6"
+      },
+      {
+        "op": "observeFiles",
+        "label": "idle-freelocks-t300",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 1500
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "SELECT COUNT(*) FROM T"
+          },
+          {
+            "type": "i4",
+            "value": 4
+          }
+        ],
+        "bind": "oc"
+      },
+      {
+        "op": "invoke",
+        "target": "oc",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "release",
+        "target": "oc"
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-acted"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t0",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m1"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t50",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m2"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t100",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m3"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t150",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m4"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t200",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m5"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t250",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 50
+      },
+      {
+        "op": "signal",
+        "name": "open-close-rs-t-m6"
+      },
+      {
+        "op": "observeFiles",
+        "label": "open-close-rs-t300",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 1500
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "kind": "propertyGet",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "errs"
+      },
+      {
+        "op": "forEachItem",
+        "target": "errs",
+        "bind": "e",
+        "maxItems": 16,
+        "body": [
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Number",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Description",
+            "kind": "propertyGet",
+            "args": []
+          },
+          {
+            "op": "invoke",
+            "target": "e",
+            "member": "Source",
+            "kind": "propertyGet",
+            "args": []
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "errs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "signal",
+        "name": "close-closed"
+      },
+      {
+        "op": "observeFiles",
+        "label": "close-t0",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "pause",
+        "ms": 100
+      },
+      {
+        "op": "observeFiles",
+        "label": "close-t100",
+        "keep": false,
+        "pageSize": 0
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false,
+        "pageSize": 0
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa.a1",
+    "token": "r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa",
+    "questionKey": "qk1-84533a4efad1a17655d3ebbb23db6ff705d6ed127e5ad69f0e70163003835397",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "603f7f173b270377277619753b05eed17311b9165a734c7d923dbda3a6548e31",
+    "artifacts": [
+      {
+        "role": "lockfile:idle-refresh-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "input-final:r-q2-cat-txn-lock-big-accdb.accdb",
+        "kind": "changed-input",
+        "relativePath": "artifacts/input-final_r-q2-cat-txn-lock-big-accdb.accdb",
+        "length": 135839744,
+        "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 35156,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T12:34:18.4612649+00:00",
+    "sealSha256": "ba81b0d42941089925f2f9494439d22344a069a4417ed68f82f64a64debe2f73"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-84533a4efad1a17655d3ebbb23db6ff705d6ed127e5ad69f0e70163003835397",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142959\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "c943ad3c3eae51e5f5b747f83dd172ce351b28989e201591878ca266b7b49ebc",
+      "workerBuild": "1.0.0+8433b216f1a90c387e7d955cba72b91b39d8faa0",
+      "toolingRevision": "8433b216f1a90c387e7d955cba72b91b39d8faa0+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 35156,
+      "threadId": 29912,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 8663040,
+            "sha256": "45484a6bf90e1106746e0587e14f1ed6e440970fb774f3a002859fdae9a83c81",
+            "lastWriteUtc": "2026-11-17T12:28:31.8439760Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142959\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142959\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142959\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Workspaces",
+        "flags": 2,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "ws",
+          "identity": "u2",
+          "typeName": "Workspace",
+          "typeIid": "{00000039-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "ws",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "ws",
+        "member": "OpenDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d00710032002d006300610074002d00740078006e002d006c006f0063006b002e00740078006e002d0066006c007500730068002d00690064006c0065002d0061006e0064002d0063006c006f00730065002d00740069006d0065006c0069006e0065002e0038003400350033003300610034006500660061002e00610031005c0069006e0070007500740073005c0072002d00710032002d006300610074002d00740078006e002d006c006f0063006b002d006200690067002d00610063006300640062002e0061006300630064006200",
+            "byteLength": 302,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-q2-cat-txn-lock.txn-flush-idle-and-close-timeline.84533a4efa.a1\\inputs\\r-q2-cat-txn-lock-big-accdb.accdb"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          },
+          {
+            "vt": 11,
+            "vtName": "VT_BOOL",
+            "integer": "0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u3",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "1500 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:07.805666+00:00",
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000280053002c0020004d0029002000530045004c00450043005400200053002c0020004d002000460052004f004d0020005400",
+            "byteLength": 78,
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "2048"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "12.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Idle",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "8"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809353,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-acted",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:07.8946431+00:00",
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t0",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t0:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:07.9875038+00:00",
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m1",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:07.9881977+00:00",
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t50",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t50:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.0646389+00:00",
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m2",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.0653741+00:00",
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t100",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t100:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.1406104+00:00",
+        "seq": 24,
+        "programPath": "23"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m3",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.1430287+00:00",
+        "seq": 25,
+        "programPath": "24"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t150",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t150:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 26,
+        "programPath": "25"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.2215204+00:00",
+        "seq": 27,
+        "programPath": "26"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m4",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.2227038+00:00",
+        "seq": 28,
+        "programPath": "27"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t200",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t200:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 29,
+        "programPath": "28"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.301049+00:00",
+        "seq": 30,
+        "programPath": "29"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m5",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.3019521+00:00",
+        "seq": 31,
+        "programPath": "30"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t250",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 13045760,
+            "sha256": "ac1fe24057516ec7c0774d579b02562cdd11a372a3766f5501585fac8f33b8d5",
+            "lastWriteUtc": "2026-11-17T12:34:07.8883567Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t250:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 32,
+        "programPath": "31"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.3793968+00:00",
+        "seq": 33,
+        "programPath": "32"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-refresh-t-m6",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:08.3811831+00:00",
+        "seq": 34,
+        "programPath": "33"
+      },
+      {
+        "event": "files",
+        "label": "idle-refresh-t300",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 17166336,
+            "sha256": "02a0aa14cab733d791cf0b5b929ab940930e6cd5bb80e5f399e13adcba0ab245",
+            "lastWriteUtc": "2026-11-17T12:34:08.4116624Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-refresh-t300:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 35,
+        "programPath": "34"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "1500 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:09.9229913+00:00",
+        "seq": 36,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 37,
+        "programPath": "36"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "37.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 39,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000280053002c0020004d0029002000530045004c00450043005400200053002c0020004d002000460052004f004d0020005400",
+            "byteLength": 78,
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 40,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "4096"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "41"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 43,
+        "programPath": "42.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 44,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Idle",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "1"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809353,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "44"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-acted",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.1069917+00:00",
+        "seq": 46,
+        "programPath": "45"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t0",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 29868032,
+            "sha256": "d1b641d626d98a1ce78bb9b4c6f6dc12ce04f837110c916eb569d9b8c2a7f6f8",
+            "lastWriteUtc": "2026-11-17T12:34:10.0996032Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t0:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 47,
+        "programPath": "46"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.2411236+00:00",
+        "seq": 48,
+        "programPath": "47"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m1",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.242085+00:00",
+        "seq": 49,
+        "programPath": "48"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t50",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 29868032,
+            "sha256": "d1b641d626d98a1ce78bb9b4c6f6dc12ce04f837110c916eb569d9b8c2a7f6f8",
+            "lastWriteUtc": "2026-11-17T12:34:10.0996032Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t50:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 50,
+        "programPath": "49"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.3592778+00:00",
+        "seq": 51,
+        "programPath": "50"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m2",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.3599795+00:00",
+        "seq": 52,
+        "programPath": "51"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t100",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 29868032,
+            "sha256": "d1b641d626d98a1ce78bb9b4c6f6dc12ce04f837110c916eb569d9b8c2a7f6f8",
+            "lastWriteUtc": "2026-11-17T12:34:10.0996032Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t100:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 53,
+        "programPath": "52"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.4774408+00:00",
+        "seq": 54,
+        "programPath": "53"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m3",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.4780616+00:00",
+        "seq": 55,
+        "programPath": "54"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t150",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 29868032,
+            "sha256": "d1b641d626d98a1ce78bb9b4c6f6dc12ce04f837110c916eb569d9b8c2a7f6f8",
+            "lastWriteUtc": "2026-11-17T12:34:10.0996032Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t150:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 56,
+        "programPath": "55"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.5850441+00:00",
+        "seq": 57,
+        "programPath": "56"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m4",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.5858374+00:00",
+        "seq": 58,
+        "programPath": "57"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t200",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 34086912,
+            "sha256": "60616aa2b4e97db6c0e1ff4529d264e341f08cb7ba4bc1f851db2c47abf70f23",
+            "lastWriteUtc": "2026-11-17T12:34:10.6309889Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t200:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 59,
+        "programPath": "58"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.7099775+00:00",
+        "seq": 60,
+        "programPath": "59"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m5",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.7107148+00:00",
+        "seq": 61,
+        "programPath": "60"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t250",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 34086912,
+            "sha256": "d5733de6221d1ca1e3e917f21e9f63a14742b9966977226971667920f58342df",
+            "lastWriteUtc": "2026-11-17T12:34:10.6309889Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t250:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 62,
+        "programPath": "61"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.8340433+00:00",
+        "seq": 63,
+        "programPath": "62"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "idle-freelocks-t-m6",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:10.8347539+00:00",
+        "seq": 64,
+        "programPath": "63"
+      },
+      {
+        "event": "files",
+        "label": "idle-freelocks-t300",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 34086912,
+            "sha256": "d5733de6221d1ca1e3e917f21e9f63a14742b9966977226971667920f58342df",
+            "lastWriteUtc": "2026-11-17T12:34:10.6309889Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:idle-freelocks-t300:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 65,
+        "programPath": "64"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "1500 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:12.4117217+00:00",
+        "seq": 66,
+        "programPath": "65"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 67,
+        "programPath": "66"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 68,
+        "programPath": "67.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 69,
+        "programPath": "68"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000280053002c0020004d0029002000530045004c00450043005400200053002c0020004d002000460052004f004d0020005400",
+            "byteLength": 78,
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 70,
+        "programPath": "69"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "8192"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 71,
+        "programPath": "70"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 72,
+        "programPath": "71"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 73,
+        "programPath": "72.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 74,
+        "programPath": "73"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "OpenRecordset",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c00450043005400200043004f0055004e00540028002a0029002000460052004f004d0020005400",
+            "byteLength": 44,
+            "text": "SELECT COUNT(*) FROM T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "4"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809383,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "oc",
+          "identity": "u5",
+          "typeName": "Recordset2",
+          "typeIid": "{00000035-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "oc",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 75,
+        "programPath": "74"
+      },
+      {
+        "event": "invoke",
+        "target": "oc",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 133,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 76,
+        "programPath": "75"
+      },
+      {
+        "event": "release",
+        "target": "oc",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 77,
+        "programPath": "76"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-acted",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:12.746669+00:00",
+        "seq": 78,
+        "programPath": "77"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t0",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t0:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 79,
+        "programPath": "78"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:12.9392375+00:00",
+        "seq": 80,
+        "programPath": "79"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m1",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:12.9406961+00:00",
+        "seq": 81,
+        "programPath": "80"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t50",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t50:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 82,
+        "programPath": "81"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.1336489+00:00",
+        "seq": 83,
+        "programPath": "82"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m2",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.1344086+00:00",
+        "seq": 84,
+        "programPath": "83"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t100",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t100:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 85,
+        "programPath": "84"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.3307336+00:00",
+        "seq": 86,
+        "programPath": "85"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m3",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.332143+00:00",
+        "seq": 87,
+        "programPath": "86"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t150",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t150:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 88,
+        "programPath": "87"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.5216825+00:00",
+        "seq": 89,
+        "programPath": "88"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m4",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.5231092+00:00",
+        "seq": 90,
+        "programPath": "89"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t200",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t200:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 91,
+        "programPath": "90"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.7151042+00:00",
+        "seq": 92,
+        "programPath": "91"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m5",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.7158672+00:00",
+        "seq": 93,
+        "programPath": "92"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t250",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t250:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 94,
+        "programPath": "93"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "50 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.9177803+00:00",
+        "seq": 95,
+        "programPath": "94"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "open-close-rs-t-m6",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:13.9185729+00:00",
+        "seq": 96,
+        "programPath": "95"
+      },
+      {
+        "event": "files",
+        "label": "open-close-rs-t300",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 68026368,
+            "sha256": "7c5f71d1575614c7f509f31844399e4a504a32598a725f51e649e52428333a49",
+            "lastWriteUtc": "2026-11-17T12:34:12.7405207Z",
+            "attributes": "Archive"
+          },
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.laccdb",
+            "length": 64,
+            "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+            "lastWriteUtc": "2026-11-17T12:34:06.3021796Z",
+            "attributes": "Archive",
+            "artifactRole": "lockfile:open-close-rs-t300:r-q2-cat-txn-lock-big-accdb.laccdb"
+          }
+        ],
+        "seq": 97,
+        "programPath": "96"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "1500 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:15.5396564+00:00",
+        "seq": 98,
+        "programPath": "97"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 99,
+        "programPath": "98"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 100,
+        "programPath": "99.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 101,
+        "programPath": "100"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000280053002c0020004d0029002000530045004c00450043005400200053002c0020004d002000460052004f004d0020005400",
+            "byteLength": 78,
+            "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 102,
+        "programPath": "101"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "RecordsAffected",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 3,
+          "vtName": "VT_I4",
+          "integer": "16384"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 103,
+        "programPath": "102"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "Errors",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809352,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "errs",
+          "identity": "u4",
+          "typeName": "Errors",
+          "typeIid": "{00000025-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "errs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 104,
+        "programPath": "103"
+      },
+      {
+        "event": "invoke",
+        "target": "errs",
+        "member": "Count",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743808,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 2,
+          "vtName": "VT_I2",
+          "integer": "0"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 105,
+        "programPath": "104.count"
+      },
+      {
+        "event": "release",
+        "target": "errs",
+        "returnedCount": 4,
+        "implicit": false,
+        "seq": 106,
+        "programPath": "105"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 107,
+        "programPath": "106"
+      },
+      {
+        "event": "sync",
+        "kind": "signal",
+        "name": "close-closed",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:16.2589873+00:00",
+        "seq": 108,
+        "programPath": "107"
+      },
+      {
+        "event": "files",
+        "label": "close-t0",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 135839744,
+            "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf",
+            "lastWriteUtc": "2026-11-17T12:34:16.2552507Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 109,
+        "programPath": "108"
+      },
+      {
+        "event": "sync",
+        "kind": "pause",
+        "name": "100 ms",
+        "timedOut": false,
+        "atUtc": "2026-11-17T12:34:16.6603174+00:00",
+        "seq": 110,
+        "programPath": "109"
+      },
+      {
+        "event": "files",
+        "label": "close-t100",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 135839744,
+            "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf",
+            "lastWriteUtc": "2026-11-17T12:34:16.2552507Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 111,
+        "programPath": "110"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "inputs/r-q2-cat-txn-lock-big-accdb.accdb",
+            "length": 135839744,
+            "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf",
+            "lastWriteUtc": "2026-11-17T12:34:16.2552507Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 112,
+        "programPath": "111"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 113,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "ws",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 114,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 115,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1192,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-142959\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 116,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "lockfile:idle-refresh-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-refresh-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-refresh-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:idle-freelocks-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_idle-freelocks-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t0_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t50_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t100_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t150_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t200_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t250_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "lockfile:open-close-rs-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+        "kind": "lock-file",
+        "relativePath": "artifacts/lockfile_open-close-rs-t300_r-q2-cat-txn-lock-big-accdb.laccdb",
+        "length": 64,
+        "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+      },
+      {
+        "role": "input-final:r-q2-cat-txn-lock-big-accdb.accdb",
+        "kind": "changed-input",
+        "relativePath": "artifacts/input-final_r-q2-cat-txn-lock-big-accdb.accdb",
+        "length": 135839744,
+        "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf"
+      }
+    ],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "lockfile:idle-refresh-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-refresh-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:idle-freelocks-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t0:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t50:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t100:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t150:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t200:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t250:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "lockfile:open-close-rs-t300:r-q2-cat-txn-lock-big-accdb.laccdb",
+      "kind": "lock-file",
+      "length": 64,
+      "sha256": "1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327",
+      "path": "evidence/artifacts/1f4a82a98356d925af3679d5f5100a14e9e748a385b5702fac528034110ac327"
+    },
+    {
+      "role": "input-final:r-q2-cat-txn-lock-big-accdb.accdb",
+      "kind": "changed-input",
+      "length": 135839744,
+      "sha256": "302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf",
+      "path": "evidence/artifacts-large/302f4b0c2fe53be38d4e484d4e5bb9f57bf775418218725b29f453637aee11bf"
+    }
+  ]
+}

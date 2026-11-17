@@ -1,0 +1,1085 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-flush-boundary-fine-timeline",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-FLUSH-LIVE",
+    "TXN-FLUSH-BEHIND",
+    "TXN-FLUSH-OP",
+    "TXN-FLUSH-COMMIT"
+  ],
+  "description": "TXN-FLUSH-BEHIND, locating the end of the write-behind window inside (250, 500] ms (the first card had one file timeline). On the big fixture opened shared read/write, an implicit INSERT INTO T (S, M) SELECT S, M FROM T (dbFailOnError; Errors before/after, RecordsAffected) is followed by the main file's size and hash (P.Files) right after the return and every 40 ms for 640 ms, each look bracketed by a Signal mark carrying the time. The sequence is run three times in the same probe (the table doubles each time). Asks the time at which the file image changes and whether it repeats.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-big-accdb.accdb",
+      "sha256": "45484a6bf90e1106746e0587e14f1ed6e440970fb774f3a002859fdae9a83c81",
+      "length": 8663040,
+      "provenance": "r-q2-cat-txn-lock.create-big-accdb.c2e14c2a98.a1 qk1-c2e14c2a98967f1f8cb78180db3023104961db2dda8dba1fabbf90b0018dc39e output:r-q2-cat-txn-lock-big-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "invoke",
+      "target": "ws",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-before",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "r1-returned"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t40",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t80",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t120",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t160",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t240",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t280",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m8"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t320",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m9"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t360",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t400",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m11"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t440",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m12"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t480",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m13"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t520",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m14"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t560",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m15"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t600",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r1-t-m16"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r1-t640",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-before",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "r2-returned"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t40",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t80",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t120",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t160",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t240",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t280",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m8"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t320",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m9"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t360",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t400",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m11"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t440",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m12"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t480",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m13"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t520",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m14"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t560",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m15"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t600",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r2-t-m16"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r2-t640",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-before",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (S, M) SELECT S, M FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "signal",
+      "name": "r3-returned"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t0",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t40",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t80",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t120",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t160",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t200",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m6"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t240",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t280",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m8"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t320",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m9"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t360",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t400",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m11"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t440",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m12"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t480",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m13"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t520",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m14"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t560",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m15"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t600",
+      "keep": false
+    },
+    {
+      "op": "pause",
+      "ms": 40
+    },
+    {
+      "op": "signal",
+      "name": "r3-t-m16"
+    },
+    {
+      "op": "observeFiles",
+      "label": "r3-t640",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

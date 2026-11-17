@@ -1,0 +1,471 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q2-cat-txn-lock/txn-support-ado-rollback-control-events",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-SUPPORT",
+    "R-ADO-1",
+    "ADO-EVENT"
+  ],
+  "description": "TXN-SUPPORT, the unexplained ADO Rollback refusal (0x800A0BB9 on every Rollback in the first card, with each Execute's recordset left open). Two ADODB.Connections in turn on the writable main copy, each with the worker's event sink on ConnectionEvents: cnA runs BeginTrans three times, an UPDATE whose returned recordset is bound and closed, and three Rollbacks; cnB runs BeginTrans twice, an UPDATE with adExecuteNoRecords (options 129) and RecordsAffected by reference, and CommitTrans then Rollback; then cnB runs BeginTrans, UPDATE with the recordset left open, Rollback. Rollback errors are read right after each. A DAO open reads the rows. Asks whether the open recordset is what makes ADO Rollback fail, which events ADO raises per call, and the by-reference RecordsAffected.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cat-txn-lock-lock-accdb.accdb",
+      "sha256": "1e3aea374a49fc3e9d66270f0cacae0ecc6b6d926112607d59e88f182560912c",
+      "length": 299008,
+      "provenance": "r-q2-cat-txn-lock.create-lock-accdb.8aa318a8c0.a1 qk1-8aa318a8c08f5490d532dbf2ea465cac8011c094c8a79c48d333c58695076db9 output:r-q2-cat-txn-lock-lock-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cnA"
+    },
+    {
+      "op": "advise",
+      "target": "cnA",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "evcnA"
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnpcnA"
+    },
+    {
+      "op": "invoke",
+      "target": "cnpcnA",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdscnA"
+    },
+    {
+      "op": "invoke",
+      "target": "cdscnA",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdscnA"
+    },
+    {
+      "op": "release",
+      "target": "cnpcnA"
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 1 WHERE ID = 3"
+        }
+      ],
+      "bind": "rsA"
+    },
+    {
+      "op": "invoke",
+      "target": "rsA",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rsA"
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnA",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "evcnA"
+    },
+    {
+      "op": "release",
+      "target": "cnA"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cnB"
+    },
+    {
+      "op": "advise",
+      "target": "cnB",
+      "eventIid": "{00001400-0000-0010-8000-00AA006D2EA4}",
+      "name": "evcnB"
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnpcnB"
+    },
+    {
+      "op": "invoke",
+      "target": "cnpcnB",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cdscnB"
+    },
+    {
+      "op": "invoke",
+      "target": "cdscnB",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cdscnB"
+    },
+    {
+      "op": "release",
+      "target": "cnpcnB"
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 1 WHERE ID = 4"
+        },
+        {
+          "type": "byref",
+          "inner": {
+            "type": "i4",
+            "value": -9
+          },
+          "typed": true
+        },
+        {
+          "type": "i4",
+          "value": 129
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "CommitTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE T SET V = V + 1 WHERE ID = 5"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cnB",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "unadvise",
+      "name": "evcnB"
+    },
+    {
+      "op": "release",
+      "target": "cnB"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, V FROM T WHERE ID IN (3, 4, 5) ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fin"
+    },
+    {
+      "op": "loopUntil",
+      "target": "fin",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fin",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 2,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "fin",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fin",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fin"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
