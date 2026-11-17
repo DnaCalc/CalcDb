@@ -170,10 +170,11 @@ internal static class Program
             {
                 RetainAttempt(store, manifest.AttemptId, options.Get("note"), evidenceDir, artifactsDir);
             }
-            if (freeze)
+            if (freeze && question.CreatesFixture == true)
             {
-                // Only fixture files follow the naming convention <card>-<fixture>.<ext>; other outputs (compaction
-                // results, streams, saved recordsets) are kept as artifacts but are not fixtures.
+                // Only questions labelled as fixture builders freeze outputs, and only their files named
+                // <card>-<fixture>.<ext>; other outputs (compaction results, streams, saved recordsets) are kept as
+                // artifacts but are not fixtures.
                 string cardPrefix = "output:" + question.Probe.Split('/')[0] + "-";
                 foreach (ArtifactRef output in manifest.Artifacts.Where(a => a.Role.StartsWith(cardPrefix, StringComparison.Ordinal)))
                 {

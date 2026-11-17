@@ -22,6 +22,12 @@ public sealed record Question
 
     public required string Description { get; init; }
 
+    /// <summary>
+    /// Label, not part of the key: the probe builds fixtures, so <c>batch --freeze</c> may register its card-prefixed
+    /// outputs as named fixtures. Null for every other question.
+    /// </summary>
+    public bool? CreatesFixture { get; init; }
+
     /// <summary>Caller surface, for example <c>native-idispatch/x64</c> (II-15 F-186 "Caller").</summary>
     public required string CallerSurface { get; init; }
 

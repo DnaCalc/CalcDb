@@ -622,3 +622,146 @@ Known weaknesses:
 - **R-STRING-1 native compression forms (`WITH COMPRESSION`) and Memo storage-form spans:** already in `r-str-ado-act` (DAO DDL refuses `WITH COMPRESSION`), so not repeated.
 - **Jet 4 `.mdb` variants:** only ACCDB fixtures are created. The `.mdb` string and scalar forms are already covered by `r-fmt-1` and `r-str-ado-act`.
 - **ADO Decimal parameters and `adBSTR` or `adVarNumeric` parameter types:** omitted to keep the ADO matrix to the types DAO also covers.
+
+## Wave 5
+
+### R-PAR-1 (native serial baseline only)
+
+- **Concurrency:** a second thread or process reading or writing during a scan. The brief limits this to serial, in-process runs, and the card's multiworker comparison belongs to the CalcDb side. Related: PAR-EFFECT, PAR-BUDGET, PAR-GENERATION, PAR-ANCESTOR and PAR-COST are not native-serial questions.
+- **Error occurring after a `Requery`:** left out because `Recordset.Requery(QueryDef)` crashes the worker (documented ACE fault). Requery without arguments after an error is a candidate for a later round.
+- **UDF or callback ordering:** the "aggregate failure before a later callback" case needs a user-defined function or VBA, and domain aggregates (`DSum` and similar) are Access-expression-service only.
+- **Spill eviction with temporary-file I/O:** the 4,096-group probes ask the result, but the size at which ACE spills is not observable here. It needs the temp-file observation of R-ORACLE-1, plus memory and size knobs set through the registry, which is an owner-approved setup step.
+- **Settings that change engine behaviour:** the page size and the `MaxBufferSize` / `SharedAsyncDelay` registry values, the Jet Engine `SetOption` options, and the Trust Center / macro settings. All are registry or settings.
+- **Exact stored bytes of Decimal, Currency and Double:** this is byte interpretation (W-04). The probes record the typed values read back, not the page bytes.
+- **Scale beyond the default Decimal field:** setting a non-default Decimal precision or scale is not available through DAO `CreateField`, and the DDL route is refused (3292). Only the default field and its read-back are probed.
+- **Crosstab accumulation order** (`TRANSFORM … PIVOT`): covered by R-SQL-3 SQL-PIVOT; a Sum-order variant can be added after the plain GROUP BY results are in.
+- **Access/Excel UI-bound paths:** query datasheet sort, report totals, `Filter`/`OrderBy` form properties, and pivot tables in Excel have no DAO equivalent.
+- **ADO and OLE DB providers:** the same order, fold and error questions through ADO and the OLE DB provider are R-ADO-1's lane, not this native DAO baseline.
+- **Network, ODBC and linked tables:** excluded by the no-prompt rule. None of these calls is in the file.
+
+### Deferred branches of R-CURSOR-1, R-DAO-1 and R-ERR-1
+
+- **Access/Excel UI recordset surfaces, VBA-only behaviour (`WithEvents`, default-member syntax):** these need Office or VBA, not an in-process DAO program.
+- **DISPID-0 default members (`DBEngine(0)`, `Field` default `Value`, `Fields(i)` without `Item`):** the worker invokes by member name only. I probed the hidden `Collect` property instead, because it has a name.
+- **IEnumVARIANT `Next`/`Skip`/`Reset`/`Clone` and enumeration across mutation (DAO-ENUM):** the builder has no enumerator operation.
+- **Bookmark transfer between a parent and its clone, a bookmark saved earlier and assigned back, `LastModified` assignment, GetRows or Move from a held bookmark:** arguments are constants and the builder cannot bind a returned VARIANT. `LastModified` is only read in my probes.
+- **Byte interpretation:**
+  - Bookmark and `LastModified` bytes.
+  - The id-relocation proof that a row body moved.
+  - Index leaf split, empty-leaf removal and allocation reuse.
+  - Page-only overflow targets.
+  - Which of two equal heap rows is physically changed.
+  - CUR-EDIT original-evidence controls (d) and (e): location-only change and delete/reinsert. They need file bytes to confirm the condition.
+  - Long-key collisions and every declared index type for Seek, which depend on R-SORT-3 key truncation.
+- **CUR-EMPTY-PAGES budget and I/O failure branches, ERR-OOM, induced I/O or flush faults:** these need fault injection or internal traversal witnesses.
+- **Anything with another process or Workspace:** CUR-POP with other Workspaces or processes, cross-process lock timing, and independent DBEngines (ERR-BASE across activations). These belong to R-LOCK-3/4. My two-cursor probes use one Workspace.
+- **CUR-ID file-copy restore branch:** this needs file replacement while the engine runs.
+- **Clone-close under nested transactions or with another Database enlisted:** these belong to R-TXN-1.
+- **Requery with a QueryDef argument (including a parameter query):** it crashes ACE (`r-crash-requery`), so I used no-argument `Requery` only.
+- **ODBC-only recordset members and option values (not asked):**
+  - `CacheSize`, `CacheStart` and `FillCache` against an ODBC source.
+  - `dbSQLPassThrough` (64), `dbRunAsync` (1024) and `dbExecDirect` (2048): without an explicit connection a pass-through attempt might open the ODBC prompt.
+  - `dbSeeChanges` against a non-ODBC source.
+  - ODBCDirect, `Connection.QueryDefs`, linked-table `Connect` strings and `RefreshLink`.
+  - `DBEngine.OpenDatabase(Empty/Missing/"")` and `Workspace` type ODBC.
+- **ERR-DAO-ORDER with a real multi-entry failure:** I know of no DAO-only, no-network way to guarantee several entries. The ODBC route is excluded. `err-multi-violation-*` and `errors-refresh-and-members` only try to produce more than one entry, and they stay one-entry if ACE reports only the first.
+- **ERR-THREAD (seeding a foreign IErrorInfo, proxy or modal loop), ERR-SLOT-REENTRY, ERR-EXCEP deferred fill, ERR-NEST, ERR-CLOSE from a callback:** these need a controlled COM object or UDF/ADO event callbacks.
+- **ERR-BIND named-argument order and ByRef writeback (`RecordsAffected` as an output argument):** the builder has no named or ByRef arguments.
+- **Permission, user-level security and workgroup branches (DAO-SEC, Permissions, wrong password):** a workgroup file or `SystemDB` change is a settings change.
+- **Settings and process-wide state:** `DBEngine.SetOption`, `SetDefaultWorkspace`, `IniPath`, `RegisterDatabase`, `Idle`, `DefaultType` changes, registry and Trust Center.
+- **Replication creation (`MakeReplica`, `PartialReplica`):** a separate setup step.
+- **Complex fields and Recordset2 attachments:** R-COMPLEX-1 owns them.
+- **Calculated, OLE and attachment non-indexability, statistics words against `DistinctCount`:** these need complex-field fixtures and file bytes.
+- **Locale, calendar and regional-setting variation:** these need settings changes.
+- **Dropped for budget:**
+  - Descending `Seek` operator tables beyond `IX_TND`.
+  - Held `Field` after `Fields.Delete`.
+  - `GetRows(-1)` Errors.
+  - `CacheSize` and `DefaultType` out of range.
+  - `Fields.Append`/`Delete`/`Refresh` on a recordset.
+  - `Properties.Append` on a recordset Field.
+  - A QueryDef timeout-value sweep.
+  - Seek on three-column keys with two trailing omissions, which `seek-three-column-mixed` partly covers.
+  - Requery-persistence of Filter and Sort, which `life-filter-sort` and `life-requery` may already cover.
+
+### Deferred branches of R-EXPR-1, R-SQL-1, R-SQL-2, R-SQL-3 and R-STRING-1
+**Checked against the repo's own tooling**
+- The two fixture creations are `create-main` (`r-def-expr-sql-main.accdb`) and `create-mdb` (`r-def-expr-sql-mdb.mdb`), both with `CreatesFixture = true`. The other 50 probes read or write copies of them; the writable ones say so in their description.
+- No call can open a dialog. Every `OpenDatabase` goes through `P.OpenDb` on a named fixture, every `CreateDatabase` uses `A.Out(...)`, and there is no `CompactDatabase`, no Connect string and no ODBC use. I wrote no `SELECT Array(...)` and no join over 15 tables.
+- All statements go through `OpenRecordset` or `Execute` with constant text. Unresolved names such as `Forms!F!C` and `?` only produce DAO errors.
+
+**Not compile-checked against the live worker**
+- Several probes call `RecordsAffected`, `Parameters.Item`, `Indexes`, `Relations` and `QueryDefs` members that no existing card reads. The first run will show whether the worker handles them.
+- `sql-querydef-create-texts` closes `db` and opens `db2` mid-program. `FinishLite("db")` then closes an already released name, which the worker should record as skipped.
+- The stored Tx values are written with `AddNew`/`Value`, as `RWire` did. If ACE refuses a lone surrogate or an odd-byte BSTR there, the creation record shows the refusal and that row keeps a Null.
+
+**Deferred:**
+- **R-EXPR-1, Access-host display tokens, Application.Eval, form-control and Access-hosted expressions:** these need the Access application or a VBA route.
+- **R-EXPR-1, direct VBA/host-code operand lane, marker UDF calls, object default-member coercion, host-effect order, EXPR-STAGE coercion markers and EXPR-MUTATION with clock or random defaults:** these need VBA, R-UDF-1 or I-HOST-1.
+- **R-EXPR-1, locale and calendar change, SandboxMode and Trust Center settings:** these are settings or registry changes, which the oracle-conduct rules forbid.
+- **R-EXPR-1, Decimal typed arguments:** `Arg` has no VT_DECIMAL.
+- **R-EXPR-1, aggregate and financial families:** financial functions are covered by `RExpr1B` apart from PPmt, which is added here. The other SQL aggregates stay with `RSql1`.
+- **R-EXPR-1, byte interpretation of results, EXPR-BIND cache or replan instrumentation, and the CalcDb local-decoder differential:** these are byte work or CalcDb's own implementation.
+- **R-SQL-1, ADO and ANSI-92 wildcard route, CREATE VIEW/PROCEDURE through OLE DB, SQL CHECK, DEFAULT and referential actions through the ADO connection:** this file is DAO-only. DAO's refusal or acceptance of the same texts is asked, but the ADO answers belong to R-ADO-1.
+- **R-SQL-1, native external-file `IN` and multi-file Workspace:** the SQL text would have to contain another fixture's path, and paths can only be passed as whole arguments.
+- **R-SQL-1, interleaved Close, Requery or schema change mid-join, plan comparison, hash and partition agreement, spill and SHOWPLAN:** the reentry routes are not admitted, and plans and spill are CalcDb's implementation or registry settings.
+- **R-SQL-1 and R-SQL-3, host callbacks (SQL-SUB-05, SQL-PIVOT-06, SQL-AGG-OCCUR):** these need R-UDF-1.
+- **R-SQL-2, workgroup, user, group, GRANT and OWNERACCESS refusal controls:** these need a workgroup file or a security change, which are out of scope.
+- **R-SQL-2, injected failures (TEMP, I/O, allocation) and a second process holding locks:** these need fault injection or another participant.
+- **R-SQL-2, SQL-ACT-DDL storage closure (dropped-column coordinates, mixed historical row layouts, protected raw bytes):** these need file-byte interpretation (W-04).
+- **R-SQL-2, ACT-INS-05 second named file under `IN`:** the path cannot be built inside SQL text.
+- **R-SQL-2, `WITH COMPRESSION` and DECIMAL DDL:** already shown to be refused (`r-ddl-limits`). Decimal is added through `P.AddDecimalField` only where a card needs it, and none here does.
+- **R-SQL-3, SQL-PIVOT-04 locale rendering and crosstab beyond 254 headings:** locale changes are excluded, and the 254-heading case is already in `RSql23`.
+- **R-STRING-1, ByRef and writeback, copy/clear through Automation, allocation failure, malformed lengths, invalidated scratch, timing and allocation measurement:** these need CalcDb's own code or fault injection.
+- **R-STRING-1, Decimal, SAFEARRAY and object ABI extensions, nonzero-bound arrays:** `Arg` has no such forms.
+- **R-STRING-1, page, cache and compression budgets:** these mean interpreting file bytes. The kept fixture images supply the raw material.
+- **R-STRING-1, large Memo values near the 1 GB limit:** a value of that size would bloat the question JSON; the probes stay at a few thousand units.
+- **R-STRING-1, other Windows locales, ACE builds and machines:** one installed engine; each needs its own oracle run.
+- **Not asked because it might prompt or touch the machine:** `Shell`, `CreateObject`, `GetObject`, `InputBox`, `MsgBox`, `SendKeys`, `Kill`, `MkDir`, `GetSetting` and `Beep`. `DBEngine.OpenDatabase` with an empty or missing name, ODBC `Connect` strings and `dbUseODBC` Workspaces are also left out.
+
+### Deferred branches of R-CAT-1, R-TXN-1, R-LOCK-1 to R-LOCK-4, R-FMT-2, R-PRESERVE-1, R-SORT-3, R-ENC-1, R-LINK-1, R-COMPLEX-1 and R-REBUILD-1
+Run order, and things to check:
+- **Run order:** `create-rel-accdb`, `create-lksrc-accdb` and `create-lksrc-mdb` must be run and frozen first. The other probes need no fixture, or need one of those three.
+- **Reused helpers:** the file uses the `ComplexSteps` extensions from `RComplexRebuild.cs` (`Snap`, `Sql`, `AddField`, `Fill`), so it only compiles with that file present. It also adds no extension methods of its own, so it cannot clash with them.
+- **Assumptions to check on the first run** (each answers itself in the capture if wrong):
+  - A name bound before can be bound again.
+  - `Workspaces(0)` is a property get with an index argument.
+  - Relative `;DATABASE=inputs\…` Connect strings resolve from the attempt directory, as in `r-enc-link`.
+  - The `IN 'inputs\…'` forms are accepted.
+  - The hidden `DBEngine.BeginTrans`, `CommitTrans` and `Rollback` members dispatch.
+  - `GenGUID()`, the `UnicodeCompression` property and `TableDef.Attributes = 1` are accepted or refused cleanly.
+- **Blocking waits:** `txn-xproc-cascade-delete-vs-pending-child-edit` may block process A's DELETE for ACE's lock-retry time. B waits at most 20 s for A, so the probe is bounded.
+
+- **R-CAT-1 CAT-NEW (locale strings beyond General, creation races, denied folders, partial files):** Legacy and General97 need the registry or Access, and the rest needs ACLs or fault injection. `RSort3B` samples the locales that `CreateDatabase` accepts.
+- **R-CAT-1 CAT-B/P/Q byte and page content (page-2 TableDef, LvProp, MSysQueries bytes, MSysObjects ID/flag fields):** byte interpretation (W-04). MSysObjects reads are refused under the default Admin, so only the public catalog is asked.
+- **R-CAT-1 MSysACEs, Owner, Documents and Containers permissions:** need a workgroup file (registry or IniPath), which the conduct rules forbid.
+- **R-CAT-1 CAT-I (function registry, host callbacks, cache hit/miss/eviction, ParameterSet capture):** need VBA, host functions or settings, and none of it is observable from DAO.
+- **R-CAT-1 CAT-X (Access reopen, Access-hosted rename closure, Name AutoCorrect):** need Access or UI.
+- **R-CAT-1 pass-through queries and ODBC execution:** need ODBC or a DSN, which is excluded.
+- **R-TXN-1 TXN-TEMP volume faults, TXN-FLUSH trace, interrupted persistence:** need an external fault injector or a byte and flush trace. `r-crash-1-*` and `r-txn-flush` own the kill model.
+- **R-TXN-1 TXN-SUPPORT (ISAM and ODBC participants, ADO nesting values), two ADO Connections, DAO/ADO order variants:** ADO and ODBC are outside this DAO-only brief.
+- **R-TXN-1 callbacks and reentry, two COM caller threads, the .NET Framework 4.8 lane:** need a callback surface or a different host process.
+- **R-TXN-1 restoring a held Bookmark after Rollback:** arguments are constants only, so a captured SAFEARRAY cannot be passed back.
+- **R-TXN-1 `dbPageTimeout` and retry sweeps, TXN-LOCAL on physical dimensions (shared leaf, allocation byte, same page):** timing needs probes designed for it. Footprints need page interpretation (R-FMT-1/2 inspector).
+- **R-LOCK-1/2 EX-AUTH, EX-MAP, EX-RANGE (LockFileEx), EX-RACE path replacement, RO-FAIL injection, RO-NATIVE, ACLs and network paths:** need ACL or settings changes, fault injection or a network.
+- **R-LOCK-3/4 READ-PATH and READ-ROLE pauses between native acquisitions, WRITE-ALLOC/TREE structure, WRITE-PROMOTE thresholds:** need a native trace or file interpretation. Only public-call granularity is possible.
+- **R-LOCK-3/4 row-level locking options:** DAO has no setter, and the registry route is out of scope. Row-level behaviour is only probed through unrelated-row writers.
+- **R-FMT-2 and R-PRESERVE-1 FMT-SLOTS256 synthetic pages, malformed LV, patched headers, protected spans, page retirement and merge:** need hand-built or patched file bytes and the W-04 inspector.
+- **R-FMT-2 and R-PRESERVE-1 NUMERIC endpoints:** DAO DDL refuses DECIMAL, and `CreateField(…, 20)` gives only the default scale.
+- **R-FMT-2 and R-PRESERVE-1 random AutoNumber (`NewValues`):** left out. The property is Access-defined, and I could not confirm a DAO type for it. It would be a one-line probe once a type is known.
+- **R-FMT-2 and R-PRESERVE-1 Access forms/reports/macros, Access-first Compact & Repair, torn writes and power loss:** need Access or UI, or R-CRASH-1's recording route.
+- **R-SORT-3 General – Legacy and General97 selection, Jet 3 General97, byte-level key content (Length510, digest, prefix compression), the SORT-DERIVE solver:** DAO has no selector. The rest is byte interpretation or CalcDb-side analysis.
+- **R-SORT-3 ADO compound-key Seek:** needs a VARIANT array argument and an ADO route. The `RSort3B` ADO lane covers ordering and LIKE.
+- **R-SORT-3 other Windows locales, registry sort effects, plan or access-path views (LIKE-RANGE-02/03/04/06, IGNORE NULL plan eligibility):** need settings, a plan view, or a second machine or build.
+- **R-ENC-1 malformed-header variants, decoded page hashes, key/IV mapping, same page at different page numbers:** byte interpretation. The kept images are the raw material.
+- **R-ENC-1 ENC-FAIL and ENC-TEMP (write/flush failure, disk exhaustion, constrained memory):** need fault injection.
+- **R-ENC-1 secured-workgroup refusal and the Access UI conversion route:** need a workgroup file or the Access UI.
+- **R-LINK-1 absolute-path links:** a constant argument cannot join the attempt path into a Connect string. Relative paths are used and their resolution is itself recorded.
+- **R-LINK-1 ODBC/ISAM link sources, denied access, expired credentials, unsupported source family:** need drivers, DSNs or ACLs.
+- **R-LINK-1 LINK-IDENTITY bookmark across a new session, LINK-CANCEL, LINK-BROWSER, pushdown demand counting, source request tracing:** bookmarks cannot be passed back, and the rest needs a cancel route, a browser host, VBA or a trace.
+- **R-LINK-1 LINK-TXN failure or disconnect injection and non-transactional participants:** need fault injection or non-DAO sources.
+- **R-COMPLEX-1 CX-DESC raw part, CX-ATT wrapper byte variation, CX-CALC stored bytes, CX-HOLD bookmark reuse:** need byte reading or editing, or a bookmark passed back as an argument.
+- **R-COMPLEX-1 CX-HISTORY (version-history UI) and CX-FAIL (resource exhaustion, interruption):** need the Access UI or fault injection. The `ColumnHistory` SQL attempt is already in `RComplexRebuild`.
+- **R-REBUILD-1 RB-REPAIR on damaged copies and RB-FAIL:** need single-defect byte writes or fault injection. Only the clean-copy repair control exists.
+- **R-REBUILD-1 RB-PUBLISH (volumes, host replacement), RB-OPAQUE (forms, reports, modules), RB-NEGATIVE secured-workgroup refusal:** paths are limited to `A.In`/`A.Out`. Stored front-end objects need Access, and workgroup files are forbidden.
+- **Access Compact & Repair lane and Access-first/ACE-first/Compact-first open orders (all cards):** need the Access application or UI (OR-DESKTOP task `b8sx`).

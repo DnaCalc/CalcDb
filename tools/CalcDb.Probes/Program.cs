@@ -72,6 +72,7 @@ internal static class Program
                 Probe = p.Card + "/" + p.Name,
                 BookRefs = p.Refs,
                 Description = p.Description,
+                CreatesFixture = p.CreatesFixture ? true : null,
                 CallerSurface = "native-idispatch/x64",
                 InvokeLcid = 1033,
                 ObservationRecipe = Recipe,

@@ -104,3 +104,35 @@ separate evidence repository, The Plan §2.4) is the owner's.
 **Next candidates.** Add a fixture-review step that reads the
 creation capture and fails a fixture whose required tables did not appear. Store the environment once per
 worker, as proposed in oracle-service.md.
+
+## 2026-11-17 early morning · conduct incident, private desktop, Decimal discriminator
+
+**Work observed.** Wave 4 (301 questions), the OR-DESKTOP launch and window guard, the `r-dec-read`
+discriminator (18 records), wave-4 summaries and the wave-5 designs (4 cards).
+
+**A conduct failure and its cause.** `DBEngine.OpenDatabase(Empty)` opened an ODBC dialog on the owner's
+desktop for up to 300 s. The process failure came first: OR-DESKTOP had been deferred on the belief that "DAO
+alone shows no windows", and that belief was written into oracle-runner.md without ever being tested. Nothing
+observed windows, so the belief could not be falsified. Changes: workers run on a private desktop, a guard
+records every visible owned window as a seal problem, and every design brief now forbids arguments that can
+prompt. Rule: a safety assumption must be observed by the tooling, not only written down.
+
+**A tempting tooling bug that was ACE behaviour.** A summary sub-agent reported Decimal values that "cannot be
+decoded". It looked like a worker offset bug. The struct layout was checked against the Windows header first,
+then a designed discriminator varied one thing (how the column was made). Result: DAO-made Decimal fields have
+Precision 38, and only those read with moved words; the capture was right. It cost about 20 minutes and kept
+an expected-looking "fix" from corrupting the capture. Rule, again: discriminate before changing shared code.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| `show` printed VT_DECIMAL and array elements as bare tags | Sub-agents and I could not read the values without ad-hoc JSON scripts | `show` prints a Decimal's exact value and words, and array elements |
+| `batch --freeze` freezes every output with the card prefix, also from probes that create no fixture | The first `r-dec-read` run froze three scratch files as fixtures, and the MDB outputs collided with them | Scratch outputs are named without the card prefix. Candidate: freeze only outputs of probes marked `CreatesFixture` |
+| `AddDecimalField` silently made Precision-38 fields | Every Decimal result of waves 1 to 4 built with it describes that unusual field | The helper documents it; ordinary Decimal columns come from ADO DDL with explicit precision |
+
+**What worked.** Sub-agent summaries plus spot checks: two of two checked claims matched the records, and
+the summaries surfaced the Decimal question.
+
+**Next candidates.** Make `batch --freeze` honour `CreatesFixture`. Give `batch` a per-question timeout
+taken from the question, so a blocked dialog costs 60 s instead of 300 s.
