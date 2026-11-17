@@ -1,0 +1,401 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/errors-refresh-and-members",
+  "bookRefs": [
+    "R-ERR-1",
+    "ERR-BASE",
+    "ERR-DAO-ORDER",
+    "ERR-SNAPSHOT"
+  ],
+  "description": "Database.Execute of \"SELEC ID FROM T\" fails; then Errors.Count; Errors.Refresh and Count; the first Error (Item 0) held and its Number, Description, Source, HelpFile and HelpContext read; a successful snapshot OpenRecordset, then Count and the held Error's members again; Errors.Refresh and Count; a second failure of the same Execute, Count and Item 0 again. Asks the effect of Errors.Refresh, whether a held Error object keeps its members across later calls, and the Count after repeated failures. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELEC ID FROM T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ers"
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "e0"
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Number",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Description",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Source",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpFile",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpContext",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "sr"
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Number",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Description",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Source",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpFile",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpContext",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Number",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Description",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Source",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpFile",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpContext",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELEC ID FROM T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ers",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "e1"
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Number",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Description",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "Source",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "HelpFile",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e1",
+      "member": "HelpContext",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Number",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Description",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "Source",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpFile",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "e0",
+      "member": "HelpContext",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "e1"
+    },
+    {
+      "op": "release",
+      "target": "e0"
+    },
+    {
+      "op": "release",
+      "target": "ers"
+    },
+    {
+      "op": "invoke",
+      "target": "sr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

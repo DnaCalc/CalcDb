@@ -1,0 +1,821 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/link-xproc-external-source-writer",
+  "bookRefs": [
+    "R-LINK-1",
+    "LINK-SESSION",
+    "LINK-SCHEMA",
+    "R-LOCK-3"
+  ],
+  "description": "Process A (host made by the probe) holds LK linked to T of r-def-cat-txn-lksrc-accdb and reads it through a held snapshot and a held dynaset. Process B opens the source file directly (shared, read/write), updates rows 1 and 2, inserts row 7 and closes. A reads LK again through the held recordsets, through a new snapshot, after DBEngine.Idle(dbRefreshCache), and after a Requery of the dynaset.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "src",
+      "fileName": "r-def-cat-txn-lksrc-accdb.accdb",
+      "sha256": "f4232ac752cc4e2355b57df308a327468c52dc4545a1af050baaf1ed173d5f0a",
+      "length": 200704,
+      "provenance": "r-def-cat-txn.create-lksrc-accdb.1c68ac7aba.a1 qk1-1c68ac7abac9b5b81b7697e6cd672705ef2a991658c9b5e0c65d08f846b87db9 output:r-def-cat-txn-lksrc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-link-xw-host.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LK"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "bstr",
+          "text": ";DATABASE=inputs\\r-def-cat-txn-lksrc-accdb.accdb"
+        }
+      ],
+      "bind": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls1"
+    },
+    {
+      "op": "invoke",
+      "target": "ls1",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "lk1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "ls1"
+    },
+    {
+      "op": "release",
+      "target": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM LK ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM LK ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "signal",
+      "name": "a-ready"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "loopUntil",
+      "target": "r1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM LK ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "fresh"
+    },
+    {
+      "op": "loopUntil",
+      "target": "fresh",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fresh",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_fresh"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_fresh",
+          "bind": "f_fresh",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_fresh",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_fresh",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_fresh",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_fresh"
+        },
+        {
+          "op": "invoke",
+          "target": "fresh",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fresh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fresh"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Idle",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM LK ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "idle"
+    },
+    {
+      "op": "loopUntil",
+      "target": "idle",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "idle",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_idle"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_idle",
+          "bind": "f_idle",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_idle",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_idle",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_idle",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_idle"
+        },
+        {
+          "op": "invoke",
+          "target": "idle",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "idle",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "idle"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "r2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "r2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-ready",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "src"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "sdb"
+        },
+        {
+          "op": "invoke",
+          "target": "sdb",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "UPDATE T SET V = V + 1000 WHERE ID <= 2"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "sdb",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "INSERT INTO T (ID, V, S) VALUES (7, 70, 's7')"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "sdb",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

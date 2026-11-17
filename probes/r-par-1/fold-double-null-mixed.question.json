@@ -1,0 +1,1149 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/fold-double-null-mixed",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-FOLD",
+    "SQL-AGG-FIRST",
+    "SQL-AGG-SINGLE"
+  ],
+  "description": "R-PAR-1 PAR-FOLD, SQL-AGG-FIRST, SQL-AGG-SINGLE: With Nulls mixed into Double groups (FN: g1 [Null, 9007199254740992, Null, 1, Null, -9007199254740992]; g2 [1, Null, Null, Null]; g3 [Null, Null]; g4 [Null, 5, Null, 7, Null]; g5 [2.5]), what do Count(*), Count(d), Sum, Avg, Min, Max, Var, VarP, StDev and StDevP give per group, overall, and through a derived table ordered by id DESC? Runs on a fresh copy of r-par-1-fold2 opened read-only through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-fold2.accdb",
+      "sha256": "625d3ab4b8527cd1d7dfe8f23e73436c58618ca104ca30733ec50b785fffa57e",
+      "length": 2371584,
+      "provenance": "r-par-1.create-fold2.d4013c5c6f.a1 qk1-d4013c5c6f6d4aefccfb0969c075d43c3f5344232e905ae3adccfe219029aad3 output:r-par-1-fold2.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Count(*) AS c, Count(d) AS cd, Sum(d) AS s, Avg(d) AS a, Min(d) AS mn, Max(d) AS mx FROM FN GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n1"
+    },
+    {
+      "op": "invoke",
+      "target": "n1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n1_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n1_mf",
+      "bind": "n1_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n1_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n1_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n1_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n1_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Var(d) AS v, VarP(d) AS vp, StDev(d) AS sd, StDevP(d) AS sdp FROM FN GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n2"
+    },
+    {
+      "op": "invoke",
+      "target": "n2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n2_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n2_mf",
+      "bind": "n2_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n2_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n2_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n2_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n2_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS c, Count(d) AS cd, Sum(d) AS s, Avg(d) AS a, Min(d) AS mn, Max(d) AS mx FROM FN"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n3"
+    },
+    {
+      "op": "invoke",
+      "target": "n3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n3_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n3_mf",
+      "bind": "n3_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n3_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n3_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n3_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n3_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Var(d) AS v, VarP(d) AS vp, StDev(d) AS sd, StDevP(d) AS sdp FROM FN"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n4"
+    },
+    {
+      "op": "invoke",
+      "target": "n4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n4_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n4_mf",
+      "bind": "n4_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n4_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n4_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n4_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n4_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n4",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Sum(d) AS s, Avg(d) AS a FROM (SELECT g, d FROM FN ORDER BY id DESC) GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n5"
+    },
+    {
+      "op": "invoke",
+      "target": "n5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n5_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n5_mf",
+      "bind": "n5_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n5_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n5_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n5_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n5_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n5",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Var(d) AS v, StDev(d) AS sd FROM (SELECT g, d FROM FN ORDER BY id DESC) GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n6"
+    },
+    {
+      "op": "invoke",
+      "target": "n6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n6_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n6_mf",
+      "bind": "n6_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n6_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n6_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n6_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n6_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n6",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Sum(d) AS s FROM FN WHERE d Is Not Null GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n7"
+    },
+    {
+      "op": "invoke",
+      "target": "n7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "n7_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "n7_mf",
+      "bind": "n7_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n7_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n7_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "n7_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "n7_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n7",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "n7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n7"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

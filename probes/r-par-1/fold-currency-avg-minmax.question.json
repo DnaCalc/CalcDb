@@ -1,0 +1,3152 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/fold-currency-avg-minmax",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-FOLD",
+    "SQL-AGG-TYPE"
+  ],
+  "description": "R-PAR-1 PAR-FOLD, SQL-AGG-TYPE: For the Currency groups of FC, what does Avg return (type, value, or error and call) per group (WHERE g = 1 to 12, one statement each); and what do Min, Max and Count give as GROUP BY g? Runs on a fresh copy of r-par-1-fold2 opened read-only through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-fold2.accdb",
+      "sha256": "625d3ab4b8527cd1d7dfe8f23e73436c58618ca104ca30733ec50b785fffa57e",
+      "length": 2371584,
+      "provenance": "r-par-1.create-fold2.d4013c5c6f.a1 qk1-d4013c5c6f6d4aefccfb0969c075d43c3f5344232e905ae3adccfe219029aad3 output:r-par-1-fold2.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a1"
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a1_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a1_mf",
+      "bind": "a1_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a1_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a1_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a1_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a1_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a1_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a1_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a1_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a1_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a1_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a1_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a1_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 2"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a2"
+    },
+    {
+      "op": "invoke",
+      "target": "a2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a2_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a2_mf",
+      "bind": "a2_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a2_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a2_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a2_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a2_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a2_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a2_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a2_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a2_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a2_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a2_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a2_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 3"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a3"
+    },
+    {
+      "op": "invoke",
+      "target": "a3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a3_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a3_mf",
+      "bind": "a3_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a3_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a3_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a3_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a3_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a3_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a3_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a3_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a3_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a3_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a3_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a3_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 4"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a4"
+    },
+    {
+      "op": "invoke",
+      "target": "a4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a4_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a4_mf",
+      "bind": "a4_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a4_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a4_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a4_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a4_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a4_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a4_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a4_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a4_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a4_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a4_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a4_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a4",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 5"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a5"
+    },
+    {
+      "op": "invoke",
+      "target": "a5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a5_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a5_mf",
+      "bind": "a5_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a5_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a5_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a5_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a5_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a5_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a5_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a5_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a5_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a5_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a5_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a5_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a5",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 6"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a6"
+    },
+    {
+      "op": "invoke",
+      "target": "a6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a6_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a6_mf",
+      "bind": "a6_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a6_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a6_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a6_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a6_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a6_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a6_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a6_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a6_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a6_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a6_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a6_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a6",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 7"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a7"
+    },
+    {
+      "op": "invoke",
+      "target": "a7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a7_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a7_mf",
+      "bind": "a7_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a7_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a7_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a7_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a7_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a7_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a7_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a7_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a7_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a7_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a7_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a7_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a7",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a7"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 8"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a8"
+    },
+    {
+      "op": "invoke",
+      "target": "a8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a8_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a8_mf",
+      "bind": "a8_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a8_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a8_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a8_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a8_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a8_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a8_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a8_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a8_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a8_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a8_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a8_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a8",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a8",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a8",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a8"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 9"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a9"
+    },
+    {
+      "op": "invoke",
+      "target": "a9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a9_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a9_mf",
+      "bind": "a9_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a9_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a9_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a9_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a9_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a9_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a9_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a9_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a9_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a9_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a9_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a9_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a9",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a9"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 10"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a10"
+    },
+    {
+      "op": "invoke",
+      "target": "a10",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a10_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a10_mf",
+      "bind": "a10_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a10_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a10_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a10_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a10_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a10_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a10_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a10_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a10_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a10_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a10_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a10_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a10",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a10",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a10",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a10",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a10"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 11"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a11"
+    },
+    {
+      "op": "invoke",
+      "target": "a11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a11_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a11_mf",
+      "bind": "a11_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a11_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a11_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a11_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a11_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a11_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a11_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a11_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a11_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a11_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a11_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a11_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a11",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a11",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a11",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a11",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a11"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Avg(c) AS a FROM FC WHERE g = 12"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a12"
+    },
+    {
+      "op": "invoke",
+      "target": "a12",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a12_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a12_mf",
+      "bind": "a12_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a12_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a12_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a12_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a12_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a12_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a12_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a12_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a12_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a12_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a12_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a12_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a12",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a12",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a12",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a12",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a12"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Min(c) AS mn, Max(c) AS mx, Count(c) AS n FROM FC GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "a13"
+    },
+    {
+      "op": "invoke",
+      "target": "a13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "a13_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "a13_mf",
+      "bind": "a13_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a13_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "a13_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "a13_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a13_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "a13_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a13_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "a13_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "a13_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "a13_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "a13_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "a13_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "a13",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "a13",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "a13",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "a13",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "a13"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

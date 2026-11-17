@@ -1,0 +1,671 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/cx-ddl-complex-keywords",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-DESC"
+  ],
+  "description": "Does DAO SQL DDL create a complex column? In an ACCDB, one statement each: CREATE TABLE with a column typed ATTACHMENT, MULTIVALUE, LONG MULTIVALUE, TEXT(20) MULTIVALUE and COMPLEX; then a control table X7(ID, F LONG) with ALTER TABLE ADD COLUMN A ATTACHMENT and ADD COLUMN B LONG MULTIVALUE. Errors after each; the TableDefs and the fields of X7 are read.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cx-ddl.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X1 (ID COUNTER CONSTRAINT PK_X1 PRIMARY KEY, A ATTACHMENT)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X2 (ID COUNTER CONSTRAINT PK_X2 PRIMARY KEY, A MULTIVALUE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X3 (ID COUNTER CONSTRAINT PK_X3 PRIMARY KEY, A LONG MULTIVALUE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X4 (ID COUNTER CONSTRAINT PK_X4 PRIMARY KEY, A TEXT(20) MULTIVALUE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X6 (ID COUNTER CONSTRAINT PK_X6 PRIMARY KEY, A COMPLEX)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE X7 (ID COUNTER CONSTRAINT PK_X7 PRIMARY KEY, F LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE X7 ADD COLUMN A ATTACHMENT"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE X7 ADD COLUMN B LONG MULTIVALUE"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct1",
+      "bind": "cd1",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr1",
+      "bind": "cl1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq1",
+      "bind": "cn1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ft1"
+    },
+    {
+      "op": "invoke",
+      "target": "ft1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "X7"
+        }
+      ],
+      "bind": "fd1"
+    },
+    {
+      "op": "invoke",
+      "target": "fd1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ff1",
+      "bind": "fe1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ff1"
+    },
+    {
+      "op": "release",
+      "target": "fd1"
+    },
+    {
+      "op": "release",
+      "target": "ft1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,707 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/txn-xproc-cascade-delete-vs-pending-child-edit",
+  "bookRefs": [
+    "R-TXN-1",
+    "TXN-STMT",
+    "WRITE-TIMING",
+    "R-LOCK-4"
+  ],
+  "description": "On r-def-cat-txn-rel-accdb: process B opens a dynaset on ChildCD, calls Edit on the first row and sets V = 999 (not updated). Process A runs DELETE FROM Parent WHERE ID = 3 (R_CD cascades to ChildCD) without dbFailOnError, then reads Database.RecordsAffected, DBEngine.Errors and the rows of ChildCD and Parent. B then calls Update and closes; A reads the same again.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cat-txn-rel-accdb.accdb",
+      "sha256": "35a5476c66ac933457a4d71bb52c15e87206924a81929dca575fc1b7bc7784d3",
+      "length": 253952,
+      "provenance": "r-def-cat-txn.create-rel-accdb.a26b4fd7f6.a1 qk1-a26b4fd7f6bf535f05165c742c28fe719a66ffcbcf158e1470fea85d9bc9855f output:r-def-cat-txn-rel-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "a-open"
+    },
+    {
+      "op": "await",
+      "name": "b-edit",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM Parent WHERE ID = 3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM ChildCD ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "c1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "c1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_c1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_c1",
+          "bind": "f_c1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_c1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_c1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_c1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_c1"
+        },
+        {
+          "op": "invoke",
+          "target": "c1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM Parent WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "p1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "p1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "p1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_p1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_p1",
+          "bind": "f_p1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_p1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_p1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_p1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_p1"
+        },
+        {
+          "op": "invoke",
+          "target": "p1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "p1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "p1"
+    },
+    {
+      "op": "signal",
+      "name": "a-1"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM ChildCD ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "c2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "c2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "c2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_c2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_c2",
+          "bind": "f_c2",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_c2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_c2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_c2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_c2"
+        },
+        {
+          "op": "invoke",
+          "target": "c2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "c2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM Parent WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "p2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "p2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "p2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_p2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_p2",
+          "bind": "f_p2",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_p2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_p2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_p2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_p2"
+        },
+        {
+          "op": "invoke",
+          "target": "p2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "p2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "p2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-open",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT * FROM ChildCD ORDER BY ID"
+            },
+            {
+              "type": "i4",
+              "value": 2
+            }
+          ],
+          "bind": "rs"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Edit",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl"
+        },
+        {
+          "op": "invoke",
+          "target": "fl",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "V"
+            }
+          ],
+          "bind": "fv"
+        },
+        {
+          "op": "invoke",
+          "target": "fv",
+          "member": "Value",
+          "kind": "propertyPut",
+          "args": [
+            {
+              "type": "i4",
+              "value": 999
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "signal",
+          "name": "b-edit"
+        },
+        {
+          "op": "await",
+          "name": "a-1",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Update",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

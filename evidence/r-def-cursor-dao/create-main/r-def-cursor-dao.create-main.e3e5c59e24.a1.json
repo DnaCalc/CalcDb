@@ -1,0 +1,2372 @@
+{
+  "schema": "calcdb.evidence/1",
+  "recordId": "r-def-cursor-dao.create-main.e3e5c59e24.a1",
+  "retainedUtc": "2026-11-17T02:52:55.0591473+00:00",
+  "probe": "r-def-cursor-dao/create-main",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "R-DAO-1",
+    "R-ERR-1",
+    "D-CURSOR-1",
+    "CUR-POS",
+    "CUR-PROV",
+    "CUR-BULK",
+    "CUR-EDIT",
+    "DAO-PROP",
+    "ERR-BASE"
+  ],
+  "description": "Deferred-branch fixture r-def-cursor-dao-main: T(ID LONG primary key PK_T, N LONG, S TEXT(20), D DATETIME, Fl YESNO, Mm MEMO, Cd TEXT(10)) with eight rows (N 10,20,30,40,40,50,60,70; S Null in row 8; D with Nulls and a repeated date; Mm Null in four rows) and indexes IX_TN (N), IX_TND (N DESC), IX_TS (S), unique UX_TCd (Cd); H(A LONG, B TEXT(10)) with no key and four rows (two equal rows (1,'x')); PA(ID primary key, V TEXT(10)) with three rows; CH(ID primary key, PID LONG, W TEXT(10)) with three rows and FOREIGN KEY FK_CH_PA (PID) REFERENCES PA (ID), parent 3 without children; LB(ID primary key, Mm MEMO, Bn LONGBINARY, Tx TEXT(20)) with a short Memo, a 12,000-character Memo and an all-Null row; R(ID primary key, Cd TEXT(10) with unique index UX_R_Cd, Rq TEXT(10) NOT NULL, Vv LONG with ValidationRule '> 0' set through DAO) with one row; stored query QSel. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, dbVersion 128) and Database.Execute DDL and DML; the closed file is kept.",
+  "retentionNote": "Designed r-def-cursor-dao probe (A-02); complete capture of the ACE answer.",
+  "token": "r-def-cursor-dao.create-main.e3e5c59e24",
+  "questionKey": "qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a",
+  "question": {
+    "schema": "calcdb.question/1",
+    "probe": "r-def-cursor-dao/create-main",
+    "bookRefs": [
+      "R-CURSOR-1",
+      "R-DAO-1",
+      "R-ERR-1",
+      "D-CURSOR-1",
+      "CUR-POS",
+      "CUR-PROV",
+      "CUR-BULK",
+      "CUR-EDIT",
+      "DAO-PROP",
+      "ERR-BASE"
+    ],
+    "description": "Deferred-branch fixture r-def-cursor-dao-main: T(ID LONG primary key PK_T, N LONG, S TEXT(20), D DATETIME, Fl YESNO, Mm MEMO, Cd TEXT(10)) with eight rows (N 10,20,30,40,40,50,60,70; S Null in row 8; D with Nulls and a repeated date; Mm Null in four rows) and indexes IX_TN (N), IX_TND (N DESC), IX_TS (S), unique UX_TCd (Cd); H(A LONG, B TEXT(10)) with no key and four rows (two equal rows (1,'x')); PA(ID primary key, V TEXT(10)) with three rows; CH(ID primary key, PID LONG, W TEXT(10)) with three rows and FOREIGN KEY FK_CH_PA (PID) REFERENCES PA (ID), parent 3 without children; LB(ID primary key, Mm MEMO, Bn LONGBINARY, Tx TEXT(20)) with a short Memo, a 12,000-character Memo and an all-Null row; R(ID primary key, Cd TEXT(10) with unique index UX_R_Cd, Rq TEXT(10) NOT NULL, Vv LONG with ValidationRule '> 0' set through DAO) with one row; stored query QSel. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, dbVersion 128) and Database.Execute DDL and DML; the closed file is kept.",
+    "callerSurface": "native-idispatch/x64",
+    "invokeLcid": 1033,
+    "observationRecipe": [
+      "clearErrorInfoBefore",
+      "excepinfo",
+      "deferredFill",
+      "errorInfo"
+    ],
+    "pathBinding": "attempt-local-copy",
+    "inputs": [],
+    "program": [
+      {
+        "op": "observeFiles",
+        "label": "before-open",
+        "keep": false
+      },
+      {
+        "op": "create",
+        "progId": "DAO.DBEngine.120",
+        "bind": "eng"
+      },
+      {
+        "op": "observeModules",
+        "label": "after-create"
+      },
+      {
+        "op": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "kind": "method",
+        "args": [
+          {
+            "type": "outputPath",
+            "fileName": "r-def-cursor-dao-main.accdb"
+          },
+          {
+            "type": "bstr",
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "type": "i4",
+            "value": 128
+          }
+        ],
+        "bind": "db"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N LONG, S TEXT(20), D DATETIME, Fl YESNO, Mm MEMO, Cd TEXT(10))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (1, 10, 'alpha', #1/15/2020#, True, 'm1', 'c1')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (2, 20, 'beta', Null, False, Null, 'c2')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (3, 30, 'gamma', #3/25/2020#, True, 'm3', 'c3')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (4, 40, 'delta', #1/5/2021#, False, Null, 'c4')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (5, 40, 'epsilon', #1/15/2020#, True, 'm5', 'c5')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (6, 50, 'zeta', Null, False, Null, 'c6')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (7, 60, 'eta', #12/31/2020#, True, 'm7', 'c7')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO T VALUES (8, 70, Null, Null, False, Null, 'c8')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE INDEX IX_TN ON T (N)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE INDEX IX_TND ON T (N DESC)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE INDEX IX_TS ON T (S)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE UNIQUE INDEX UX_TCd ON T (Cd)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE H (A LONG, B TEXT(10))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO H VALUES (1, 'x')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO H VALUES (1, 'x')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO H VALUES (2, 'y')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO H VALUES (3, Null)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE PA (ID LONG CONSTRAINT PK_PA PRIMARY KEY, V TEXT(10))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE CH (ID LONG CONSTRAINT PK_CH PRIMARY KEY, PID LONG, W TEXT(10))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO PA VALUES (1, 'p1')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO PA VALUES (2, 'p2')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO PA VALUES (3, 'p3')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "ALTER TABLE CH ADD CONSTRAINT FK_CH_PA FOREIGN KEY (PID) REFERENCES PA (ID)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO CH VALUES (1, 1, 'c1')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO CH VALUES (2, 1, 'c2')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO CH VALUES (3, 2, 'c3')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE LB (ID LONG CONSTRAINT PK_LB PRIMARY KEY, Mm MEMO, Bn LONGBINARY, Tx TEXT(20))"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LB (ID, Mm, Tx) VALUES (1, 'short memo', 't1')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LB (ID, Mm, Tx) VALUES (2, 'mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm', 't2')"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO LB (ID) VALUES (3)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE TABLE R (ID LONG CONSTRAINT PK_R PRIMARY KEY, Cd TEXT(10), Rq TEXT(10) NOT NULL, Vv LONG)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "CREATE UNIQUE INDEX UX_R_Cd ON R (Cd)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "INSERT INTO R VALUES (1, 'r1', 'q1', 5)"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "TableDefs",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "tdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "tdfs",
+        "member": "Refresh",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "invoke",
+        "target": "tdfs",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "R"
+          }
+        ],
+        "bind": "tr"
+      },
+      {
+        "op": "invoke",
+        "target": "tr",
+        "member": "Fields",
+        "kind": "propertyGet",
+        "args": [],
+        "bind": "rfl"
+      },
+      {
+        "op": "invoke",
+        "target": "rfl",
+        "member": "Item",
+        "kind": "methodOrGet",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Vv"
+          }
+        ],
+        "bind": "rv"
+      },
+      {
+        "op": "invoke",
+        "target": "rv",
+        "member": "ValidationRule",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "> 0"
+          }
+        ]
+      },
+      {
+        "op": "invoke",
+        "target": "rv",
+        "member": "ValidationText",
+        "kind": "propertyPut",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "Vv must be positive"
+          }
+        ]
+      },
+      {
+        "op": "release",
+        "target": "rv"
+      },
+      {
+        "op": "release",
+        "target": "rfl"
+      },
+      {
+        "op": "release",
+        "target": "tr"
+      },
+      {
+        "op": "release",
+        "target": "tdfs"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "CreateQueryDef",
+        "kind": "method",
+        "args": [
+          {
+            "type": "bstr",
+            "text": "QSel"
+          },
+          {
+            "type": "bstr",
+            "text": "SELECT ID, N FROM T WHERE N >= 30 ORDER BY ID"
+          }
+        ],
+        "bind": "qd"
+      },
+      {
+        "op": "release",
+        "target": "qd"
+      },
+      {
+        "op": "invoke",
+        "target": "db",
+        "member": "Close",
+        "kind": "method",
+        "args": []
+      },
+      {
+        "op": "observeFiles",
+        "label": "after-close",
+        "keep": false
+      }
+    ]
+  },
+  "manifest": {
+    "schema": "calcdb.manifest/1",
+    "attemptId": "r-def-cursor-dao.create-main.e3e5c59e24.a1",
+    "token": "r-def-cursor-dao.create-main.e3e5c59e24",
+    "questionKey": "qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a",
+    "workerGeneration": 1,
+    "execution": "ReturnedSuccess",
+    "capture": "Complete",
+    "problems": [],
+    "captureSha256": "f556b27f6e5c59092f0c707fa44595ddbbaae28501eca00b9b2fcfee3d2e91c9",
+    "artifacts": [
+      {
+        "role": "output:r-def-cursor-dao-main.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_r-def-cursor-dao-main.accdb",
+        "length": 327680,
+        "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0"
+      }
+    ],
+    "owner": {
+      "participant": "a",
+      "launched": true,
+      "processId": 44124,
+      "ownership": "retained process handle + job object (kill on close)",
+      "exitCode": 0,
+      "timedOut": false,
+      "killed": false,
+      "exitObserved": true,
+      "desktop": "WinSta0\\CalcDbOracle",
+      "windowsOnUserDesktop": [],
+      "windowsOnPrivateDesktop": []
+    },
+    "participants": [],
+    "sealedUtc": "2026-11-17T02:52:55.0244858+00:00",
+    "sealSha256": "642a075626ae13a69d0451632770b556f3a87796824e68c83705917e6788d1d4"
+  },
+  "capture": {
+    "schema": "calcdb.capture/1",
+    "attemptId": "r-def-cursor-dao.create-main.e3e5c59e24.a1",
+    "workerGeneration": 1,
+    "questionKey": "qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a",
+    "participant": "a",
+    "environment": {
+      "workerPath": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-045241\\worker\\CalcDb.Oracle.Worker.dll",
+      "workerSha256": "e686468bbd31e6bcd490c4dde5cba4c76b94afea11f853afeebf5c890888c1a7",
+      "workerBuild": "1.0.0+d239ce92ebc6727c6923fe42ef0a4f14b70bb5c9",
+      "toolingRevision": "bd3ff27e471b28b08dbcfd2fb2041bb107414bd0+dirty",
+      "bookRevision": "book-v1.1 manifest-sha256:60c82656ceae7faa84ace410d710eb2a37fdec449d56776ba191352f2281e49d",
+      "runtime": ".NET 11.0.0",
+      "runtimeVersion": "11.0.0",
+      "osDescription": "Microsoft Windows 10.0.26200",
+      "osVersion": "Microsoft Windows NT 10.0.26200.0",
+      "processArchitecture": "X64",
+      "processId": 44124,
+      "threadId": 51104,
+      "apartmentType": "MainSTA (qualifier 0)",
+      "userDefaultLcid": 7177,
+      "threadLocale": 7177,
+      "ansiCodePage": 1252,
+      "oemCodePage": 437,
+      "currentCulture": "en-ZA",
+      "tempPath": "%USERPROFILE%\\AppData\\Local\\Temp\\",
+      "attemptDirectory": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-def-cursor-dao.create-main.e3e5c59e24.a1",
+      "windowStation": "WinSta0",
+      "desktop": "CalcDbOracle",
+      "sessionId": 1,
+      "userLabel": "h-53adc1a17247",
+      "machineLabel": "h-1b1b64f34534",
+      "elevated": false
+    },
+    "events": [
+      {
+        "event": "files",
+        "label": "before-open",
+        "files": [],
+        "seq": 1,
+        "programPath": "0"
+      },
+      {
+        "event": "create",
+        "progId": "DAO.DBEngine.120",
+        "clsid": "{CD7791B9-43FD-42C5-AE42-8DD2811F0419}",
+        "clsidFromProgIdHresult": "0x00000000",
+        "coCreateInstanceHresult": "0x00000000",
+        "bind": "eng",
+        "object": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "eng",
+          "identity": "u1",
+          "typeName": "_DBEngine",
+          "typeIid": "{00000021-0000-0010-8000-00AA006D2EA4}"
+        },
+        "registration": {
+          "source": "HKCR (read-only)",
+          "inprocServer32": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "threadingModel": "apartment"
+        },
+        "seq": 2,
+        "programPath": "1"
+      },
+      {
+        "event": "modules",
+        "label": "after-create",
+        "complete": true,
+        "bytesNeeded": 656,
+        "bytesProvided": 8192,
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-045241\\worker\\CalcDb.Oracle.Worker.exe",
+          "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+          "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+          "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+          "C:\\WINDOWS\\System32\\SHELL32.dll",
+          "C:\\WINDOWS\\System32\\msvcp_win.dll",
+          "C:\\WINDOWS\\System32\\ucrtbase.dll",
+          "C:\\WINDOWS\\System32\\USER32.dll",
+          "C:\\WINDOWS\\System32\\win32u.dll",
+          "C:\\WINDOWS\\System32\\GDI32.dll",
+          "C:\\WINDOWS\\System32\\gdi32full.dll",
+          "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+          "C:\\WINDOWS\\System32\\msvcrt.dll",
+          "C:\\WINDOWS\\System32\\sechost.dll",
+          "C:\\WINDOWS\\System32\\RPCRT4.dll",
+          "C:\\WINDOWS\\System32\\IMM32.DLL",
+          "C:\\Program Files\\dotnet\\host\\fxr\\11.0.0\\hostfxr.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\hostpolicy.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\coreclr.dll",
+          "C:\\WINDOWS\\System32\\ole32.dll",
+          "C:\\WINDOWS\\System32\\combase.dll",
+          "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+          "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+          "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+          "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.CoreLib.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\clrjit.dll",
+          "C:\\WINDOWS\\SYSTEM32\\icu.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-045241\\worker\\CalcDb.Oracle.Worker.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.dll",
+          "C:\\WINDOWS\\system32\\uxtheme.dll",
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-045241\\worker\\CalcDb.Evidence.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Console.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Linq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Json.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encodings.Web.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Numerics.Vectors.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.IO.Pipelines.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Memory.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.Encoding.Extensions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Collections.Concurrent.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Private.Uri.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.Lightweight.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Primitives.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Reflection.Emit.ILGeneration.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Runtime.InteropServices.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Text.RegularExpressions.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Security.Cryptography.dll",
+          "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+          "C:\\WINDOWS\\System32\\SHCORE.dll",
+          "C:\\WINDOWS\\System32\\shlwapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\secur32.dll",
+          "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Threading.Thread.dll",
+          "C:\\WINDOWS\\System32\\clbcatq.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\Microsoft.Win32.Registry.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+          "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+          "C:\\WINDOWS\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8328_none_87eede957a2ccddd\\Comctl32.dll",
+          "C:\\WINDOWS\\System32\\MSCTF.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+          "C:\\WINDOWS\\SYSTEM32\\D3DCOMPILER_47.dll",
+          "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+          "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+          "C:\\WINDOWS\\SYSTEM32\\msi.dll",
+          "C:\\WINDOWS\\SYSTEM32\\sxs.dll",
+          "C:\\WINDOWS\\System32\\psapi.dll",
+          "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "identities": [
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\ACEDAO.DLL",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\ACEDAO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 859552,
+            "sha256": "335ca6761d67f6e287fac3e93ddcb57514f4f6f746add68ecf7e8620a4464f40",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "000000000000000000340000003483B9",
+            "lastWriteUtc": "2026-11-13T09:22:31.5799645Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140_1.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140_1.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 57632,
+            "sha256": "e9600ae616c57665f407bb596efd93109e95c1550c6c0b80af81ee29f296b0ce",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C32",
+            "lastWriteUtc": "2026-08-22T22:57:54.7806650Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\VCRUNTIME140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\vcruntime140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 134040,
+            "sha256": "f7cc1690530ef448b7cdfd097f9f551818328badf8d555a3deb7ee7a5c97c073",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C2F",
+            "lastWriteUtc": "2026-08-22T22:57:54.7653715Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\Office16\\MSVCP140.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\msvcp140.dll",
+            "fileVersion": "14.50.35731.0",
+            "productVersion": "14.50.35731.0",
+            "fileVersionNumber": "14.50.35731.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 564000,
+            "sha256": "8adabe8b40c9bebb65a8eb230561c09a42386e8fe649a7d3875a49d570094ef4",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "00000000000000000005000000472C23",
+            "lastWriteUtc": "2026-08-22T22:57:54.6684190Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\Office16\\JitV.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 476952,
+            "sha256": "2e17e68d59a34a9c44e9e58c2b22b0d8af976d319e3d64b0ed8790ba002fb067",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000001100000034C6E3",
+            "lastWriteUtc": "2026-11-13T09:22:37.3329752Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\AppvIsvSubsystems64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\AppvIsvSubsystems64.dll",
+            "fileVersion": "16.0.20527.20016",
+            "productVersion": "16.0.20527.20016",
+            "fileVersionNumber": "16.0.20527.20016",
+            "productName": "Microsoft Office",
+            "length": 1457968,
+            "sha256": "0984243c9f9ad1fe0b7064389fd08c0e05923ad93bfbf21cde7f929c98e3dcb0",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003000000033FF11",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\c2r64.dll",
+            "mappedPath": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\C2R64.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 2682648,
+            "sha256": "c229a6ff04f0c1f255db6344e03d74ea19394205cc05168b0e855227e0b28b15",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000004B00000034088D",
+            "lastWriteUtc": "2026-11-09T21:56:18.0000000Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso20win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso20win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 10117912,
+            "sha256": "80072da3c6973224aadaf9b8dc2262e4209b08eb5e649aeab69c4f0c42da5b0c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002C00000034EB66",
+            "lastWriteUtc": "2026-11-13T09:22:55.7102652Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\System\\msvcp140_atomic_wait.dll",
+            "fileVersion": "14.50.35719.0",
+            "productVersion": "14.50.35719.0",
+            "fileVersionNumber": "14.50.35719.0",
+            "productName": "Microsoft® Visual Studio®",
+            "length": 59544,
+            "sha256": "122b75824fb0a5f16a526dfd674c39b8e8eb9295e7ca485d1467f61ae4909044",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000000A000000472F5B",
+            "lastWriteUtc": "2026-08-22T22:58:28.8076166Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso30win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso30win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 18620696,
+            "sha256": "d351b7a66f69543b8fce4e2d740daf5c50745ff702da1bb6c9d8c5b589c92699",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000003600000034ED13",
+            "lastWriteUtc": "2026-11-13T09:22:56.0393896Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso40uiwin32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso40UIwin32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 20470120,
+            "sha256": "bfd63564ea675d11a5c148a3b93c88a013ea6bcca2b946586f96029898ba9e8c",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034EE04",
+            "lastWriteUtc": "2026-11-13T09:22:56.3797227Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso50win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso50win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 1185560,
+            "sha256": "ec4bf5012a119e16d8faf33d5f2ee117d8e594cf194642d2dc7ea56ac7b00f05",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002000000034EE0E",
+            "lastWriteUtc": "2026-11-13T09:22:56.4114953Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso98win32client.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\Mso98win32client.dll",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 28963688,
+            "sha256": "df295adc5b61e287331e8cf6eb7f8c9a21d3c13306f212bb7fe4da084ed77640",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002100000034EF24",
+            "lastWriteUtc": "2026-11-13T09:22:56.8306380Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          },
+          {
+            "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Office16\\mso.dll",
+            "mappedPath": "C:\\Program Files\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSO.DLL",
+            "fileVersion": "16.0.20527.20196",
+            "productVersion": "16.0.20527.20196",
+            "fileVersionNumber": "16.0.20527.20196",
+            "productName": "Microsoft Office",
+            "length": 40091928,
+            "sha256": "bb6aa9adeef731a45d35ca21d4e116523a8f3a819c6bf367d508a6b9548232e8",
+            "volumeSerial": "7E825A368259F35F",
+            "fileId": "0000000000000000002700000034E669",
+            "lastWriteUtc": "2026-11-13T09:22:54.8248969Z",
+            "association": "Loader path from GetModuleFileNameExW; disk file from GetMappedFileNameW at the module base (device path mapped to a drive with QueryDosDeviceW); FileIdInfo and SHA-256 of that disk file taken at this observation"
+          }
+        ],
+        "deliberate": false,
+        "rounds": 2,
+        "changedDuringCollection": [
+          "+C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\11.0.0\\System.Diagnostics.FileVersionInfo.dll"
+        ],
+        "seq": 3,
+        "programPath": "2"
+      },
+      {
+        "event": "invoke",
+        "target": "eng",
+        "member": "CreateDatabase",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43003a005c0057006f0072006b005c0044006e006100430061006c0063005c00430061006c006300440062005c002e006f007200610063006c0065002d00720075006e0073005c0061007400740065006d007000740073005c0072002d006400650066002d0063007500720073006f0072002d00640061006f002e006300720065006100740065002d006d00610069006e002e0065003300650035006300350039006500320034002e00610031005c0077006f0072006b005c0072002d006400650066002d0063007500720073006f0072002d00640061006f002d006d00610069006e002e0061006300630064006200",
+            "byteLength": 240,
+            "text": "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\attempts\\r-def-cursor-dao.create-main.e3e5c59e24.a1\\work\\r-def-cursor-dao-main.accdb"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3b004c0041004e004700490044003d003000780030003400300039003b00430050003d0031003200350032003b0043004f0055004e005400520059003d003000",
+            "byteLength": 64,
+            "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+          },
+          {
+            "vt": 3,
+            "vtName": "VT_I4",
+            "integer": "128"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "db",
+          "identity": "u2",
+          "typeName": "Database",
+          "typeIid": "{00000071-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "db",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 4,
+        "programPath": "3"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020005400200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f00540020005000520049004d0041005200590020004b00450059002c0020004e0020004c004f004e0047002c00200053002000540045005800540028003200300029002c002000440020004400410054004500540049004d0045002c00200046006c0020005900450053004e004f002c0020004d006d0020004d0045004d004f002c002000430064002000540045005800540028003100300029002900",
+            "byteLength": 232,
+            "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, N LONG, S TEXT(20), D DATETIME, Fl YESNO, Mm MEMO, Cd TEXT(10))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 5,
+        "programPath": "4"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280031002c002000310030002c002000270061006c0070006800610027002c002000230031002f00310035002f00320030003200300023002c00200054007200750065002c00200027006d00310027002c00200027006300310027002900",
+            "byteLength": 136,
+            "text": "INSERT INTO T VALUES (1, 10, 'alpha', #1/15/2020#, True, 'm1', 'c1')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 6,
+        "programPath": "5"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280032002c002000320030002c0020002700620065007400610027002c0020004e0075006c006c002c002000460061006c00730065002c0020004e0075006c006c002c00200027006300320027002900",
+            "byteLength": 122,
+            "text": "INSERT INTO T VALUES (2, 20, 'beta', Null, False, Null, 'c2')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 7,
+        "programPath": "6"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280033002c002000330030002c0020002700670061006d006d00610027002c002000230033002f00320035002f00320030003200300023002c00200054007200750065002c00200027006d00330027002c00200027006300330027002900",
+            "byteLength": 136,
+            "text": "INSERT INTO T VALUES (3, 30, 'gamma', #3/25/2020#, True, 'm3', 'c3')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 8,
+        "programPath": "7"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280034002c002000340030002c0020002700640065006c007400610027002c002000230031002f0035002f00320030003200310023002c002000460061006c00730065002c0020004e0075006c006c002c00200027006300340027002900",
+            "byteLength": 136,
+            "text": "INSERT INTO T VALUES (4, 40, 'delta', #1/5/2021#, False, Null, 'c4')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 9,
+        "programPath": "8"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280035002c002000340030002c002000270065007000730069006c006f006e0027002c002000230031002f00310035002f00320030003200300023002c00200054007200750065002c00200027006d00350027002c00200027006300350027002900",
+            "byteLength": 140,
+            "text": "INSERT INTO T VALUES (5, 40, 'epsilon', #1/15/2020#, True, 'm5', 'c5')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 10,
+        "programPath": "9"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280036002c002000350030002c00200027007a0065007400610027002c0020004e0075006c006c002c002000460061006c00730065002c0020004e0075006c006c002c00200027006300360027002900",
+            "byteLength": 122,
+            "text": "INSERT INTO T VALUES (6, 50, 'zeta', Null, False, Null, 'c6')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 11,
+        "programPath": "10"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280037002c002000360030002c002000270065007400610027002c0020002300310032002f00330031002f00320030003200300023002c00200054007200750065002c00200027006d00370027002c00200027006300370027002900",
+            "byteLength": 134,
+            "text": "INSERT INTO T VALUES (7, 60, 'eta', #12/31/2020#, True, 'm7', 'c7')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 12,
+        "programPath": "11"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200054002000560041004c005500450053002000280038002c002000370030002c0020004e0075006c006c002c0020004e0075006c006c002c002000460061006c00730065002c0020004e0075006c006c002c00200027006300380027002900",
+            "byteLength": 118,
+            "text": "INSERT INTO T VALUES (8, 70, Null, Null, False, Null, 'c8')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 13,
+        "programPath": "12"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430052004500410054004500200049004e004400450058002000490058005f0054004e0020004f004e0020005400200028004e002900",
+            "byteLength": 54,
+            "text": "CREATE INDEX IX_TN ON T (N)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 14,
+        "programPath": "13"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430052004500410054004500200049004e004400450058002000490058005f0054004e00440020004f004e0020005400200028004e00200044004500530043002900",
+            "byteLength": 66,
+            "text": "CREATE INDEX IX_TND ON T (N DESC)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 15,
+        "programPath": "14"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430052004500410054004500200049004e004400450058002000490058005f005400530020004f004e00200054002000280053002900",
+            "byteLength": 54,
+            "text": "CREATE INDEX IX_TS ON T (S)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 16,
+        "programPath": "15"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430052004500410054004500200055004e004900510055004500200049004e004400450058002000550058005f0054004300640020004f004e002000540020002800430064002900",
+            "byteLength": 72,
+            "text": "CREATE UNIQUE INDEX UX_TCd ON T (Cd)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 17,
+        "programPath": "16"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c0045002000480020002800410020004c004f004e0047002c00200042002000540045005800540028003100300029002900",
+            "byteLength": 70,
+            "text": "CREATE TABLE H (A LONG, B TEXT(10))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 18,
+        "programPath": "17"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200048002000560041004c005500450053002000280031002c0020002700780027002900",
+            "byteLength": 58,
+            "text": "INSERT INTO H VALUES (1, 'x')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 19,
+        "programPath": "18"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200048002000560041004c005500450053002000280031002c0020002700780027002900",
+            "byteLength": 58,
+            "text": "INSERT INTO H VALUES (1, 'x')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 20,
+        "programPath": "19"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200048002000560041004c005500450053002000280032002c0020002700790027002900",
+            "byteLength": 58,
+            "text": "INSERT INTO H VALUES (2, 'y')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 21,
+        "programPath": "20"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200048002000560041004c005500450053002000280033002c0020004e0075006c006c002900",
+            "byteLength": 60,
+            "text": "INSERT INTO H VALUES (3, Null)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 22,
+        "programPath": "21"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c004500200050004100200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f005000410020005000520049004d0041005200590020004b00450059002c00200056002000540045005800540028003100300029002900",
+            "byteLength": 132,
+            "text": "CREATE TABLE PA (ID LONG CONSTRAINT PK_PA PRIMARY KEY, V TEXT(10))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 23,
+        "programPath": "22"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c004500200043004800200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f004300480020005000520049004d0041005200590020004b00450059002c00200050004900440020004c004f004e0047002c00200057002000540045005800540028003100300029002900",
+            "byteLength": 152,
+            "text": "CREATE TABLE CH (ID LONG CONSTRAINT PK_CH PRIMARY KEY, PID LONG, W TEXT(10))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 24,
+        "programPath": "23"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000500041002000560041004c005500450053002000280031002c00200027007000310027002900",
+            "byteLength": 62,
+            "text": "INSERT INTO PA VALUES (1, 'p1')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 25,
+        "programPath": "24"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000500041002000560041004c005500450053002000280032002c00200027007000320027002900",
+            "byteLength": 62,
+            "text": "INSERT INTO PA VALUES (2, 'p2')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 26,
+        "programPath": "25"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000500041002000560041004c005500450053002000280033002c00200027007000330027002900",
+            "byteLength": 62,
+            "text": "INSERT INTO PA VALUES (3, 'p3')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 27,
+        "programPath": "26"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "41004c0054004500520020005400410042004c0045002000430048002000410044004400200043004f004e00530054005200410049004e005400200046004b005f00430048005f0050004100200046004f0052004500490047004e0020004b004500590020002800500049004400290020005200450046004500520045004e0043004500530020005000410020002800490044002900",
+            "byteLength": 150,
+            "text": "ALTER TABLE CH ADD CONSTRAINT FK_CH_PA FOREIGN KEY (PID) REFERENCES PA (ID)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 28,
+        "programPath": "27"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000430048002000560041004c005500450053002000280031002c00200031002c00200027006300310027002900",
+            "byteLength": 68,
+            "text": "INSERT INTO CH VALUES (1, 1, 'c1')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 29,
+        "programPath": "28"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000430048002000560041004c005500450053002000280032002c00200031002c00200027006300320027002900",
+            "byteLength": 68,
+            "text": "INSERT INTO CH VALUES (2, 1, 'c2')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 30,
+        "programPath": "29"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f002000430048002000560041004c005500450053002000280033002c00200032002c00200027006300330027002900",
+            "byteLength": 68,
+            "text": "INSERT INTO CH VALUES (3, 2, 'c3')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 31,
+        "programPath": "30"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020004c004200200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f004c00420020005000520049004d0041005200590020004b00450059002c0020004d006d0020004d0045004d004f002c00200042006e0020004c004f004e004700420049004e004100520059002c002000540078002000540045005800540028003200300029002900",
+            "byteLength": 182,
+            "text": "CREATE TABLE LB (ID LONG CONSTRAINT PK_LB PRIMARY KEY, Mm MEMO, Bn LONGBINARY, Tx TEXT(20))"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 32,
+        "programPath": "31"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c00420020002800490044002c0020004d006d002c0020005400780029002000560041004c005500450053002000280031002c0020002700730068006f007200740020006d0065006d006f0027002c00200027007400310027002900",
+            "byteLength": 116,
+            "text": "INSERT INTO LB (ID, Mm, Tx) VALUES (1, 'short memo', 't1')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 33,
+        "programPath": "32"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c00420020002800490044002c0020004d006d002c0020005400780029002000560041004c005500450053002000280032002c00200027006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d006d0027002c00200027007400320027002900",
+            "byteLength": 24096,
+            "text": "INSERT INTO LB (ID, Mm, Tx) VALUES (2, 'mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm', 't2')"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 34,
+        "programPath": "33"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f0020004c004200200028004900440029002000560041004c005500450053002000280033002900",
+            "byteLength": 60,
+            "text": "INSERT INTO LB (ID) VALUES (3)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 35,
+        "programPath": "34"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "43005200450041005400450020005400410042004c00450020005200200028004900440020004c004f004e004700200043004f004e00530054005200410049004e005400200050004b005f00520020005000520049004d0041005200590020004b00450059002c002000430064002000540045005800540028003100300029002c0020005200710020005400450058005400280031003000290020004e004f00540020004e0055004c004c002c0020005600760020004c004f004e0047002900",
+            "byteLength": 192,
+            "text": "CREATE TABLE R (ID LONG CONSTRAINT PK_R PRIMARY KEY, Cd TEXT(10), Rq TEXT(10) NOT NULL, Vv LONG)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 36,
+        "programPath": "35"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "430052004500410054004500200055004e004900510055004500200049004e004400450058002000550058005f0052005f004300640020004f004e002000520020002800430064002900",
+            "byteLength": 74,
+            "text": "CREATE UNIQUE INDEX UX_R_Cd ON R (Cd)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 37,
+        "programPath": "36"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Execute",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "49004e005300450052005400200049004e0054004f00200052002000560041004c005500450053002000280031002c00200027007200310027002c00200027007100310027002c00200035002900",
+            "byteLength": 78,
+            "text": "INSERT INTO R VALUES (1, 'r1', 'q1', 5)"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 38,
+        "programPath": "37"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "TableDefs",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "tdfs",
+          "identity": "u3",
+          "typeName": "TableDefs",
+          "typeIid": "{0000004B-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "tdfs",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 39,
+        "programPath": "38"
+      },
+      {
+        "event": "invoke",
+        "target": "tdfs",
+        "member": "Refresh",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610743810,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 40,
+        "programPath": "39"
+      },
+      {
+        "event": "invoke",
+        "target": "tdfs",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "5200",
+            "byteLength": 2,
+            "text": "R"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "tr",
+          "identity": "u4",
+          "typeName": "_TableDef",
+          "typeIid": "{00000049-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "tr",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 41,
+        "programPath": "40"
+      },
+      {
+        "event": "invoke",
+        "target": "tr",
+        "member": "Fields",
+        "flags": 2,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rfl",
+          "identity": "u5",
+          "typeName": "Fields",
+          "typeIid": "{00000053-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rfl",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 42,
+        "programPath": "41"
+      },
+      {
+        "event": "invoke",
+        "target": "rfl",
+        "member": "Item",
+        "flags": 3,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "56007600",
+            "byteLength": 4,
+            "text": "Vv"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 0,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "rv",
+          "identity": "u6",
+          "typeName": "Field3",
+          "typeIid": "{00000057-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "rv",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 43,
+        "programPath": "42"
+      },
+      {
+        "event": "invoke",
+        "target": "rv",
+        "member": "ValidationRule",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "3e0020003000",
+            "byteLength": 6,
+            "text": "> 0"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809363,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 44,
+        "programPath": "43"
+      },
+      {
+        "event": "invoke",
+        "target": "rv",
+        "member": "ValidationText",
+        "flags": 4,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "5600760020006d00750073007400200062006500200070006f00730069007400690076006500",
+            "byteLength": 38,
+            "text": "Vv must be positive"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809359,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 45,
+        "programPath": "44"
+      },
+      {
+        "event": "release",
+        "target": "rv",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 46,
+        "programPath": "45"
+      },
+      {
+        "event": "release",
+        "target": "rfl",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 47,
+        "programPath": "46"
+      },
+      {
+        "event": "release",
+        "target": "tr",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 48,
+        "programPath": "47"
+      },
+      {
+        "event": "release",
+        "target": "tdfs",
+        "returnedCount": 2,
+        "implicit": false,
+        "seq": 49,
+        "programPath": "48"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "CreateQueryDef",
+        "flags": 1,
+        "args": [
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "5100530065006c00",
+            "byteLength": 8,
+            "text": "QSel"
+          },
+          {
+            "vt": 8,
+            "vtName": "VT_BSTR",
+            "bytes": "530045004c004500430054002000490044002c0020004e002000460052004f004d002000540020005700480045005200450020004e0020003e003d0020003300300020004f005200440045005200200042005900200049004400",
+            "byteLength": 90,
+            "text": "SELECT ID, N FROM T WHERE N >= 30 ORDER BY ID"
+          }
+        ],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809368,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 9,
+          "vtName": "VT_DISPATCH",
+          "object": "qd",
+          "identity": "u7",
+          "typeName": "_QueryDef",
+          "typeIid": "{00000079-0000-0010-8000-00AA006D2EA4}"
+        },
+        "bind": "qd",
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 50,
+        "programPath": "49"
+      },
+      {
+        "event": "release",
+        "target": "qd",
+        "returnedCount": 0,
+        "implicit": false,
+        "seq": 51,
+        "programPath": "50"
+      },
+      {
+        "event": "invoke",
+        "target": "db",
+        "member": "Close",
+        "flags": 1,
+        "args": [],
+        "getIdsOfNamesHresult": "0x00000000",
+        "dispId": 1610809358,
+        "invokeHresult": "0x00000000",
+        "result": {
+          "vt": 0,
+          "vtName": "VT_EMPTY"
+        },
+        "observationOrder": [
+          "clearErrorInfoBefore",
+          "return"
+        ],
+        "seq": 52,
+        "programPath": "51"
+      },
+      {
+        "event": "files",
+        "label": "after-close",
+        "files": [
+          {
+            "relativePath": "work/r-def-cursor-dao-main.accdb",
+            "length": 327680,
+            "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+            "lastWriteUtc": "2026-11-17T02:52:54.6159065Z",
+            "attributes": "Archive"
+          }
+        ],
+        "seq": 53,
+        "programPath": "52"
+      },
+      {
+        "event": "release",
+        "target": "db",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 54,
+        "programPath": "end"
+      },
+      {
+        "event": "release",
+        "target": "eng",
+        "returnedCount": 0,
+        "implicit": true,
+        "seq": 55,
+        "programPath": "end"
+      },
+      {
+        "event": "modules",
+        "label": "deliberate-truncation",
+        "complete": false,
+        "bytesNeeded": 1192,
+        "bytesProvided": 8,
+        "error": "enumeration truncated: buffer smaller than module list",
+        "modulePaths": [
+          "C:\\Work\\DnaCalc\\CalcDb\\.oracle-runs\\bin\\20261117-045241\\worker\\CalcDb.Oracle.Worker.exe"
+        ],
+        "identities": [],
+        "deliberate": true,
+        "rounds": 1,
+        "changedDuringCollection": [],
+        "seq": 56,
+        "programPath": "end"
+      }
+    ],
+    "artifacts": [
+      {
+        "role": "output:r-def-cursor-dao-main.accdb",
+        "kind": "output-file",
+        "relativePath": "artifacts/output_r-def-cursor-dao-main.accdb",
+        "length": 327680,
+        "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0"
+      }
+    ],
+    "execution": "ReturnedSuccess",
+    "captureErrors": []
+  },
+  "artifacts": [
+    {
+      "role": "output:r-def-cursor-dao-main.accdb",
+      "kind": "output-file",
+      "length": 327680,
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "path": "evidence/artifacts/e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0"
+    }
+  ]
+}

@@ -1,0 +1,6994 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-expr-sql/ddl-column-clauses",
+  "bookRefs": [
+    "R-SQL-2",
+    "SQL-ACT-DDL",
+    "R-CAT-1",
+    "CAT-D"
+  ],
+  "description": "Asks, on a writable copy, which column and table clauses CREATE TABLE accepts through Database.Execute (dbFailOnError), each statement its own table Cc<i> followed by DBEngine.Errors: NOT NULL and NULL, DEFAULT, column-level and table-level PRIMARY KEY (single, composite, with direction, repeated and mixed), UNIQUE in column and table form, an INDEX clause, CHECK in column and table form, a trailing comma, no columns, no column list, a repeated column name in two cases, a missing type, a missing comma, COLLATE, COMMENT, AUTO_INCREMENT, IDENTITY, UNSIGNED, REFERENCES in column and table form with and without a column list, and a computed-column spelling. Then for each created table the fields (Name, Type, Attributes, Required, AllowZeroLength) and indexes (Name, Primary, Unique, IgnoreNulls, Required) are read. Fixture r-def-expr-sql-main is opened on a writable fresh copy through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-expr-sql-main.accdb",
+      "sha256": "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70",
+      "length": 237568,
+      "provenance": "r-def-expr-sql.create-main.e7178cf25c.a1 qk1-e7178cf25cd82f571d308a285e32608915e2dd17853ec508fb114cbc54147c50 output:r-def-expr-sql-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc0 (A LONG NOT NULL)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc1 (A LONG NULL)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc2 (A LONG DEFAULT 5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc3 (A TEXT(10) DEFAULT 'x')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc4 (A LONG NOT NULL DEFAULT 5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc5 (A LONG CONSTRAINT PK_Cc5 PRIMARY KEY)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc6 (A LONG PRIMARY KEY)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc7 (A LONG, B LONG, CONSTRAINT PK_Cc7 PRIMARY KEY (A, B))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc8 (A LONG, B LONG, CONSTRAINT PK_Cc8 PRIMARY KEY (A DESC, B ASC))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc9 (A LONG, B LONG, UNIQUE (A, B))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc10 (A LONG UNIQUE, B LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc11 (A LONG NOT NULL UNIQUE)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc12 (A LONG PRIMARY KEY, B LONG PRIMARY KEY)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc13 (A LONG PRIMARY KEY, CONSTRAINT PK2 PRIMARY KEY (A))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc14 (A LONG, INDEX IX_A (A))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc15 (A LONG, B LONG, CONSTRAINT CK_15 CHECK (A > B))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc16 (A LONG CHECK (A > 0))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc17 (A LONG,)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc18 ()"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc19"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc20 (A LONG, A LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc21 (A LONG, a LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc22 (A)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc23 (A LONG B LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc24 (A TEXT(10) COLLATE X)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc25 (A LONG COMMENT 'x')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc26 (A LONG AUTO_INCREMENT)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc27 (A LONG IDENTITY)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc28 (A LONG UNSIGNED)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc29 (A LONG REFERENCES One (ID))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc30 (A LONG REFERENCES One)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc31 (A LONG, FOREIGN KEY (A) REFERENCES One)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc32 (A LONG GENERATED ALWAYS AS (1))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc33 (A LONG, B AS (A + 1))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc34 (A LONG NOT NULL NULL)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Cc35 (A LONG, B LONG, PRIMARY KEY (A) PRIMARY KEY (B))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc0"
+        }
+      ],
+      "bind": "cct0"
+    },
+    {
+      "op": "invoke",
+      "target": "cct0",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct0f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct0f",
+      "bind": "cct0x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct0x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct0f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct0",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct0i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct0i",
+      "bind": "cct0y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct0y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct0y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct0i"
+    },
+    {
+      "op": "release",
+      "target": "cct0"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc1"
+        }
+      ],
+      "bind": "cct1"
+    },
+    {
+      "op": "invoke",
+      "target": "cct1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct1f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct1f",
+      "bind": "cct1x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct1x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct1f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct1",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct1i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct1i",
+      "bind": "cct1y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct1y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct1y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct1i"
+    },
+    {
+      "op": "release",
+      "target": "cct1"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc2"
+        }
+      ],
+      "bind": "cct2"
+    },
+    {
+      "op": "invoke",
+      "target": "cct2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct2f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct2f",
+      "bind": "cct2x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct2x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct2f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct2",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct2i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct2i",
+      "bind": "cct2y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct2y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct2y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct2i"
+    },
+    {
+      "op": "release",
+      "target": "cct2"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc3"
+        }
+      ],
+      "bind": "cct3"
+    },
+    {
+      "op": "invoke",
+      "target": "cct3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct3f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct3f",
+      "bind": "cct3x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct3x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct3f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct3",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct3i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct3i",
+      "bind": "cct3y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct3y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct3y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct3i"
+    },
+    {
+      "op": "release",
+      "target": "cct3"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc4"
+        }
+      ],
+      "bind": "cct4"
+    },
+    {
+      "op": "invoke",
+      "target": "cct4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct4f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct4f",
+      "bind": "cct4x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct4x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct4f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct4",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct4i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct4i",
+      "bind": "cct4y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct4y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct4y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct4i"
+    },
+    {
+      "op": "release",
+      "target": "cct4"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc5"
+        }
+      ],
+      "bind": "cct5"
+    },
+    {
+      "op": "invoke",
+      "target": "cct5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct5f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct5f",
+      "bind": "cct5x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct5x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct5f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct5",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct5i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct5i",
+      "bind": "cct5y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct5y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct5y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct5i"
+    },
+    {
+      "op": "release",
+      "target": "cct5"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc6"
+        }
+      ],
+      "bind": "cct6"
+    },
+    {
+      "op": "invoke",
+      "target": "cct6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct6f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct6f",
+      "bind": "cct6x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct6x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct6f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct6",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct6i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct6i",
+      "bind": "cct6y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct6y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct6y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct6i"
+    },
+    {
+      "op": "release",
+      "target": "cct6"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc7"
+        }
+      ],
+      "bind": "cct7"
+    },
+    {
+      "op": "invoke",
+      "target": "cct7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct7f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct7f",
+      "bind": "cct7x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct7x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct7f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct7",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct7i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct7i",
+      "bind": "cct7y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct7y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct7y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct7i"
+    },
+    {
+      "op": "release",
+      "target": "cct7"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc8"
+        }
+      ],
+      "bind": "cct8"
+    },
+    {
+      "op": "invoke",
+      "target": "cct8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct8f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct8f",
+      "bind": "cct8x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct8x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct8f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct8",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct8i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct8i",
+      "bind": "cct8y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct8y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct8y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct8i"
+    },
+    {
+      "op": "release",
+      "target": "cct8"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc9"
+        }
+      ],
+      "bind": "cct9"
+    },
+    {
+      "op": "invoke",
+      "target": "cct9",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct9f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct9f",
+      "bind": "cct9x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct9x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct9f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct9",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct9i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct9i",
+      "bind": "cct9y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct9y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct9y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct9i"
+    },
+    {
+      "op": "release",
+      "target": "cct9"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc10"
+        }
+      ],
+      "bind": "cct10"
+    },
+    {
+      "op": "invoke",
+      "target": "cct10",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct10f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct10f",
+      "bind": "cct10x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct10x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct10f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct10",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct10i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct10i",
+      "bind": "cct10y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct10y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct10y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct10i"
+    },
+    {
+      "op": "release",
+      "target": "cct10"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc11"
+        }
+      ],
+      "bind": "cct11"
+    },
+    {
+      "op": "invoke",
+      "target": "cct11",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct11f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct11f",
+      "bind": "cct11x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct11x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct11f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct11",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct11i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct11i",
+      "bind": "cct11y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct11y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct11y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct11i"
+    },
+    {
+      "op": "release",
+      "target": "cct11"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc12"
+        }
+      ],
+      "bind": "cct12"
+    },
+    {
+      "op": "invoke",
+      "target": "cct12",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct12f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct12f",
+      "bind": "cct12x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct12x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct12f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct12",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct12i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct12i",
+      "bind": "cct12y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct12y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct12y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct12i"
+    },
+    {
+      "op": "release",
+      "target": "cct12"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc13"
+        }
+      ],
+      "bind": "cct13"
+    },
+    {
+      "op": "invoke",
+      "target": "cct13",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct13f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct13f",
+      "bind": "cct13x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct13x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct13f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct13",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct13i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct13i",
+      "bind": "cct13y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct13y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct13y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct13i"
+    },
+    {
+      "op": "release",
+      "target": "cct13"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc14"
+        }
+      ],
+      "bind": "cct14"
+    },
+    {
+      "op": "invoke",
+      "target": "cct14",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct14f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct14f",
+      "bind": "cct14x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct14x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct14f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct14",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct14i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct14i",
+      "bind": "cct14y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct14y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct14y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct14i"
+    },
+    {
+      "op": "release",
+      "target": "cct14"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc15"
+        }
+      ],
+      "bind": "cct15"
+    },
+    {
+      "op": "invoke",
+      "target": "cct15",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct15f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct15f",
+      "bind": "cct15x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct15x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct15f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct15",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct15i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct15i",
+      "bind": "cct15y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct15y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct15y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct15i"
+    },
+    {
+      "op": "release",
+      "target": "cct15"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc16"
+        }
+      ],
+      "bind": "cct16"
+    },
+    {
+      "op": "invoke",
+      "target": "cct16",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct16f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct16f",
+      "bind": "cct16x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct16x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct16f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct16",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct16i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct16i",
+      "bind": "cct16y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct16y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct16y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct16i"
+    },
+    {
+      "op": "release",
+      "target": "cct16"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc17"
+        }
+      ],
+      "bind": "cct17"
+    },
+    {
+      "op": "invoke",
+      "target": "cct17",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct17f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct17f",
+      "bind": "cct17x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct17x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct17f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct17",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct17i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct17i",
+      "bind": "cct17y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct17y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct17y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct17i"
+    },
+    {
+      "op": "release",
+      "target": "cct17"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc18"
+        }
+      ],
+      "bind": "cct18"
+    },
+    {
+      "op": "invoke",
+      "target": "cct18",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct18f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct18f",
+      "bind": "cct18x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct18x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct18f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct18",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct18i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct18i",
+      "bind": "cct18y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct18y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct18y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct18i"
+    },
+    {
+      "op": "release",
+      "target": "cct18"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc19"
+        }
+      ],
+      "bind": "cct19"
+    },
+    {
+      "op": "invoke",
+      "target": "cct19",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct19f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct19f",
+      "bind": "cct19x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct19x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct19f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct19",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct19i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct19i",
+      "bind": "cct19y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct19y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct19y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct19i"
+    },
+    {
+      "op": "release",
+      "target": "cct19"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc20"
+        }
+      ],
+      "bind": "cct20"
+    },
+    {
+      "op": "invoke",
+      "target": "cct20",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct20f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct20f",
+      "bind": "cct20x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct20x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct20f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct20",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct20i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct20i",
+      "bind": "cct20y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct20y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct20y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct20i"
+    },
+    {
+      "op": "release",
+      "target": "cct20"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc21"
+        }
+      ],
+      "bind": "cct21"
+    },
+    {
+      "op": "invoke",
+      "target": "cct21",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct21f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct21f",
+      "bind": "cct21x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct21x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct21f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct21",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct21i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct21i",
+      "bind": "cct21y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct21y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct21y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct21i"
+    },
+    {
+      "op": "release",
+      "target": "cct21"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc22"
+        }
+      ],
+      "bind": "cct22"
+    },
+    {
+      "op": "invoke",
+      "target": "cct22",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct22f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct22f",
+      "bind": "cct22x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct22x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct22f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct22",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct22i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct22i",
+      "bind": "cct22y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct22y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct22y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct22i"
+    },
+    {
+      "op": "release",
+      "target": "cct22"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc23"
+        }
+      ],
+      "bind": "cct23"
+    },
+    {
+      "op": "invoke",
+      "target": "cct23",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct23f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct23f",
+      "bind": "cct23x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct23x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct23f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct23",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct23i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct23i",
+      "bind": "cct23y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct23y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct23y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct23i"
+    },
+    {
+      "op": "release",
+      "target": "cct23"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc24"
+        }
+      ],
+      "bind": "cct24"
+    },
+    {
+      "op": "invoke",
+      "target": "cct24",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct24f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct24f",
+      "bind": "cct24x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct24x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct24f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct24",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct24i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct24i",
+      "bind": "cct24y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct24y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct24y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct24i"
+    },
+    {
+      "op": "release",
+      "target": "cct24"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc25"
+        }
+      ],
+      "bind": "cct25"
+    },
+    {
+      "op": "invoke",
+      "target": "cct25",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct25f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct25f",
+      "bind": "cct25x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct25x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct25f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct25",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct25i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct25i",
+      "bind": "cct25y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct25y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct25y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct25i"
+    },
+    {
+      "op": "release",
+      "target": "cct25"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc26"
+        }
+      ],
+      "bind": "cct26"
+    },
+    {
+      "op": "invoke",
+      "target": "cct26",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct26f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct26f",
+      "bind": "cct26x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct26x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct26f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct26",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct26i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct26i",
+      "bind": "cct26y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct26y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct26y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct26i"
+    },
+    {
+      "op": "release",
+      "target": "cct26"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc27"
+        }
+      ],
+      "bind": "cct27"
+    },
+    {
+      "op": "invoke",
+      "target": "cct27",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct27f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct27f",
+      "bind": "cct27x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct27x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct27f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct27",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct27i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct27i",
+      "bind": "cct27y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct27y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct27y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct27i"
+    },
+    {
+      "op": "release",
+      "target": "cct27"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc28"
+        }
+      ],
+      "bind": "cct28"
+    },
+    {
+      "op": "invoke",
+      "target": "cct28",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct28f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct28f",
+      "bind": "cct28x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct28x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct28f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct28",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct28i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct28i",
+      "bind": "cct28y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct28y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct28y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct28i"
+    },
+    {
+      "op": "release",
+      "target": "cct28"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc29"
+        }
+      ],
+      "bind": "cct29"
+    },
+    {
+      "op": "invoke",
+      "target": "cct29",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct29f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct29f",
+      "bind": "cct29x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct29x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct29f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct29",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct29i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct29i",
+      "bind": "cct29y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct29y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct29y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct29i"
+    },
+    {
+      "op": "release",
+      "target": "cct29"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc30"
+        }
+      ],
+      "bind": "cct30"
+    },
+    {
+      "op": "invoke",
+      "target": "cct30",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct30f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct30f",
+      "bind": "cct30x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct30x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct30f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct30",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct30i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct30i",
+      "bind": "cct30y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct30y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct30y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct30i"
+    },
+    {
+      "op": "release",
+      "target": "cct30"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc31"
+        }
+      ],
+      "bind": "cct31"
+    },
+    {
+      "op": "invoke",
+      "target": "cct31",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct31f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct31f",
+      "bind": "cct31x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct31x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct31f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct31",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct31i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct31i",
+      "bind": "cct31y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct31y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct31y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct31i"
+    },
+    {
+      "op": "release",
+      "target": "cct31"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc32"
+        }
+      ],
+      "bind": "cct32"
+    },
+    {
+      "op": "invoke",
+      "target": "cct32",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct32f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct32f",
+      "bind": "cct32x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct32x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct32f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct32",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct32i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct32i",
+      "bind": "cct32y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct32y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct32y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct32i"
+    },
+    {
+      "op": "release",
+      "target": "cct32"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc33"
+        }
+      ],
+      "bind": "cct33"
+    },
+    {
+      "op": "invoke",
+      "target": "cct33",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct33f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct33f",
+      "bind": "cct33x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct33x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct33f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct33",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct33i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct33i",
+      "bind": "cct33y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct33y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct33y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct33i"
+    },
+    {
+      "op": "release",
+      "target": "cct33"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc34"
+        }
+      ],
+      "bind": "cct34"
+    },
+    {
+      "op": "invoke",
+      "target": "cct34",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct34f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct34f",
+      "bind": "cct34x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct34x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct34f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct34",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct34i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct34i",
+      "bind": "cct34y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct34y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct34y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct34i"
+    },
+    {
+      "op": "release",
+      "target": "cct34"
+    },
+    {
+      "op": "invoke",
+      "target": "cctdfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Cc35"
+        }
+      ],
+      "bind": "cct35"
+    },
+    {
+      "op": "invoke",
+      "target": "cct35",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct35f"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct35f",
+      "bind": "cct35x",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct35x",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35x",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35x",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35x",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35x",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct35f"
+    },
+    {
+      "op": "invoke",
+      "target": "cct35",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cct35i"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cct35i",
+      "bind": "cct35y",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cct35y",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35y",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35y",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35y",
+          "member": "IgnoreNulls",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cct35y",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cct35i"
+    },
+    {
+      "op": "release",
+      "target": "cct35"
+    },
+    {
+      "op": "release",
+      "target": "cctdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

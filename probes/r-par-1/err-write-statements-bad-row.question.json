@@ -1,0 +1,1213 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/err-write-statements-bad-row",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-ERROR",
+    "SQL-DEMAND",
+    "ERR-PARTIAL"
+  ],
+  "description": "R-PAR-1 PAR-ERROR, SQL-DEMAND, ERR-PARTIAL: What is written when a row in the middle of the scan raises (zm = 0 at id 100) during a write statement: INSERT INTO SINK SELECT id, 1 / zm without and with dbFailOnError, UPDATE of a copy EU SET w = 5 / w without and with dbFailOnError, and a make-table SELECT ... INTO EM; reads RecordsAffected, and the row counts and values afterwards (SINK count and Max(id); EU rows with w = 5; whether EM exists). Runs on a fresh copy of r-par-1-error opened read-write through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-error.accdb",
+      "sha256": "4100848678f01a94f57d313b3d3d95161cbcc8d130d4b4af32deb3ad6364b016",
+      "length": 303104,
+      "provenance": "r-par-1.create-error.446c4363f1.a1 qk1-446c4363f1478ae3ea149296d0f8ee1711a0245a5b3617cc69af11915da49c2b output:r-par-1-error.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE SINK (id LONG, e LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SINK (id, e) SELECT id, 1 / zm FROM ER"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n, Max(id) AS hi FROM SINK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "k1"
+    },
+    {
+      "op": "invoke",
+      "target": "k1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "k1_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "k1_mf",
+      "bind": "k1_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k1_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k1_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k1_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "k1_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "k1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "k1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "k1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DELETE FROM SINK"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO SINK (id, e) SELECT id, 1 / zm FROM ER"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n, Max(id) AS hi FROM SINK"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "k2"
+    },
+    {
+      "op": "invoke",
+      "target": "k2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "k2_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "k2_mf",
+      "bind": "k2_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k2_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k2_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k2_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "k2_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "k2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "k2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "k2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, zm AS w INTO EU FROM ER"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE EU SET w = 5 / w"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n, Sum(IIf(w = 5, 1, 0)) AS updated FROM EU"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "k3"
+    },
+    {
+      "op": "invoke",
+      "target": "k3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "k3_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "k3_mf",
+      "bind": "k3_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k3_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k3_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k3_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "k3_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "k3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "k3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "k3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE EU SET w = 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE EU SET w = 0 WHERE id = 100"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "UPDATE EU SET w = 5 / w"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n, Sum(IIf(w = 5, 1, 0)) AS updated FROM EU"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "k4"
+    },
+    {
+      "op": "invoke",
+      "target": "k4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "k4_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "k4_mf",
+      "bind": "k4_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k4_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k4_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k4_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "k4_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "k4",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "k4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "k4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, 1 / zm AS e INTO EM FROM ER"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "RecordsAffected",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM EM"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "k5"
+    },
+    {
+      "op": "invoke",
+      "target": "k5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "k5_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "k5_mf",
+      "bind": "k5_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k5_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k5_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "k5_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "k5_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "k5",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "k5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "k5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "k5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "k5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

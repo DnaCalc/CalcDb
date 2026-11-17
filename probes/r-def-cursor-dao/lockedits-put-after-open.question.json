@@ -1,0 +1,754 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/lockedits-put-after-open",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-EDIT",
+    "CUR-PROV"
+  ],
+  "description": "For a table-type, a dynaset, a snapshot and a forward-only recordset over T: read LockEdits; assign False and read; assign True and read; where Edit is accepted, Edit, assign LockEdits False during the pending Edit, read LockEdits and EditMode, CancelUpdate; Errors after each type. Asks whether LockEdits can be changed after open, per type and while an Edit is pending. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

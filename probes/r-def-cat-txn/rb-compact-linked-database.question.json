@@ -1,0 +1,614 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/rb-compact-linked-database",
+  "bookRefs": [
+    "R-REBUILD-1",
+    "RB-CLEAN",
+    "RB-OPTIONS",
+    "R-LINK-1"
+  ],
+  "description": "An ACCDB host made by the probe holds LK linked to T of r-def-cat-txn-lksrc-accdb and a local table L with two rows. DBEngine.CompactDatabase of the host to a new file: errors; in the output, LK's Connect, SourceTableName, Attributes and Updatable, the rows of LK through the link, and the rows of L. The closed outputs are kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "src",
+      "fileName": "r-def-cat-txn-lksrc-accdb.accdb",
+      "sha256": "f4232ac752cc4e2355b57df308a327468c52dc4545a1af050baaf1ed173d5f0a",
+      "length": 200704,
+      "provenance": "r-def-cat-txn.create-lksrc-accdb.1c68ac7aba.a1 qk1-1c68ac7abac9b5b81b7697e6cd672705ef2a991658c9b5e0c65d08f846b87db9 output:r-def-cat-txn-lksrc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-rb-link-host.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE L (ID LONG CONSTRAINT PK_L PRIMARY KEY, S TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO L (ID, S) VALUES (1, 'a')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO L (ID, S) VALUES (2, 'b')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LK"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "bstr",
+          "text": ";DATABASE=inputs\\r-def-cat-txn-lksrc-accdb.accdb"
+        }
+      ],
+      "bind": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ls1"
+    },
+    {
+      "op": "invoke",
+      "target": "ls1",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "lk1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "ls1"
+    },
+    {
+      "op": "release",
+      "target": "lk1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "lt1"
+    },
+    {
+      "op": "invoke",
+      "target": "lt1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LK"
+        }
+      ],
+      "bind": "ld1"
+    },
+    {
+      "op": "invoke",
+      "target": "ld1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld1",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld1",
+      "member": "SourceTableName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld1",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld1",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ld1"
+    },
+    {
+      "op": "release",
+      "target": "lt1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "before",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-rb-link-host.accdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-rb-link-compacted.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-rb-link-compacted.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "lt2"
+    },
+    {
+      "op": "invoke",
+      "target": "lt2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "LK"
+        }
+      ],
+      "bind": "ld2"
+    },
+    {
+      "op": "invoke",
+      "target": "ld2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld2",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld2",
+      "member": "SourceTableName",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld2",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ld2",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ld2"
+    },
+    {
+      "op": "release",
+      "target": "lt2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM LK ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "lk"
+    },
+    {
+      "op": "loopUntil",
+      "target": "lk",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "lk",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_lk"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_lk",
+          "bind": "f_lk",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_lk",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_lk",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_lk",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_lk"
+        },
+        {
+          "op": "invoke",
+          "target": "lk",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lk",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lk"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM L ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "l"
+    },
+    {
+      "op": "loopUntil",
+      "target": "l",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "l",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_l"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_l",
+          "bind": "f_l",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_l",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_l",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_l",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_l"
+        },
+        {
+          "op": "invoke",
+          "target": "l",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "compacted",
+      "keep": true
+    }
+  ]
+}

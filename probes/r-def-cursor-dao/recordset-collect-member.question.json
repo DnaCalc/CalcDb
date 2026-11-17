@@ -1,0 +1,552 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/recordset-collect-member",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-ID",
+    "CUR-EDIT"
+  ],
+  "description": "A dynaset over \"SELECT ID, N, S FROM T WHERE ID = 3\", inside BeginTrans and rolled back: the property Collect read with the index Long 0, 1, 3 and -1, the strings \"N\", \"n\" and \"T.N\", Null and Empty; then, with no Edit, Collect assigned 41 for \"N\"; Edit, Collect assigned 41 for \"N\" and 42 for index 1, read both through Collect and through Fields, Update, read; Collect assigned for the unknown name \"Nope\". Asks whether the hidden Collect member exists on a recordset, its index forms and refusals, and whether a write through it equals a Field write. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N, S FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T.N"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        },
+        {
+          "type": "i4",
+          "value": 41
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        },
+        {
+          "type": "i4",
+          "value": 41
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 42
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Collect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nope"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

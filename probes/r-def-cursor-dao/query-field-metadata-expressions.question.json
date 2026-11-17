@@ -1,0 +1,284 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/query-field-metadata-expressions",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-PROP",
+    "DAO-COLL",
+    "CUR-PROV"
+  ],
+  "description": "A snapshot over \"SELECT N + 1 AS A1, N * 1.5 AS A2, S & 'x' AS A3, IIf(N > 20, 'a', 'b') AS A4, CInt(N) AS A5, CDbl(N) AS A6, Format(D, 'yyyy') AS A7, Now() AS A8, Null AS A9, True AS A10, 'lit' AS A11, 7 AS A12, 7.5 AS A13, #1/1/2020# AS A14 FROM T WHERE ID = 1\": for each Field, by its own call, Name, Type, Size, Attributes, DataUpdatable, SourceTable, SourceField, Required, OrdinalPosition, CollatingOrder, AllowZeroLength, ValidationRule, ValidationText, DefaultValue, CollectionIndex, ForeignName, Expression and ValidateOnSet; then ReadRow reads the Value of each field. Asks the Type, Size and origin members of expression and literal columns. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT N + 1 AS A1, N * 1.5 AS A2, S & 'x' AS A3, IIf(N > 20, 'a', 'b') AS A4, CInt(N) AS A5, CDbl(N) AS A6, Format(D, 'yyyy') AS A7, Now() AS A8, Null AS A9, True AS A10, 'lit' AS A11, 7 AS A12, 7.5 AS A13, #1/1/2020# AS A14 FROM T WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "mfs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "mfs",
+      "bind": "mf",
+      "maxItems": 24,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DataUpdatable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollatingOrder",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationRule",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidationText",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "DefaultValue",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "CollectionIndex",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ForeignName",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "Expression",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "mf",
+          "member": "ValidateOnSet",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "mfs"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "mr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "mr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

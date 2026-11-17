@@ -1,0 +1,613 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/err-join-excludes-bad-row",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-ERROR",
+    "SQL-DEMAND",
+    "SQL-J"
+  ],
+  "description": "R-PAR-1 PAR-ERROR, SQL-DEMAND, SQL-J: Is the error of zm = 0 at id 100 raised when the join or a subquery removes row 100 before the expression is read: ER INNER JOIN SM (ids 1 to 49) with the division in the select list, in both FROM orders, with the division in WHERE, ER LEFT JOIN SM, WHERE id IN (SELECT id FROM SM), and WHERE EXISTS over SM (one GetRows(300) per statement)? Runs on a fresh copy of r-par-1-error opened read-only through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-error.accdb",
+      "sha256": "4100848678f01a94f57d313b3d3d95161cbcc8d130d4b4af32deb3ad6364b016",
+      "length": 303104,
+      "provenance": "r-par-1.create-error.446c4363f1.a1 qk1-446c4363f1478ae3ea149296d0f8ee1711a0245a5b3617cc69af11915da49c2b output:r-par-1-error.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ER.id, 1 / ER.zm AS e FROM ER INNER JOIN SM ON ER.id = SM.id"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j1"
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ER.id, 1 / ER.zm AS e FROM SM INNER JOIN ER ON ER.id = SM.id"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j2"
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ER.id FROM ER INNER JOIN SM ON ER.id = SM.id WHERE 1 / ER.zm > 0"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j3"
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ER.id, 1 / ER.zm AS e FROM ER LEFT JOIN SM ON ER.id = SM.id"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j4"
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, 1 / zm AS e FROM ER WHERE id IN (SELECT id FROM SM)"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j5"
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, 1 / zm AS e FROM ER WHERE EXISTS (SELECT 1 FROM SM WHERE SM.id = ER.id)"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "j6"
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "j6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "j6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

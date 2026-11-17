@@ -1,0 +1,975 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-expr-sql/str-self-join-equality-classes",
+  "bookRefs": [
+    "R-STRING-1",
+    "II-02",
+    "R-SQL-1",
+    "SQL-EQ",
+    "SQL-J"
+  ],
+  "description": "Asks which pairs of stored Tx values (a.ID < b.ID) compare equal under four predicates over the 38 x 38 self join: a.T = b.T, a.M = b.M, StrComp(a.T, b.T, 1) = 0 and StrComp(a.T, b.T, 0) = 0, and which pairs differ in Len or LenB while comparing equal. Each is one snapshot of the ID pairs ordered by both IDs, followed by DBEngine.Errors. Fixture r-def-expr-sql-main is opened read-only through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-expr-sql-main.accdb",
+      "sha256": "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70",
+      "length": 237568,
+      "provenance": "r-def-expr-sql.create-main.e7178cf25c.a1 qk1-e7178cf25cd82f571d308a285e32608915e2dd17853ec508fb114cbc54147c50 output:r-def-expr-sql-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE a.T = b.T ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs0",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs0f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs0f",
+          "bind": "rs0x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs0x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs0f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE a.M = b.M ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs1f",
+          "bind": "rs1x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs1f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE StrComp(a.T, b.T, 1) = 0 ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs2f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs2f",
+          "bind": "rs2x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs2x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs2x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs2x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs2f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE StrComp(a.T, b.T, 0) = 0 ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs3",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs3f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs3f",
+          "bind": "rs3x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs3f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE a.T = b.T AND (Len(a.T) <> Len(b.T) OR LenB(a.T) <> LenB(b.T)) ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs4"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs4",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs4f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs4f",
+          "bind": "rs4x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs4x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs4x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs4x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs4f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE a.T = b.M ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs5"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs5",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs5f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs5f",
+          "bind": "rs5x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs5f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT a.ID AS ia, b.ID AS ib FROM Tx AS a INNER JOIN Tx AS b ON a.ID < b.ID WHERE UCase(a.T) = UCase(b.T) ORDER BY a.ID, b.ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs6"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs6",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs6f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs6f",
+          "bind": "rs6x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs6x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs6x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs6x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs6f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

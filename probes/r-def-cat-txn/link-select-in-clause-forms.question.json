@@ -1,0 +1,877 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/link-select-in-clause-forms",
+  "bookRefs": [
+    "R-LINK-1",
+    "LINK-OPEN",
+    "LINK-PUSHDOWN",
+    "R-SQL-3"
+  ],
+  "description": "Without any linked table, in an empty ACCDB made by the probe: which external-table forms does ACE accept against r-def-cat-txn-lksrc-accdb by relative path: SELECT FROM T IN 'path'; SELECT FROM [;DATABASE=path].T; SELECT FROM T IN '' [;DATABASE=path]; INSERT INTO T IN 'path' SELECT ... FROM T IN 'path'; SELECT * INTO Local FROM T IN 'path'; and SELECT FROM T IN a path of a file that does not exist. Errors and rows after each.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "src",
+      "fileName": "r-def-cat-txn-lksrc-accdb.accdb",
+      "sha256": "f4232ac752cc4e2355b57df308a327468c52dc4545a1af050baaf1ed173d5f0a",
+      "length": 200704,
+      "provenance": "r-def-cat-txn.create-lksrc-accdb.1c68ac7aba.a1 qk1-1c68ac7abac9b5b81b7697e6cd672705ef2a991658c9b5e0c65d08f846b87db9 output:r-def-cat-txn-lksrc-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-link-in-host.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T IN 'inputs\\r-def-cat-txn-lksrc-accdb.accdb' ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q0"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q0",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q0",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_q0"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_q0",
+          "bind": "f_q0",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_q0",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q0",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q0",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_q0"
+        },
+        {
+          "op": "invoke",
+          "target": "q0",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM [;DATABASE=inputs\\r-def-cat-txn-lksrc-accdb.accdb].T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_q1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_q1",
+          "bind": "f_q1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_q1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_q1"
+        },
+        {
+          "op": "invoke",
+          "target": "q1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T IN '' [;DATABASE=inputs\\r-def-cat-txn-lksrc-accdb.accdb] ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q2",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_q2"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_q2",
+          "bind": "f_q2",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_q2",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q2",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q2",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_q2"
+        },
+        {
+          "op": "invoke",
+          "target": "q2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T IN 'inputs\\r-def-cat-txn-lksrc-missing.accdb'"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "q3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "q3",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "q3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_q3"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_q3",
+          "bind": "f_q3",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_q3",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q3",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_q3",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_q3"
+        },
+        {
+          "op": "invoke",
+          "target": "q3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T IN 'inputs\\r-def-cat-txn-lksrc-accdb.accdb' SELECT ID + 100, V, S FROM T IN 'inputs\\r-def-cat-txn-lksrc-accdb.accdb'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T IN 'inputs\\r-def-cat-txn-lksrc-accdb.accdb' ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "after"
+    },
+    {
+      "op": "loopUntil",
+      "target": "after",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "after",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_after"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_after",
+          "bind": "f_after",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_after",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_after",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_after",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_after"
+        },
+        {
+          "op": "invoke",
+          "target": "after",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "after",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "after"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * INTO Local FROM T IN 'inputs\\r-def-cat-txn-lksrc-accdb.accdb'"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct1",
+      "bind": "cd1",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr1",
+      "bind": "cl1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq1",
+      "bind": "cn1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

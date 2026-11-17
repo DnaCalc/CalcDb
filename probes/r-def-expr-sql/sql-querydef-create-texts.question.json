@@ -1,0 +1,2888 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-expr-sql/sql-querydef-create-texts",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B",
+    "CAT-Q"
+  ],
+  "description": "Asks, on a writable copy, what Database.CreateQueryDef(name, sql) keeps and refuses for SQL texts of many shapes (spacing and case variants, brackets and qualifiers, one and two trailing semicolons, CR/LF, comment forms, an unknown table or column or function, a syntax error, empty, blank and semicolon-only text, every statement family without running it, a declaration, an append, make-table, DDL, crosstab and union text, a reference to another QueryDef, and an embedded accent): after each create, the SQL property exactly, Type and ReturnsRecords; then the Database is closed and reopened and each QueryDef's SQL is read again by name. Fixture r-def-expr-sql-main is opened on a writable fresh copy through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-expr-sql-main.accdb",
+      "sha256": "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70",
+      "length": 237568,
+      "provenance": "r-def-expr-sql.create-main.e7178cf25c.a1 qk1-e7178cf25cd82f571d308a285e32608915e2dd17853ec508fb114cbc54147c50 output:r-def-expr-sql-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q0"
+        },
+        {
+          "type": "bstr",
+          "text": "select  id   from   one"
+        }
+      ],
+      "bind": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT [ID] FROM [One]"
+        }
+      ],
+      "bind": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q1",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q2"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT One.ID FROM One"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q3"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q3",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q4"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One ; "
+        }
+      ],
+      "bind": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q5"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One\r\n"
+        }
+      ],
+      "bind": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q5",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q6"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID\r\nFROM One\r\n"
+        }
+      ],
+      "bind": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q7"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM One"
+        }
+      ],
+      "bind": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q7",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q8"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID AS ID FROM One"
+        }
+      ],
+      "bind": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q9"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One WHERE ID=1 AND ID<>2"
+        }
+      ],
+      "bind": "q9"
+    },
+    {
+      "op": "invoke",
+      "target": "q9",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q9",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q9",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q10"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One WHERE (ID=1)"
+        }
+      ],
+      "bind": "q10"
+    },
+    {
+      "op": "invoke",
+      "target": "q10",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q10",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q10",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q11"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One WHERE ((ID=1))"
+        }
+      ],
+      "bind": "q11"
+    },
+    {
+      "op": "invoke",
+      "target": "q11",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q11",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q11",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q12"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT \"a\" AS v FROM One"
+        }
+      ],
+      "bind": "q12"
+    },
+    {
+      "op": "invoke",
+      "target": "q12",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q12",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q12",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q13"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT 'a' AS v FROM One"
+        }
+      ],
+      "bind": "q13"
+    },
+    {
+      "op": "invoke",
+      "target": "q13",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q13",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q13",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q14"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One /* c */"
+        }
+      ],
+      "bind": "q14"
+    },
+    {
+      "op": "invoke",
+      "target": "q14",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q14",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q14",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q15"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One -- c"
+        }
+      ],
+      "bind": "q15"
+    },
+    {
+      "op": "invoke",
+      "target": "q15",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q15",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q15",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q16"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Nope"
+        }
+      ],
+      "bind": "q16"
+    },
+    {
+      "op": "invoke",
+      "target": "q16",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q16",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q16",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q17"
+        },
+        {
+          "type": "bstr",
+          "text": "SELEC ID"
+        }
+      ],
+      "bind": "q17"
+    },
+    {
+      "op": "invoke",
+      "target": "q17",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q17",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q17",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q18"
+        },
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ],
+      "bind": "q18"
+    },
+    {
+      "op": "invoke",
+      "target": "q18",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q18",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q18",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q18"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q19"
+        },
+        {
+          "type": "bstr",
+          "text": " "
+        }
+      ],
+      "bind": "q19"
+    },
+    {
+      "op": "invoke",
+      "target": "q19",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q19",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q19",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q19"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q20"
+        },
+        {
+          "type": "bstr",
+          "text": ";"
+        }
+      ],
+      "bind": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "q20",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q20",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q20",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q21"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT 1"
+        }
+      ],
+      "bind": "q21"
+    },
+    {
+      "op": "invoke",
+      "target": "q21",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q21",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q21",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q21"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q22"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT Nope FROM One"
+        }
+      ],
+      "bind": "q22"
+    },
+    {
+      "op": "invoke",
+      "target": "q22",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q22",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q22",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q22"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q23"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT NoFunc(1) FROM One"
+        }
+      ],
+      "bind": "q23"
+    },
+    {
+      "op": "invoke",
+      "target": "q23",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q23",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q23",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q23"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q24"
+        },
+        {
+          "type": "bstr",
+          "text": "UPDATE One SET ID = 1"
+        }
+      ],
+      "bind": "q24"
+    },
+    {
+      "op": "invoke",
+      "target": "q24",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q24",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q24",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q24"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q25"
+        },
+        {
+          "type": "bstr",
+          "text": "DELETE * FROM One"
+        }
+      ],
+      "bind": "q25"
+    },
+    {
+      "op": "invoke",
+      "target": "q25",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q25",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q25",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q25"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q26"
+        },
+        {
+          "type": "bstr",
+          "text": "INSERT INTO One (ID) VALUES (9)"
+        }
+      ],
+      "bind": "q26"
+    },
+    {
+      "op": "invoke",
+      "target": "q26",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q26",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q26",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q26"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q27"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID INTO Mk FROM One"
+        }
+      ],
+      "bind": "q27"
+    },
+    {
+      "op": "invoke",
+      "target": "q27",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q27",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q27",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q27"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q28"
+        },
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE QT (A LONG)"
+        }
+      ],
+      "bind": "q28"
+    },
+    {
+      "op": "invoke",
+      "target": "q28",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q28",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q28",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q28"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q29"
+        },
+        {
+          "type": "bstr",
+          "text": "DROP TABLE Nope"
+        }
+      ],
+      "bind": "q29"
+    },
+    {
+      "op": "invoke",
+      "target": "q29",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q29",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q29",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q29"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q30"
+        },
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE One ADD COLUMN X LONG"
+        }
+      ],
+      "bind": "q30"
+    },
+    {
+      "op": "invoke",
+      "target": "q30",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q30",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q30",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q30"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q31"
+        },
+        {
+          "type": "bstr",
+          "text": "TRANSFORM Count(ID) SELECT ID FROM One GROUP BY ID PIVOT ID"
+        }
+      ],
+      "bind": "q31"
+    },
+    {
+      "op": "invoke",
+      "target": "q31",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q31",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q31",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q31"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q32"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One UNION SELECT ID FROM One"
+        }
+      ],
+      "bind": "q32"
+    },
+    {
+      "op": "invoke",
+      "target": "q32",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q32",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q32",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q32"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q33"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p Long; SELECT ID FROM One WHERE ID = p;"
+        }
+      ],
+      "bind": "q33"
+    },
+    {
+      "op": "invoke",
+      "target": "q33",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q33",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q33",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q33"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q34"
+        },
+        {
+          "type": "bstr",
+          "text": "PARAMETERS p Long; UPDATE One SET ID = p"
+        }
+      ],
+      "bind": "q34"
+    },
+    {
+      "op": "invoke",
+      "target": "q34",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q34",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q34",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q34"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q35"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One WITH OWNERACCESS OPTION"
+        }
+      ],
+      "bind": "q35"
+    },
+    {
+      "op": "invoke",
+      "target": "q35",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q35",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q35",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q35"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q36"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;SELECT ID FROM One"
+        }
+      ],
+      "bind": "q36"
+    },
+    {
+      "op": "invoke",
+      "target": "q36",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q36",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q36",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q36"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q37"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One WHERE ID = [Q0]"
+        }
+      ],
+      "bind": "q37"
+    },
+    {
+      "op": "invoke",
+      "target": "q37",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q37",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q37",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q37"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q38"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT 'café' AS v FROM One"
+        }
+      ],
+      "bind": "q38"
+    },
+    {
+      "op": "invoke",
+      "target": "q38",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q38",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q38",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q38"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q39"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM Q1"
+        }
+      ],
+      "bind": "q39"
+    },
+    {
+      "op": "invoke",
+      "target": "q39",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q39",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q39",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q39"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q40"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM [Q2]"
+        }
+      ],
+      "bind": "q40"
+    },
+    {
+      "op": "invoke",
+      "target": "q40",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q40",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "q40",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q40"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qs41"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q0"
+        }
+      ],
+      "bind": "q42"
+    },
+    {
+      "op": "invoke",
+      "target": "q42",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q42"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "q43"
+    },
+    {
+      "op": "invoke",
+      "target": "q43",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q43"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q2"
+        }
+      ],
+      "bind": "q44"
+    },
+    {
+      "op": "invoke",
+      "target": "q44",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q44"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q3"
+        }
+      ],
+      "bind": "q45"
+    },
+    {
+      "op": "invoke",
+      "target": "q45",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q45"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q4"
+        }
+      ],
+      "bind": "q46"
+    },
+    {
+      "op": "invoke",
+      "target": "q46",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q46"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q5"
+        }
+      ],
+      "bind": "q47"
+    },
+    {
+      "op": "invoke",
+      "target": "q47",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q47"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q6"
+        }
+      ],
+      "bind": "q48"
+    },
+    {
+      "op": "invoke",
+      "target": "q48",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q48"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q7"
+        }
+      ],
+      "bind": "q49"
+    },
+    {
+      "op": "invoke",
+      "target": "q49",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q49"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q8"
+        }
+      ],
+      "bind": "q50"
+    },
+    {
+      "op": "invoke",
+      "target": "q50",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q50"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q9"
+        }
+      ],
+      "bind": "q51"
+    },
+    {
+      "op": "invoke",
+      "target": "q51",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q51"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q10"
+        }
+      ],
+      "bind": "q52"
+    },
+    {
+      "op": "invoke",
+      "target": "q52",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q52"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q11"
+        }
+      ],
+      "bind": "q53"
+    },
+    {
+      "op": "invoke",
+      "target": "q53",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q53"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q12"
+        }
+      ],
+      "bind": "q54"
+    },
+    {
+      "op": "invoke",
+      "target": "q54",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q54"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q13"
+        }
+      ],
+      "bind": "q55"
+    },
+    {
+      "op": "invoke",
+      "target": "q55",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q55"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q14"
+        }
+      ],
+      "bind": "q56"
+    },
+    {
+      "op": "invoke",
+      "target": "q56",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q56"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q15"
+        }
+      ],
+      "bind": "q57"
+    },
+    {
+      "op": "invoke",
+      "target": "q57",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q57"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q16"
+        }
+      ],
+      "bind": "q58"
+    },
+    {
+      "op": "invoke",
+      "target": "q58",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q58"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q17"
+        }
+      ],
+      "bind": "q59"
+    },
+    {
+      "op": "invoke",
+      "target": "q59",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q59"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q18"
+        }
+      ],
+      "bind": "q60"
+    },
+    {
+      "op": "invoke",
+      "target": "q60",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q60"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q19"
+        }
+      ],
+      "bind": "q61"
+    },
+    {
+      "op": "invoke",
+      "target": "q61",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q61"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q20"
+        }
+      ],
+      "bind": "q62"
+    },
+    {
+      "op": "invoke",
+      "target": "q62",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q62"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q21"
+        }
+      ],
+      "bind": "q63"
+    },
+    {
+      "op": "invoke",
+      "target": "q63",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q63"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q22"
+        }
+      ],
+      "bind": "q64"
+    },
+    {
+      "op": "invoke",
+      "target": "q64",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q64"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q23"
+        }
+      ],
+      "bind": "q65"
+    },
+    {
+      "op": "invoke",
+      "target": "q65",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q65"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q24"
+        }
+      ],
+      "bind": "q66"
+    },
+    {
+      "op": "invoke",
+      "target": "q66",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q66"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q25"
+        }
+      ],
+      "bind": "q67"
+    },
+    {
+      "op": "invoke",
+      "target": "q67",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q67"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q26"
+        }
+      ],
+      "bind": "q68"
+    },
+    {
+      "op": "invoke",
+      "target": "q68",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q68"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q27"
+        }
+      ],
+      "bind": "q69"
+    },
+    {
+      "op": "invoke",
+      "target": "q69",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q69"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q28"
+        }
+      ],
+      "bind": "q70"
+    },
+    {
+      "op": "invoke",
+      "target": "q70",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q70"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q29"
+        }
+      ],
+      "bind": "q71"
+    },
+    {
+      "op": "invoke",
+      "target": "q71",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q71"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q30"
+        }
+      ],
+      "bind": "q72"
+    },
+    {
+      "op": "invoke",
+      "target": "q72",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q72"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q31"
+        }
+      ],
+      "bind": "q73"
+    },
+    {
+      "op": "invoke",
+      "target": "q73",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q73"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q32"
+        }
+      ],
+      "bind": "q74"
+    },
+    {
+      "op": "invoke",
+      "target": "q74",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q74"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q33"
+        }
+      ],
+      "bind": "q75"
+    },
+    {
+      "op": "invoke",
+      "target": "q75",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q75"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q34"
+        }
+      ],
+      "bind": "q76"
+    },
+    {
+      "op": "invoke",
+      "target": "q76",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q76"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q35"
+        }
+      ],
+      "bind": "q77"
+    },
+    {
+      "op": "invoke",
+      "target": "q77",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q77"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q36"
+        }
+      ],
+      "bind": "q78"
+    },
+    {
+      "op": "invoke",
+      "target": "q78",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q78"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q37"
+        }
+      ],
+      "bind": "q79"
+    },
+    {
+      "op": "invoke",
+      "target": "q79",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q79"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q38"
+        }
+      ],
+      "bind": "q80"
+    },
+    {
+      "op": "invoke",
+      "target": "q80",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q80"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q39"
+        }
+      ],
+      "bind": "q81"
+    },
+    {
+      "op": "invoke",
+      "target": "q81",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q81"
+    },
+    {
+      "op": "invoke",
+      "target": "qs41",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q40"
+        }
+      ],
+      "bind": "q82"
+    },
+    {
+      "op": "invoke",
+      "target": "q82",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q82"
+    },
+    {
+      "op": "release",
+      "target": "qs41"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

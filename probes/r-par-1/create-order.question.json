@@ -1,0 +1,3253 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/create-order",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-ORDER"
+  ],
+  "description": "R-PAR-1 fixture r-par-1-order: DG(d 0..7) and NUM(n 1..512, inserted ascending); tie tables with 256 rows each inserted by INSERT ... SELECT pk = 1000 - n, k = n Mod 7, ins = n, s = 't' & (n Mod 5) FROM NUM ORDER BY n (so insertion order is ins ascending and primary-key order is descending): OT5 (no key, no index), OT2 (primary key pk), OT3 (primary key and index IX_OT3_K on k), OT4 (primary key and compound index IX_OT4_KI on k, ins DESC); UA(id PK, v = 21 - n), UB(v = n + 10) and UC(v = (n * 7) Mod 23) with 20 rows each; join tables JL and JLI (id PK, k = n Mod 5, 16 rows) and JR and JRI (rid = 100 - n PK, k = n Mod 4, ins = n, 32 rows), with indexes on k in JLI and JRI; OG and OGI (id PK, t Text, n Long; OGI indexes t) holding the same twelve Text values with case and accent variants in one insertion order. Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); DDL and set-based rows go through Database.Execute, exact typed values through table-type AddNew/Value/Update; every statement's outcome is captured (a refused statement is an observation) and a read-back follows; the closed file is kept.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-par-1-order.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DG (d LONG CONSTRAINT PK_DG PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (4)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (6)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE NUM (n LONG CONSTRAINT PK_NUM PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO NUM (n) SELECT a.d * 64 + b.d * 8 + c.d + 1 FROM DG AS a, DG AS b, DG AS c ORDER BY a.d, b.d, c.d"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM NUM"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nn"
+    },
+    {
+      "op": "invoke",
+      "target": "nn",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "nn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nn"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OT5 (pk LONG, k LONG, ins LONG, s TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OT2 (pk LONG CONSTRAINT PK_OT2 PRIMARY KEY, k LONG, ins LONG, s TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OT3 (pk LONG CONSTRAINT PK_OT3 PRIMARY KEY, k LONG, ins LONG, s TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OT4 (pk LONG CONSTRAINT PK_OT4 PRIMARY KEY, k LONG, ins LONG, s TEXT(10))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_OT3_K ON OT3 (k)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_OT4_KI ON OT4 (k, ins DESC)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO OT5 (pk, k, ins, s) SELECT 1000 - n, n Mod 7, n, 't' & (n Mod 5) FROM NUM WHERE n <= 256 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM OT5"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cOT5"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cOT5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO OT2 (pk, k, ins, s) SELECT 1000 - n, n Mod 7, n, 't' & (n Mod 5) FROM NUM WHERE n <= 256 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM OT2"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cOT2"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cOT2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO OT3 (pk, k, ins, s) SELECT 1000 - n, n Mod 7, n, 't' & (n Mod 5) FROM NUM WHERE n <= 256 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM OT3"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cOT3"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cOT3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO OT4 (pk, k, ins, s) SELECT 1000 - n, n Mod 7, n, 't' & (n Mod 5) FROM NUM WHERE n <= 256 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM OT4"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "cOT4"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "cOT4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cOT4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE UA (id LONG CONSTRAINT PK_UA PRIMARY KEY, v LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE UB (id LONG CONSTRAINT PK_UB PRIMARY KEY, v LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE UC (id LONG CONSTRAINT PK_UC PRIMARY KEY, v LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO UA (id, v) SELECT n, 21 - n FROM NUM WHERE n <= 20 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO UB (id, v) SELECT n, n + 10 FROM NUM WHERE n <= 20 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO UC (id, v) SELECT n, (n * 7) Mod 23 FROM NUM WHERE n <= 20 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE JL (id LONG CONSTRAINT PK_JL PRIMARY KEY, k LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE JLI (id LONG CONSTRAINT PK_JLI PRIMARY KEY, k LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE JR (rid LONG CONSTRAINT PK_JR PRIMARY KEY, k LONG, ins LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE JRI (rid LONG CONSTRAINT PK_JRI PRIMARY KEY, k LONG, ins LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_JLI_K ON JLI (k)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_JRI_K ON JRI (k)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO JL (id, k) SELECT n, n Mod 5 FROM NUM WHERE n <= 16 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO JLI (id, k) SELECT n, n Mod 5 FROM NUM WHERE n <= 16 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO JR (rid, k, ins) SELECT 100 - n, n Mod 4, n FROM NUM WHERE n <= 32 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO JRI (rid, k, ins) SELECT 100 - n, n Mod 4, n FROM NUM WHERE n <= 32 ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OG (id LONG CONSTRAINT PK_OG PRIMARY KEY, t TEXT(10), n LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OG"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_OG"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_OG_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_OG_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "t"
+        }
+      ],
+      "bind": "ins_OG_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "n"
+        }
+      ],
+      "bind": "ins_OG_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ä"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_OG_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_OG_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_OG_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_OG_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OG",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_OG"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE OGI (id LONG CONSTRAINT PK_OGI PRIMARY KEY, t TEXT(10), n LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "OGI"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_OGI"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_OGI_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_OGI_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "t"
+        }
+      ],
+      "bind": "ins_OGI_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "n"
+        }
+      ],
+      "bind": "ins_OGI_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ä"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_OGI_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_OGI_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_OGI_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_OGI_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_OGI",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_OGI"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_OGI_T ON OGI (t)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT k, Count(*) AS n FROM OT5 GROUP BY k"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb1"
+    },
+    {
+      "op": "invoke",
+      "target": "rb1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb1_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb1_mf",
+      "bind": "rb1_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb1_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb1",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM UA"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb2"
+    },
+    {
+      "op": "invoke",
+      "target": "rb2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb2_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb2_mf",
+      "bind": "rb2_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb2_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb2",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM JL"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb3"
+    },
+    {
+      "op": "invoke",
+      "target": "rb3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb3_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb3_mf",
+      "bind": "rb3_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb3_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb3",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM JR"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb4"
+    },
+    {
+      "op": "invoke",
+      "target": "rb4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb4_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb4_mf",
+      "bind": "rb4_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb4_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb4",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM OGI"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb5"
+    },
+    {
+      "op": "invoke",
+      "target": "rb5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb5_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb5_mf",
+      "bind": "rb5_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb5_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb5",
+      "member": "EOF",
+      "maxIterations": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

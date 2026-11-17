@@ -1,0 +1,1183 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/join-field-names-and-lookup",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-COLL",
+    "DAO-ID",
+    "CUR-PROV"
+  ],
+  "description": "Dynasets over \"SELECT PA.ID, PA.V, CH.ID, CH.PID, CH.W FROM PA INNER JOIN CH ON PA.ID = CH.PID ORDER BY CH.ID\" and \"SELECT * FROM PA INNER JOIN CH ON PA.ID = CH.PID\": Fields Count; for each field Name, SourceTable, SourceField, OrdinalPosition and Value; then Fields.Item with \"ID\", \"PA.ID\", \"CH.ID\", \"ID1\", \"ID2\", \"[ID]\", \"V\", \"PA.V\", \"W\", Long 0 to 4 and Long 5, each followed by Name and Value. Asks how duplicate output names are named and which lookup forms find which column. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT PA.ID, PA.V, CH.ID, CH.PID, CH.W FROM PA INNER JOIN CH ON PA.ID = CH.PID ORDER BY CH.ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "jr"
+    },
+    {
+      "op": "invoke",
+      "target": "jr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "jfs"
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "jfs",
+      "bind": "jf",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "jl0_0"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PA.ID"
+        }
+      ],
+      "bind": "jl0_1"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CH.ID"
+        }
+      ],
+      "bind": "jl0_2"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID1"
+        }
+      ],
+      "bind": "jl0_3"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID2"
+        }
+      ],
+      "bind": "jl0_4"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[ID]"
+        }
+      ],
+      "bind": "jl0_5"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_5",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "jl0_6"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_6",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PA.V"
+        }
+      ],
+      "bind": "jl0_7"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_7",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_7",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "W"
+        }
+      ],
+      "bind": "jl0_8"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_8",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "jl0_9"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_9",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_9",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "jl0_10"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_10",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_10",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "jl0_11"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_11",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_11",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "jl0_12"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_12",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_12",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "jl0_13"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_13",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_13",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "jl0_14"
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_14",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl0_14",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "jfs"
+    },
+    {
+      "op": "invoke",
+      "target": "jr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "jr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM PA INNER JOIN CH ON PA.ID = CH.PID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "jr"
+    },
+    {
+      "op": "invoke",
+      "target": "jr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "jfs"
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "jfs",
+      "bind": "jf",
+      "maxItems": 12,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "SourceTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "SourceField",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "OrdinalPosition",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "jf",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "jl1_0"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_0",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PA.ID"
+        }
+      ],
+      "bind": "jl1_1"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_1",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_1",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CH.ID"
+        }
+      ],
+      "bind": "jl1_2"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_2",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID1"
+        }
+      ],
+      "bind": "jl1_3"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_3",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_3",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID2"
+        }
+      ],
+      "bind": "jl1_4"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_4",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[ID]"
+        }
+      ],
+      "bind": "jl1_5"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_5",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_5",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "V"
+        }
+      ],
+      "bind": "jl1_6"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_6",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PA.V"
+        }
+      ],
+      "bind": "jl1_7"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_7",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_7",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "W"
+        }
+      ],
+      "bind": "jl1_8"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_8",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "jl1_9"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_9",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_9",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "jl1_10"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_10",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_10",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "jl1_11"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_11",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_11",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "jl1_12"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_12",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_12",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "jl1_13"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_13",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_13",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "jl1_14"
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_14",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "jl1_14",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "jfs"
+    },
+    {
+      "op": "invoke",
+      "target": "jr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "jr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

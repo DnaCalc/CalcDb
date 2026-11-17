@@ -1,0 +1,791 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/pres-xproc-interleaved-inserts",
+  "bookRefs": [
+    "R-PRESERVE-1",
+    "R-FMT-2",
+    "WRITE-ALLOC",
+    "R-LOCK-4"
+  ],
+  "description": "Two processes, both shared read/write on T(ID COUNTER key, Who TEXT 1, N LONG), insert ten rows each in four alternating rounds (A, B, A, B, ...) ordered by barriers. A then reads the row count, the distinct IDs and the rows by writer; the closed file is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-pres-interleave.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, Who TEXT(1), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE D (X LONG CONSTRAINT PK_D PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (0)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (1)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (2)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (3)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (4)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (6)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (7)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (8)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO D (X) VALUES (9)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-pres-interleave.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "a-ready"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Who, N) SELECT 'a', X + 100 FROM D"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "a-1"
+    },
+    {
+      "op": "await",
+      "name": "b-1",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Who, N) SELECT 'a', X + 200 FROM D"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "a-2"
+    },
+    {
+      "op": "await",
+      "name": "b-2",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Who, N) SELECT 'a', X + 300 FROM D"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "a-3"
+    },
+    {
+      "op": "await",
+      "name": "b-3",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Who, N) SELECT 'a', X + 400 FROM D"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "signal",
+      "name": "a-4"
+    },
+    {
+      "op": "await",
+      "name": "b-4",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*), MAX(ID) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "count"
+    },
+    {
+      "op": "loopUntil",
+      "target": "count",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "count",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_count"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_count",
+          "bind": "f_count",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_count",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_count",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_count",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_count"
+        },
+        {
+          "op": "invoke",
+          "target": "count",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "count",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "count"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM (SELECT DISTINCT ID FROM T)"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "distinct"
+    },
+    {
+      "op": "loopUntil",
+      "target": "distinct",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "distinct",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_distinct"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_distinct",
+          "bind": "f_distinct",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_distinct",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_distinct",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_distinct",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_distinct"
+        },
+        {
+          "op": "invoke",
+          "target": "distinct",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "distinct",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "distinct"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Who, COUNT(*), MIN(ID), MAX(ID) FROM T GROUP BY Who ORDER BY Who"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "by"
+    },
+    {
+      "op": "loopUntil",
+      "target": "by",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "by",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_by"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_by",
+          "bind": "f_by",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_by",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_by",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_by",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_by"
+        },
+        {
+          "op": "invoke",
+          "target": "by",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "by",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "by"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "closed-image",
+      "keep": true
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-ready",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "r-def-cat-txn-pres-interleave.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "await",
+          "name": "a-1",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "INSERT INTO T (Who, N) SELECT 'b', X + 100 FROM D"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "signal",
+          "name": "b-1"
+        },
+        {
+          "op": "await",
+          "name": "a-2",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "INSERT INTO T (Who, N) SELECT 'b', X + 200 FROM D"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "signal",
+          "name": "b-2"
+        },
+        {
+          "op": "await",
+          "name": "a-3",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "INSERT INTO T (Who, N) SELECT 'b', X + 300 FROM D"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "signal",
+          "name": "b-3"
+        },
+        {
+          "op": "await",
+          "name": "a-4",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "INSERT INTO T (Who, N) SELECT 'b', X + 400 FROM D"
+            },
+            {
+              "type": "i4",
+              "value": 128
+            }
+          ]
+        },
+        {
+          "op": "signal",
+          "name": "b-4"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    }
+  ]
+}

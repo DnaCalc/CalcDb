@@ -1,0 +1,1535 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/addnew-landing-by-index-and-type",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-EDIT",
+    "CUR-POS",
+    "CUR-ID"
+  ],
+  "description": "For a table-type with Index IX_TN, IX_TND and PK_T and a dynaset over T, over \"SELECT ID, N FROM T ORDER BY N DESC\" and over \"SELECT ID, N FROM T ORDER BY N\", each at its row 3 (Move 2) and inside BeginTrans, rolled back: AddNew, assign ID 20 and N 35, Update; read BOF, EOF, ID and N of the current row, LastModified; MoveNext and read; MovePrevious twice and read; MoveLast and read; RecordCount. Asks which row is current after AddNew and Update and where the new row sits in each ordering. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TND"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PK_T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T ORDER BY N DESC"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T ORDER BY N"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "l_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "l_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "l_N"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "l_ID",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "l_ID"
+    },
+    {
+      "op": "release",
+      "target": "l_N"
+    },
+    {
+      "op": "release",
+      "target": "l_s"
+    },
+    {
+      "op": "invoke",
+      "target": "lr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "lr"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,1087 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/fmt-index-growth-ladder",
+  "bookRefs": [
+    "R-FMT-2",
+    "II-05",
+    "R-SORT-3"
+  ],
+  "description": "ACCDB: T(ID LONG key, K TEXT 100 under index IX_K, V LONG) starts with one row and doubles by INSERT ... SELECT 13 times to 8,192 rows with distinct keys of about 30 characters. At 2, 16, 128, 1,024 and 8,192 rows: the row count, the DistinctCount of IX_K and the file length and state; the closed file with 8,192 rows is kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-fmt-growth.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, K TEXT(100), V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_K ON T (K)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) VALUES (1, 'key-1-padding-padding-padding', 0)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 1, 'key-' & (ID + 1) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n1",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_n1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_n1",
+          "bind": "f_n1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_n1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n1",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n1",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_n1"
+        },
+        {
+          "op": "invoke",
+          "target": "n1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dt1"
+    },
+    {
+      "op": "invoke",
+      "target": "dt1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dd1"
+    },
+    {
+      "op": "invoke",
+      "target": "dd1",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dx1"
+    },
+    {
+      "op": "invoke",
+      "target": "dx1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ],
+      "bind": "de1"
+    },
+    {
+      "op": "invoke",
+      "target": "de1",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "de1"
+    },
+    {
+      "op": "release",
+      "target": "dx1"
+    },
+    {
+      "op": "release",
+      "target": "dd1"
+    },
+    {
+      "op": "release",
+      "target": "dt1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "rows-2",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 2, 'key-' & (ID + 2) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 4, 'key-' & (ID + 4) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 8, 'key-' & (ID + 8) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n4"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n4",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_n4"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_n4",
+          "bind": "f_n4",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_n4",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n4",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n4",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_n4"
+        },
+        {
+          "op": "invoke",
+          "target": "n4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dt4"
+    },
+    {
+      "op": "invoke",
+      "target": "dt4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dd4"
+    },
+    {
+      "op": "invoke",
+      "target": "dd4",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dx4"
+    },
+    {
+      "op": "invoke",
+      "target": "dx4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ],
+      "bind": "de4"
+    },
+    {
+      "op": "invoke",
+      "target": "de4",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "de4"
+    },
+    {
+      "op": "release",
+      "target": "dx4"
+    },
+    {
+      "op": "release",
+      "target": "dd4"
+    },
+    {
+      "op": "release",
+      "target": "dt4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "rows-16",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 16, 'key-' & (ID + 16) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 32, 'key-' & (ID + 32) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 64, 'key-' & (ID + 64) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n7"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n7",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_n7"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_n7",
+          "bind": "f_n7",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_n7",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n7",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n7",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_n7"
+        },
+        {
+          "op": "invoke",
+          "target": "n7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dt7"
+    },
+    {
+      "op": "invoke",
+      "target": "dt7",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dd7"
+    },
+    {
+      "op": "invoke",
+      "target": "dd7",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dx7"
+    },
+    {
+      "op": "invoke",
+      "target": "dx7",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ],
+      "bind": "de7"
+    },
+    {
+      "op": "invoke",
+      "target": "de7",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "de7"
+    },
+    {
+      "op": "release",
+      "target": "dx7"
+    },
+    {
+      "op": "release",
+      "target": "dd7"
+    },
+    {
+      "op": "release",
+      "target": "dt7"
+    },
+    {
+      "op": "observeFiles",
+      "label": "rows-128",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 128, 'key-' & (ID + 128) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 256, 'key-' & (ID + 256) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 512, 'key-' & (ID + 512) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n10"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n10",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n10",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_n10"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_n10",
+          "bind": "f_n10",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_n10",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n10",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n10",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_n10"
+        },
+        {
+          "op": "invoke",
+          "target": "n10",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n10",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dt10"
+    },
+    {
+      "op": "invoke",
+      "target": "dt10",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dd10"
+    },
+    {
+      "op": "invoke",
+      "target": "dd10",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dx10"
+    },
+    {
+      "op": "invoke",
+      "target": "dx10",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ],
+      "bind": "de10"
+    },
+    {
+      "op": "invoke",
+      "target": "de10",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "de10"
+    },
+    {
+      "op": "release",
+      "target": "dx10"
+    },
+    {
+      "op": "release",
+      "target": "dd10"
+    },
+    {
+      "op": "release",
+      "target": "dt10"
+    },
+    {
+      "op": "observeFiles",
+      "label": "rows-1024",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 1024, 'key-' & (ID + 1024) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 2048, 'key-' & (ID + 2048) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, K, V) SELECT ID + 4096, 'key-' & (ID + 4096) & '-padding-padding-padding', V FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT COUNT(*) FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "n13"
+    },
+    {
+      "op": "loopUntil",
+      "target": "n13",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "n13",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_n13"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_n13",
+          "bind": "f_n13",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_n13",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n13",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_n13",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_n13"
+        },
+        {
+          "op": "invoke",
+          "target": "n13",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "n13",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "n13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dt13"
+    },
+    {
+      "op": "invoke",
+      "target": "dt13",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "dd13"
+    },
+    {
+      "op": "invoke",
+      "target": "dd13",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "dx13"
+    },
+    {
+      "op": "invoke",
+      "target": "dx13",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_K"
+        }
+      ],
+      "bind": "de13"
+    },
+    {
+      "op": "invoke",
+      "target": "de13",
+      "member": "DistinctCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "de13"
+    },
+    {
+      "op": "release",
+      "target": "dx13"
+    },
+    {
+      "op": "release",
+      "target": "dd13"
+    },
+    {
+      "op": "release",
+      "target": "dt13"
+    },
+    {
+      "op": "observeFiles",
+      "label": "rows-8192",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "closed-image",
+      "keep": true
+    }
+  ]
+}

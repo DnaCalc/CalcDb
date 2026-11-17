@@ -1,0 +1,933 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/fmt-mask-boundary-columns",
+  "bookRefs": [
+    "R-FMT-2",
+    "R-PRESERVE-1",
+    "II-04"
+  ],
+  "description": "Tables W7, W8, W9, W15, W16 and W17 hold 7, 8, 9, 15, 16 and 17 LONG columns c1..cN. Each gets three rows: all columns set, only the last column set, and every column but the last set. The rows are read back and the closed file is kept, so null-mask boundaries at multiples of eight are in one image.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-fmt-mask.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W7 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W7 (c1, c2, c3, c4, c5, c6, c7) VALUES (1, 2, 3, 4, 5, 6, 7)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W7 (c7) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W7 (c1, c2, c3, c4, c5, c6) VALUES (100, 200, 300, 400, 500, 600)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W7"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w7"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w7",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w7"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w7",
+          "bind": "f_w7",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w7",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w7",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w7",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w7"
+        },
+        {
+          "op": "invoke",
+          "target": "w7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W8 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG, c8 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W8 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (1, 2, 3, 4, 5, 6, 7, 8)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W8 (c8) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W8 (c1, c2, c3, c4, c5, c6, c7) VALUES (100, 200, 300, 400, 500, 600, 700)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W8"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w8"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w8",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w8",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w8"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w8",
+          "bind": "f_w8",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w8",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w8",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w8",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w8"
+        },
+        {
+          "op": "invoke",
+          "target": "w8",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W9 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG, c8 LONG, c9 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W9 (c1, c2, c3, c4, c5, c6, c7, c8, c9) VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W9 (c9) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W9 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (100, 200, 300, 400, 500, 600, 700, 800)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W9"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w9"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w9",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w9"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w9",
+          "bind": "f_w9",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w9",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w9",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w9",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w9"
+        },
+        {
+          "op": "invoke",
+          "target": "w9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W15 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG, c8 LONG, c9 LONG, c10 LONG, c11 LONG, c12 LONG, c13 LONG, c14 LONG, c15 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W15 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15) VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W15 (c15) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W15 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14) VALUES (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W15"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w15"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w15",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w15",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w15"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w15",
+          "bind": "f_w15",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w15",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w15",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w15",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w15"
+        },
+        {
+          "op": "invoke",
+          "target": "w15",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w15",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W16 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG, c8 LONG, c9 LONG, c10 LONG, c11 LONG, c12 LONG, c13 LONG, c14 LONG, c15 LONG, c16 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W16 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16) VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W16 (c16) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W16 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15) VALUES (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W16"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w16"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w16",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w16",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w16"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w16",
+          "bind": "f_w16",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w16",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w16",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w16",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w16"
+        },
+        {
+          "op": "invoke",
+          "target": "w16",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w16",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE W17 (c1 LONG, c2 LONG, c3 LONG, c4 LONG, c5 LONG, c6 LONG, c7 LONG, c8 LONG, c9 LONG, c10 LONG, c11 LONG, c12 LONG, c13 LONG, c14 LONG, c15 LONG, c16 LONG, c17 LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W17 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17) VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W17 (c17) VALUES (5)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO W17 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16) VALUES (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM W17"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "w17"
+    },
+    {
+      "op": "loopUntil",
+      "target": "w17",
+      "member": "EOF",
+      "maxIterations": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "w17",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "fl_w17"
+        },
+        {
+          "op": "forEachItem",
+          "target": "fl_w17",
+          "bind": "f_w17",
+          "maxItems": 24,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f_w17",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w17",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "f_w17",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "fl_w17"
+        },
+        {
+          "op": "invoke",
+          "target": "w17",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "w17",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "w17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "closed-image",
+      "keep": true
+    }
+  ]
+}

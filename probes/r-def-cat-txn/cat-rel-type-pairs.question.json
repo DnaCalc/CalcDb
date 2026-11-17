@@ -1,0 +1,1854 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/cat-rel-type-pairs",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-D"
+  ],
+  "description": "Which field-type pairs does Relations.Append accept? Primary fields P_Long.ID (LONG), P_Text.ID (TEXT 10), P_Counter.ID (COUNTER), P_Int.ID (SMALLINT) against F.L (LONG), F.I (SMALLINT), F.D (DOUBLE), F.T10 (TEXT 10), F.T20 (TEXT 20) and F.B (BYTE), eleven pairs by CreateRelation with attributes 0; errors after each append, then the Relations.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cat-typepairs.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P_Long (ID LONG CONSTRAINT PK_PL PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P_Text (ID TEXT(10) CONSTRAINT PK_PT PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P_Counter (ID COUNTER CONSTRAINT PK_PC2 PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P_Int (ID SMALLINT CONSTRAINT PK_PI PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE F (L LONG, I SMALLINT, D DOUBLE, T10 TEXT(10), T20 TEXT(20), B BYTE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_1"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Long"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_2"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Long"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "I"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_3"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Long"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "D"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_4"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Long"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_5"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Long"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_6"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Text"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T10"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_7"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Text"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T20"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_8"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Counter"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_9"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Counter"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "I"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_10"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Int"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "L"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_11"
+        },
+        {
+          "type": "bstr",
+          "text": "P_Int"
+        },
+        {
+          "type": "bstr",
+          "text": "F"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct1",
+      "bind": "cd1",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr1",
+      "bind": "cl1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq1",
+      "bind": "cn1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

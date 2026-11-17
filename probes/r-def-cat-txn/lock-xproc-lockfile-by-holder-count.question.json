@@ -1,0 +1,260 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/lock-xproc-lockfile-by-holder-count",
+  "bookRefs": [
+    "R-LOCK-1",
+    "EX-PROBE",
+    "R-LOCK-2",
+    "R-LOCK-3"
+  ],
+  "description": "On r-def-cat-txn-rel-accdb: process A opens it with DAO shared read/write; process C opens the lock file with all sharing and reads 256 bytes at offset 0 (one holder); process B opens it shared read/write too and C reads again (two holders); B closes and C reads again (one holder). The bytes and the file states are recorded; nothing is interpreted.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cat-txn-rel-accdb.accdb",
+      "sha256": "35a5476c66ac933457a4d71bb52c15e87206924a81929dca575fc1b7bc7784d3",
+      "length": 253952,
+      "provenance": "r-def-cat-txn.create-rel-accdb.a26b4fd7f6.a1 qk1-a26b4fd7f6bf535f05165c742c28fe719a66ffcbcf158e1470fea85d9bc9855f output:r-def-cat-txn-rel-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "a-open",
+      "keep": false
+    },
+    {
+      "op": "signal",
+      "name": "a-open"
+    },
+    {
+      "op": "await",
+      "name": "c-done",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "c-1",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "observeFiles",
+          "label": "b-open",
+          "keep": false
+        },
+        {
+          "op": "signal",
+          "name": "b-open"
+        },
+        {
+          "op": "await",
+          "name": "c-2",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-closed"
+        }
+      ]
+    },
+    {
+      "name": "c",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-open",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "nativeOpen",
+          "bind": "lk1",
+          "file": "lock:main",
+          "access": 2147483648,
+          "share": 7,
+          "disposition": 3
+        },
+        {
+          "op": "nativeRead",
+          "handle": "lk1",
+          "offset": 0,
+          "count": 256
+        },
+        {
+          "op": "nativeClose",
+          "handle": "lk1"
+        },
+        {
+          "op": "observeFiles",
+          "label": "c-1",
+          "keep": false
+        },
+        {
+          "op": "signal",
+          "name": "c-1"
+        },
+        {
+          "op": "await",
+          "name": "b-open",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "nativeOpen",
+          "bind": "lk2",
+          "file": "lock:main",
+          "access": 2147483648,
+          "share": 7,
+          "disposition": 3
+        },
+        {
+          "op": "nativeRead",
+          "handle": "lk2",
+          "offset": 0,
+          "count": 256
+        },
+        {
+          "op": "nativeClose",
+          "handle": "lk2"
+        },
+        {
+          "op": "observeFiles",
+          "label": "c-2",
+          "keep": false
+        },
+        {
+          "op": "signal",
+          "name": "c-2"
+        },
+        {
+          "op": "await",
+          "name": "b-closed",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "nativeOpen",
+          "bind": "lk3",
+          "file": "lock:main",
+          "access": 2147483648,
+          "share": 7,
+          "disposition": 3
+        },
+        {
+          "op": "nativeRead",
+          "handle": "lk3",
+          "offset": 0,
+          "count": 256
+        },
+        {
+          "op": "nativeClose",
+          "handle": "lk3"
+        },
+        {
+          "op": "observeFiles",
+          "label": "c-3",
+          "keep": false
+        },
+        {
+          "op": "signal",
+          "name": "c-done"
+        }
+      ]
+    }
+  ]
+}

@@ -134,5 +134,7 @@ an expected-looking "fix" from corrupting the capture. Rule, again: discriminate
 **What worked.** Sub-agent summaries plus spot checks: two of two checked claims matched the records, and
 the summaries surfaced the Decimal question.
 
-**Next candidates.** Make `batch --freeze` honour `CreatesFixture`. Give `batch` a per-question timeout
-taken from the question, so a blocked dialog costs 60 s instead of 300 s.
+**Change made the same night.** `batch --freeze` now freezes only questions labelled `CreatesFixture`.
+
+**Next candidate.** `batch` already takes `--timeout` for all its questions. A per-question timeout would let
+a probe that may block declare 60 s while long joins keep 300 s.

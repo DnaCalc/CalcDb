@@ -1,0 +1,1188 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/cx-drop-complex-column-then-compact",
+  "bookRefs": [
+    "R-COMPLEX-1",
+    "CX-DESC",
+    "R-REBUILD-1",
+    "RB-RELOC"
+  ],
+  "description": "ACCDB table T(ID COUNTER key, Name) with a multi-value Text field Tags (CreateField 109) and children for two parents. TableDefs with attributes, then ALTER TABLE T DROP COLUMN Tags (errors, TableDefs and the fields of T), then DBEngine.CompactDatabase to a new file and the TableDefs and fields of the output. The closed files are kept.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cx-dropcol.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID COUNTER CONSTRAINT PK_T PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tsa"
+    },
+    {
+      "op": "invoke",
+      "target": "tsa",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tda"
+    },
+    {
+      "op": "invoke",
+      "target": "tda",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        },
+        {
+          "type": "i4",
+          "value": 109
+        }
+      ],
+      "bind": "fna"
+    },
+    {
+      "op": "invoke",
+      "target": "tda",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfa"
+    },
+    {
+      "op": "invoke",
+      "target": "tfa",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "fna"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "fna"
+    },
+    {
+      "op": "release",
+      "target": "tfa"
+    },
+    {
+      "op": "release",
+      "target": "tda"
+    },
+    {
+      "op": "release",
+      "target": "tsa"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Name) VALUES ('p1')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (Name) VALUES ('p2')"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p1'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "alpha"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "beta"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T WHERE Name = 'p2'"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "ff",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tags"
+        }
+      ],
+      "bind": "fc"
+    },
+    {
+      "op": "invoke",
+      "target": "fc",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fh"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fhf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Value"
+        }
+      ],
+      "bind": "fv"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fv",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "alpha"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fv"
+    },
+    {
+      "op": "release",
+      "target": "fhf"
+    },
+    {
+      "op": "invoke",
+      "target": "fh",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fh"
+    },
+    {
+      "op": "release",
+      "target": "fc"
+    },
+    {
+      "op": "release",
+      "target": "ff"
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "fp",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "fp"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct1",
+      "bind": "cd1",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr1",
+      "bind": "cl1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq1",
+      "bind": "cn1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ft1"
+    },
+    {
+      "op": "invoke",
+      "target": "ft1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "fd1"
+    },
+    {
+      "op": "invoke",
+      "target": "fd1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ff1",
+      "bind": "fe1",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe1",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ff1"
+    },
+    {
+      "op": "release",
+      "target": "fd1"
+    },
+    {
+      "op": "release",
+      "target": "ft1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ALTER TABLE T DROP COLUMN Tags"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct2",
+      "bind": "cd2",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd2",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr2",
+      "bind": "cl2",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl2",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl2",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl2",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq2",
+      "bind": "cn2",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ft2"
+    },
+    {
+      "op": "invoke",
+      "target": "ft2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "fd2"
+    },
+    {
+      "op": "invoke",
+      "target": "fd2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff2"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ff2",
+      "bind": "fe2",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fe2",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe2",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe2",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ff2"
+    },
+    {
+      "op": "release",
+      "target": "fd2"
+    },
+    {
+      "op": "release",
+      "target": "ft2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "dropped",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CompactDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cx-dropcol.accdb"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cx-dropcol-compacted.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cx-dropcol-compacted.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ct3"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ct3",
+      "bind": "cd3",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cd3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cd3",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ct3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cr3"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cr3",
+      "bind": "cl3",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cl3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl3",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl3",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cl3",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cr3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cq3"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cq3",
+      "bind": "cn3",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cn3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cq3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ft3"
+    },
+    {
+      "op": "invoke",
+      "target": "ft3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "fd3"
+    },
+    {
+      "op": "invoke",
+      "target": "fd3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ff3"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ff3",
+      "bind": "fe3",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fe3",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe3",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fe3",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ff3"
+    },
+    {
+      "op": "release",
+      "target": "fd3"
+    },
+    {
+      "op": "release",
+      "target": "ft3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "compacted",
+      "keep": true
+    }
+  ]
+}

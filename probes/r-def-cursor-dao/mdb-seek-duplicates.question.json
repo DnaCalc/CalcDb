@@ -1,0 +1,1338 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/mdb-seek-duplicates",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-SEEK",
+    "CUR-POS"
+  ],
+  "description": "On the MDB fixture, table-type recordsets over T with Index IX_TN (rows N 10,20,30,40,40,50,60,70): for each operator =, >=, >, <=, <, Seek with key 40 on a fresh recordset, read NoMatch, BOF, EOF and ID; MoveNext and read ID; MovePrevious twice and read ID. Then Seek \"=\" 45 and Seek \">\" 70, reading NoMatch, BOF, EOF and ID. Asks which duplicate each operator selects and the neighbours on the Jet 4 format. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-mdb.mdb",
+      "sha256": "af2f812ccca59485010332dfa1dea88a41aec02f070d61373c18905ec48d8c06",
+      "length": 163840,
+      "provenance": "r-def-cursor-dao.create-mdb.6cce87a12d.a1 qk1-6cce87a12d9e2c3da832c216f3de6c5ff0e8a7b2845aa23fca8d408f9c34c452 output:r-def-cursor-dao-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">="
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<="
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "<"
+        },
+        {
+          "type": "i4",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "MovePrevious",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "i4",
+          "value": 45
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_TN"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ">"
+        },
+        {
+          "type": "i4",
+          "value": 70
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "sf",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "sv"
+    },
+    {
+      "op": "invoke",
+      "target": "sv",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sv"
+    },
+    {
+      "op": "release",
+      "target": "sf"
+    },
+    {
+      "op": "invoke",
+      "target": "rt",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rt"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

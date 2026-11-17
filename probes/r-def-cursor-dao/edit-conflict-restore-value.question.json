@@ -1,0 +1,810 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/edit-conflict-restore-value",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-EDIT",
+    "CUR-ID"
+  ],
+  "description": "Two dynasets (r1, r2) over \"SELECT ID, N FROM T WHERE ID = 3\", inside BeginTrans and rolled back. r1 has LockEdits False and Edit with N read; r2 Edit, assign N 31, Update, Edit, assign N 30 (the original value), Update; r1 assigns N 35 and Update, Errors, read N, EditMode; r1 Requery and read N; then the same with r2 assigning 31 once and not restoring. Asks whether an optimistic update by r1 is refused when another writer changed the field and restored its original value, compared with the writer that did not restore. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "x_s"
+    },
+    {
+      "op": "invoke",
+      "target": "x_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "x_N"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "y_s"
+    },
+    {
+      "op": "invoke",
+      "target": "y_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "y_N"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "y_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 31
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "y_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 30
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "x_N"
+    },
+    {
+      "op": "release",
+      "target": "x_s"
+    },
+    {
+      "op": "release",
+      "target": "y_N"
+    },
+    {
+      "op": "release",
+      "target": "y_s"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "LockEdits",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "x_s"
+    },
+    {
+      "op": "invoke",
+      "target": "x_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "x_N"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, N FROM T WHERE ID = 3"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "y_s"
+    },
+    {
+      "op": "invoke",
+      "target": "y_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "y_N"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "y_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 31
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 35
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "x_N",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "x_N"
+    },
+    {
+      "op": "release",
+      "target": "x_s"
+    },
+    {
+      "op": "release",
+      "target": "y_N"
+    },
+    {
+      "op": "release",
+      "target": "y_s"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,492 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/cat-drop-index-held-table-recordset",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-D",
+    "R-CURSOR-1"
+  ],
+  "description": "A table-type recordset on T has Index = IX_V set and is positioned. DROP INDEX IX_V ON T is executed. What do the errors, the recordset's Index property, MoveNext, the current row, Seek('=', 20) with NoMatch and a new assignment of Index = 'IX_V' show?",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cat-drop-index.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_V ON T (V)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (1, 30)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (2, 20)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (3, 10)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_V"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DROP INDEX IX_V ON T"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Index",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Seek",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "="
+        },
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Index",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "IX_V"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "it1"
+    },
+    {
+      "op": "invoke",
+      "target": "it1",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "id1"
+    },
+    {
+      "op": "invoke",
+      "target": "id1",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ix1"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ix1",
+      "bind": "ie1",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ie1",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ie1",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ie1",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ie1",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ie1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "if1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "if1",
+          "bind": "ig1",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ig1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ig1",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "if1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ix1"
+    },
+    {
+      "op": "release",
+      "target": "id1"
+    },
+    {
+      "op": "release",
+      "target": "it1"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

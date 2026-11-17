@@ -1,0 +1,494 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/recordset-closed-member-inventory",
+  "bookRefs": [
+    "R-DAO-1",
+    "DAO-LIFE",
+    "DAO-CLOSE-OWN",
+    "ERR-CLOSE"
+  ],
+  "description": "A dynaset over T with its Fields collection and Field N held is closed. After the Close, each of AbsolutePosition, BOF, Bookmark, Bookmarkable, CacheSize, EditMode, EOF, Filter, Index, LastModified, LockEdits, Name, NoMatch, PercentPosition, RecordCount, Restartable, Sort, Type, Updatable and Fields is read by its own call, and Count of the held Fields, Value, Name of the held Field are read; then MoveFirst, MoveNext, Clone, Requery, GetRows, OpenRecordset, FindFirst \"ID = 1\", AddNew, Update, CancelUpdate and Close are called; Errors read after the reads and after the calls. Asks which members of a closed Recordset still answer and which refuse, and with what. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "cr"
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cfs"
+    },
+    {
+      "op": "invoke",
+      "target": "cfs",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "N"
+        }
+      ],
+      "bind": "cf"
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "AbsolutePosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "BOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Bookmark",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Bookmarkable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "CacheSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "EditMode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Filter",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Index",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "LastModified",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "LockEdits",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "NoMatch",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "PercentPosition",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Restartable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Sort",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Updatable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cf",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Clone",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Requery",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "GetRows",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "FindFirst",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID = 1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "cf"
+    },
+    {
+      "op": "release",
+      "target": "cfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

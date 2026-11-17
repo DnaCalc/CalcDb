@@ -1,0 +1,588 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/err-snapshot-mid-bad-row-movelast",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-ERROR",
+    "SQL-DEMAND"
+  ],
+  "description": "R-PAR-1 PAR-ERROR, SQL-DEMAND: For SELECT id, 1 / zm AS e FROM ER (zm = 0 at id 100) as a snapshot: does MoveLast, RecordCount or EOF raise the error, which rows can be read afterwards (MoveFirst; Move(98) to id 99; then four rows with Fields id and e read and MoveNext, crossing id 100)? Runs on a fresh copy of r-par-1-error opened read-only through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-error.accdb",
+      "sha256": "4100848678f01a94f57d313b3d3d95161cbcc8d130d4b4af32deb3ad6364b016",
+      "length": 303104,
+      "provenance": "r-par-1.create-error.446c4363f1.a1 qk1-446c4363f1478ae3ea149296d0f8ee1711a0245a5b3617cc69af11915da49c2b output:r-par-1-error.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, 1 / zm AS e FROM ER"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "RecordCount",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveFirst",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Move",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 98
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_ai"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_al",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_ae"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ai",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs_ae",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs_ae"
+    },
+    {
+      "op": "release",
+      "target": "rs_ai"
+    },
+    {
+      "op": "release",
+      "target": "rs_al"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

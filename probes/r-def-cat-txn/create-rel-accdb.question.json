@@ -1,0 +1,723 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/create-rel-accdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-D",
+    "R-TXN-1",
+    "TXN-STMT",
+    "R-LOCK-3"
+  ],
+  "description": "Fixture r-def-cat-txn-rel-accdb (ACCDB, DBEngine.CreateDatabase with dbVersion120): Parent(ID LONG primary key, Name) rows 1 to 5; Child, ChildCD and ChildCU (ID COUNTER primary key, PID LONG, V LONG) with rows referencing parents 1 and 2 (Child), 3 (ChildCD, two rows) and 4 (ChildCU, two rows); parent 5 has no child. Relations appended by Database.CreateRelation: R_Child (attributes 0), R_CD (4096) and R_CU (256), all from Parent.ID to PID. The relations are read back.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-rel-accdb.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Parent (ID LONG CONSTRAINT PK_Parent PRIMARY KEY, Name TEXT(20))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE Child (ID COUNTER CONSTRAINT PK_Child PRIMARY KEY, PID LONG, V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE ChildCD (ID COUNTER CONSTRAINT PK_ChildCD PRIMARY KEY, PID LONG, V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE ChildCU (ID COUNTER CONSTRAINT PK_ChildCU PRIMARY KEY, PID LONG, V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent (ID, Name) VALUES (1, 'p1')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent (ID, Name) VALUES (2, 'p2')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent (ID, Name) VALUES (3, 'p3')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent (ID, Name) VALUES (4, 'p4')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Parent (ID, Name) VALUES (5, 'p5')"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, V) VALUES (1, 10)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO Child (PID, V) VALUES (2, 20)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO ChildCD (PID, V) VALUES (3, 30)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO ChildCD (PID, V) VALUES (3, 31)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO ChildCU (PID, V) VALUES (4, 40)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO ChildCU (PID, V) VALUES (4, 41)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_Child"
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        },
+        {
+          "type": "bstr",
+          "text": "Child"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_CD"
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        },
+        {
+          "type": "bstr",
+          "text": "ChildCD"
+        },
+        {
+          "type": "i4",
+          "value": 4096
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_CU"
+        },
+        {
+          "type": "bstr",
+          "text": "Parent"
+        },
+        {
+          "type": "bstr",
+          "text": "ChildCU"
+        },
+        {
+          "type": "i4",
+          "value": 256
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "relf"
+    },
+    {
+      "op": "invoke",
+      "target": "relf",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PID"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relfs"
+    },
+    {
+      "op": "invoke",
+      "target": "relfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "relf"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "relfs"
+    },
+    {
+      "op": "release",
+      "target": "relf"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ctf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "ctf",
+      "bind": "cdf",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cdf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cdf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ctf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "crf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "crf",
+      "bind": "clf",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "clf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "clf",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "clf",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "clf",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "crf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cqf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cqf",
+      "bind": "cnf",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cnf",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cqf"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

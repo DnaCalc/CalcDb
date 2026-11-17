@@ -1,0 +1,7982 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/create-fold2",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-FOLD"
+  ],
+  "description": "R-PAR-1 fixture r-par-1-fold2: DG(d 0..15) and NUM(n 1..4096, inserted ascending from the cross join DG x DG x DG); FO(id Long PK, k Long indexed IX_FO_K, d Double) with three rows inserted as (id 2, k 3, d 2^53), (id 3, k 1, d 1), (id 1, k 2, d -2^53), so that insertion, primary-key and k order differ; FOI(id PK, g, d) with three groups interleaved in storage (g1 [9007199254740992, 1, -9007199254740992]; g2 [-9007199254740992, 9007199254740992, 1]; g3 [1, 9007199254740992, -9007199254740992]; ids 1-9 in insertion order) and FOV (the same rows, ids 9 down to 1, index IX_FOV_G on g); FL(id Counter PK, g, d): g1 one 2^53 then 4096 rows of 1, g2 4096 rows of 1 then one 2^53, g3 one 2^53, 4096 rows of 1, then -2^53 (inserted in that order), and FLI (the same rows, indexes IX_FLI_G on g and IX_FLI_D on d); FG(id Counter PK, g, d): 4096 groups, each as three rows [2^53, 1, -2^53], the groups interleaved (all 2^53 rows, then all 1 rows, then all -2^53 rows), and FGI (the same rows, index IX_FGI_G); FN (Null-mixed Double groups); FS (Single groups); FC (Currency groups at and near the type limits: g1 [922337203685477.5807, 0.0001, -0.0001]; g2 [922337203685477.5807, 1, -1]; g3 [-1, 1, 922337203685477.5807]; g4 [1, 922337203685477.5807, -1]; g5 [922337203685477.5807, 922337203685477.5807]; g6 [-922337203685477.5808, -1, 1]; g7 [0.0001, 0.0002, 0.0003]; g8 [922337203685477.5807, -922337203685477.5808, 1]; g9 [0.0001, 0.0002]; g10 [100000000.0001, 100000000.0003]; g11 [-922337203685477.5808, -922337203685477.5808]; g12 [0.0001, 922337203685477.5807]); FD (made through ADO DDL with Provider Microsoft.ACE.OLEDB.12.0 as id INTEGER PK, g INTEGER, x DECIMAL(28,4), after closing the DAO database, then reopened by DAO; rows inserted as SQL numeric literals; g1 [9999999999999.9999, 0.0001, -0.0001]; g2 [9999999999999.9999, 1, -1]; g3 [-1, 1, 9999999999999.9999]; g4 [0.1, 0.2, 0.3]; g5 [99999999999999999, 1, -99999999999999999]; g6 [79228162514264337593543950335, 1, -1]; g7 [1.00000000000000000001, 1]; g8 [0.5, 0.5]). Created in ACCDB by DBEngine.CreateDatabase(path, dbLangGeneral, 128); DDL and set-based rows go through Database.Execute, exact typed values through table-type AddNew/Value/Update; every statement's outcome is captured (a refused statement is an observation) and a read-back follows; the closed file is kept.",
+  "createsFixture": true,
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-par-1-fold2.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE DG (d LONG CONSTRAINT PK_DG PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (0)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (4)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (6)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (8)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (9)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (10)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (11)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (12)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (13)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (14)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO DG VALUES (15)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE NUM (n LONG CONSTRAINT PK_NUM PRIMARY KEY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO NUM (n) SELECT a.d * 256 + b.d * 16 + c.d + 1 FROM DG AS a, DG AS b, DG AS c ORDER BY a.d, b.d, c.d"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM NUM"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "nn"
+    },
+    {
+      "op": "invoke",
+      "target": "nn",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "nn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "nn"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FO (id LONG CONSTRAINT PK_FO PRIMARY KEY, k LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FO_K ON FO (k)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FO"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FO"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FO_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FO_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "k"
+        }
+      ],
+      "bind": "ins_FO_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "d"
+        }
+      ],
+      "bind": "ins_FO_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FO_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FO_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FO_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FO_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FO",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FO"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FOI (id LONG CONSTRAINT PK_FOI PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FOV (id LONG CONSTRAINT PK_FOV PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FOV_G ON FOV (g)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FOI"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FOI"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FOI_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FOI_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "g"
+        }
+      ],
+      "bind": "ins_FOI_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "d"
+        }
+      ],
+      "bind": "ins_FOI_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FOI_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOI_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOI_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOI_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOI",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FOI"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FOV"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FOV"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FOV_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FOV_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "g"
+        }
+      ],
+      "bind": "ins_FOV_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "d"
+        }
+      ],
+      "bind": "ins_FOV_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FOV_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOV_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOV_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FOV_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FOV",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FOV"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FL (id COUNTER CONSTRAINT PK_FL PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) VALUES (1, 9007199254740992)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) SELECT 1, 1 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) SELECT 2, 1 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) VALUES (2, 9007199254740992)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) VALUES (3, 9007199254740992)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) SELECT 3, 1 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FL (g, d) VALUES (3, -9007199254740992)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FLI (id LONG CONSTRAINT PK_FLI PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FLI_G ON FLI (g)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FLI_D ON FLI (d)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FLI (id, g, d) SELECT id, g, d FROM FL ORDER BY id"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FG (id COUNTER CONSTRAINT PK_FG PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FG (g, d) SELECT n, 9007199254740992 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FG (g, d) SELECT n, 1 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FG (g, d) SELECT n, -9007199254740992 FROM NUM ORDER BY n"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FGI (id LONG CONSTRAINT PK_FGI PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE INDEX IX_FGI_G ON FGI (g)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FGI (id, g, d) SELECT id, g, d FROM FG ORDER BY id"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FN (id LONG CONSTRAINT PK_FN PRIMARY KEY, g LONG, d DOUBLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FN"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FN"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FN_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FN_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "g"
+        }
+      ],
+      "bind": "ins_FN_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "d"
+        }
+      ],
+      "bind": "ins_FN_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "c340000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff0000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 14
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4014000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "401c000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 17
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FN_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FN_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FN_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FN_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FN",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FN"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FS (id LONG CONSTRAINT PK_FS PRIMARY KEY, g LONG, s SINGLE)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FS"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FS"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FS_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FS_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "g"
+        }
+      ],
+      "bind": "ins_FS_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "s"
+        }
+      ],
+      "bind": "ins_FS_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "4b800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3f800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "cb800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3dcccccd"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 14
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "7f7fffff"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "7f7fffff"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "00000001"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 17
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "00000001"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "40600000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 21
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "4b800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 22
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3f800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 23
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "r4",
+          "bits": "3f800000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FS_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FS_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FS_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FS_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FS",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FS"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FC (id LONG CONSTRAINT PK_FC PRIMARY KEY, g LONG, c CURRENCY)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "FC"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "ins_FC"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ins_FC_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "ins_FC_c0"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "g"
+        }
+      ],
+      "bind": "ins_FC_c1"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_f",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "c"
+        }
+      ],
+      "bind": "ins_FC_c2"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 14
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -9223372036854775808
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 17
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 18
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 19
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 21
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 22
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -9223372036854775808
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 23
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 10000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 24
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 25
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 9
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 26
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1000000000001
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 27
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1000000000003
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 28
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -9223372036854775808
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 29
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": -9223372036854775808
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 30
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "AddNew",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c0",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 31
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c1",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC_c2",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "cy",
+          "scaled": 9223372036854775807
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FC_c0"
+    },
+    {
+      "op": "release",
+      "target": "ins_FC_c1"
+    },
+    {
+      "op": "release",
+      "target": "ins_FC_c2"
+    },
+    {
+      "op": "release",
+      "target": "ins_FC_f"
+    },
+    {
+      "op": "invoke",
+      "target": "ins_FC",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ins_FC"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cds"
+    },
+    {
+      "op": "invoke",
+      "target": "cds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-par-1-fold2.accdb"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE FD (id INTEGER CONSTRAINT PK_FD PRIMARY KEY, g INTEGER, x DECIMAL(28,4))"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-par-1-fold2.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (1, 1, 9999999999999.9999)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (2, 1, 0.0001)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (3, 1, -0.0001)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (4, 2, 9999999999999.9999)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (5, 2, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (6, 2, -1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (7, 3, -1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (8, 3, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (9, 3, 9999999999999.9999)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (10, 4, 0.1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (11, 4, 0.2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (12, 4, 0.3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (13, 5, 99999999999999999)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (14, 5, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (15, 5, -99999999999999999)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (16, 6, 79228162514264337593543950335)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (17, 6, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (18, 6, -1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (19, 7, 1.00000000000000000001)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (20, 7, 1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (21, 8, 0.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO FD (id, g, x) VALUES (22, 8, 0.5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Count(*) AS n, Min(id) AS lo, Max(id) AS hi FROM FL GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb1"
+    },
+    {
+      "op": "invoke",
+      "target": "rb1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb1_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb1_mf",
+      "bind": "rb1_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb1_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb1_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb1",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, Count(*) AS n FROM FLI GROUP BY g"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb2"
+    },
+    {
+      "op": "invoke",
+      "target": "rb2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb2_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb2_mf",
+      "bind": "rb2_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb2_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb2_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb2",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb2",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb2",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb2"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM FG"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb3"
+    },
+    {
+      "op": "invoke",
+      "target": "rb3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb3_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb3_mf",
+      "bind": "rb3_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb3_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb3_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb3",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM FGI"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb4"
+    },
+    {
+      "op": "invoke",
+      "target": "rb4",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb4_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb4_mf",
+      "bind": "rb4_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb4_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb4_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb4",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb4",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb4",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb4"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, k, d FROM FO ORDER BY id"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb5"
+    },
+    {
+      "op": "invoke",
+      "target": "rb5",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb5_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb5_mf",
+      "bind": "rb5_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb5_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb5_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb5",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb5"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM FN"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb6"
+    },
+    {
+      "op": "invoke",
+      "target": "rb6",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb6_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb6_mf",
+      "bind": "rb6_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb6_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb6_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb6_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb6_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb6",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb6",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb6",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb6"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Count(*) AS n FROM FS"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb7"
+    },
+    {
+      "op": "invoke",
+      "target": "rb7",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb7_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb7_mf",
+      "bind": "rb7_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb7_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb7_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb7_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb7_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb7",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb7"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT g, c FROM FC"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rb8"
+    },
+    {
+      "op": "invoke",
+      "target": "rb8",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rb8_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rb8_mf",
+      "bind": "rb8_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb8_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb8_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rb8_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rb8_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rb8",
+      "member": "EOF",
+      "maxIterations": 40,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rb8",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rb8",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rb8",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rb8"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, g, x FROM FD"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rbd"
+    },
+    {
+      "op": "invoke",
+      "target": "rbd",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rbd_mf"
+    },
+    {
+      "op": "forEachItem",
+      "target": "rbd_mf",
+      "bind": "rbd_mfi",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rbd_mfi",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi",
+          "member": "Properties",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rbd_mfi_p"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Precision"
+            }
+          ],
+          "bind": "rbd_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p_Precision",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rbd_mfi_p_Precision"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Scale"
+            }
+          ],
+          "bind": "rbd_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p_Scale",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rbd_mfi_p_Scale"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p",
+          "member": "Item",
+          "kind": "methodOrGet",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DecimalPlaces"
+            }
+          ],
+          "bind": "rbd_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd_mfi_p_DecimalPlaces",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "rbd_mfi_p_DecimalPlaces"
+        },
+        {
+          "op": "release",
+          "target": "rbd_mfi_p"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rbd_mf"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rbd",
+      "member": "EOF",
+      "maxIterations": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rbd",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rbd",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rbd",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rbd"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

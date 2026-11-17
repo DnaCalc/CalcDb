@@ -1,0 +1,4283 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-expr-sql/sql-querydef-names",
+  "bookRefs": [
+    "R-SQL-1",
+    "SQL-B",
+    "CAT-Q"
+  ],
+  "description": "Asks, on a writable copy, which names Database.CreateQueryDef(name, 'SELECT ID FROM One;') accepts, what Name then reads, and whether the query opens by that name: blank and padded names, names with a dot, bang, brackets, quotes, a semicolon, comma, wildcard, slash and colon, a leading tilde, hyphen, digit and #, the MSys and USys prefixes, 64 and 65 characters, non-Latin and astral characters, an embedded U+0000, tab and CR/LF, and the name of a table (One) and of a QueryDef differing only in case. At the end the QueryDefs Count and every name are read. Fixture r-def-expr-sql-main is opened on a writable fresh copy through DAO.DBEngine.120; engine version and the loaded modules (once) are recorded; each recordset reads Name, Type and Value of every field.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-expr-sql-main.accdb",
+      "sha256": "c654a4d6142d98748ef099461d0ee4b116a784449653052206edad0c65910b70",
+      "length": 237568,
+      "provenance": "r-def-expr-sql.create-main.e7178cf25c.a1 qk1-e7178cf25cd82f571d308a285e32608915e2dd17853ec508fb114cbc54147c50 output:r-def-expr-sql-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CollatingOrder",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " "
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "q0",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q0"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " "
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs1"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs1",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs1f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs1f",
+          "bind": "rs1x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs1x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs1f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs1",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q "
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "q2",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q "
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs3"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs3",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs3",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs3f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs3f",
+          "bind": "rs3x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs3x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs3f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs3",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs3"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "q4",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q4"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": " q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs5"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs5",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs5",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs5f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs5f",
+          "bind": "rs5x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs5x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs5f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs5",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs5"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q.q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "q6",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q6"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q.q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs7"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs7",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs7",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs7f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs7f",
+          "bind": "rs7x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs7x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs7x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs7x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs7f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs7",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs7"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q!q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "q8",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q8"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q!q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs9"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs9",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs9",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs9f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs9f",
+          "bind": "rs9x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs9x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs9x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs9x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs9f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs9",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs9",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs9"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q[1]"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q10"
+    },
+    {
+      "op": "invoke",
+      "target": "q10",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q10"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q[1]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs11"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs11",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs11",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs11f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs11f",
+          "bind": "rs11x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs11x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs11x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs11x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs11f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs11",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs11",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs11"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q]q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q12"
+    },
+    {
+      "op": "invoke",
+      "target": "q12",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q12"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q]q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs13"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs13",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs13",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs13f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs13f",
+          "bind": "rs13x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs13x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs13x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs13x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs13f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs13",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs13",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs13"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\"q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q14"
+    },
+    {
+      "op": "invoke",
+      "target": "q14",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q14"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\"q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs15"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs15",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs15",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs15f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs15f",
+          "bind": "rs15x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs15x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs15x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs15x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs15f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs15",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs15",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs15"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q'q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q16"
+    },
+    {
+      "op": "invoke",
+      "target": "q16",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q16"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q'q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs17"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs17",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs17",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs17f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs17f",
+          "bind": "rs17x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs17x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs17x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs17x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs17f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs17",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs17",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs17"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "~q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q18"
+    },
+    {
+      "op": "invoke",
+      "target": "q18",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q18"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "~q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs19"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs19",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs19",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs19f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs19f",
+          "bind": "rs19x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs19x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs19x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs19x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs19f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs19",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs19",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs19"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "~sq_x"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "q20",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q20"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "~sq_x"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs21"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs21",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs21",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs21f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs21f",
+          "bind": "rs21x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs21x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs21x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs21x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs21f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs21",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs21",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs21"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysQ"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q22"
+    },
+    {
+      "op": "invoke",
+      "target": "q22",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q22"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "MSysQ"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs23"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs23",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs23",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs23f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs23f",
+          "bind": "rs23x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs23x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs23x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs23x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs23f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs23",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs23",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs23"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "USysQ"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q24"
+    },
+    {
+      "op": "invoke",
+      "target": "q24",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q24"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "USysQ"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs25"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs25",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs25",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs25f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs25f",
+          "bind": "rs25x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs25x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs25x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs25x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs25f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs25",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs25",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs25"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q26"
+    },
+    {
+      "op": "invoke",
+      "target": "q26",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q26"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs27"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs27",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs27",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs27f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs27f",
+          "bind": "rs27x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs27x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs27x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs27x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs27f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs27",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs27",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs27"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q28"
+    },
+    {
+      "op": "invoke",
+      "target": "q28",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q28"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs29"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs29",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs29",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs29f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs29f",
+          "bind": "rs29x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs29x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs29x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs29x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs29f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs29",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs29",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs29"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qä€"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q30"
+    },
+    {
+      "op": "invoke",
+      "target": "q30",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q30"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Qä€"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs31"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs31",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs31",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs31f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs31f",
+          "bind": "rs31x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs31x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs31x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs31x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs31f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs31",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs31",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs31"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q\uD834\uDD1E"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q32"
+    },
+    {
+      "op": "invoke",
+      "target": "q32",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q32"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q\uD834\uDD1E"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs33"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs33",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs33",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs33f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs33f",
+          "bind": "rs33x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs33x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs33x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs33x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs33f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs33",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs33",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs33"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\u0000q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q34"
+    },
+    {
+      "op": "invoke",
+      "target": "q34",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q34"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\u0000q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs35"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs35",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs35",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs35f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs35f",
+          "bind": "rs35x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs35x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs35x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs35x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs35f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs35",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs35",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs35"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\tq"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q36"
+    },
+    {
+      "op": "invoke",
+      "target": "q36",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q36"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\tq"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs37"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs37",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs37",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs37f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs37f",
+          "bind": "rs37x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs37x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs37x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs37x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs37f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs37",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs37",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs37"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\r\nq"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q38"
+    },
+    {
+      "op": "invoke",
+      "target": "q38",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q38"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\r\nq"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs39"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs39",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs39",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs39f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs39f",
+          "bind": "rs39x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs39x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs39x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs39x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs39f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs39",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs39",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs39"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "One"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q40"
+    },
+    {
+      "op": "invoke",
+      "target": "q40",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q40"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "One"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs41"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs41",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs41",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs41f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs41f",
+          "bind": "rs41x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs41x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs41x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs41x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs41f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs41",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs41",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs41"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ONE"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q42"
+    },
+    {
+      "op": "invoke",
+      "target": "q42",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q42"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ONE"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs43"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs43",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs43",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs43f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs43f",
+          "bind": "rs43x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs43x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs43x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs43x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs43f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs43",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs43",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs43"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q44"
+    },
+    {
+      "op": "invoke",
+      "target": "q44",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q44"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs45"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs45",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs45",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs45f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs45f",
+          "bind": "rs45x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs45x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs45x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs45x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs45f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs45",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs45",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs45"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q46"
+    },
+    {
+      "op": "invoke",
+      "target": "q46",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q46"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs47"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs47",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs47",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs47f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs47f",
+          "bind": "rs47x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs47x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs47x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs47x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs47f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs47",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs47",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs47"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[q]"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q48"
+    },
+    {
+      "op": "invoke",
+      "target": "q48",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q48"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "[q]"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs49"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs49",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs49",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs49f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs49f",
+          "bind": "rs49x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs49x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs49x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs49x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs49f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs49",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs49",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs49"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q;q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q50"
+    },
+    {
+      "op": "invoke",
+      "target": "q50",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q50"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q;q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs51"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs51",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs51",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs51f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs51f",
+          "bind": "rs51x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs51x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs51x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs51x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs51f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs51",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs51",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs51"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q,q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q52"
+    },
+    {
+      "op": "invoke",
+      "target": "q52",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q52"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q,q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs53"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs53",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs53",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs53f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs53f",
+          "bind": "rs53x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs53x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs53x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs53x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs53f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs53",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs53",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs53"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q*q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q54"
+    },
+    {
+      "op": "invoke",
+      "target": "q54",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q54"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q*q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs55"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs55",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs55",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs55f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs55f",
+          "bind": "rs55x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs55x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs55x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs55x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs55f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs55",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs55",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs55"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q?q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q56"
+    },
+    {
+      "op": "invoke",
+      "target": "q56",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q56"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q?q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs57"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs57",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs57",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs57f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs57f",
+          "bind": "rs57x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs57x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs57x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs57x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs57f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs57",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs57",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs57"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q%q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q58"
+    },
+    {
+      "op": "invoke",
+      "target": "q58",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q58"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q%q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs59"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs59",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs59",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs59f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs59f",
+          "bind": "rs59x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs59x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs59x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs59x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs59f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs59",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs59",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs59"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "-q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q60"
+    },
+    {
+      "op": "invoke",
+      "target": "q60",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q60"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "-q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs61"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs61",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs61",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs61f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs61f",
+          "bind": "rs61x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs61x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs61x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs61x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs61f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs61",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs61",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs61"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q62"
+    },
+    {
+      "op": "invoke",
+      "target": "q62",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q62"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs63"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs63",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs63",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs63f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs63f",
+          "bind": "rs63x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs63x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs63x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs63x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs63f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs63",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs63",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs63"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "#q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q64"
+    },
+    {
+      "op": "invoke",
+      "target": "q64",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q64"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "#q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs65"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs65",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs65",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs65f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs65f",
+          "bind": "rs65x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs65x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs65x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs65x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs65f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs65",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs65",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs65"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\\q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q66"
+    },
+    {
+      "op": "invoke",
+      "target": "q66",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q66"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q\\q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs67"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs67",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs67",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs67f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs67f",
+          "bind": "rs67x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs67x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs67x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs67x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs67f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs67",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs67",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs67"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q/q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q68"
+    },
+    {
+      "op": "invoke",
+      "target": "q68",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q68"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q/q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs69"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs69",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs69",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs69f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs69f",
+          "bind": "rs69x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs69x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs69x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs69x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs69f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs69",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs69",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs69"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q:q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q70"
+    },
+    {
+      "op": "invoke",
+      "target": "q70",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q70"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q:q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs71"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs71",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs71",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs71f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs71f",
+          "bind": "rs71x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs71x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs71x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs71x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs71f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs71",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs71",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs71"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q|q"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT ID FROM One;"
+        }
+      ],
+      "bind": "q72"
+    },
+    {
+      "op": "invoke",
+      "target": "q72",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "q72"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "q|q"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs73"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs73",
+      "member": "EOF",
+      "maxIterations": 4,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs73",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rs73f"
+        },
+        {
+          "op": "forEachItem",
+          "target": "rs73f",
+          "bind": "rs73x",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rs73x",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs73x",
+              "member": "Type",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rs73x",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rs73f"
+        },
+        {
+          "op": "invoke",
+          "target": "rs73",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs73",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs73"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Refresh",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "qdfs",
+      "bind": "qx",
+      "maxItems": 200,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "qx",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "qdfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

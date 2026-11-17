@@ -1,0 +1,559 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/chunk-read-offsets",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-BULK",
+    "DAO-PROP"
+  ],
+  "description": "A dynaset over \"SELECT ID, Mm, Tx, Bn FROM LB WHERE ID = 2\" (12,000-character Memo; Bn Null): FieldSize of ID, Mm, Tx and Bn; GetChunk on Mm with (offset, size) (0,10), (0,0), (0,1), (11990,100), (11999,1), (12000,1), (12001,1), (-1,5), (0,-1), (0,12000), (0,100000), Null and Long, Long and Null, the strings \"2\" and \"3\", Double 1.5 and 2.5; GetChunk (0,2) on Tx, (0,1) on ID and (0,4) on Bn. Asks the FieldSize per type, the exact return VARIANT of GetChunk (type, length, units), the clamping or refusal at and beyond the end, and the argument coercion. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Mm, Tx, Bn FROM LB WHERE ID = 2"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "cr"
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "c_s"
+    },
+    {
+      "op": "invoke",
+      "target": "c_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "c_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "c_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mm"
+        }
+      ],
+      "bind": "c_Mm"
+    },
+    {
+      "op": "invoke",
+      "target": "c_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tx"
+        }
+      ],
+      "bind": "c_Tx"
+    },
+    {
+      "op": "invoke",
+      "target": "c_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Bn"
+        }
+      ],
+      "bind": "c_Bn"
+    },
+    {
+      "op": "invoke",
+      "target": "c_ID",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_Tx",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_Bn",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11990
+        },
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 11999
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12000
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 12001
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 12000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 100000
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "2"
+        },
+        {
+          "type": "bstr",
+          "text": "3"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "r8",
+          "bits": "3ff8000000000000"
+        },
+        {
+          "type": "r8",
+          "bits": "4004000000000000"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Tx",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_ID",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "c_Bn",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "c_ID"
+    },
+    {
+      "op": "release",
+      "target": "c_Mm"
+    },
+    {
+      "op": "release",
+      "target": "c_Tx"
+    },
+    {
+      "op": "release",
+      "target": "c_Bn"
+    },
+    {
+      "op": "release",
+      "target": "c_s"
+    },
+    {
+      "op": "invoke",
+      "target": "cr",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cr"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

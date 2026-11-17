@@ -1,0 +1,1127 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cat-txn/cat-xproc-drop-table-under-reader",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-D",
+    "READ-SCHEMA",
+    "R-LOCK-3"
+  ],
+  "description": "Process A holds a snapshot, a dynaset and a table-type recordset on T, each positioned on row 1, and a TableDef object. Process B tries DROP TABLE T, then ALTER TABLE T ADD COLUMN W LONG; A then moves each recordset one row, closes the snapshot; B tries DROP TABLE T again; A closes the others; B tries a last DROP TABLE T. Errors, catalogs and A's reads after each step.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "CreateDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cat-xdrop.accdb"
+        },
+        {
+          "type": "bstr",
+          "text": ";LANGID=0x0409;CP=1252;COUNTRY=0"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, V LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (1, 10)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (2, 20)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T (ID, V) VALUES (3, 30)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "r-def-cat-txn-cat-xdrop.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "r1"
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "r2"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "r3"
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "td"
+    },
+    {
+      "op": "signal",
+      "name": "a-ready"
+    },
+    {
+      "op": "await",
+      "name": "b-1",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "MoveNext",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "forEachItem",
+      "target": "flds",
+      "bind": "f",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "f",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "signal",
+      "name": "a-1"
+    },
+    {
+      "op": "await",
+      "name": "b-2",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "r2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "r3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "td"
+    },
+    {
+      "op": "signal",
+      "name": "a-2"
+    },
+    {
+      "op": "await",
+      "name": "b-done",
+      "timeoutMs": 20000
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cta"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cta",
+      "bind": "cda",
+      "maxItems": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cda",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cda",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cta"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cra"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cra",
+      "bind": "cla",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cla",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cla",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cla",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cla",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cra"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cqa"
+    },
+    {
+      "op": "forEachItem",
+      "target": "cqa",
+      "bind": "cna",
+      "maxItems": 32,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "cna",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cqa"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-ready",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "outputPath",
+              "fileName": "r-def-cat-txn-cat-xdrop.accdb"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": false
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DROP TABLE T"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "ALTER TABLE T ADD COLUMN W LONG"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "TableDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ct1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ct1",
+          "bind": "cd1",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cd1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cd1",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ct1"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Relations",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cr1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "cr1",
+          "bind": "cl1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cl1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl1",
+              "member": "Table",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl1",
+              "member": "ForeignTable",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl1",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cr1"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "QueryDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cq1"
+        },
+        {
+          "op": "forEachItem",
+          "target": "cq1",
+          "bind": "cn1",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cn1",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cq1"
+        },
+        {
+          "op": "signal",
+          "name": "b-1"
+        },
+        {
+          "op": "await",
+          "name": "a-1",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DROP TABLE T"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "signal",
+          "name": "b-2"
+        },
+        {
+          "op": "await",
+          "name": "a-2",
+          "timeoutMs": 20000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Execute",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "DROP TABLE T"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "TableDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "ct3"
+        },
+        {
+          "op": "forEachItem",
+          "target": "ct3",
+          "bind": "cd3",
+          "maxItems": 64,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cd3",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cd3",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "ct3"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Relations",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cr3"
+        },
+        {
+          "op": "forEachItem",
+          "target": "cr3",
+          "bind": "cl3",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cl3",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl3",
+              "member": "Table",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl3",
+              "member": "ForeignTable",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "cl3",
+              "member": "Attributes",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cr3"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "QueryDefs",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cq3"
+        },
+        {
+          "op": "forEachItem",
+          "target": "cq3",
+          "bind": "cn3",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "cn3",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cq3"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-done"
+        }
+      ]
+    }
+  ]
+}

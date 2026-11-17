@@ -1,0 +1,615 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-def-cursor-dao/chunk-append-memo-text",
+  "bookRefs": [
+    "R-CURSOR-1",
+    "CUR-BULK",
+    "CUR-EDIT"
+  ],
+  "description": "A dynaset over \"SELECT ID, Mm, Tx FROM LB WHERE ID = 1\", inside BeginTrans and rolled back: AppendChunk on Mm with no Edit, Errors; Edit, AppendChunk \"abc\" and \"def\" on Mm, FieldSize, GetChunk (0,10), read Value, Update, read Value and FieldSize; Edit, AppendChunk \"zzz\", CancelUpdate, read Value; Edit, AppendChunk on the Text field Tx and read FieldSize and Value, CancelUpdate; Edit, AppendChunk on the Long field ID, Errors, CancelUpdate; Edit, AppendChunk Null, Long 5 and the bytes 65 66 on Mm, FieldSize, read Value, Update, read Value. Asks the state in which AppendChunk is accepted, whether the pending chunk is visible through FieldSize and Value, the fields and argument types it refuses, and what CancelUpdate discards. The fixture copy is opened read-write.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-def-cursor-dao-main.accdb",
+      "sha256": "e6c0d23cc00a646991cc7c6cabd74305f2bc15ce8267745527e686ac13dd8dc0",
+      "length": 327680,
+      "provenance": "r-def-cursor-dao.create-main.e3e5c59e24.a1 qk1-e3e5c59e24fa4bdb81c3bdbb646ec2cc18f5365d5b2110d4daf7094bd684254a output:r-def-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": false
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "BeginTrans",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Mm, Tx FROM LB WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "m_s"
+    },
+    {
+      "op": "invoke",
+      "target": "m_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        }
+      ],
+      "bind": "m_ID"
+    },
+    {
+      "op": "invoke",
+      "target": "m_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Mm"
+        }
+      ],
+      "bind": "m_Mm"
+    },
+    {
+      "op": "invoke",
+      "target": "m_s",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Tx"
+        }
+      ],
+      "bind": "m_Tx"
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "def"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "GetChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        },
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "zzz"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Tx",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Tx",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Tx",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_ID",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "CancelUpdate",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Edit",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "AppendChunk",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "4142"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "FieldSize",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Update",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "m_Mm",
+      "member": "Value",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpContext",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "HelpFile",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "m_ID"
+    },
+    {
+      "op": "release",
+      "target": "m_Mm"
+    },
+    {
+      "op": "release",
+      "target": "m_Tx"
+    },
+    {
+      "op": "release",
+      "target": "m_s"
+    },
+    {
+      "op": "invoke",
+      "target": "ar",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "ar"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Rollback",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

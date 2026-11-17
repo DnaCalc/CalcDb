@@ -1,0 +1,235 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-par-1/err-snapshot-mid-bad-row-step-mdb",
+  "bookRefs": [
+    "R-PAR-1",
+    "PAR-ERROR",
+    "SQL-DEMAND"
+  ],
+  "description": "R-PAR-1 PAR-ERROR, SQL-DEMAND: For SELECT id, 1 / zm AS e FROM ER (zm = 0 at id 100 of 240 rows) as a snapshot: at which call does the division error appear (OpenRecordset, the first reads, a row before id 100, the Value read of e at row 100, the MoveNext after it), and what do the calls after it give? Steps 105 rows reading Fields id and e before each MoveNext. Runs on a fresh copy of r-par-1-error-mdb opened read-only through DAO OpenDatabase in one process and one STA; each statement is opened with Database.OpenRecordset as a snapshot unless stated, and every call's result, HRESULT and DBEngine.Errors are captured.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-par-1-error-mdb.mdb",
+      "sha256": "cfab40fe04530778b05093fe07da084de4e79966894431ace728d84f4408078b",
+      "length": 208896,
+      "provenance": "r-par-1.create-error-mdb.6652c4f628.a1 qk1-6652c4f628f9d0a51be34bfe1b82ead0b880045ad563bb3d23b6a85b072d0fab output:r-par-1-error-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT id, 1 / zm AS e FROM ER"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "EOF",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rs_sl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_sl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "id"
+        }
+      ],
+      "bind": "rs_si"
+    },
+    {
+      "op": "invoke",
+      "target": "rs_sl",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "e"
+        }
+      ],
+      "bind": "rs_se"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 105,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs_si",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rs_se",
+          "member": "Value",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rs_se"
+    },
+    {
+      "op": "release",
+      "target": "rs_si"
+    },
+    {
+      "op": "release",
+      "target": "rs_sl"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
