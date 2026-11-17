@@ -77,24 +77,27 @@ failed test). Findings and open items are in [evidence-log.md](evidence-log.md);
 [evidence-summaries.md](evidence-summaries.md). "Partial" means some branches have evidence; no ACE behaviour
 is called qualified here.
 
-| Graph result | Cards | Records | Status |
+| Graph result | Cards | Evidence folders (records) | Status |
 | --- | --- | --- | --- |
-| capture_core | R-ORACLE-1 | 3 + 5 (`r-oracle-1`, `r-crash-requery`) | partial (see the R-ORACLE-1 rows above) |
+| capture_core | R-ORACLE-1 | `r-oracle-1` 3, `r-crash-requery` 5, `r-wire` 61, `r-dec-read` 18 | partial (see the R-ORACLE-1 rows above); OR-WIRE values through DAO, SQL, parameters and ADO |
 | native_sdk_capture | I-FOUNDATION-1 FOUND-SDK | — | not started as its own probe; the worker's raw VARIANT route is the capture path, without an ABI self-check |
-| native_open_probe, native_reader_probe | R-LOCK-1, R-LOCK-2 | 144 + 10 | partial |
-| native_format | R-FMT-1 | 104 | partial: fixture family and public read-backs; byte interpretation is W-04 |
-| native_catalog_raw | R-CAT-1 | 40 (+20 `r-ddl-limits`) | partial; system tables refuse DAO reads for the default Admin |
-| native_cursor_core | R-CURSOR-1 | 42 | partial |
-| native_transaction_core | R-TXN-1 | 44 + 43 (`r-lock-3-4-txn`) + 40 (`r-txn-flush`) | partial |
-| native_scalar | R-EXPR-1 | 83 | partial |
-| native_sql_scalar, native_simple_action, native_statement_scope | R-SQL-1, R-SQL-2, R-SQL-3 | 43 + 42 | partial |
-| native_saved_query_metadata | R-CAT-1, R-SQL-3 | in the two rows above | partial |
-| native_mutation_shapes | R-FMT-2, R-PRESERVE-1 | 56 | partial: before/after images kept; interpretation is W-04 |
-| native_key_extraction | R-SORT-3 | 38 | partial: public order, equality and key images; byte keys not extracted |
-| native_crash_observation | R-CRASH-1 | 34 + 12 | partial: process-termination model only |
-| native_host_driver, native_udf, native_expression_effects | R-UDF-1, R-EXPR-1 host effects | — | deferred: needs an owned Access host on a private desktop (OR-DESKTOP, task `b8sx`) |
-| foundation_discovery, host_minimum, browser_minimum | I-FOUNDATION-1, I-HOST-1, R-ACT-1, R-WASM-1 | 6 (`r-act-1-thread`) | partial for ACT-THREAD; the rest are not ACE observations |
-| other native cards | R-DAO-1, R-ERR-1, R-STRING-1, R-ADO-1, R-ENC-1, R-LINK-1, R-COMPLEX-1, R-REBUILD-1, R-OLEDB-1, R-ODBC-1 | 43 + 74 + 41 + 56 + 82 | partial |
+| native_open_probe, native_reader_probe | R-LOCK-1, R-LOCK-2 | `r-lock-1-2` 144, `r-lock-perm` 10 | partial |
+| native_format | R-FMT-1 | `r-fmt-1` 104 | partial: fixture family and public read-backs; byte interpretation is W-04 |
+| native_catalog_raw | R-CAT-1 | `r-cat-1` 40, `r-cat-1b` 62, `r-ddl-limits` 20 | partial; system tables refuse DAO reads for the default Admin |
+| native_cursor_core | R-CURSOR-1 | `r-cursor-1` 42, `r-cursor-1b` 59 | partial |
+| native_transaction_core | R-TXN-1 | `r-txn-1` 44, `r-txn-1b` 62, `r-lock-3-4-txn` 43, `r-txn-flush` 40 | partial |
+| native_scalar | R-EXPR-1 | `r-expr-1` 83, `r-expr-1b` 62 | partial |
+| native_sql_scalar, native_simple_action, native_statement_scope | R-SQL-1, R-SQL-2, R-SQL-3 | `r-sql-1` 43, `r-sql-2-3` 42, `r-sql-13b` 57 | partial |
+| native_saved_query_metadata | R-CAT-1, R-SQL-3 | — | partial, in the catalog and SQL rows |
+| native_mutation_shapes | R-FMT-2, R-PRESERVE-1 | `r-fmt-2-pres-1` 56, `r-fmt-2b` 60 | partial: before/after images kept; interpretation is W-04 |
+| native_key_extraction | R-SORT-3 | `r-sort-3` 38, `r-sort-3b` 56 | partial: public order, equality and key images; byte keys not extracted |
+| native_crash_observation | R-CRASH-1 | `r-crash-1-kill` 34, `r-crash-1-midcall` 12 | partial: process-termination model only |
+| native serial baseline | R-PAR-1 (PAR-FOLD, PAR-ORDER, PAR-ERROR) | `r-par-1` 60 | partial: ACE's serial answers only; the parallel branches are CalcDb-side |
+| deferred-branch sweeps (wave 5) | R-CURSOR-1, R-DAO-1, R-ERR-1; R-EXPR-1, R-SQL-1/2/3, R-STRING-1; R-CAT-1, R-TXN-1, R-LOCK-*, R-FMT-2, R-PRESERVE-1, R-SORT-3, R-ENC-1, R-LINK-1, R-COMPLEX-1, R-REBUILD-1 | `r-def-cursor-dao` 62, `r-def-expr-sql` 52, `r-def-cat-txn` 60 | partial |
+| native_host_driver, native_udf, native_expression_effects | R-UDF-1, R-EXPR-1 host effects | — | deferred: needs an owned Access host with qualified dialog handling (OR-DESKTOP, task `b8sx`) |
+| foundation_discovery, host_minimum, browser_minimum | I-FOUNDATION-1, I-HOST-1, R-ACT-1, R-WASM-1 | `r-act-1-thread` 6 | partial for ACT-THREAD; the rest are not ACE observations |
+| other native cards | R-DAO-1, R-ERR-1, R-STRING-1, R-ADO-1, R-ENC-1, R-LINK-1, R-COMPLEX-1, R-REBUILD-1, R-OLEDB-1, R-ODBC-1 | `r-dao-1-err-1` 43, `r-dao-1b` 60, `r-err-1b` 59, `r-str-ado-act` 74, `r-ado-1b` 62, `r-enc-link` 41, `r-cplx-rebuild` 56, `r-oledb-odbc` 82 | partial |
+| **Total** | | 2017 records in 40 folders (2026-11-17 05:10) | |
 
 **Seal note.** These three records were sealed by tooling `67a9af91`, which serialized with
 the host line ending; their `sealSha256` verifies against the CRLF-indented manifest form.

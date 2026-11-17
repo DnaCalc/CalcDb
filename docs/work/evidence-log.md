@@ -87,6 +87,30 @@ incomplete attempts are retained as `Uncertain`, with their lifecycle trace:
 - `Recordset.Requery` on a parameter query recordset: access violation (`r-cursor-1b/requery-parameter-query`),
   the same fault as `r-crash-requery`.
 
+### Wave 5: R-PAR-1 serial baseline and deferred-branch sweeps — 233 questions, all complete
+`evidence/r-par-1`, `r-def-cursor-dao`, `r-def-expr-sql`, `r-def-cat-txn`, all on the private desktop with no window
+recorded. Digests with their probe defects are in evidence-summaries.md. Findings checked against the records:
+- **PAR-FOLD, Double sums depend on the table, not on the query's order** (`fold-double-large-groups`). FL holds
+  group 1 as 2^53 then 4096 ones, group 2 as 4096 ones then 2^53, and group 3 as 2^53, 4096 ones, then -2^53, inserted
+  in that order. `Sum(d)` gives `9007199254740992`, `9007199254745088` and `0`. These values are consistent with a
+  sequential binary64 sum in insertion order. FLI is the same rows copied by `INSERT … SELECT … ORDER BY id`, with
+  indexes on g and d. Its group 3 gives `1360` (groups 1 and 2 are equal). A derived-table `ORDER BY` did not change
+  any FL sum (`fold-double-large-reordered`). FG holds 4096 groups of `[2^53, 1, -2^53]`, interleaved: 1164 groups
+  sum to 1 and the rest to 0. FGI, the same rows with an index on g, gives 0 for every group (`fold-double-many-groups`).
+  Which physical order ACE folds in is not shown by these records.
+- **Currency aggregates overflow at OpenRecordset** (error 6, `0x800A0006`, `fold-currency-sum-groups`): `Sum(c)`
+  over values near the Currency limits fails at open, not at the read. `Sum(CDbl(c))` returns a Double.
+- **Decimal aggregates** (`fold-decimal-*`, on the `DECIMAL(28,4)` column of `fold2`): Sum keeps scale 4, while Avg
+  can return scale 28 (`0.3333333333333333333333333333`). Var and StDev return Double. `CDec(…)` in SQL answers 3075
+  in every form tried.
+- **PAR-ORDER** (`order-recordset-types`): `SELECT ins FROM OT3` returned `ins` 1, 2, … 256 as a snapshot and as a
+  forward-only recordset, and 256, 255, … 1 as a dynaset. `SELECT TOP 20 ins FROM OT3 ORDER BY k` returned 36 rows:
+  TOP keeps every row tied with the 20th. Ties under `ORDER BY k` come out in one fixed order that is not insertion
+  order (`112, 126, 84, …`), the same on the four tables with and without indexes (`order-ties-*`).
+- `Nz` is an undefined function in standalone ACE (`0x800A0C0D`, `r-def-expr-sql`).
+- The first `create-fold` used a DAO-made Decimal field (Precision 38): its 11 Decimal writes failed (3759) and it is
+  superseded by `create-fold2`.
+
 ### DAO DDL limits seen while building fixtures (R-CAT-1 CAT-D, R-SQL-2 SQL-ACT-DDL)
 `evidence/r-ddl-limits`, one element varied per statement, each on a fresh database, ACCDB and MDB alike:
 - Refused with 3292 (`0x800A0CDC`, syntax error in field definition): `DECIMAL(18,4)`, plain `DECIMAL`, and a column
