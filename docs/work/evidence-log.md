@@ -36,6 +36,70 @@ raw lane, in ACCDB and MDB, TEXT and MEMO, by DAO put, SQL literal, parameter an
 The index is an ACE table too, so it lost the same values. Its display text escapes U+FEFF; the exact bytes were
 always kept in `ResultBytes`.
 
+### ACE's file writes and flushes, by ETW (R-CRASH-1 CRASH-ORDER, R-TXN-1 TXN-FLUSH, R-LOCK-2 RO-NATIVE) — `evidence/r-etw-rec`, 11 records
+The owner installed the ETW file-I/O recorder (tools/etw-setup) on 2026-11-17. Each record has the trace of every create,
+read, write, flush and delete on the attempt's files; `calcdb-oracle show --etw` places each one inside the native call
+that issued it, on which thread (the worker's lifecycle trace is kept as an artifact for that). Three ACE threads
+take part:
+- **Who writes, and when.** In a shared session, an implicit-transaction statement returns with its pages unwritten; a
+  background ACE thread writes them 500 to 545 ms later. This is the half second the sampling recorder saw (OR-FREEZE).
+  `ImplicitCommitSync` Yes makes Execute write them itself, on the calling thread, before it returns. An explicit
+  CommitTrans writes the transaction's pages itself, on the calling thread; with `UserCommitSync` No it writes only the
+  growth bytes, and the background thread writes the pages about 508 ms later. In the exclusive session of
+  CreateDatabase, every statement writes synchronously on the calling thread.
+- **One FlushFileBuffers, from a timer on a third thread.** After the writes, another ACE thread flushes the database
+  once, 2.33 to 2.89 s later. No statement, CommitTrans, Close or CompactDatabase calls it. Neither sync option changes
+  the flush. The spread suggests a periodic flush of dirty files, not a fixed delay.
+- **Close does not flush.** Close writes any pending pages itself, then page 1 and the 2-byte field again, and issues no
+  flush. A session closed within the flush delay (`lazy-writer-window`, `compact`), and the whole exclusive creation
+  session, are never flushed by ACE. CompactDatabase flushes neither the source nor the new file.
+- **Write order within a statement.** 2 bytes of page 0, then the pages, then the same 2 bytes again. The field is at offset
+  3584 (0xE00) in the exclusive session and at 3586 in shared sessions. The file grows by a 1-byte write at the last byte
+  of each new page, before the page is written.
+- **Read-only session (RO-NATIVE).** A read-only shared open opens the database share R/W, writes only the 64-byte lock
+  record at offset 0 of the `.laccdb`, reads the database, and deletes the lock file at Close. Nothing is written to the
+  database.
+- **Limit of the recorder.** The order of ACE's own WriteFile and FlushFileBuffers calls is complete. Paging writes, the
+  data actually reaching the disk, are only partly attributed: two of eleven traces have some for the database. Even 15 s
+  after Close, `lazy-writer-window` shows none. So these records say what ACE asks of the file system, not when the disk
+  received it.
+- Open: what triggers the timer (a period, or idle after the last write), and its value under load; the 0xE00 field's
+  meaning (W-04 byte analysis); flushes during long transactions.
+- Tooling note: these 11 attempts ran on a Release worker built at 04:21, which the runner then preferred to the current
+  Debug worker. Every operation they use existed in that build, and each record names its worker by path, SHA-256 and
+  tooling revision. The runner now runs the worker of its own build configuration.
+
+### The owned Access host (R-UDF-1, R-EXPR-1 EXPR-SANDBOX / EXPR-DOMAIN / EXPR-EVAL, R-ORACLE-1 OR-OWN) — `evidence/r-access-host`, 7 records
+Access.Application 16.0 (Build 20527, MSACCESS.EXE 16.0.20527.20196) runs as a local server. The worker claims its
+process through `hWndAccessApp` (operation `claimProcess`), and the runner then puts it in the attempt's kill-on-close
+job, guards its windows and ends it if it outlives the worker. By the owner's instruction of 2026-11-17 these runs are on
+the main desktop (`--desktop main`), recorded in each owner report. AutomationSecurity is set to low on the instance only,
+and the only code run is the generated fixture module, loaded by `LoadFromText(acModule)`.
+- **Defaults.** Visible False, UserControl False, AutomationSecurity 2. After Quit(acQuitSaveNone) and Release, Access
+  exits by itself with code 0.
+- **Eval context.** Nz and the domain functions work; DLookup with no match is Null, DSum of a Long is a Double.
+  `CDec("1.5")` is refused, 0x800A0987 "wrong number of arguments". The literal `1.5` reaches VBA as Decimal (VarType 14).
+  A VBA Boolean comes back as VT_BOOL through Run, and as VT_I2 -1 through Eval and in query fields.
+- **CurrentDb queries.** Nz and DLookup work, and Nz returns text (`"-1"`, `"7"`); a Variant UDF result also projects as
+  text. A row-dependent UDF runs once per row in key order, in a column or in WHERE; a constant-argument UDF runs once for
+  the whole query. A UDF in a column runs when its field value is read.
+- **Sandbox (EXPR-SANDBOX), under the machine's existing mode.** Environ and CurDir are refused as unknown names, by Eval
+  (0x800A0979) and by SQL (3085). Called inside generated VBA, both run through every route, so the refusal is the
+  expression service's.
+- **Names and arguments (UDF-NAME, UDF-SIGNATURE).** An omitted Optional Variant is missing (TypeName Error) and typed
+  defaults apply. Null and Empty pass through. Text converts into a Double parameter when it can; otherwise Run fails with
+  DISP_E_TYPEMISMATCH and Eval with 0x800A000D. A missing procedure is 2517 through Run and 0x800A0979 through Eval. The
+  module-qualified name `CalcDbGen.CalcDbEcho(5)` fails with 2517, and its description names the previous failure: the
+  text is stale.
+- **Standalone DAO (UDF-CONTEXT).** On the same file after Access quit: 3085 Undefined function for Nz, Environ and the
+  generated functions.
+- **Errors (UDF-ERROR).** A UDF that raises an error, called through Run, Eval or a CurrentDb query, opens the modal
+  **Microsoft Visual Basic** run-time error dialog in the host and blocks the caller (the query at the failing row's field
+  read). The three records are Uncertain by construction. The dialog was not dismissed, and the runner ended the host.
+  On the main desktop such a dialog is visible to the owner until the attempt's timeout.
+- Open: error channels without the dialog (they need a VBA error-trapping setting that is not changed in a run, or
+  dialog handling by UI Automation); UDF-BYREF, UDF-ENTRY, UDF-REENTRY, UDF-CLOSE; CAT-X; the private desktop for the host.
+
 ### Erratum: twelve retention notes name the wrong kill mechanism
 The \`retentionNote\` of these records says participant a "ends itself with TerminateSelf". It did not. In every one,
 participant b ended a with \`KillParticipant\` (TerminateProcess, exit 0xDEAD), as the card source shows. The captures

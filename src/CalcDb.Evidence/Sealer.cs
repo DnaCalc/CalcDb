@@ -109,6 +109,14 @@ public static class Sealer
             problems.Add("ETW file-I/O recorder did not finish cleanly: " + statusText);
         }
         artifacts.Add(new ArtifactRef("etw:file-io", "etw-file-io", "artifacts/etw-file-io.jsonl", new FileInfo(trace).Length, Hashing.Sha256File(trace)));
+        // The workers' lifecycle traces (one flushed line before every native call) appear in the ETW trace as writes
+        // at known offsets, so keeping them lets a reader place every recorded I/O inside the call that issued it.
+        foreach (string lifecycle in Directory.EnumerateFiles(Path.Combine(attemptDir, "receipts"), "trace*.jsonl").Order(StringComparer.Ordinal))
+        {
+            string name = Path.GetFileName(lifecycle);
+            string participant = name == "trace.jsonl" ? "a" : name["trace.".Length..^".jsonl".Length];
+            artifacts.Add(new ArtifactRef("trace:" + participant, "lifecycle-trace", "receipts/" + name, new FileInfo(lifecycle).Length, Hashing.Sha256File(lifecycle)));
+        }
     }
 
     private static readonly string[] Severity = [Execution.ReturnedSuccess, Execution.ReturnedFailure, Execution.Terminated, Execution.NotStarted, Execution.Aborted, Execution.Uncertain];
@@ -155,7 +163,9 @@ public static class Sealer
         }
         foreach (string window in owner.WindowsOnUserDesktop ?? [])
         {
-            problems.Add("CONDUCT: window of the owned worker on the owner's desktop (OR-DESKTOP guard): " + window);
+            problems.Add(owner.MainDesktopInstruction is { } instruction
+                ? $"Window of an owned process on the main desktop (main-desktop run, {instruction}): {window}"
+                : "CONDUCT: window of the owned worker on the owner's desktop (OR-DESKTOP guard): " + window);
         }
         return (execution, captureSha);
     }

@@ -224,3 +224,33 @@ code or a name.
 
 **Next candidates.** Repeats of the sampling recorder per mutation class; a pre-push size check is no longer needed
 since retain enforces it.
+
+## 2026-11-17 (afternoon) · ETW recorder and the owned Access host (one session, Claude Opus 5.5)
+
+**Work observed.** The owner installed the ETW recorder; 11 `r-etw-rec` records, a `show --etw` view, the
+`claimProcess` operation, owned out-of-process servers in the runner, `--desktop main`, and the first 7
+`r-access-host` records. About 25 runs, 5 qualification notes, 11 report rows.
+
+**What worked.**
+- *Placing each I/O inside its native call.* The recorder has no absolute clock, but each worker writes one flushed
+  line before every native call, and the trace sees those writes at their offsets. Keeping that lifecycle trace as an
+  artifact made every recorded write attributable to a call without a recorder change or a reinstall.
+- *One designed probe for an unexplained absence.* No paging writes of the database appeared at all. A 15 s pause
+  after Close (`lazy-writer-window`) settled it: Close does not flush, and the missing disk writes are a recorder limit.
+- *Splitting a probe at a blocking UI.* Run of a raising UDF opens a modal VBA dialog. The Eval and query routes got
+  their own probes, so that dialog could not hide them.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The runner preferred a Release worker to a Debug one | 11 ETW attempts ran on a 04:21 worker, and the first Access run failed to parse `activate` | The runner runs the worker of its own build configuration |
+| I wrote "writes inside Execute" from where the call markers fell | 6 of 11 uncommitted notes were wrong; the thread ids showed a background writer | The view prints process and thread; notes re-retained before commit |
+| PowerShell `-match` ignores case | "flushes 0" in the summary matched the FLUSH pattern once | `-cmatch` for trace text |
+
+**Rule.** A claim about when or by whom a write happened is taken from the event's thread and time, not from the call
+it falls after.
+
+**Next candidates.** Dialog handling by UI Automation (it would open UDF-ERROR's channels); the recorder's paging-write
+attribution, which needs a recorder change and the owner's reinstall; moving the Access host to the private desktop when
+the owner says so.

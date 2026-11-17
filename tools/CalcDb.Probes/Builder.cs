@@ -212,6 +212,12 @@ public sealed class P
 
     public P Unadvise(string name) => Add(new Unadvise(name));
 
+    /// <summary>
+    /// Claim the out-of-process server behind a bound object (R-ORACLE-1 OR-OWN), by the window handle
+    /// <paramref name="member"/> returns: the runner then owns, guards and ends it. For Access: <c>hWndAccessApp</c>, <c>MSACCESS.EXE</c>.
+    /// </summary>
+    public P Claim(string target, string member, string image) => Add(new ClaimProcess(target, member, image));
+
     /// <summary>QueryInterface a bound object for each IID and record which succeed.</summary>
     public P QueryInterfaces(string target, params string[] iids) => Add(new QueryInterfaces(target, iids));
 

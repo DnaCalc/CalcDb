@@ -105,7 +105,19 @@ public sealed record OwnerReport
 
     /// <summary>Top-level windows of owned workers seen on the private desktop (for example a modal dialog), sampled while it ran.</summary>
     public IReadOnlyList<string>? WindowsOnPrivateDesktop { get; init; }
+
+    /// <summary>
+    /// Set when the owner instructed a run on the main desktop (<c>WinSta0\Default</c>), with that instruction. Windows
+    /// on the owner's desktop are then observations of that run, not conduct incidents.
+    /// </summary>
+    public string? MainDesktopInstruction { get; init; }
+
+    /// <summary>OR-OWN: COM-started server processes this participant claimed, with how each one ended.</summary>
+    public IReadOnlyList<string>? ClaimedChildren { get; init; }
 }
+
+/// <summary>A server process a worker claimed (<see cref="ClaimProcess"/>), as written to its owned-children receipt.</summary>
+public sealed record OwnedChild(string Participant, int ProcessId, string Image, DateTimeOffset StartedUtc, DateTimeOffset ClaimedUtc);
 
 /// <summary>
 /// Sealed result of an attempt (F-184 <c>CaptureManifest</c>). Published atomically after every

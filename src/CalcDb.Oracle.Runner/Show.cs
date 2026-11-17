@@ -16,6 +16,17 @@ internal static class Show
             {
                 sb.AppendLine("  problem: " + p);
             }
+            foreach (OwnerReport owner in new[] { manifest.Owner }.Concat(manifest.Participants.Select(x => x.Owner)))
+            {
+                foreach (string child in owner.ClaimedChildren ?? [])
+                {
+                    sb.AppendLine($"  claimed by {owner.Participant}: {child}");
+                }
+            }
+            if (manifest.Owner.MainDesktopInstruction is { } instruction)
+            {
+                sb.AppendLine("  desktop: main (" + instruction + ")");
+            }
         }
         EnvironmentReceipt env = capture.Environment;
         sb.AppendLine($"env: {env.Runtime} {env.ProcessArchitecture} {env.ApartmentType} desktop={env.WindowStation}\\{env.Desktop} lcid={env.UserDefaultLcid} acp={env.AnsiCodePage} tooling={env.ToolingRevision}");
@@ -61,6 +72,9 @@ internal static class Show
                     break;
                 case ActivationEvent ac:
                     sb.AppendLine($"activate {ac.Route} {ac.Class} {ac.Clsid} ctx=0x{ac.ClsCtx:X} iid={ac.Iid}{(ac.Aggregate ? " aggregate" : "")}: {string.Join("; ", ac.Steps)}{(ac.OuterQueries is { Count: > 0 } q ? " | outer asked for " + string.Join(", ", q) : "")}{(ac.Object is null ? "" : " -> " + Value(ac.Object))}");
+                    break;
+                case ClaimEvent cl:
+                    sb.AppendLine($"claim {cl.Target}.{cl.Member} window {cl.Window} -> pid {cl.ProcessId} {cl.ImagePath} {cl.ImageFileVersion} started {cl.StartedUtc:O}: {cl.Outcome}");
                     break;
                 case ConnectionEvent ce:
                     sb.AppendLine($"{ce.Op} {ce.Name} {ce.Target} {ce.EventIid}: {string.Join("; ", ce.Steps)}{(ce.Cookie is { } ck ? $" cookie {ck}" : "")}{(ce.CallsRecorded is { } calls ? $", {calls} calls recorded" : "")}");

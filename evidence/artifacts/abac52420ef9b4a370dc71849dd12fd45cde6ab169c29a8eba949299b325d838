@@ -1,0 +1,51 @@
+Option Compare Database
+Option Explicit
+
+Private mTrace As String
+Private mCount As Long
+
+Public Function CalcDbEcho(ByVal x As Variant) As Variant
+    CalcDbEcho = x
+End Function
+
+Public Function CalcDbTypeOf(ByVal x As Variant) As String
+    CalcDbTypeOf = TypeName(x) & "/" & CStr(VarType(x))
+End Function
+
+Public Function CalcDbOpt(Optional a As Variant, Optional ByVal b As Long = 7) As String
+    CalcDbOpt = CStr(IsMissing(a)) & "|" & TypeName(a) & "|" & CStr(b)
+End Function
+
+Public Function CalcDbTrace(ByVal x As Variant) As Variant
+    mCount = mCount + 1
+    mTrace = mTrace & CStr(mCount) & ":" & TypeName(x) & "=" & CStr(Nz(x, "Null")) & ";"
+    CalcDbTrace = x
+End Function
+
+Public Function CalcDbTraceRead() As String
+    CalcDbTraceRead = mTrace
+End Function
+
+Public Function CalcDbTraceReset() As Long
+    CalcDbTraceReset = mCount
+    mTrace = ""
+    mCount = 0
+End Function
+
+Public Function CalcDbFailAt(ByVal x As Variant, ByVal at As Long) As Variant
+    CalcDbTrace x
+    If x = at Then Err.Raise vbObjectError + 513, "CalcDbGen", "CalcDb fixture error at " & CStr(at)
+    CalcDbFailAt = x
+End Function
+
+Public Function CalcDbDouble(ByVal x As Double) As Double
+    CalcDbDouble = x * 2
+End Function
+
+Public Function CalcDbEnvOk() As Boolean
+    CalcDbEnvOk = Len(Environ("TEMP")) > 0
+End Function
+
+Public Function CalcDbDirOk() As Boolean
+    CalcDbDirOk = Len(CurDir()) > 0
+End Function

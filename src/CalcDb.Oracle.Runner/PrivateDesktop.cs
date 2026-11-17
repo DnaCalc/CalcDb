@@ -25,6 +25,9 @@ internal static partial class PrivateDesktop
     /// </summary>
     public const string ContainerName = "CalcDbOracleContainers";
 
+    /// <summary>The owner's own desktop, used only for a run the owner instructed (<c>--desktop main</c>).</summary>
+    public const string MainName = "Default";
+
     private const string ContainerSddl = "D:(A;;GA;;;SY)(A;;GA;;;OW)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)";
     private static readonly Lazy<nint> Desktop = new(() => Create(Name, null));
     private static readonly Lazy<nint> ContainerDesktop = new(() => Create(ContainerName, ContainerSddl));
@@ -102,7 +105,10 @@ internal static partial class PrivateDesktop
 
     public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop = Name)
     {
-        _ = HandleOf(desktop);
+        if (desktop != MainName)
+        {
+            _ = HandleOf(desktop);
+        }
         var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), InheritHandle = 1 };
         if (!CreatePipe(out SafeFileHandle readEnd, out SafeFileHandle writeEnd, ref sa, 0))
         {
@@ -144,7 +150,10 @@ internal static partial class PrivateDesktop
         var user = new List<string>();
         var priv = new List<string>();
         EnumWindows((hwnd, _) => { Note(hwnd, pids, user); return true; }, 0);
-        EnumDesktopWindows(HandleOf(desktop), (hwnd, _) => { Note(hwnd, pids, priv); return true; }, 0);
+        if (desktop != MainName)
+        {
+            EnumDesktopWindows(HandleOf(desktop), (hwnd, _) => { Note(hwnd, pids, priv); return true; }, 0);
+        }
         return (user, priv);
     }
 

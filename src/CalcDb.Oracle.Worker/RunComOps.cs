@@ -415,6 +415,81 @@ internal sealed unsafe partial class Run
         }
     }
 
+    /// <summary>
+    /// R-ORACLE-1 OR-OWN: claim the server process behind a bound object by the window handle its member returns. The
+    /// process must run the named image and have started after the attempt was prepared; only then is it written to
+    /// this participant's owned-children receipt, which the runner reads while the worker runs.
+    /// </summary>
+    private void DoClaim(ClaimProcess c, string path)
+    {
+        CapturedValue? value = DoInvoke(c.Target, c.Member, DispatchKind.MethodOrGet, [], null, path);
+        int? pid = null;
+        string? image = null, version = null;
+        DateTimeOffset? started = null;
+        string outcome;
+        if (value?.Integer is not { } text || !long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long hwnd) || hwnd == 0)
+        {
+            outcome = "refused: the member did not return a window handle";
+        }
+        else if (Native.GetWindowThreadProcessId((nint)hwnd, out uint owner) == 0 || owner == 0)
+        {
+            outcome = "refused: no process owns that window";
+        }
+        else
+        {
+            try
+            {
+                using Process process = Process.GetProcessById((int)owner);
+                pid = process.Id;
+                image = process.MainModule?.FileName;
+                version = image is null ? null : FileVersionInfo.GetVersionInfo(image).FileVersion;
+                started = process.StartTime.ToUniversalTime();
+                if (!string.Equals(Path.GetFileName(image), c.Image, StringComparison.OrdinalIgnoreCase))
+                {
+                    outcome = $"refused: process {pid} runs {image}, not {c.Image}";
+                }
+                else if (started < _attempt.PreparedUtc.AddSeconds(-1))
+                {
+                    outcome = $"refused: process {pid} started before this attempt was prepared";
+                }
+                else
+                {
+                    RecordOwnedChild(new OwnedChild(_participant, process.Id, c.Image, started.Value, DateTimeOffset.UtcNow));
+                    outcome = "claimed";
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            {
+                outcome = "refused: " + ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+        _events.Add(new ClaimEvent
+        {
+            Seq = ++_seq,
+            ProgramPath = path,
+            Target = c.Target,
+            Member = c.Member,
+            Window = value?.Integer,
+            ProcessId = pid,
+            ImagePath = image,
+            ImageFileVersion = version,
+            StartedUtc = started,
+            Outcome = outcome,
+        });
+    }
+
+    private readonly List<OwnedChild> _ownedChildren = [];
+
+    /// <summary>Rewrite the owned-children receipt whole, through a temporary file, so the runner never reads a partial list.</summary>
+    private void RecordOwnedChild(OwnedChild child)
+    {
+        _ownedChildren.Add(child);
+        string receipt = Path.Combine(_attemptDir, "receipts", _participant == "a" ? "owned-children.json" : $"owned-children.{_participant}.json");
+        string temp = receipt + ".tmp";
+        File.WriteAllText(temp, EvidenceJson.Serialize(_ownedChildren));
+        File.Move(temp, receipt, overwrite: true);
+    }
+
     private SyncEvent DoSuspend(SuspendParticipant s, string path)
     {
         Thread.Sleep(s.DelayMs);

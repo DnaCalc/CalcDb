@@ -1,0 +1,264 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-access-host/udf-error-eval",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-OWN",
+    "R-UDF-1",
+    "UDF-ERROR",
+    "UDF-CONTEXT"
+  ],
+  "description": "Owned Access host (Access.Application, local server, claimed by hWndAccessApp; AutomationSecurity low on this instance; generated fixture code only): a new current database with T and the generated module; CalcDbFailAt raises vbObjectError + 513 after tracing when its argument is 2; Application.Eval(\"CalcDbFailAt(2, 2)\"), then Eval of CalcDbTraceRead(). Asks this route's error channels, whether it shows the VBA error dialog the Run route shows, and which calls happened before the error.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false,
+      "pageSize": 0
+    },
+    {
+      "op": "observeModules",
+      "label": "before-activate"
+    },
+    {
+      "op": "activate",
+      "class": "Access.Application",
+      "route": "cocreate",
+      "clsCtx": 4,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "app",
+      "aggregate": false
+    },
+    {
+      "op": "claimProcess",
+      "target": "app",
+      "member": "hWndAccessApp",
+      "image": "MSACCESS.EXE"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Build",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Visible",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "UserControl",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "NewCurrentDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "host-err-eval.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CurrentDb",
+      "kind": "method",
+      "args": [],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 1.5, 'a', Null)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 2.5, 'b', 7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (3, -0.5, Null, 3)"
+        }
+      ]
+    },
+    {
+      "op": "writeFile",
+      "file": "work:CalcDbGen.bas",
+      "hex": "4f7074696f6e20436f6d706172652044617461626173650d0a4f7074696f6e204578706c696369740d0a0d0a50726976617465206d547261636520417320537472696e670d0a50726976617465206d436f756e74204173204c6f6e670d0a0d0a5075626c69632046756e6374696f6e2043616c6344624563686f28427956616c20782041732056617269616e74292041732056617269616e740d0a2020202043616c6344624563686f203d20780d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c634462547970654f6628427956616c20782041732056617269616e742920417320537472696e670d0a2020202043616c634462547970654f66203d20547970654e616d65287829202620222f22202620435374722856617254797065287829290d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c6344624f7074284f7074696f6e616c20612041732056617269616e742c204f7074696f6e616c20427956616c2062204173204c6f6e67203d20372920417320537472696e670d0a2020202043616c6344624f7074203d20435374722849734d697373696e6728612929202620227c22202620547970654e616d65286129202620227c22202620435374722862290d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c634462547261636528427956616c20782041732056617269616e74292041732056617269616e740d0a202020206d436f756e74203d206d436f756e74202b20310d0a202020206d5472616365203d206d547261636520262043537472286d436f756e7429202620223a22202620547970654e616d65287829202620223d2220262043537472284e7a28782c20224e756c6c222929202620223b220d0a2020202043616c6344625472616365203d20780d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c634462547261636552656164282920417320537472696e670d0a2020202043616c634462547261636552656164203d206d54726163650d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c634462547261636552657365742829204173204c6f6e670d0a2020202043616c63446254726163655265736574203d206d436f756e740d0a202020206d5472616365203d2022220d0a202020206d436f756e74203d20300d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c6344624661696c417428427956616c20782041732056617269616e742c20427956616c206174204173204c6f6e67292041732056617269616e740d0a2020202043616c634462547261636520780d0a2020202049662078203d206174205468656e204572722e52616973652076624f626a6563744572726f72202b203531332c202243616c63446247656e222c202243616c6344622066697874757265206572726f72206174202220262043537472286174290d0a2020202043616c6344624661696c4174203d20780d0a456e642046756e6374696f6e0d0a0d0a5075626c69632046756e6374696f6e2043616c634462446f75626c6528427956616c207820417320446f75626c652920417320446f75626c650d0a2020202043616c634462446f75626c65203d2078202a20320d0a456e642046756e6374696f6e0d0a"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "LoadFromText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 5
+        },
+        {
+          "type": "bstr",
+          "text": "CalcDbGen"
+        },
+        {
+          "type": "outputPath",
+          "fileName": "CalcDbGen.bas"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbFailAt(2, 2)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CalcDbTraceRead()"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CloseCurrentDatabase",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Quit",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "app"
+    },
+    {
+      "op": "pause",
+      "ms": 3000
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 0
+    }
+  ]
+}

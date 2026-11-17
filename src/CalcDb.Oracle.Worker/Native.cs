@@ -197,6 +197,9 @@ internal static unsafe partial class Native
     public static partial nint GetThreadDesktop(uint threadId);
 
     [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint hwnd, out uint processId);
+
+    [LibraryImport("user32.dll")]
     public static partial nint GetProcessWindowStation();
 
     [LibraryImport("user32.dll", SetLastError = true)]

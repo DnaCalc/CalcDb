@@ -1,9 +1,10 @@
 # Qualification report
 
-**State on 2026-11-17**, after two qualification rounds and the worker operations (The Plan §8.1). The reference build is
+**State on 2026-11-17**, after two qualification rounds, the worker operations, the ETW recorder and the first owned
+Access host (The Plan §8.1). The reference build is
 Office Click-to-Run 16.0.20527.20196 x64, through the raw IDispatch lane. Sources:
-- [qualified.md](qualified.md) holds the 254 qualification notes, each citing its records.
-- `evidence/` holds the retained records. The rounds added `r-q-*`, `r-q2-*`, `r-ops` and `r-sample-rec`.
+- [qualified.md](qualified.md) holds the 259 qualification notes, each citing its records.
+- `evidence/` holds the retained records. The rounds added `r-q-*`, `r-q2-*`, `r-ops`, `r-sample-rec`, `r-etw-rec` and `r-access-host`.
 - The construction index of [II-16 §24](../book/II-16-development.md) (F-218 to F-222) gives each slice's deciding
   experiment branches.
 
@@ -20,12 +21,16 @@ probes, and spot-checked against the records. Statuses:
 
 ## Summary
 
-- **468 branch rows across 29 cards:**
+- **479 branch rows across 30 cards** (R-UDF-1's 11 rows are counted from the Access host on):
 
-  | | Q | Q+T | F | T | N | unclear |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | After the first round | 164 | 103 | 30 | 122 | 44 | 4 |
-  | Now | 186 | 120 | 10 | 104 | 44 | 4 |
+  | | Rows | Q | Q+T | F | T | N | unclear |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | After the first round | 468 | 164 | 103 | 30 | 122 | 44 | 4 |
+  | After the worker operations | 468 | 186 | 120 | 10 | 104 | 44 | 4 |
+  | Now | 479 | 187 | 124 | 10 | 110 | 44 | 4 |
+
+  The last line: RO-NATIVE T to Q and EXPR-SANDBOX T to Q+T; R-UDF-1 gets UDF-NAME, UDF-SIGNATURE and UDF-CONTEXT as Q+T
+  and its eight other branches as T.
 
   The notes record about 20 draft claims that later records corrected, among them the tie order under equal keys,
   TXN-CLOSE, the Double fold and the engine-identity note.
@@ -33,9 +38,14 @@ probes, and spot-checked against the records. Statuses:
   named arguments, raw activation with class factories and aggregation, `ITypeInfo::CreateInstance`, a recording event
   sink, and freezing a participant mid-call. Among the branches they settled are ACT-CLSID, ACT-FACTORY,
   ACT-AGGREGATE, ACT-TYPECREATE, STR-BYREF, DAO-ENUM, ADO-EVENT, ADO-RESULTS and READ-PATH.
-- **A sampling write recorder exists now, with no kernel driver:** freeze the writer, hash the file's pages, resume
-  (`r-sample-rec`). It shows which pages reach the file between samples, at the file-cache level. Exact per-write
-  and flush order still need ETW or a file-system filter, an owner-approved setup step.
+- **ACE's writes and flushes are recorded exactly (ETW, `r-etw-rec`):** every WriteFile and FlushFileBuffers with offset,
+  size and thread. A shared-session statement's pages are written by a background thread about 0.5 s later; an
+  explicit CommitTrans writes them itself. One FlushFileBuffers follows each burst, from a timer thread 2.3 to 2.9 s
+  later. Close, CompactDatabase and the exclusive creation session never flush. The sampling recorder (`r-sample-rec`)
+  saw the same at the file-cache level.
+- **The owned Access host runs (`r-access-host`),** on the main desktop by the owner's instruction for now: Eval and
+  CurrentDb contexts, generated VBA functions in queries, and the standalone-DAO contrast. A VBA error in a fixture
+  function opens a modal dialog, so the error channels of that route wait for dialog handling.
 - **How far construction can go:** the whole read path up to the first joined goal, W-08/native-read, is clear of
   unsettled ACE facts except one follow-up (CUR-POP) and our own byte analysis. The first wall is still durable
   writes: the exact order in which ACE writes data and index pages (CRASH-ORDER).
@@ -52,14 +62,15 @@ probes, and spot-checked against the records. Statuses:
 | R-PRESERVE-1 | 12 | 7 | 1 | 0 | 3 | 1 | Bytes; Access objects |
 | R-SORT-3 | 18 | 11 | 4 | 0 | 3 | 0 | Key bytes and the weight derivation (SORT-DERIVE) |
 | R-LOCK-1 | 12 | 5 | 4 | 0 | 2 | 1 | ACLs, file mapping |
-| R-LOCK-2 | 8 | 4 | 1 | 1 | 1 | 1 | Native trace |
+| R-LOCK-2 | 8 | 5 | 1 | 1 | 0 | 1 | — |
 | R-LOCK-3 | 7 | 4 | 1 | 2 | 0 | 0 | — |
 | R-LOCK-4 | 11 | 7 | 1 | 1 | 1 | 1 | SMB network |
 | R-CAT-1 | 9 | 1 | 7 | 0 | 1 | 0 | CAT-X (Access and crash route); MSys rows refused to the default Admin |
 | R-CURSOR-1 | 10 | 3 | 5 | 1 | 0 | 1 | — |
 | R-TXN-1 | 14 | 7 | 4 | 2 | 1 | 0 | ODBC transactions |
-| R-CRASH-1 | 16 | 1 | 2 | 1 | 5 | 7 | Per-write and flush recording, injection |
-| R-EXPR-1 | 31 | 17 | 9 | 1 | 4 | 0 | Access and VBA contexts, the full function-by-context inventory |
+| R-CRASH-1 | 16 | 1 | 2 | 1 | 5 | 7 | Page roles of the recorded writes (W-04), injection, power loss |
+| R-EXPR-1 | 31 | 17 | 10 | 1 | 3 | 0 | The full function-by-context inventory; Access error channels without a dialog |
+| R-UDF-1 | 11 | 0 | 3 | 0 | 8 | 0 | ByRef, entry, ownership, effect, reentry, close and thread need instrumented callbacks; UDF-ERROR needs dialog handling |
 | R-SQL-1 | 43 | 19 | 7 | 0 | 3 | 14 | Access contexts; overflow past $2^{31}$ rows |
 | R-SQL-2 | 23 | 9 | 10 | 0 | 4 | 0 | Injected failures, storage-closure bytes |
 | R-SQL-3 | 17 | 13 | 3 | 0 | 1 | 0 | Trace |
@@ -74,8 +85,7 @@ probes, and spot-checked against the records. Statuses:
 | R-OLEDB-1 | 12 | 3 | 7 | 0 | 2 | 0 | Managed clients |
 | R-ODBC-1 | 12 | 0 | 0 | 0 | 12 | 0 | ODBC entirely (DSN and driver prompts are forbidden by the conduct rules) |
 
-R-UDF-1 has no rows: its route needs an owned Access host, so all its branches are T. R-WASM-1 and R-CRASH-2 are not
-ACE questions. R-FMT-1, R-PRESERVE-1 and R-STRING-1 have no branch tables in the book; their rows use labels the
+R-UDF-1's rows come from the owned Access host (`r-access-host`). R-WASM-1 and R-CRASH-2 are not ACE questions. R-FMT-1, R-PRESERVE-1 and R-STRING-1 have no branch tables in the book; their rows use labels the
 agents chose from the card's paragraphs.
 
 ## Dependency order: how far construction can go
@@ -102,23 +112,24 @@ deciding branches, and by whether a remaining T concerns its first scope.
   500-row prefetch take their values.
 - **W-05/edit-frames**, the in-memory edit state.
 - **W-06** restricted-scalar, parser-binder-scan and relational-spill. The function-by-context inventory (EXPR-INVENTORY)
-  grows with the evaluator; only the Access sandbox contexts (EXPR-SANDBOX) are T.
+  grows with the evaluator. EXPR-SANDBOX is Q+T: in the Access contexts Environ and CurDir are refused by name and run
+  inside VBA; other machine sandbox modes are not asked.
 
 ### The first wall: durable writes
 
 **W-05/same-width-mutation, and everything that publishes to the file after it,** needs CRASH-ORDER: the order in
-which ACE writes data and index pages. The sampling recorder has given one trace: in an explicit transaction, new
-data pages first, then pages 0, 1 and 45–48. That is an observation, not yet a rule. Repeating it over the mutation
-classes (update in place, growth, deletes, index splits) is ordinary F work now. Exact per-write and flush order
-needs ETW or a file-system filter. The transaction flush branches (TXN-FLUSH-COMMIT, -OP, -BEHIND) are now
-qualified from repeated kills and page timelines.
+which ACE writes data and index pages. The ETW traces now give the issued order of every write and flush for inserts,
+updates, deletes, commits and compaction (qualified.md, CRASH-ORDER issued order). What keeps the CRASH-ORDER rows T is
+the page roles: which written page is data, index or map needs our W-04 byte analysis of the same files, not new
+ACE runs. Power-loss and torn-write behaviour stay out of reach of a trace. The transaction flush branches
+(TXN-FLUSH-COMMIT, -OP, -BEHIND) are qualified, and the traces show their mechanism.
 
 ### Later walls
 
 | Area | What it needs |
 | --- | --- |
-| Sharing: W-10/native-readers-only, W-11, W-12 | RO-NATIVE (a native trace); the rest of R-LOCK-2/3/4 is Q or F now; SMB for the network combinations |
-| Host extension, W-06/host-extension (R-UDF-1) | an owned Access host with dialog handling |
+| Sharing: W-10/native-readers-only, W-11, W-12 | RO-NATIVE is Q now; the rest of R-LOCK-2/3/4 is Q or F; SMB for the network combinations |
+| Host extension, W-06/host-extension (R-UDF-1) | the owned Access host runs; instrumented callbacks (reentry, close, ByRef) and dialog handling for UDF-ERROR |
 | ADO events and persistence, W-09/events-persistence-inventory | network persistence only; the event branches are qualified |
 | Encryption: W-L1 | protected temp backing and failures |
 | Links: W-L2 | cancel has no DAO route |
@@ -133,9 +144,9 @@ qualified from repeated kills and page timelines.
 | --- | --- | --- |
 | Worker operations: enumeration, ByRef and named arguments, raw activation, aggregation, `ITypeInfo::CreateInstance`, an event sink, suspend and resume | DAO-ENUM, ACT-*, STR-BYREF, ADO-EVENT, ADO-RESULTS, READ-PATH, ERR-SNAPSHOT and others | **done** (`b2be2637`) |
 | A sampling write recorder (suspend, page hashes, resume) | CRASH-ORDER at the file-cache level, CRASH-OBS | **done** (`r-sample-rec`); needs repeats per mutation class |
-| A per-write and flush recorder (ETW, Microsoft-Windows-Kernel-File) | exact write and flush order, RO-NATIVE, CRASH-TRACE | **built**, approved 2026-11-17; waits for the one elevated install step (tools/etw-setup), then card `r-etw-rec` runs |
+| A per-write and flush recorder (ETW, Microsoft-Windows-Kernel-File) | exact write and flush order, RO-NATIVE, CRASH-TRACE | **done** (`r-etw-rec`, installed 2026-11-17); paging (disk) writes are attributed only in part |
 | Fault injection (I/O failures, memory, temp space) | ERR-OOM, ENC-FAIL, RB-FAIL, CX-FAIL, the injected parts of SQL-ACT-FAIL | large; not started |
-| An owned Access host with dialog handling (UI Automation on the private desktop) | R-UDF-1, EXPR-SANDBOX, the Access contexts of R-EXPR-1 and R-SQL-1, CAT-X, RB-OPAQUE, the VBA lane of OR-OBS | large; task `b8sx` |
+| An owned Access host with dialog handling (UI Automation on the private desktop) | R-UDF-1, EXPR-SANDBOX, the Access contexts of R-EXPR-1 and R-SQL-1, CAT-X, RB-OPAQUE, the VBA lane of OR-OBS | **host done** (`r-access-host`, main desktop by owner instruction); dialog handling and the private desktop remain; task `b8sx` |
 | Managed caller lanes (ExcelDna.Interop.Dao on .NET Framework 4.8 and .NET 10) | the OR-OBS managed lanes, OLE-MANAGED, ACT-MANAGED | medium; task `9fkt` |
 | Byte-level interpretation of the retained images | FMT-*, II-05 index pages, SORT-DERIVE, STR-COMPRESS, slot reuse, the meaning of the sampled pages | our W-04 work; no new ACE run |
 | An SMB share | WRITE-NET, network persistence, network combinations | setup |
@@ -217,8 +228,8 @@ does not.
 | Level | Slice | Status of its deciding branches | Follow-ups (F) | Troublesome remainder (T, and what it needs) |
 | --- | --- | --- | --- | --- |
 | 3 | W-06/restricted-scalar | blocked | — | R-EXPR-1 EXPR-INVENTORY [large matrix] |
-| 4 | W-06/host-extension | blocked | R-EXPR-1 EXPR-DOMAIN | R-UDF-1 UDF-NAME [Access host]; R-UDF-1 UDF-SIGNATURE [Access host]; R-UDF-1 UDF-BYREF [Access host]; R-UDF-1 UDF-ENTRY [Access host]; R-UDF-1 UDF-OWNERSHIP [Access host]; R-UDF-1 UDF-REENTRY [Access host]; R-UDF-1 UDF-ERROR [Access host]; R-UDF-1 UDF-THREAD [Access host]; R-EXPR-1 EXPR-EVAL [Access host] |
-| 6 | W-06/parser-binder-scan | blocked | R-CURSOR-1 CUR-POP | R-EXPR-1 EXPR-SANDBOX [Access host] |
+| 4 | W-06/host-extension | blocked | R-EXPR-1 EXPR-DOMAIN | R-UDF-1 UDF-BYREF [instrumented callbacks]; R-UDF-1 UDF-ENTRY [instrumented callbacks]; R-UDF-1 UDF-OWNERSHIP [instrumented callbacks]; R-UDF-1 UDF-REENTRY [instrumented callbacks]; R-UDF-1 UDF-ERROR [dialog handling]; R-UDF-1 UDF-THREAD [instrumented callbacks]; R-EXPR-1 EXPR-EVAL [Access error channels]. UDF-NAME, UDF-SIGNATURE and UDF-CONTEXT are Q+T (`r-access-host`) |
+| 6 | W-06/parser-binder-scan | follow-up | R-CURSOR-1 CUR-POP | - |
 | 7 | W-06/relational-spill | clear with remainders | — | — |
 | 8 | W-06/measured-specialization | clear with remainders | — | — |
 | 8 | W-07/new-database-image | follow-ups | R-DAO-1 DAO-CREATE | — |
@@ -241,7 +252,7 @@ does not.
 | 4 | W-08/browser-query-write | clear | — | — |
 | 4 | W-09/events-persistence-inventory | blocked | — | R-ADO-1 ADO-REENTRY [other] |
 | 6 | W-08/native-read | follow-ups | R-CURSOR-1 CUR-POP | — |
-| 6 | W-10/native-readers-only | blocked | R-LOCK-2 RO-FAIL | R-LOCK-2 RO-NATIVE [fault/recording tooling] |
+| 6 | W-10/native-readers-only | follow-up | R-LOCK-2 RO-FAIL | - |
 | 7 | W-09/native-read-query | clear with remainders | — | — |
 | 8 | W-09/edit-client-batch | blocked | R-TXN-1 TXN-SUPPORT | R-ADO-1 ADO-DISCONNECT [network] |
 | 10 | W-08/same-width-edit | blocked | — | R-ERR-1 ERR-OOM [fault/recording tooling] |

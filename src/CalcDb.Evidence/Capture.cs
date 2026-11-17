@@ -57,6 +57,7 @@ public sealed record ArtifactRef(string Role, string Kind, string RelativePath, 
 [JsonDerivedType(typeof(ActivationEvent), "activation")]
 [JsonDerivedType(typeof(ConnectionEvent), "connection")]
 [JsonDerivedType(typeof(SinkCallEvent), "sinkCall")]
+[JsonDerivedType(typeof(ClaimEvent), "claim")]
 public abstract record CaptureEvent
 {
     /// <summary>Monotonic sequence number within the attempt.</summary>
@@ -178,6 +179,31 @@ public sealed record ActivationEvent : CaptureEvent
     public CapturedValue? Object { get; init; }
 
     public string? Bind { get; init; }
+}
+
+/// <summary>
+/// R-ORACLE-1 OR-OWN: the claim of a COM-started server process (<see cref="ClaimProcess"/>): the window handle the
+/// member returned, the process that owns it, its image and start time, and the outcome (<c>claimed</c> or the reason
+/// for refusing).
+/// </summary>
+public sealed record ClaimEvent : CaptureEvent
+{
+    public required string Target { get; init; }
+
+    public required string Member { get; init; }
+
+    public string? Window { get; init; }
+
+    public int? ProcessId { get; init; }
+
+    public string? ImagePath { get; init; }
+
+    /// <summary>The image file's version resource, the host identity of an out-of-process server.</summary>
+    public string? ImageFileVersion { get; init; }
+
+    public DateTimeOffset? StartedUtc { get; init; }
+
+    public required string Outcome { get; init; }
 }
 
 /// <summary>R-ADO-1 ADO-EVENT: connecting or disconnecting the worker's recording sink.</summary>

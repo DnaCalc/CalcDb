@@ -166,6 +166,7 @@ public enum DispatchKind
 [JsonDerivedType(typeof(Unadvise), "unadvise")]
 [JsonDerivedType(typeof(SuspendParticipant), "suspendParticipant")]
 [JsonDerivedType(typeof(ResumeParticipant), "resumeParticipant")]
+[JsonDerivedType(typeof(ClaimProcess), "claimProcess")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -515,6 +516,18 @@ public sealed record SuspendParticipant(string Name, int DelayMs) : Operation
 public sealed record ResumeParticipant(string Name) : Operation
 {
     internal override void Write(CanonicalWriter w) => w.Begin("resumeParticipant").Text("name", Name);
+}
+
+/// <summary>
+/// R-ORACLE-1 OR-OWN for a local server that COM started outside the runner's job (an Access host): call
+/// <see cref="Member"/> on the bound object for a top-level window handle (<c>Application.hWndAccessApp</c>), take
+/// the window's process, and claim it only when its image file is <see cref="Image"/> and it started after the attempt
+/// was prepared. A claimed process is written to <c>receipts/owned-children[.participant].json</c>; the runner then puts
+/// it in the attempt's kill-on-close job, guards its windows, and ends it if it outlives its claimant.
+/// </summary>
+public sealed record ClaimProcess(string Target, string Member, string Image) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("claimProcess").Text("target", Target).Text("member", Member).Text("image", Image);
 }
 
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>

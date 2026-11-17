@@ -16,18 +16,29 @@ namespace CalcDb.Oracle.Runner;
 /// </summary>
 internal static partial class OwnedWorker
 {
-    public static IReadOnlyList<OwnerReport> Run(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
+    /// <summary>
+    /// The owner's instruction that admits main-desktop runs (<c>--desktop main</c>), recorded in every owner report of
+    /// such a run. Office runs on the private desktop otherwise (AGENTS.md, OR-DESKTOP).
+    /// </summary>
+    public const string MainDesktopInstruction = "owner instruction of 2026-11-17: the Access host runs on the main desktop until the owner moves it to the private desktop";
+
+    /// <summary>How long a claimed server may outlive its claimant before the runner ends it (an Access host quits asynchronously).</summary>
+    private static readonly TimeSpan ChildGrace = TimeSpan.FromSeconds(20);
+
+    public static IReadOnlyList<OwnerReport> Run(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop = false)
     {
         if (!OperatingSystem.IsWindows())
         {
             return [.. participants.Select(p => new OwnerReport { Participant = p, Ownership = "none", LaunchError = "The ACE worker runs only on a Windows oracle host; submit this job to one." })];
         }
-        return RunWindows(workerPath, attemptDir, attempt, participants, timeout, onAdmitted);
+        return RunWindows(workerPath, attemptDir, attempt, participants, timeout, onAdmitted, mainDesktop);
     }
 
     [SupportedOSPlatform("windows")]
-    private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted)
+    private static List<OwnerReport> RunWindows(string workerPath, string attemptDir, AttemptRecord attempt, IReadOnlyList<string> participants, TimeSpan timeout, Action onAdmitted, bool mainDesktop)
     {
+        string desktop = mainDesktop ? PrivateDesktop.MainName : PrivateDesktop.Name;
+        string? instruction = mainDesktop ? MainDesktopInstruction : null;
         // R-CRASH-1 CRASH-ORDER: a question that asks for ETW file-I/O records every file operation on its attempt files.
         string questionFile = Path.Combine(attemptDir, "question.json");
         EtwBridge? etw = File.Exists(questionFile) && EvidenceJson.Read<Question>(questionFile).ObservationRecipe.Contains(EtwBridge.Channel)
@@ -43,7 +54,7 @@ internal static partial class OwnedWorker
             {
                 // OR-DESKTOP: created suspended on the private desktop, owned by the job, then resumed. It still
                 // blocks on its admission line, so no native call runs before every participant is owned.
-                PrivateDesktop.Launched process = PrivateDesktop.StartSuspended(workerPath, args, attemptDir, log);
+                PrivateDesktop.Launched process = PrivateDesktop.StartSuspended(workerPath, args, attemptDir, log, desktop);
                 string ownership = job.TryAssign(process.Process, out int error)
                     ? "retained process handle + job object (kill on close)"
                     : $"retained process handle (job assignment failed: {error})";
@@ -67,16 +78,23 @@ internal static partial class OwnedWorker
 
         // Wait for all workers, sampling the guard every 200 ms: owned windows on the owner's desktop (which
         // must stay none) and on the private desktop (a dialog, recorded as evidence). Nothing is dismissed.
+        // Server processes a worker claims (OR-OWN) join the job and the guard as soon as their receipt appears.
         var deadline = Stopwatch.StartNew();
         var pids = started.Where(s => s.Process is not null).Select(s => s.Process!.ProcessId).ToHashSet();
+        var claimed = new Dictionary<int, Claimed>();
         var onUser = new Dictionary<int, SortedSet<string>>();
         var onPrivate = new Dictionary<int, SortedSet<string>>();
         var live = started.Where(s => s.Process is not null).ToList();
-        while (live.Count > 0 && deadline.Elapsed < timeout)
+        void Sample()
         {
-            (List<string> user, List<string> priv) = PrivateDesktop.WindowsOf(pids);
+            ClaimChildren(attemptDir, attempt, job, claimed, pids);
+            (List<string> user, List<string> priv) = PrivateDesktop.WindowsOf(pids, desktop);
             Collect(user, onUser);
             Collect(priv, onPrivate);
+        }
+        while (live.Count > 0 && deadline.Elapsed < timeout)
+        {
+            Sample();
             live.RemoveAll(s => s.Process!.Wait(TimeSpan.Zero));
             if (live.Count > 0)
             {
@@ -84,22 +102,34 @@ internal static partial class OwnedWorker
             }
         }
 
+        // Workers that outlived the deadline are ended first; then claimed servers get their grace to quit.
+        var timedOut = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Started s in started.Where(s => s.Process is not null))
+        {
+            if (!s.Process!.Wait(TimeSpan.Zero))
+            {
+                _ = timedOut.Add(s.Participant);
+                s.Process.Terminate(1);
+                // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
+                _ = s.Process.Wait(Timeout.InfiniteTimeSpan);
+            }
+        }
+        EndClaimed(claimed, Sample);
+
         var reports = new List<OwnerReport>();
         foreach (Started s in started)
         {
             if (s.Process is null)
             {
-                reports.Add(new OwnerReport { Participant = s.Participant, Ownership = s.Ownership, LaunchError = s.Error, Desktop = "WinSta0\\" + PrivateDesktop.Name });
+                reports.Add(new OwnerReport { Participant = s.Participant, Ownership = s.Ownership, LaunchError = s.Error, Desktop = "WinSta0\\" + desktop, MainDesktopInstruction = instruction });
                 continue;
             }
             using PrivateDesktop.Launched process = s.Process;
-            bool exited = process.Wait(TimeSpan.Zero);
-            if (!exited)
-            {
-                process.Terminate(1);
-                // Windows reports exit only after the process's pending I/O completes or is canceled (II-15 §4).
-                _ = process.Wait(Timeout.InfiniteTimeSpan);
-            }
+            bool exited = !timedOut.Contains(s.Participant);
+            List<Claimed> mine = [.. claimed.Values.Where(c => c.Child.Participant == s.Participant)];
+            // A claimed server's windows are reported with the participant that claimed it.
+            string[] Windows(Dictionary<int, SortedSet<string>> seen) =>
+                [.. new[] { process.ProcessId }.Concat(mine.Select(c => c.Child.ProcessId)).SelectMany(pid => seen.TryGetValue(pid, out var w) ? w : []).Order(StringComparer.Ordinal)];
             reports.Add(new OwnerReport
             {
                 Participant = s.Participant,
@@ -110,13 +140,103 @@ internal static partial class OwnedWorker
                 TimedOut = !exited,
                 Killed = !exited,
                 ExitObserved = true,
-                Desktop = "WinSta0\\" + PrivateDesktop.Name,
-                WindowsOnUserDesktop = onUser.TryGetValue(process.ProcessId, out var u) ? [.. u] : [],
-                WindowsOnPrivateDesktop = onPrivate.TryGetValue(process.ProcessId, out var p) ? [.. p] : [],
+                Desktop = "WinSta0\\" + desktop,
+                MainDesktopInstruction = instruction,
+                WindowsOnUserDesktop = Windows(onUser),
+                WindowsOnPrivateDesktop = Windows(onPrivate),
+                ClaimedChildren = mine.Count == 0 ? null : [.. mine.Select(c => c.Describe())],
             });
+        }
+        foreach (Claimed c in claimed.Values)
+        {
+            c.Process.Dispose();
         }
         etw?.Stop();
         return reports;
+    }
+
+    /// <summary>A claimed server process, held by handle from the claim to the end so its id cannot be reused meanwhile.</summary>
+    private sealed class Claimed(OwnedChild child, Process process, string ownership)
+    {
+        public OwnedChild Child { get; } = child;
+
+        public Process Process { get; } = process;
+
+        public string Ownership { get; } = ownership;
+
+        public string Ending { get; set; } = "";
+
+        public string Describe() => $"pid {Child.ProcessId} {Child.Image} started {Child.StartedUtc:O}, {Ownership}; {Ending}";
+    }
+
+    /// <summary>
+    /// OR-OWN: read the workers' owned-children receipts and take each new claim into the job, after checking again that
+    /// the process runs the claimed image and started when the claim says, after the attempt was prepared.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void ClaimChildren(string attemptDir, AttemptRecord attempt, JobObject job, Dictionary<int, Claimed> claimed, HashSet<int> pids)
+    {
+        foreach (string receipt in Directory.EnumerateFiles(Path.Combine(attemptDir, "receipts"), "owned-children*.json"))
+        {
+            List<OwnedChild> children;
+            try
+            {
+                children = EvidenceJson.Read<List<OwnedChild>>(receipt);
+            }
+            catch (Exception ex) when (ex is IOException or EvidenceFormatException or System.Text.Json.JsonException)
+            {
+                continue; // being replaced; read again at the next sample
+            }
+            foreach (OwnedChild child in children.Where(c => !claimed.ContainsKey(c.ProcessId)))
+            {
+                Process process;
+                try
+                {
+                    process = Process.GetProcessById(child.ProcessId);
+                    _ = process.Handle;
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+                {
+                    continue; // already gone: nothing to own
+                }
+                DateTimeOffset start = process.StartTime.ToUniversalTime();
+                bool same = string.Equals(process.ProcessName + ".exe", child.Image, StringComparison.OrdinalIgnoreCase)
+                    && Math.Abs((start - child.StartedUtc).TotalSeconds) < 1 && start >= attempt.PreparedUtc.AddSeconds(-1);
+                if (!same)
+                {
+                    process.Dispose();
+                    continue;
+                }
+                string ownership = job.TryAssign(process.Handle, out int error)
+                    ? "claimed by " + child.Participant + ", in the job (kill on close)"
+                    : $"claimed by {child.Participant}, held by handle (job assignment failed: {error})";
+                claimed[child.ProcessId] = new Claimed(child, process, ownership);
+                _ = pids.Add(child.ProcessId);
+            }
+        }
+    }
+
+    /// <summary>Give claimed servers their grace to exit after every worker ended, guarding them meanwhile; end the rest.</summary>
+    private static void EndClaimed(Dictionary<int, Claimed> claimed, Action sample)
+    {
+        sample();
+        var grace = Stopwatch.StartNew();
+        while (claimed.Values.Any(c => !c.Process.HasExited) && grace.Elapsed < ChildGrace)
+        {
+            sample();
+            Thread.Sleep(200);
+        }
+        foreach (Claimed c in claimed.Values)
+        {
+            if (c.Process.HasExited)
+            {
+                c.Ending = $"exited by itself, code 0x{c.Process.ExitCode:X8}";
+                continue;
+            }
+            c.Process.Kill();
+            c.Process.WaitForExit();
+            c.Ending = $"still running {ChildGrace.TotalSeconds:F0} s after its claimant ended; terminated by the runner";
+        }
     }
 
     private sealed record Started(string Participant, PrivateDesktop.Launched? Process, string Ownership, string? Error);

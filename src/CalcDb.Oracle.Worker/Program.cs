@@ -201,6 +201,9 @@ internal sealed unsafe partial class Run : IDisposable
                 case ResumeParticipant resume:
                     _events.Add(DoResume(resume.Name, path));
                     break;
+                case ClaimProcess claim:
+                    DoClaim(claim, path);
+                    break;
                 case CreateObject create:
                     DoCreate(create, path);
                     break;

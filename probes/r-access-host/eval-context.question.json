@@ -1,0 +1,777 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-access-host/eval-context",
+  "bookRefs": [
+    "R-ORACLE-1",
+    "OR-OWN",
+    "R-EXPR-1",
+    "EXPR-SANDBOX",
+    "EXPR-DOMAIN",
+    "EXPR-EVAL",
+    "R-UDF-1",
+    "UDF-CONTEXT"
+  ],
+  "description": "Owned Access host (Access.Application, local server, claimed by hWndAccessApp; AutomationSecurity low on this instance; generated fixture code only): a new current database with T; Application.Eval of constants, Nz, domain functions (DLookup, DCount, DSum), CDec, nested Eval, a division by zero, a failed conversion, an unknown function and the sandbox-listed Environ and CurDir (reduced to Booleans); the same Nz/DLookup and Environ/CurDir SQL through CurrentDb; then, after Quit, the same SQL through standalone DAO on the same file. Asks which functions each context admits, the exact values and subtypes, and the error channels of each refusal.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false,
+      "pageSize": 0
+    },
+    {
+      "op": "observeModules",
+      "label": "before-activate"
+    },
+    {
+      "op": "activate",
+      "class": "Access.Application",
+      "route": "cocreate",
+      "clsCtx": 4,
+      "iid": "{00020400-0000-0000-C000-000000000046}",
+      "bind": "app",
+      "aggregate": false
+    },
+    {
+      "op": "claimProcess",
+      "target": "app",
+      "member": "hWndAccessApp",
+      "image": "MSACCESS.EXE"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Version",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Build",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Visible",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "UserControl",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "AutomationSecurity",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "NewCurrentDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "host-eval.accdb"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CurrentDb",
+      "kind": "method",
+      "args": [],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY, X DOUBLE, S TEXT(20), N LONG)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (1, 1.5, 'a', Null)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (2, 2.5, 'b', 7)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "INSERT INTO T VALUES (3, -0.5, Null, 3)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1+1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Nz(Null, 5)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DLookup(\"X\", \"T\", \"ID = 2\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DCount(\"*\", \"T\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DSum(\"N\", \"T\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "DLookup(\"X\", \"T\", \"ID = 99\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CDec(\"1.5\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Eval(\"2*3\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "1/0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CLng(\"x\")"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "NoSuchFunction(1)"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Len(Environ(\"TEMP\")) > 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Eval",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Len(CurDir()) > 0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Nz(N, -1) AS a, DLookup(\"S\", \"T\", \"ID = \" & ID) AS b FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Len(Environ(\"TEMP\")) > 0 AS e, Len(CurDir()) > 0 AS c FROM T WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "CloseCurrentDatabase",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "app",
+      "member": "Quit",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "app"
+    },
+    {
+      "op": "pause",
+      "ms": 3000
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "outputPath",
+          "fileName": "host-eval.accdb"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "sdb"
+    },
+    {
+      "op": "invoke",
+      "target": "sdb",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Nz(N, -1) AS a, DLookup(\"S\", \"T\", \"ID = \" & ID) AS b FROM T ORDER BY ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sdb",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT Len(Environ(\"TEMP\")) > 0 AS e, Len(CurDir()) > 0 AS c FROM T WHERE ID = 1"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "loopUntil",
+      "target": "rs",
+      "member": "EOF",
+      "maxIterations": 64,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "rs",
+          "member": "MoveNext",
+          "kind": "method",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "invoke",
+      "target": "sdb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sdb"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 0
+    }
+  ]
+}

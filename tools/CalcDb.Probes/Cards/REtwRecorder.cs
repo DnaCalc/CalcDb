@@ -95,6 +95,14 @@ public sealed class REtwRecorder : ICard
                 });
         }
 
+        // The first traces hold no paging write of the database at all, even after a FlushFileBuffers, while the lazy
+        // writer's writes of other attempt files are recorded: either the database's disk writes come after the trace
+        // window or they reach the recorder under a file object it cannot name. A long pause after Close decides it.
+        yield return Make("lazy-writer-window", ["R-TXN-1", "TXN-FLUSH-BEHIND"],
+            "a new ACCDB, reopened shared; an INSERT of 256 rows with dbFailOnError; Close; then a 15000 ms pause before the files are observed, well past the system lazy writer's cycle.",
+            p => Fresh(p, "scratch-lazy.accdb", 0).Call("db", "Execute", A.Str(Insert(256)), A.I4(Dao.FailOnError))
+                .Call("db", "Close").Release("db").Pause(15000).FinishLite());
+
         yield return Make("readonly-session", ["R-LOCK-2", "RO-NATIVE", "RO-ACTUAL"],
             "a new ACCDB with 4096 rows, closed; then OpenDatabase read-only (shared), a snapshot of SELECT COUNT(*), SUM(V) FROM T, a full scan of T, Close.",
             p =>

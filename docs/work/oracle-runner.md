@@ -113,7 +113,25 @@ A question whose observation recipe holds `etwFileIo` (probe property `RecordFil
 file-I/O recorder: every create, read, write and flush on the attempt's files, with offsets and sizes, becomes the
 artifact `etw:file-io`. The recorder needs an elevated token, so it runs through a scheduled task installed once by the
 owner ([tools/etw-setup](../../tools/etw-setup/README.md)); `calcdb-oracle etw-check` tests it. Without it, such a
-question seals Incomplete with the reason.
+question seals Incomplete with the reason. `calcdb-oracle show --etw --attempt ID` (or `--record FILE`, with
+`--file TEXT` and `--all-io`) shows the trace in order, with each operation's process and thread. The workers'
+lifecycle traces are kept as artifacts `trace:<participant>`, so each operation is placed inside the native call that
+issued it. Writes are marked cached (WriteFile into the system cache) or paging (to disk); the recorder attributes
+paging writes only in part.
+
+**An owned out-of-process server (OR-OWN).** COM starts a local server such as Access.Application outside the
+runner's job. The operation `claimProcess` asks the bound object for a window handle (`hWndAccessApp`), takes the
+window's process, and claims it only when it runs the named image and started after the attempt was prepared. The
+claim goes to `receipts/owned-children[.participant].json`. The runner reads the receipt while the worker runs, checks
+image and start time again, and puts the process in the attempt's kill-on-close job. It guards the process's windows
+with the worker's, gives it 20 s after the worker ends to exit, and then ends it. The owner report records how it ended.
+
+**Main desktop, by owner instruction only.** `run --desktop main` runs the workers, and the servers they start, on
+`WinSta0\Default`. The owner allowed this for the Access host on 2026-11-17, until they move it to the private desktop.
+The owner report records the instruction, and windows on the owner's desktop are then observations of that run, not
+conduct incidents. The default stays the private desktop.
+
+The runner always runs the worker of its own build configuration (a Debug runner runs the Debug worker).
 
 The store lives in `.oracle-runs/` (ignored by git): transient attempts, dry runs and
 failures stay there. Only `retain` writes to `evidence/`, and it never overwrites a record.
@@ -142,7 +160,8 @@ long-lived ACE workers, and this runner as its tier for owned experiments, is in
 - DAO alone can show UI: `DBEngine.OpenDatabase(Empty)` opens the ODBC Select Data Source
   dialog (evidence log, night of 2026-11-17). The private desktop and the window guard are in
   place; UI Automation dialog handling is not, so a dialog ends its attempt at the deadline.
-  Access-host routes stay unavailable until dialog handling is qualified.
+  The owned Access host runs (card `r-access-host`), on the main desktop for now; a VBA error in a
+  fixture function opens a modal dialog that ends its attempt at the deadline in the same way.
 - OR-JOB transport-loss and kill-at-boundary cases, OR-REUSE, OR-REENTRY, OR-FREEZE and
   OR-REPAIR are not yet exercised against the real worker; the sealing rules they rely on
   are covered by synthetic tests that qualify the harness only.

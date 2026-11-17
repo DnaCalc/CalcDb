@@ -65,6 +65,7 @@ public class QuestionKeyTests
                 new Unadvise("c"),
                 new SuspendParticipant("b", 10),
                 new ResumeParticipant("b"),
+                new ClaimProcess("app", "hWndAccessApp", "MSACCESS.EXE"),
                 new Invoke("eng", "M", DispatchKind.Method, [new ByRefArg(new BstrArg("x"), true)]) { Named = [new NamedArg("N", new I4Arg(2))] },
             ],
         };

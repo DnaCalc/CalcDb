@@ -7,7 +7,7 @@ namespace CalcDb.Oracle.Runner;
 /// <c>calcdb-oracle</c>: the oracle runner CLI (W-01/capture-core). Commands:
 /// <list type="bullet">
 /// <item><c>submit --question FILE --token T [--env LABEL]</c>: admit or query a job (T-EVID-02).</item>
-/// <item><c>run --token T [--timeout SECONDS] [--new-attempt]</c>: prepare an attempt, run an owned worker, seal it.</item>
+/// <item><c>run --token T [--timeout SECONDS] [--new-attempt] [--desktop private|main]</c>: prepare an attempt, run an owned worker, seal it.</item>
 /// <item><c>status --token T</c>: the job and its latest manifest.</item>
 /// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
 /// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
@@ -115,7 +115,15 @@ internal static class Program
         TimeSpan timeout = TimeSpan.FromSeconds(int.Parse(options.Get("timeout") ?? "300", System.Globalization.CultureInfo.InvariantCulture));
         Question question = store.GetQuestion(attempt.QuestionKey);
         string[] participants = ["a", .. question.Peers.Select(p => p.Name)];
-        IReadOnlyList<OwnerReport> owners = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, participants, timeout, () => store.MarkRunning(token));
+        // --desktop main runs the workers, and the servers they start, on the owner's desktop: only by the owner's
+        // instruction (OwnedWorker.MainDesktopInstruction); the private desktop is the default.
+        bool mainDesktop = options.Get("desktop") switch
+        {
+            null or "private" => false,
+            "main" => true,
+            string other => throw new ArgumentException($"--desktop {other}: use private or main."),
+        };
+        IReadOnlyList<OwnerReport> owners = OwnedWorker.Run(worker, store.AttemptDirectory(attempt.AttemptId), attempt, participants, timeout, () => store.MarkRunning(token), mainDesktop);
         return store.Seal(attempt, owners);
     }
 
@@ -425,6 +433,10 @@ internal static class Program
 
     private static int ShowAttempt(JobStore store, Options options)
     {
+        if (options.Has("etw"))
+        {
+            return ShowEtwTrace(store, options);
+        }
         if (options.Get("record") is { } recordPath)
         {
             EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
@@ -461,6 +473,53 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>
+    /// <c>show --etw (--attempt ID | --record FILE) [--file TEXT] [--all-io]</c>: the ETW file-I/O trace of an attempt,
+    /// placed by native call (R-CRASH-1 CRASH-ORDER). <c>--file</c> keeps files whose path contains TEXT; <c>--all-io</c>
+    /// adds the harness's own files and the query events.
+    /// </summary>
+    private static int ShowEtwTrace(JobStore store, Options options)
+    {
+        CaptureManifest manifest;
+        Func<ArtifactRef, string> locate;
+        string? attemptDir = null;
+        if (options.Get("record") is { } recordPath)
+        {
+            EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
+            manifest = record.Manifest;
+            string evidence = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(recordPath))))!;
+            locate = a => File.Exists(Path.Combine(evidence, "artifacts", a.Sha256)) ? Path.Combine(evidence, "artifacts", a.Sha256) : Path.Combine(evidence, "artifacts-large", a.Sha256);
+        }
+        else
+        {
+            string attemptId = options.Require("attempt");
+            manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
+            string dir = attemptDir = store.AttemptDirectory(attemptId);
+            locate = a => Path.Combine(dir, a.RelativePath);
+        }
+        ArtifactRef etw = manifest.Artifacts.SingleOrDefault(a => a.Role == "etw:file-io") ?? throw new InvalidOperationException("The attempt has no ETW file-I/O trace.");
+        var pids = new Dictionary<string, int?>(StringComparer.Ordinal) { ["a"] = manifest.Owner.ProcessId };
+        foreach (ParticipantResult p in manifest.Participants)
+        {
+            pids[p.Name] = p.Owner.ProcessId;
+        }
+        var lifecycles = manifest.Artifacts.Where(a => a.Role.StartsWith("trace:", StringComparison.Ordinal))
+            .Select(a => new ShowEtw.Lifecycle(a.Role["trace:".Length..], pids.GetValueOrDefault(a.Role["trace:".Length..]), locate(a))).ToList();
+        if (lifecycles.Count == 0 && attemptDir is not null)
+        {
+            // Attempts sealed before the lifecycle traces became artifacts still have them in their receipts.
+            lifecycles = [.. Directory.EnumerateFiles(Path.Combine(attemptDir, "receipts"), "trace*.jsonl").Select(t =>
+            {
+                string name = Path.GetFileName(t);
+                string participant = name == "trace.jsonl" ? "a" : name["trace.".Length..^".jsonl".Length];
+                return new ShowEtw.Lifecycle(participant, pids.GetValueOrDefault(participant), t);
+            })];
+        }
+        Console.WriteLine($"attempt {manifest.AttemptId}: ETW file I/O{(lifecycles.Count == 0 ? " (no lifecycle traces kept: calls are not marked)" : "")}");
+        Console.Write(ShowEtw.Render(locate(etw), lifecycles, options.Get("file"), options.Has("all-io")));
+        return 0;
+    }
+
     private static string RepositoryRoot()
     {
         for (string? dir = Directory.GetCurrentDirectory(); dir is not null; dir = Path.GetDirectoryName(dir))
@@ -476,12 +535,11 @@ internal static class Program
     private static string DefaultWorker(string repo)
     {
         string exe = OperatingSystem.IsWindows() ? "CalcDb.Oracle.Worker.exe" : "CalcDb.Oracle.Worker";
-        string[] candidates =
-        [
-            Path.Combine(repo, "src", "CalcDb.Oracle.Worker", "bin", "Release", "net11.0-windows", "win-x64", exe),
-            Path.Combine(repo, "src", "CalcDb.Oracle.Worker", "bin", "Debug", "net11.0-windows", "win-x64", exe),
-        ];
-        return candidates.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("Build CalcDb.Oracle.Worker first, or pass --worker.");
+        // The worker of the runner's own build configuration, so one build updates both. Preferring another
+        // configuration once ran a stale Release worker under a fresh Debug runner (evidence log, r-etw-rec).
+        string own = AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug";
+        string worker = Path.Combine(repo, "src", "CalcDb.Oracle.Worker", "bin", own, "net11.0-windows", "win-x64", exe);
+        return File.Exists(worker) ? worker : throw new FileNotFoundException($"Build CalcDb.Oracle.Worker ({own}) first, or pass --worker.");
     }
 
     /// <summary>Exact tooling source revision: the commit, marked <c>+dirty</c> when the tree has changes.</summary>
