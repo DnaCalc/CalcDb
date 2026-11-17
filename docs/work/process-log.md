@@ -161,3 +161,11 @@ recorded.
 | A design agent's answer was too large to return (133 KB) | Its card arrived as "no code block"; the file was recovered from its temp folder | Next briefs should name a scratch path to write the file to, and return only the list |
 
 **Next candidates.** The two rules in the table, and a per-question timeout.
+
+**A misread value, written down twice before it was checked.** The index check showed values with bytes `fffe`. I
+read that as U+FFFE, wrote it into a code comment, the evidence log and commit a3d5809a, and built a workaround for
+the wrong character. The bytes are little-endian, so the code unit was U+FEFF; `show` printed it as an invisible
+glyph. The designed probe showed the real behaviour (a lone U+FEFF reads back empty) once its records were read
+carefully. Changes: `show` prints invisible and unprintable code units as `\uXXXX`, and the index tool gained
+`--evidence DIR`, so a check of one folder takes seconds instead of an hour. Rule: decode bytes with their stated
+order, and read the designed probe before naming the behaviour.

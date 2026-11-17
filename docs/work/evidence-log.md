@@ -22,14 +22,23 @@ Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20
 > assumption that DAO-only probes show no UI was wrong. Since 04:24 every worker runs on a private desktop, and
 > a guard records any owned window on the owner's desktop (see the R-ORACLE-1 OR-DESKTOP entry below).
 
-### U+FFFE in Text and Memo (R-STRING-1, OR-WIRE) — `evidence/r-text-fffe`, 4 records
-The evidence-index check found a LONGTEXT value "￾" that read back as "" through the DAO PIA. The designed
-probe asks ACE directly, through the raw lane: U+FFFE alone, leading, trailing, inside and doubled, U+FFFF, U+FEFF
-and U+FFFD, written to TEXT(255) and MEMO by DAO put and by SQL literal, in ACCDB and MDB. After reopening, the rows
-checked (U+FFFE alone, leading, trailing and inside, all four routes) return the value unchanged, with the expected
-`Len`, and U+FFFE reads as `AscW` −2. The U+FFFF, U+FEFF and U+FFFD rows are recorded but not yet read. The loss is therefore in
-the index tool's .NET path, not in ACE storage. Its cause is open; the index escapes the two noncharacters until it
-is found.
+### A lone U+FEFF in Text and Memo reads back empty (R-STRING-1, OR-WIRE) — `evidence/r-text-fffe`, 4 records
+The evidence-index check found five call results whose display text came back empty from the index. Their bytes are
+`fffe`, little-endian, so the code unit is U+FEFF (the byte-order mark), not U+FFFE. An earlier version of this entry,
+and commit a3d5809a, misread them as U+FFFE.
+
+The designed probe writes, to TEXT(255) and MEMO, by DAO put and by SQL literal, in ACCDB and MDB: U+FFFE alone,
+leading, trailing, inside and doubled; U+FFFF alone and inside; U+FEFF alone; U+FFFD alone; and `ab`. After
+reopening, read through the raw lane:
+- U+FEFF alone reads back as `""` with `Len` 0, in both columns, all four routes. Before Update, the field's own
+  `Value` returned the U+FEFF just put.
+- U+FFFE alone, leading, trailing and inside are kept unchanged, with the expected `Len`; U+FFFE reads as `AscW` −2.
+- The U+FFFF, U+FFFD and doubled rows are recorded but not yet read.
+- Not asked: U+FEFF with other characters, so whether ACE drops only a value that is exactly U+FEFF, or every
+  leading U+FEFF, is open.
+
+The index is an ACE table too, so it lost the same values. Its display text now escapes U+FEFF; the exact bytes were
+always kept in `ResultBytes`.
 
 ### The night in numbers
 2,281 retained records in 45 folders, from six waves of designed questions in the book's order (II-16 §25,

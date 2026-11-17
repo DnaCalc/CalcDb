@@ -33,7 +33,8 @@ internal static class Program
             return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         }
 
-        IReadOnlyList<Table> tables = Derive(evidence, repo);
+        // --evidence DIR indexes one part of the evidence (for a quick check); the default is all of evidence/.
+        IReadOnlyList<Table> tables = Derive(Option("evidence") is { } part ? Path.GetFullPath(part) : evidence, repo);
         switch (command)
         {
             case "build":
@@ -125,16 +126,28 @@ internal static class Program
         v is null ? null : v.Integer ?? (v.Text is { } t ? EscapeForAce(t) : null) ?? v.Display ?? v.Bits ?? v.Identity ?? v.Unsupported;
 
     /// <summary>
-    /// Workaround: in this index a LONGTEXT value "￾", written and read through the DAO PIA from .NET, read back
-    /// as "" (verify, 2026-11-17). The cause is not found. Through the raw IDispatch lane ACE keeps U+FFFE in Text and
-    /// Memo, ACCDB and MDB, by DAO put and SQL literal (evidence/r-text-fffe), so it lies in this tool's path. Until
-    /// it is found, the display text writes U+FFFE and U+FFFF as <c>￾</c> and <c>￿</c> (and a backslash as
-    /// <c>\\</c>) so it round-trips; the exact bytes are in ResultBytes. Remove this once the cause is fixed.
+    /// ACE stores a Text or Memo value that is the single code unit U+FEFF as an empty string: it reads back as ""
+    /// with Len 0, in ACCDB and MDB, written by DAO put or SQL literal (evidence/r-text-fffe, raw IDispatch lane). The
+    /// index is an ACE table too, so its display text writes U+FEFF as a backslash, 'u' and FEFF (and a backslash as
+    /// two) to round-trip; the exact bytes are in ResultBytes. U+FFFE and U+FFFF are kept by ACE and need no escape.
+    /// The code units are written as numbers, because editing tools turn escape sequences into the characters.
     /// </summary>
-    private static string EscapeForAce(string text) =>
-        text.AsSpan().IndexOfAny('￾', '￿', '\\') < 0
-            ? text
-            : text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("￾", "\\uFFFE", StringComparison.Ordinal).Replace("￿", "\\uFFFF", StringComparison.Ordinal);
+    private static string EscapeForAce(string text)
+    {
+        const char Bom = (char)0xFEFF, Backslash = (char)0x5C;
+        if (text.AsSpan().IndexOfAny(Bom, Backslash) < 0)
+        {
+            return text;
+        }
+        var sb = new StringBuilder(text.Length + 8);
+        foreach (char ch in text)
+        {
+            _ = ch == Bom ? sb.Append(Backslash).Append('u').Append(((int)ch).ToString("X4", CultureInfo.InvariantCulture))
+                : ch == Backslash ? sb.Append(Backslash).Append(Backslash)
+                : sb.Append(ch);
+        }
+        return sb.ToString();
+    }
 
     private static void Build(string path, IReadOnlyList<Table> tables)
     {

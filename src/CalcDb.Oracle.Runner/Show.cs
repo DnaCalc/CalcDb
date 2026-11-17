@@ -92,13 +92,29 @@ internal static class Show
         {
             return "-";
         }
-        string payload = v.Text is not null ? "\"" + v.Text + "\""
+        string payload = v.Text is not null ? "\"" + Visible(v.Text) + "\""
             : v.Bytes is { Length: > 0 } raw ? $"bytes {(raw.Length > 96 ? raw[..96] + "…" : raw)} ({v.ByteLength} B)"
             : v.Integer ?? v.Display ?? v.Bits ?? v.Unsupported
                 ?? (v.Decimal is { } d ? DecimalText(d) : null)
                 ?? (v.Array is { } a ? ArrayText(a) : null)
                 ?? (v.Identity is not null ? $"{v.Identity} {v.TypeName} {v.TypeIid}" : "");
         return $"{v.VtName} {payload}".TrimEnd();
+    }
+
+    /// <summary>
+    /// Display text with invisible or unprintable code units as \uXXXX: controls, format characters such as U+FEFF,
+    /// surrogates, and the noncharacters U+FFFE and U+FFFF. A U+FEFF read as a blank once passed for U+FFFE.
+    /// </summary>
+    private static string Visible(string text)
+    {
+        var sb = new System.Text.StringBuilder(text.Length);
+        foreach (char ch in text)
+        {
+            System.Globalization.UnicodeCategory cat = char.GetUnicodeCategory(ch);
+            bool hide = ch < (char)0x20 || ch >= (char)0xFFFE || cat is System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.Surrogate or System.Globalization.UnicodeCategory.OtherNotAssigned;
+            _ = hide ? sb.Append((char)0x5C).Append('u').Append(((int)ch).ToString("X4", System.Globalization.CultureInfo.InvariantCulture)) : sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     /// <summary>A VT_DECIMAL as its exact value and its stored fields (OR-WIRE: the fields are the authority).</summary>
