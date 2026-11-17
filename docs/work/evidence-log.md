@@ -73,6 +73,21 @@ seals `Uncertain`; b records whether a had signalled that the call returned. ACC
 - Killed before the call returned (20 ms), in either scope: the next opener reads 2,048 rows.
 - The next opener's open succeeded in every case.
 
+**Flush window after return** (`evidence/r-txn-flush`, 40 records). Writer a's `INSERT INTO T SELECT` (2,048 rows)
+returns and a signals it; b waits, kills a, and the next opener counts rows. ACCDB and MDB alike; three
+attempts each for the implicit 0 ms, 250 ms, 1 s, `dbFlushTransactionTimeout` and explicit 0 ms variants, one
+for the others:
+- Implicit Execute, killed 0 ms and 250 ms after return: rows absent (3 of 3 each). Killed 1 s, 3 s or 6 s after
+  return: rows present (3 of 3 at 1 s). In these probes the write-behind window ends between 250 ms and 1 s.
+- `SetOption(dbImplicitCommitSync, "Yes")` (59): rows present at 0 ms. `SetOption(dbSharedAsyncDelay, 0)` (61):
+  rows absent at 0 ms.
+- `SetOption(dbFlushTransactionTimeout, 1)` (66): mixed outcomes in both formats (ACCDB absent, present, present;
+  MDB present, absent, absent). This is a race at the kill boundary, not a format difference; a single run
+  suggested one, and the repetitions show it isn't.
+- Explicit transaction, killed 0 ms after CommitTrans returned: rows present (3 of 3). With
+  `SetOption(dbUserCommitSync, "No")` (58): rows absent.
+- Option values are from the captured DAO type library; SetOption affects this process only.
+
 ### R-ACT-1 ACT-THREAD, SAME-STA and MTA-CREATE without a message pump — 6 records
 `evidence/r-act-1-thread`:
 - DAO.DBEngine.120 and its Database, created on the main STA, answer `E_NOINTERFACE` for IClientSecurity,
