@@ -51,6 +51,8 @@ public sealed record ArtifactRef(string Role, string Kind, string RelativePath, 
 [JsonDerivedType(typeof(TypeEvent), "type")]
 [JsonDerivedType(typeof(SyncEvent), "sync")]
 [JsonDerivedType(typeof(HandleEvent), "handle")]
+[JsonDerivedType(typeof(InterfacesEvent), "interfaces")]
+[JsonDerivedType(typeof(ThreadEvent), "thread")]
 public abstract record CaptureEvent
 {
     /// <summary>Monotonic sequence number within the attempt.</summary>
@@ -162,6 +164,29 @@ public sealed record ReleaseEvent : CaptureEvent
     public required uint ReturnedCount { get; init; }
 
     public bool Implicit { get; init; }
+}
+
+/// <summary>The result of QueryInterface for each IID on a bound object.</summary>
+public sealed record InterfacesEvent : CaptureEvent
+{
+    public required string Target { get; init; }
+
+    /// <summary>IID to HRESULT of QueryInterface.</summary>
+    public required IReadOnlyDictionary<string, string> Results { get; init; }
+}
+
+/// <summary>Start and end of a block run on its own thread, with the apartment that thread actually has.</summary>
+public sealed record ThreadEvent : CaptureEvent
+{
+    public required string Kind { get; init; }
+
+    public required string Requested { get; init; }
+
+    public string? CoInitializeHresult { get; init; }
+
+    public string? ApartmentType { get; init; }
+
+    public required int ThreadId { get; init; }
 }
 
 /// <summary>A barrier step: <c>signal</c>, or <c>await</c> with how long it waited and whether it timed out.</summary>

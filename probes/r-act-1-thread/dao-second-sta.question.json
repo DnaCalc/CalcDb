@@ -1,0 +1,244 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-act-1-thread/dao-second-sta",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-THREAD",
+    "SAME-STA",
+    "MTA-CREATE",
+    "RQ-CALL-03"
+  ],
+  "description": "DAO.DBEngine.120 created on a second STA thread without a message pump: the thread's apartment, QueryInterface results for IUnknown, IDispatch, IClientSecurity, IMultiQI, IMarshal, IStdMarshalInfo, IAgileObject and _DBEngine, Version, OpenDatabase of the R-LOCK fixture read-only with a count read, a deliberate OpenRecordset of a missing table with DBEngine.Errors, then Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-lock-1-2-accdb.accdb",
+      "sha256": "a867cc3246834b57ed4e1209749e8b1007e37743fb0ab3189d59de7374a5da24",
+      "length": 8663040,
+      "provenance": "r-lock-1-2.create-accdb.e3664f5138.a1 qk1-e3664f5138e67743b9278668168a70b00bd351d782b985f1e5f889cd52772eed output:r-lock-1-2-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "onThread",
+      "apartment": "sta",
+      "body": [
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "queryInterfaces",
+          "target": "eng",
+          "iids": [
+            "{00000000-0000-0000-C000-000000000046}",
+            "{00020400-0000-0000-C000-000000000046}",
+            "{0000013D-0000-0000-C000-000000000046}",
+            "{00000020-0000-0000-C000-000000000046}",
+            "{00000003-0000-0000-C000-000000000046}",
+            "{00000018-0000-0000-C000-000000000046}",
+            "{94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90}",
+            "{00000021-0000-0010-8000-00AA006D2EA4}"
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Version",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "queryInterfaces",
+          "target": "db",
+          "iids": [
+            "{00000000-0000-0000-C000-000000000046}",
+            "{00020400-0000-0000-C000-000000000046}",
+            "{0000013D-0000-0000-C000-000000000046}",
+            "{00000020-0000-0000-C000-000000000046}",
+            "{00000003-0000-0000-C000-000000000046}",
+            "{00000018-0000-0000-C000-000000000046}",
+            "{94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90}",
+            "{00000021-0000-0010-8000-00AA006D2EA4}"
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "SELECT COUNT(*) FROM T"
+            },
+            {
+              "type": "i4",
+              "value": 4
+            }
+          ],
+          "bind": "c"
+        },
+        {
+          "op": "invoke",
+          "target": "c",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "flds"
+        },
+        {
+          "op": "forEachItem",
+          "target": "flds",
+          "bind": "f",
+          "maxItems": 32,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "f",
+              "member": "Value",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "flds"
+        },
+        {
+          "op": "invoke",
+          "target": "c",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "c"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "OpenRecordset",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "NoSuchTable"
+            },
+            {
+              "type": "i4",
+              "value": 1
+            }
+          ],
+          "bind": "x"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "errs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "errs",
+          "bind": "e",
+          "maxItems": 16,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "e",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "errs"
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "db"
+        },
+        {
+          "op": "release",
+          "target": "eng"
+        }
+      ]
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    }
+  ]
+}

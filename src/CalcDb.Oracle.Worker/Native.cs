@@ -76,6 +76,12 @@ internal static unsafe partial class Native
     [LibraryImport("ole32.dll")]
     public static partial int CoGetApartmentType(out int aptType, out int aptQualifier);
 
+    [LibraryImport("ole32.dll")]
+    public static partial int CoInitializeEx(nint reserved, uint coinit);
+
+    [LibraryImport("ole32.dll")]
+    public static partial void CoUninitialize();
+
     [LibraryImport("oleaut32.dll")]
     public static partial nint SysAllocStringLen(char* text, uint length);
 

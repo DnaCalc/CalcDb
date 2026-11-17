@@ -148,6 +148,17 @@ public sealed class P
     /// <summary>Create or overwrite an attempt file with exactly these bytes.</summary>
     public P WriteFile(string file, params byte[] bytes) => Add(new WriteFileBytes(file, Convert.ToHexStringLower(bytes)));
 
+    /// <summary>Run a block on a new mta or sta thread (R-ACT-1 ACT-THREAD); its binds are released there.</summary>
+    public P OnThread(string apartment, Action<P> body)
+    {
+        var inner = new P();
+        body(inner);
+        return Add(new OnThread(apartment, inner.Ops));
+    }
+
+    /// <summary>QueryInterface a bound object for each IID and record which succeed.</summary>
+    public P QueryInterfaces(string target, params string[] iids) => Add(new QueryInterfaces(target, iids));
+
     /// <summary>Wait a fixed time, for example to let a killed participant's process settle.</summary>
     public P Pause(int ms) => Add(new Pause(ms));
 

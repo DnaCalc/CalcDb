@@ -3,7 +3,7 @@
 Digests of the retained records, card by card. They were written by sub-agents (Sonnet) that read every
 record of their card with `calcdb-oracle show --record`, and were spot-checked against the records (the
 GUID read-back form, bookmark bytes and the system-table permission errors matched). **The records under
-`evidence/` are the authority**; a summary that disagrees with a record is wrong. Each section lists what ACE
+`evidence/` are the authority**; a summary that disagrees with a record is wrong. Query notation in a summary can be shorthand; the exact SQL of every call is in its record. Each section lists what ACE
 answered, probe or fixture defects found in the records, and what to revisit. Environment of all records:
 see [evidence-log.md](evidence-log.md).
 
@@ -736,3 +736,492 @@ All 42 records were read, 11 of them through the `show` output and the rest from
 - Why ACCDB gives 3704 and MDB 3045 for the same refusal is unexamined. Which participant holds the file (shared versus exclusive A) correlates with it in ACCDB.
 - Whether the lock-file artifact is absent under exclusive opens, or only not captured, is unclear from these records (an observation-timing question).
 - Release timing after process death and pending I/O is not tested.
+
+### r-sort-3
+
+All reads below come from `evidence/r-sort-3/**` (38 records, 19 probe names × ACCDB/MDB where paired). Loaded engine in every record: `ACEDAO.DLL 16.0.20527.20196`; `eng.Version()` = "16.0". Unless stated, the ACCDB and MDB records of a probe pair gave identical ID sequences, seek results, equality classes and failure lists. Corpus T has 203 rows, with ID 1 = Null.
+
+**Observed**
+
+*Descriptor dispatch*
+- `create-version-256` (accepted, attempt `a2`): `CreateDatabase(…, ";LANGID=0x0409;CP=1252;COUNTRY=0", 256)` returned `db.Version()` "14.0", `CollatingOrder` VT_I4 1033. A dbVersion 128 file gives "12.0", a 64 file "4.0".
+- `create-version-32`: the same call with 32 returned 0x800A0C62, "Could not find installable ISAM".
+- `create-locale-spellings`:
+  - `""` gave 0x800A0BB9 "Invalid argument".
+  - `"LANGID=0x0409;CP=1252;COUNTRY=0"` (no leading `;`) gave 0x800A0C62.
+  - `";LANGID=0x0000;CP=1252;COUNTRY=0"` gave 0x800A0C9C "Selected collating sequence not supported by the operating system".
+  - `";LANGID=0x0409"` and `";LANGID=0x0409;CP=1252"` gave CollatingOrder 1033. `;LANGID=0x0809;CP=1252;COUNTRY=0` gave 2057.
+  - All three accepted files returned the same SQL order of the six values: IDs 2,1,4,3,6,5.
+- `compact-*` (`CompactDatabase`, `Errors.Count` VT_I2 0 in all):
+  - German `;LANGID=0x0407` gave CollatingOrder 1031.
+  - Czech `0x0405` gave 1029.
+  - Japanese `0x0411` gave 1041.
+  - Swedish `0x041D` gave 1053.
+  - `accdb-to-accdb-general`, `accdb-to-mdb-general` (db.Version "4.0") and `mdb-to-accdb-general` kept 1033.
+- The IX_K walk, the IX_KD walk and SQL ORDER BY K on the compacted copies were identical to the source for general, accdb-to-mdb, mdb-to-accdb and german. They differed for czech, swedish and japanese:
+  - Czech: U+0308 sorts before U+0301.
+  - Japanese: Han order differs. U+6F22 and U+56FD come before U+4E09, U+4E2D and U+4E01.
+  - Swedish: ø (U+00D8) sorts apart from o.
+- All 40 `Seek "="` calls on each compacted copy returned NoMatch False.
+- `create-version-256` (dbVersion 256) versus the dbVersion 128 corpus:
+  - U+1D11E, U+1D400, U+1F600, U+20000 and U+20001 sort between the ligatures and the Han values, with U+20000 and U+20001 after Han.
+  - In the 128 files, all supplementary-plane values equal `""` (see Text levels).
+  - Sample of 40 values only; SQL order ≠ IX_K walk (tie order not examined).
+
+*Text levels, equality, order*
+- `equality-accdb`, `equality-mdb`: SQL `=` partitions T into 125 classes (`COUNT(DISTINCT K)` VT_I4 125). Selected classes:
+  - `""` ≡ " " ≡ "  " ≡ U+1E9E, U+3400, U+9FFF, U+20000, U+20001, U+1D11E, U+1F600, U+1D400, U+20000×2, U+FFFD, U+FFFE, U+FFFF, U+D7FF, and the ID 178 value.
+  - A ≡ a ≡ U+FF21 ≡ U+FF41 ≡ "a " ≡ "a  ", and also "a"+U+20000 and U+20000+"a".
+  - é ≡ É ≡ e+U+0301 ≡ E+U+0301.
+  - U+FB01 ≡ "fi", U+FB00 ≡ "ff", U+FB02 ≡ "fl", U+FB03 ≡ "ffi", U+0153 ≡ U+0152 ≡ "oe".
+  - Kana, half-width and hiragana: U+3042 ≡ U+30A2 ≡ U+FF71.
+  - ß is unequal to "ss"; "ss" ≡ "SS".
+  - U+0001 is not equal to `""`.
+  - `W` (unique K, one INSERT per row) kept 125 rows. The first ID of each class survives.
+- `order-index-*` (T, IX_K, built after the rows):
+  - Walk is NULL first, then class order, with ties in ascending ID.
+  - IX_K backward is the exact reverse.
+  - IX_KD forward is class order reversed, NULL last, ties still ascending ID.
+  - Incrementally built `T2` gives walks identical to T.
+  - `order-sql`: `ORDER BY K` gives the same class order as IX_K, but tie order is not ID order, and `ORDER BY K DESC` is not the reverse of ASC at tie level. `ORDER BY K, ID` equals the IX_K walk. `T2` equals `T` in SQL order too.
+- `seek-*` on T IX_K (402 seeks):
+  - NoMatch was False for all of them, including key Null → ID 1.
+  - Where I could align a key with a stored value (198 `=` and 198 `>=`), `=` returned the lowest ID of the equality class in all 198, and `>=` did the same in 197.
+- `seek-*` on `DG` (1,536 rows, three repeated 100-char keys; IDs a≡1, b≡2, c≡0 mod 3):
+  - `=` b×100 gave ID 2 (first of group); `>` gave 3; `<=` gave 2; `<` gave 1534.
+  - Absent key between a and b: `>=` and `>` gave 2; `<=` and `<` gave 1534.
+  - `=` on an absent key set NoMatch True.
+- `ado-order-seek-accdb` (`ADODB.Connection`, Mode 1, `cn.Version` "10.0"):
+  - `ORDER BY K`, `K DESC`, `K, ID` and the equal-K self-join returned sequences identical to the DAO SQL ones.
+  - Seek EOF was False for all 72 seeks.
+  - adSeekFirstEQ gave the lowest class ID (e.g. "A" → 3); adSeekLastEQ the highest ("A" → 197, `""` → 203); adSeekAfterEQ equalled FirstEQ.
+- `like-prefix-accdb`: `K LIKE 'a'` gave IDs 3,4, while `K = 'a'` gave 8 IDs (3,4,163,164,170,171,196,197).
+  - `LIKE U+FB01` gave 94 only, while `= U+FB01` gave 94 and 95.
+  - `LIKE U+20000*` and `LIKE '*'` each returned 202 rows.
+  - `LIKE 'A*'`, `LIKE 'a*'` and `LIKE U+FF21*` each returned 42 rows.
+
+*Positions and controls, UTF-16 boundaries*
+- Table U (37 values, ID 1–37):
+  - Embedded U+0000 values were stored as given (e.g. ID 1 `"a\x00b"`).
+  - Lone-surrogate BSTRs display as bare `VT_BSTR` in `show`, so I could not confirm the stored units for those rows.
+  - In U, "a\0b" ≡ "a\0\0b" ≡ "a\0b\0" ≡ "A\0b" ≡ "a\0B" ≡ "A"+DC00+"B", and "a\0", "\0a", D800+"a", "a"+D800, "a"+DC00, D840+"a"+DC00 are one class.
+  - "\0", "\0\0", "\0"+U+20000 and every lone-surrogate-only value are one class, which sorts first after Null.
+  - `W2` kept IDs 1,2,4,10,11,12,31,32,33,36,37.
+- Boundary values:
+  - K of 255 UTF-16 units was accepted: A×253+U+20000 (ID 35) and A×254+U+D840 (ID 34).
+  - K of 256 units was refused with 0x800A0C5B (3163, "The field is too small…") for A×254+U+20000 (ID 36) and A×256 (ID 37). Both rows stayed ID-only with Null K.
+  - A×253 ≡ A×253+U+20000, and A×254 ≡ A×254+U+D840. A×253, A×254 and A×255 are mutually distinct.
+  - `seek-*` on U: all `=` seeks matched except A×256, which gave NoMatch True. The 3021 on reading ID, 0x800A0BCD "No current record", comes after that. `>=` A×256 returned ID 1.
+
+*Compound framing, Length510, Shortened-key collisions*
+- `keys-uniqueness-meta-*`:
+  - `LU` (unique K,N) and `LU2` (unique K,N DESC) kept 32 rows each. Refused were IDs 27 and 28 (e+U+0301×127 ≡ é×127) and 31 and 32 (a×255 ≡ A×255), plus the 4 repeated IDs.
+  - `LU3` (unique K) kept 16 rows (the N=1 row of each distinct K).
+  - `DistinctCount` of every LK compound index is 35.
+- `keys-order-index-*`, `keys-order-sql-*`, `keys-seek-*` (LK, 39 rows):
+  - For K = é×255 (IDs 19,20), ß×255 (25,26) and Han×255 (33,34), IX_KN lists the N=2 row first; IX_KND lists IDs ascending (19,20). SQL ORDER BY (K,N) shows the same pairs.
+  - `=` with (K,1) and (K,2) returned the right rows for all 18 keys.
+  - `>=` K-only returned 29 for é×255 (not 19 or 20), 26 for ß×255 and 34 for Han×255 (the first row in IX_KN order).
+  - IX_KN (K,N) and the (K,D), (K,DT) and (K,GU) indexes order the long-K rows differently: `IX_KM` and `IX_KG` list 19,20, while `IX_KN`, `IX_KD` and `IX_KT` list 20,19. The cause is not established.
+  - `IX_KN` on fresh `LK` equals `LK2` (incremental) in walk order.
+- FR (60 rows): "\0" rows (37–42) are returned by seeks for `""` (7–12) and interleave with `""` rows in the IX_FKN walk. Seek `(K)` alone returned the N=Null row of the group.
+
+*Maintained indexes*
+- `maintain-*` (delete, reverse reinsert, update away and back): IX_K and IX_KD keep the same class order as the fresh fixture, but within-class ties are descending ID (78 of 78 tie steps; fixture is ascending). Reinsert and update-back sequences are identical. Intermediate whole-file images were read (sizes 688128 → 700416 → 708608 B, hashes recorded).
+
+*Null policy / aliases* (`keys-uniqueness-meta-*`; INSERT…SELECT without `dbFailOnError`, so refusals are silent)
+- NP1 and NP2, unique (K,N) with or without IGNORE NULL: 10 of 12 rows survive. Only the repeated ('a',1) and ('',1) are refused; the Null-bearing tuples are all kept.
+- NP3 (PK K,N) and NP4 (DISALLOW NULL): 2 rows (('a',1), ('',1)).
+- NP5 (K NOT NULL): 6 rows.
+- NP6 and NP7 (unique K): 6 rows. All four Null-K rows are kept.
+- NP9 (DAO unique K, Required, IgnoreNulls): `Append` hr 0, 2 rows survive. Index reports U R IgnNull.
+- NS reports IX_A and IX_B as two separate logical indexes (same field K); IX_C has Attributes 1; NSC reports FK_NSC with Foreign true.
+
+*Typed keys* (`create-nums-*`, forward IX_ walks, NULLs first)
+- Byte: 256 as VT_I4 and -1 as VT_I2 → 0x800A0D5D, "Data type conversion error".
+- Single and Double: NaN and ±Infinity are accepted and read back as NaN or Infinity.
+- Double walk: negative-sign NaN (ID 39), then −Inf (42), −max (31)…+max (37), +Inf (41), then positive-sign NaNs (38, 40).
+- Single walk: NaN (29) first, +Inf (30) last.
+- DATE: −0 (ID 57) sorts before +0 (ID 56); `show` prints the values as "-0" and "0".
+- Currency: R8, string and Cy inputs of 1.2345 all read VT_CY 1.2345.
+- GUID order follows the textual groups.
+- MDB:
+  - `ALTER TABLE … DATETIME2` gave 0x800A0BB9.
+  - `CREATE INDEX IX_DX` gave 0x800A0D51.
+  - `w.Index "IX_DX"` gave 0x800A0ED8.
+  - ACCDB `DX` reads as a string with the .0000000 fraction.
+- All typed walks agree between ACCDB and MDB.
+
+*SORT-DERIVE start* (`create-derive-*`): U+0000–U+00FF in six contexts (1,536 rows).
+- The anomaly query returned EOF at once: no Null K and no LEN mismatch.
+- SQL `ORDER BY K` and the IX_K walk each hold 1,536 distinct IDs. They differ, but tie versus class order was not examined.
+
+**Probe or fixture defects**
+- **Compression table:** `CREATE TABLE C … TEXT(255) WITH COMPRESSION` returned 0x800A0CDA ("Syntax error in CREATE TABLE statement") in both formats (`create-corpus-accdb`, `create-corpus-mdb`). Compression is therefore not covered. The follow-on opens of `C` (0x800A0BC3, 0x800A0C06) make `order-sql-*` and `order-index-*` end `ReturnedFailure`.
+- **Silent refusals:** the INSERT…SELECT loads into `W`, `W2`, `LU*` and `NP*` show hr 0 for every call, so refusal causes and error numbers are not recorded. Only surviving rows show refusals.
+- **Intermediate images:** the intermediate `files[…]` captures in all `create-*` probes are size-only (`unread: IOException 0x80070020`, file locked); only the after-close image carries a hash. The fresh-versus-incremental build stages are therefore not retained as images.
+- **FR index name collision:** `CREATE INDEX IX_FKND` on `FR` returned 0x800A0D2F because `IX_FKNd` already exists (names are case-insensitive). Walking "IX_FKND" in `keys-order-index-*` therefore walked `IX_FKNd`: identical sequence. `FR (K,N,D)` is untested.
+- **NP10:** `dtd.Item("NP10")` returned 0x800A0CC1, so the DAO Required / non-IgnoreNulls index was never created. The 12 NP10 inserts ran on a table with no index. The card's refused-property creation case is not captured.
+- **Decimal X:** `CreateField("X", 20)` has the default scale, so six values failed with 0x800A0EAF ("Scaling of decimal value resulted in data truncation"). Reading the four stored values failed with 0x800A0BB8 (−1038). Decimal keys are not observed.
+- **`seek-*` status:** `seek-*` is `ReturnedFailure`. The eight 3021 results follow NoMatch True and are ACE answers, not a defect.
+- **`show` display:** I cannot tell lone-surrogate or NUL content from the display. Rows with U+2028 or CR/LF break my line-based parse; I did not rely on them.
+
+**Revisit**
+- **Engine build:** the card cites ACE16.0.20527.20016, but the records load 16.0.20527.20196.
+- **Key bytes:** no record contains key bytes or page extraction. Sort-descriptor identity, General97 or General–Legacy, and shortened-key bytes (the 510 cutoff and its digest) are unobserved. No A×253/254/255 General + Long1/Long2 pair was run. No 509/510/511/513-byte encoded-length series was run, except the K sets above.
+- **Locales and builds:** only 0x0409, 0x0809 and the compaction locales listed above. No other Windows locales or builds.
+- **Untested branches:** mixed-direction suffix controls beyond IX_KND, FR `K,N,D` / `D,K`, DAO Null-option refusals, NUMERIC, extended-date and the Text compression row-format interaction.
+- **Open anomalies:**
+  - The N-tail order inversion for the long-K rows (é, ß, Han ×255) in IX_KN, IX_KND and SQL.
+  - The `>=` K-only seek that skipped the é×255 group.
+  - Why supplementary-plane values equal `""` in dbVersion 128 files but not in dbVersion 256.
+- **SORT-DERIVE:** only U+0000–U+00FF is captured, not all 65,536 units, and no weights were derived from index bytes.
+
+### r-lock-3-4-txn
+
+All records are two harness processes `a` and `b` on one local ACCDB (MDB where named), via DAO from .NET 11 x64. The loaded `ACEDAO.DLL` is 16.0.20527.**20196** (the card names 20016; `ACEERR.DLL` is 20016). `fixtures --failed-only` lists no failed creation call for this card. Fixture `T` has 64 rows (ID, N=10·ID, V=0, S) with `PK_T` and a non-unique `IX_N`. Row 64 is on a different page from rows 1 and 2. All fixture rows are written in one step per statement.
+
+**Observed**
+
+*READ-ROLE*
+- Readers opened before or during `a`'s pessimistic `Edit` on row 1 (`ra.Edit`, `EditMode` 1) read row 1 as (N=10, V=0). This held for snapshot, dynaset, forward-only and table cursors, both held and newly opened (`read-role-edit-existing-readers`, `read-role-edit-then-update-new-reader`, `write-timing-pessimistic-matrix`).
+- `Transactions()` reads: snapshot 0, dynaset -1, forward-only 0, table -1 (`read-role-edit-existing-readers`, `txn-view-readers`).
+- After `a`'s published `Update` (N=5555), `b`'s held cursors and new cursors still read N=10, including after `Move 0` and `Requery`. The file hash was still the initial `d13aa3a9aa41` at the capture after `Update`, with `.laccdb` 64→128 B (`read-role-edit-existing-readers`).
+- A `Requery` on the table-type recordset returned 0x800A0CB3 (3251) in every probe that tried it.
+
+*READ-REFRESH, READ-PATH, READ-SNAPSHOT*
+- Reader-side reads taken 20–1000 ms after `b`'s committed or implicit updates returned pre-change values from every cursor kind, including after `Move 0`, `Requery`, `MoveFirst` and a new snapshot (`read-snapshot-cursor-kinds`, `read-path-lv-replace`, `read-refresh-ladder`).
+- `read-refresh-elapsed`: after `b` set N=2001, `a`'s immediate read gave N=10 for the dynaset, snapshot and table cursors. After a 6.5 s wait with no move, the dynaset and table cursors read 2001 and the snapshot read 10.
+- `read-refresh-ladder`: `b` wrote N=1001 to 1005 in turn. After `Idle(dbRefreshCache)` the dynaset and table cursors read **1001** (not 1002); the snapshot read 10. Later steps (`Move 0`, `Requery`, `MoveFirst`) never returned more than 1001. After `Requery` the snapshot read 1001. A fresh dynaset read 1001.
+- `read-path-index-moved`: `b` changed N of rows 3, 62 and 64. `a`'s table walk on `IX_N` returned IDs 2 to 64 in the old order, with row 3 at the old N=30 and rows 62 and 64 with the new N (5 and 15) at their old positions. `Seek =15` and `Seek =100000` gave NoMatch True. Errors collection 3021 appears, after field reads that raised 0x800A0BCD.
+- `read-path-lv-replace`: after `b` replaced three memos and deleted and reinserted row 3, `a`'s snapshot, dynaset, `MoveFirst` and `Requery` all returned the original memo texts. No error.
+- `read-snapshot-cursor-kinds`: forward-only `MoveFirst` returned 0x800A0C93 (Errors 3219). The ID 0 and 65 inserts were not seen by any cursor.
+
+*READ-ID*
+- `read-id-delete-reinsert`: after `b` deleted row 5 and reinserted the same key and values, `rd` and `cl` returned (5,50,0) with an unchanged bookmark `04020000` (`VT_ARRAY|VT_UI1 [0+4]`).
+- After a second delete and reinsert with N=51, V=9, both cursors still returned (5,50,0), also after `Move 0`.
+- `Requery` moved the dynaset to row 1, bookmark `00020000`. The reinserted row was never read.
+
+*READ-SCHEMA* (`read-schema-held-descriptors`, `read-schema-index-held-cursor`)
+- While `a` held cursors, `b`'s `ALTER TABLE U ADD COLUMN`, `CREATE INDEX` and `DROP INDEX` / `CREATE INDEX` on `T` failed with 0x800A0CBE (3262, "Could not lock table … currently in use by user 'admin'"). After `a` closed its cursors, they succeeded.
+- `a`'s held `TableDef` still reported U with 3 fields (ID I4/4, N 4, W 10), 1 index and 12 properties. This held after U was dropped and recreated by `b`, and after `TableDefs.Refresh`.
+- `a`'s `OpenRecordset("SELECT * FROM U")` returned 0x800A0BC3 (3011). A new `QueryDefs` binding returned `QT`'s old SQL (`ID <= 10`) although `b` had set `ID <= 3`.
+- A table cursor opened after `b` dropped `IX_N` and created `IX_V2`: `Index="IX_N"` and `"IX_V"` returned 0x800A0ED8 (3800); `"IX_V2"` was accepted.
+
+*WRITE-TIMING*
+- `write-timing-pessimistic-matrix` (`a` Edit on row 1, `b` default DAO):
+  - Blocked with 3260 (0x800A0CBC, "currently locked by user 'admin'"): UPDATE of rows 1 and 2, `rb2.Edit`.
+  - Admitted: UPDATE of row 64 and of `U`, INSERT row 200, `rb64.Edit` with `Update`.
+  - A blocked statement returned after about 2.2 s in the `txn-local-xproc-*` probes.
+- `write-timing-optimistic-seechanges` (options 512, `LockEdits` 3, pending Edit on row 1): every `b` statement was admitted, including `Edit` and `Update` of row 2.
+- `write-timing-release-boundaries`: `b`'s UPDATE of the held row was blocked (3260) only while `Edit` was pending. It was admitted after `CancelUpdate`, after `Edit`/assign/`Update`, after `Edit` then `Recordset.Close`, after a recordset released without `Close`, and after `Database.Close` with the recordset open.
+- `write-timing-ado-lock-mode-page` / `-row` (ADO `Jet OLEDB:Database Locking Mode`, read back 0 and 1): `b` (DAO) was blocked on rows 1 and 2 and admitted on row 64 and the INSERT in both. The error was 3260 (0x800A0CBC, with user name) for mode 0 and 3218 (0x800A0C92, "Could not update; currently locked.") for mode 1.
+- `write-deny-options`: with `dbDenyWrite`, `b`'s snapshot open and read worked; UPDATE and table-open returned 3262. With `dbDenyRead`, all three returned 0x800A0CBD (3261, "Table 'T' is exclusively locked"). After `a` closed, all three worked.
+
+*WRITE-ORIGINAL*
+- Optimistic `a` with a pending Edit (N=100), then `b` changed the same row by statement (N=222), on both ACCDB and MDB (`write-original-same-row[-mdb]`).
+  - The first `Update` returned 0x800A0C7D (3197) and `EditMode` stayed 1.
+  - A second `Update` returned success, `EditMode` 0, and `a` read N=100.
+  - `CancelUpdate` then returned 3020.
+- `b` changing only V (`write-original-unconflicting`, phase 1): same sequence, first `Update` 3197. `b`'s final read, taken after phase 2, showed (1,100,0), so V=77 was gone.
+- `b` changing N and restoring it (`write-original-changed-then-restored`): the first `Update` succeeded.
+- `write-original-unconflicting`, phase 2: after `b`'s UPDATE of row 2 returned, `a`'s `Update` on row 1 returned 3260 twice, `EditMode` stayed 1, and `Move 0` discarded the edit.
+
+*WRITE-ALLOC, WRITE-TREE*
+- While `a` held an uncommitted INSERT in a transaction, `b`'s INSERTs of keys 202, 203 (low N), 212 and 213 (`write-alloc-insert-txn`), and 300, 301, 310 and 311 (`write-tree-unique-candidate`) all returned 3260. Key 300, equal to `a`'s uncommitted key, also gave 3260, not 3022.
+- After `a`'s rollback, `b`'s INSERTs of 201 and 300 succeeded. After `a`'s commit, `b`'s INSERT of 310 returned 0x800A0BCE (3022).
+- `write-alloc-insert-txn`, after `a`'s commit: `b`'s `COUNT/MAX` read (65, 201) while `b`'s `ID > 200` read returned 201 and 211 (`a`'s own read: 66, 211).
+- `write-alloc-counter-rollback`: `AddNew` ID read 3 for `a` (in transaction) and 4 for `b`. `b`'s `Update` returned 3260. After `a`'s rollback `b` read 5, then `a` read 6. Final rows: 1, 2, 5, 6.
+
+*WRITE-LV* (`write-lv-replace-reuse`)
+- `b`'s first two memo replaces on row 4, while `a`'s dynaset sat on row 4, returned 0x800A0C72 (3186). File unchanged at 290816 B.
+- After `a` closed, replaces and appends succeeded. File sizes (B): 290816, 290816 (replace), 311296, 331776 (after `SetOption(65,1)` and replace), 352256, 372736 (after close).
+
+*WRITE-DDL* (`write-ddl-vs-pending-edit`)
+- With `a`'s pessimistic `Edit` pending, and again after `CancelUpdate` with the recordset open, `b`'s ADD COLUMN, CREATE INDEX and DROP TABLE on U returned 3262. After `a` closed the recordset all three succeeded (U dropped).
+
+*WRITE-PROMOTE* (`write-promote-bulk-update`)
+- `a`'s transaction updated 64 rows (RecordsAffected 64). `b`'s row-64 UPDATE returned 3260. `b`'s UPDATE of U row 1 and INSERT of row 400 were admitted.
+- With `SetOption(62, 8)` in `a`, `a`'s bulk UPDATE returned 0x800A0BDB (3035, "System resource exceeded"), RecordsAffected 0. `Rollback` then worked, and `b` was admitted on row 64.
+
+*TXN-LOCAL*
+- Two transactions on the same row, same page (rows 1 and 2) or via an implicit `b`: `b`'s UPDATE returned 3260 in all 2, 6 and 6 phases, on ACCDB and MDB (`txn-local-xproc-same-row`, `-same-page`, `-same-page-mdb`).
+- Rows 1 and 64, and tables T and U: both owners updated and committed or rolled back (`-far-row`, `-other-table`).
+- `-conflict-settings`: three `SetOption` conditions (`dbLockRetry` 1 with `dbLockDelay` 1; 5 with 100; then `dbPageTimeout` 100) all ended in 3260. The three blocked calls took about 1.1 s in total by timestamps.
+
+*TXN-NEST, TXN-MULTI, TXN-STMT, TXN-CLOSE, TXN-FLUSH-LIVE*
+- Three nested `BeginTrans` updating rows 1 to 3, then `CommitTrans` (inner) and `Rollback` (middle): `a` read (1,1010), (2,20), (3,30). After the outer commit, `CommitTrans` and `Rollback` each returned 0x800A0BDA (3034) (`txn-nest-observed`).
+- Two files, one transaction: `a`'s later transaction touching T2 then T was rolled back in both. Committed values survived: T row 1=1010, T2 row 1=1100 (`txn-multi-two-files`).
+- Blocked statements (`a`'s Edit on the middle row):
+  - Multi-row UPDATE with no options (`txn-stmt-blocked-no-scope`, `-in-txn`): the call returned success, RecordsAffected 0, Errors 0, and no row of the range changed, including the unblocked ones.
+  - With `dbFailOnError`: 3260, RecordsAffected 0. Earlier and later single-row statements were applied; inside the transaction, `Rollback` followed.
+  - In `-in-txn` phase 1, `a`'s read after `b`'s `CommitTrans` showed row 1 V=0 and row 50 V=1.
+- `txn-range-close`:
+  - `b`'s UPDATE of row 2 returned 3260 in both phases (during `a`'s transaction on row 1).
+  - Closing `Workspace w2` with an open transaction: `a` read N=10.
+  - Closing and reopening the Database with the transaction open: `a` read 1010, and `Rollback` restored 10.
+- `txn-flush-live-images` (`a`'s file image per step):
+
+| Step | Main-file hash |
+| --- | --- |
+| start, inside the first transaction | unchanged `d13a…` |
+| after ordinary `CommitTrans` | changed (`139bde…`) |
+| inside the second transaction | unchanged |
+| after `CommitTrans(dbForceOSFlush)` | changed (`a0080c…`) |
+| after inner forced commit, after outer `Rollback`, after an implicit UPDATE, after `Idle(dbRefreshCache)` | all unchanged |
+| after close | changed (`cf8f8f…`) |
+
+  - `b`'s first read, about 0.9 s after the first commit, returned 1010. Its next two reads, 59 to 95 ms after later commits to 2010 and 3010, still returned 1010.
+
+*TXN-VIEW* (`txn-view-readers`): `b`'s cursors never read the committed 1010 (reads 17 to 60 ms after `a`'s commit), for held and new cursors, with and without `Requery`.
+
+**Probe or fixture defects**
+- Read-visibility results are confounded by `b`'s read cache. Most reads came 20 to 1000 ms after `b`'s own earlier read. `read-refresh-elapsed` shows the staleness lifts after 6.5 s without a move. The engine's `dbPageTimeout` default was never read. Affected: `txn-view-readers`, `txn-nest-observed`, `txn-multi-two-files` (all `b` reads stale), `read-path-*`, `read-id-delete-reinsert`, `read-snapshot-cursor-kinds`, `read-role-edit-existing-readers`.
+- `write-alloc-counter-rollback`: the ID read after `Update` returned row 1 for every writer (cursor stays on the old record), so the generated value after `Update` is not captured.
+- `write-ddl-vs-open-transaction`: `a`'s own `ALTER TABLE` and `CREATE INDEX` after its insert in its own transaction returned 3211 (0x800A0C8B) before `b` ran. No catalog change existed to be rolled back; `b`'s field names are identical throughout.
+- `txn-local-xproc-same-page[-mdb]`, `-same-row` and `txn-range-close`: `b`'s competing write was always refused (3260) and never retried after release. The resolution orders (`B:C A:R` and so on) and "does an unrelated update survive rollback" are not exercised, despite the `WRITE-REBASE` tag.
+- `write-tree-unique-candidate`: `IX_N` is non-unique in the fixture, so the secondary-index uniqueness candidate is untested. The `read-schema-held-descriptors` DDL while cursors were open was refused (3262), and `DROP INDEX IX_U1` found no index (3372).
+- `txn-local-xproc-conflict-settings`: the record holds no per-call timings (the description says the worker records them). `txn-local-xproc-same-row` contains no read of engine defaults, although `-conflict-settings` says it does.
+- `DBEngine.Errors` is not cleared by later successful calls. Many records show Errors count 1 (3260, 3262, 3372) after a successful call. The `Errors` reads there are not per-call evidence.
+- `write-original-same-row[-mdb]` and `-changed-then-restored`: nobody reads the row after close, and `b`'s final read comes 0.6 s or less after `a`'s second `Update`. The final stored value is not established, because `b` read 222 and 10 while `a` read 100.
+- `write-timing-release-boundaries`: no check shows that the `Edit` was still held at the release and close steps.
+
+**Revisit**
+- No native lock, handle or byte trace is in these records, only public DAO answers. So `READ-ROLE` lock purpose and `READ-PATH` validation or retry are unobserved. Nothing pauses ACE mid-acquisition.
+- Uncovered: `READ-LIFE` (close, cancel, process death), `WRITE-REBASE` (no CalcDb preparation pause), `WRITE-FAIL`, and promotion by lock count beyond the 3035 error. Also uncovered are `TXN-TEMP`, `TXN-SUPPORT` and the `TXN-CLOSE` clone and multi-participant cases. `TXN-NEST` has no `BeginTrans` exhaustion and no empty-level or same-page-at-all-levels cases. The `TXN-DDL` rollback restoration, the SMB lanes and the COM-thread and ADO-vs-DAO `TXN-LOCAL` lanes are also open.
+- Open: whether `b` sees commits at all within ~1 s without Idle or an elapsed page timeout. The elapsed-time probe only varies one delay, and the `read-refresh-ladder` 1001-vs-1002 result is unexplained. The `read-schema-held-descriptors` 3011 for U (while `b`'s recreate had returned) and `far-row`'s stale N=10 versus `other-table`'s fresh 1010 are also unexplained.
+- Row 2 blocked while row 1 was pessimistically edited, in default ACCDB and in `Locking Mode` 0 and 1. Whether that is page locking or `b`'s own mode is untested.
+
+### r-enc-link
+
+All 43 retained records were read. Loaded `ACEDAO.DLL` is 16.0.20527.20196 (`ACEERR.DLL` 16.0.20527.20016), not the card's 20016. DAO was `DBEngine.120`; ADO was `Microsoft.ACE.OLEDB.12.0`.
+
+**Observed: R-ENC-1**
+
+- **ENC-PROFILE, creation.** `CreateDatabase` succeeded for these:
+  - plain MDB (option 64) and plain ACCDB (128);
+  - MDB with `dbEncrypt` (66);
+  - MDB and ACCDB with `;pwd=secret1` in the locale string (`create-enc-*-pwd`);
+  - MDB and ACCDB given a password afterwards by `NewPassword("", "secret2")` (`create-enc-*-newpwd`).
+
+  ACCDB with `dbEncrypt` (130) failed: `hr=0x80020009`, scode `0x800A0BB9` "Invalid argument.", no `IErrorInfo`, no file (`create-enc-accdb-enc`). All MDB fixtures are 655360 B and all ACCDB fixtures 749568 B.
+- **ENC-PROFILE, DAO credentials.** On the four password fixtures (`profile-pwd-*`, `profile-newpwd-*`), `OpenDatabase` failed with Errors number 3031 "Not a valid password." (scode `0x800A0BD7`) when the password was omitted, `;pwd=`, wrong, or the right one in upper case. It succeeded with the exact password, read-only and read/write.
+- **ENC-PROFILE, stale Errors.** `DBEngine.Errors` still held the earlier 3031 (count 1) after a later successful open in the same probe. Counts were 0 in probes with no earlier failure, for example `update-pwd-*`.
+- **ENC-PROFILE, ADO.** `Connection.Open` on `enc-mdb-pwd` failed with no password and with a wrong one:
+  - `hr=0x80020009`, EXCEPINFO scode `0x80040E4D` "Not a valid password.";
+  - `Errors` count 1, Number -2147217843, SQLState "3031", NativeError -124782449;
+  - the following `Execute` failed with `0x800A0E78` "Operation is not allowed when the object is closed."
+
+  The open with `secret1` worked and `COUNT(*)`/`SUM(LEN(M))` returned VT_I4 64 and VT_R8 192000 (`ado-open-pwd-mdb`).
+- **ENC-UPDATE.** With `;pwd=secret1`, six statements all succeeded on MDB and ACCDB: updates of rows 1, 32 and 64 with 3000-character memos, an insert, `DELETE ID BETWEEN 10 AND 20`, and a bulk insert. `Errors` count 0 and the reopen counts matched. Counts went from N=64, LM=192000 to N=108, LM=330000. MDB went from 655360 B to 1024000 B and ACCDB from 749568 B to 1118208 B (`update-pwd-mdb`, `update-pwd-accdb`).
+- **ENC-PASSWORD, in place.** `NewPassword` returned `hr=0` with Errors count 0 in these cases, and the file size was unchanged, with a different SHA-256 prefix:
+  - set `"" -> secret3` on plain MDB (`54628728f059` to `cf72285e6375`) and plain ACCDB (`081c957990db` to `0c2f2003be39`) (`newpassword-set-*`);
+  - change `secret2 -> secret3` on MDB (`e8453dbcd84d` to `55f5b1cf66e3`) and ACCDB (`a91330cdd819` to `2a295fc15d9e`);
+  - remove `secret1 -> ""` on MDB (`c396c631ea52` to `4e2373a0bce5`), after which the file opened with no password and also with `;pwd=secret1` (`newpassword-remove-mdb`).
+
+  After set and change, opening with no password gave 3031. After change, the old password gave 3031 and `secret3` opened.
+- **ENC-PASSWORD, wrong old password.** On MDB and ACCDB (`password-wrong-old`), `NewPassword("not-the-old","x1")` and `NewPassword("","x2")` both failed with `hr=0x80020009` and Errors 3031. File hashes were unchanged, the original password still opened, and `x1` and `x2` gave 3031.
+- **ENC-LIFE (MDB only).** `NewPassword("secret1","secret3")` on an open exclusive database did not stop the held dynaset: `MoveNext` read row 3 ("r3", 3000) and `Bookmark` returned VT_ARRAY|VT_UI1 `02020000`. `Execute UPDATE` ran with `RecordsAffected` VT_I4 1, and a fresh snapshot read "after-password". After close, the old password gave 3031 and `secret3` opened (`life-held-cursor-mdb`).
+- **ENC-REKEY.** `CompactDatabase` returned `hr=0` with Errors count 0 in each of these:
+  - Source password in SrcLocale and destination `;pwd=other1`, MDB and ACCDB: the destination opened only with `other1` (none and `secret1` gave 3031) and the source file was unchanged (`rekey-pwd-*`).
+  - Plain MDB with option 66: the destination opened with no password.
+  - Plain MDB with option 66 and `;pwd=encpw`: no password gave 3031 and `encpw` opened.
+  - `dbEncrypt`-created MDB with option 68 (`dbDecrypt`): the destination opened with no password (`rekey-options-mdb`).
+
+**Observed: R-LINK-1**
+
+- **LINK-META.**
+  - Attributes are VT_I4 1073741824 for `LK` and 1073872896 for `LKP` (after setting 131072 before `Append`).
+  - `Connect` after `Append` in the creating session read back relative (`;DATABASE=inputs\r-enc-link-src.accdb`). In later sessions it reads back as an absolute path (see defects). `LKP` Connect is `MS Access;PWD=secret1;DATABASE=...`.
+  - The `TableDefs` count is 8, in the order `L, LK, LKP, MSysACEs, MSysComplexColumns, MSysObjects, MSysQueries, MSysRelationships`.
+  - Fields (ID I4/17, V Text, N Text, D I4, M Memo type 12) carry `SourceField` and `SourceTable` "SRC". Indexes `IX_SRC_D` and `PK_SRC` are present.
+  - `RecordCount` is VT_I4 -1 (`create-linked`, `meta-read-through-link`, `meta-source-absent`).
+  - `Updatable` was VT_BOOL 0 for `LK` in a read-only open.
+- **LINK-META, public views.** DAO `SELECT ... FROM MSysObjects` failed with 3112 "Record(s) cannot be read; no read permission on 'MSysObjects'." (scode `0x800A0C28`). ADO `OpenSchema(adSchemaTables)` returned 8 rows, with `L` as TABLE and `LK` and `LKP` as LINK (`public-views`).
+- **LINK-RELINK, unchanged.** `RefreshLink` with Connect unchanged returned `hr=0`, Errors 0, and Connect, Attributes, fields and the 2 indexes unchanged. `linked.accdb` went from 221184 B to 229376 B in that read/write probe (`relink-refresh-unchanged`).
+- **LINK-RELINK, second source.** Setting Connect to src2 read back unchanged, and `RefreshLink` returned `hr=0`.
+  - A retained `Fields` collection then reported D as type 10 (was 4), and the index names stayed `IX_SRC_D, PK_SRC`.
+  - The held dynaset (opened before the relink) kept returning old rows (ID 2, D VT_I4 10).
+  - A new recordset returned IDs 11–14 with D as VT_BSTR "10"/"20" (`relink-to-second-version`).
+- **LINK-OPEN / LINK-RELINK, bad targets.** `RefreshLink` results:
+  - missing file: 3024 "Could not find file";
+  - the linked file itself: 3011 ("could not find the object 'SRC'");
+  - Connect `garbage`: 3170 "Could not find installable ISAM.";
+  - unknown option `;FOO=bar;DATABASE=inputs\r-enc-link-src.accdb`: `hr=0`;
+  - restore: `hr=0`.
+
+  After every step, including the failed ones, `SELECT * FROM LK` opened and read the original 4 rows. The Connect property read back the bad value (`relink-bad-targets`).
+- **LINK-OPEN, credentials (on `LKP`).** `RefreshLink` with `PWD=wrong-pass` and with no PWD both failed with 3031. With `PWD=secret1` it returned `hr=0`, but Errors still showed the stale 3031. All three following recordsets read 4 rows. `Attributes(0)` read back as 1073741824, so the `dbAttachedTable` bit stayed and the `dbAttachSavePWD` bit cleared (`link-credentials`).
+- **LINK-PUSHDOWN (native lane).** In all 8 queries (equality `'a'` with an `'A'` row, IS NULL, LIKE, ORDER BY with Null and empty text, TOP 2, `CLng(N)`, DISTINCT, GROUP BY), link and local gave identical rows and order. The two lanes also matched on errors. Details:
+  - `TOP 2 ... ORDER BY D` returned 3 tied rows, IDs 3, 2, 1, in both lanes.
+  - `CLng(N)` raised at `Field.Value`, not at open: row 2 `0x800A0D88` "Data type mismatch in criteria expression.", row 3 (Null) `0x800A005E` "Invalid use of Null". Errors held a single entry, Number 94 (`pushdown-link-vs-local`).
+- **LINK-UPDATE.** Through `LK`:
+  - `UPDATE ... WHERE D = 10` gave `RecordsAffected` 3;
+  - a full insert, an insert without the counter key (generated ID 6), a delete, and a 5000-character memo update each gave 1;
+  - `AddNew/Update` gave `LastModified` VT_ARRAY|VT_UI1 `08020000` and row ID 7;
+  - `Edit/Update` on the first row worked.
+
+  Errors count 0 throughout (`update-through-link`).
+- **LINK-TXN / LINK-SESSION.** `LK` and local `L` both took part in `BeginTrans`/`Rollback`/`CommitTrans`/nesting: in-transaction counts went up, rollback restored them, commit and nested commit kept them.
+  - For `LK` the counts were 5, 6, 5, 6, 7 in order (start, in-transaction, after rollback, after commit, after nested).
+  - `IsolateODBCTrans` read VT_I2 0, then -1 after setting 1.
+  - In a second Workspace, `d2` saw 4 while `d1` saw 5 mid-transaction, and 4/4 after rollback and 5/5 after commit (`txn-local-and-link`, `session-two-workspaces`).
+
+**Probe or fixture defects**
+
+- **Relative link path resolves to the fixture-creation attempt.** Every probe that reads `LK`/`LKP` through the stored Connect goes to `...\attempts\r-enc-link.create-linked.92c44b92f7.a1\inputs\`, not to its own `inputs\` copy. Evidence: `meta-source-absent` and `meta-read-through-link` show that absolute path in `tdf.Connect()`, and that directory still exists on disk.
+- **Consequences of that defect:**
+  - `meta-source-absent` did not have an absent source: the `OpenRecordset` calls on `LK` and `LKP` returned `hr=0`.
+  - `update-through-link`, `txn-local-and-link` and `session-two-workspaces` mutated one shared source across attempts. Reads in `update-through-link` returned IDs 101, 103 and 201, inserted by other probes, and `LK` counts at start differ between probes (5 versus 4). Mutation arms are therefore not independently restored.
+  - The independent readers (`update-through-link`, `txn-local-and-link`) read the attempt-local `inputs\r-enc-link-src.accdb`, which stayed at 4 rows with hash `e330c1b86c6c`. They do not show source effects.
+  - `schema-change-under-cursor` altered the attempt-local `inputs\r-enc-link-src.accdb` (hash `e330c1b86c6c` to `03aef834c844`), while the link read the unchanged creation-dir copy. LK still showed column N and 4 rows after `RefreshLink`, so the LINK-SCHEMA question is unanswered.
+  - `link-credentials` and `relink-bad-targets` read their recordsets through the stored link. This is probably why the recordsets still opened after failed `RefreshLink`; relative Connect values set in-session do resolve to the attempt directory, so these were not isolated. The cause is inferred, not shown.
+- **Missing `accdb-enc` fixture.** `create-enc-accdb-enc` failed (3001), so `profile-unprotected` (which opens an `accdb_enc` role) has no retained record. I did not confirm that this is the reason.
+- `meta-source-absent` checks "enumeration without connecting" only against a source that was present.
+
+**Revisit**
+
+- **ENC-PROFILE:** ACCDB encryption via a supported route (the `dbEncrypt` option is refused, 3001); header discriminators in malformed copies; unprotected-file open with wrong or empty password.
+- **ENC-PAGE:** the records hold hashes and sizes only; raw versus decoded pages were not interpreted here.
+- **ENC-UPDATE:** only DAO with the password given; no torn or crash arms.
+- **ENC-PASSWORD:** no secured-workgroup refusal control, no ADO or Access route; `NewPassword` on ACCDB only set and change.
+- **ENC-REKEY:** ACCDB option variants; the `dbEncrypt` route for `CompactDatabase` was tried only on MDB.
+- **ENC-LIFE:** only an MDB held cursor, no ACCDB held cursor.
+- **Not covered:** ENC-FAIL, ENC-TEMP; the card's DLL version 20016 versus the loaded 20196.
+- **LINK-RELINK:**
+  - Index preservation is not discriminated: src and src2 both define `IX_SRC_D`.
+  - The 221184 B to 229376 B growth in `relink-refresh-unchanged` cannot be attributed to `RefreshLink` versus read/write open (no control).
+  - Native catalog byte deltas were not examined.
+- **LINK-SCHEMA, LINK-IDENTITY (bookmark across sessions, duplicate non-key rows beyond `UPDATE D=10`), LINK-TXN source states, LINK-SESSION connection counts:** all need valid per-attempt sources, which the path defect currently breaks.
+- **Not covered:** LINK-CANCEL, LINK-BROWSER, ODBC/ISAM families, a concurrent second writer, denied access, expired credential, a wrong file at the same path, and `Updatable` on `LKP` and in read/write opens.
+
+### r-expr-1
+
+Scope: 83 records. They cover the main2 fixture (39 records), the superseded `r-expr-1-main` fixture (the other attempts), the three `create-*` records and 2 records with no capture. Unless stated, results come from the main2 attempts. Every attempt ran once (`a1`), so there are no A/A repeats. Types are `Field.Type()` numbers as returned (DAO DataTypeEnum). Environment in all records: loaded ACEDAO.DLL 16.0.20527.20196 (the book expects ...20016; only ACEERR.DLL shows 20016), `eng.Version()` "16.0", `db.Version()` "16.7", collating order 1033, process lcid 7177, x64.
+
+**Observed**
+
+- **Branch A, Null/Empty/Error/omission**
+  - `a-null-empty-error-literals`: `IsNull(Null)` is VT_I2 -1 and `IsNull('')` is 0. `IsEmpty(Null)` and `IsEmpty('')` are both 0 and `IsError(1)` is 0. For all of these Field.Type is 3.
+  - `a-null-empty-error-literals`: `Null + 1`, `Null & Null`, `Null = Null`, `Null <> 1`, `-Null` and `Not Null` return VT_NULL (Type 9). `Null & 'x'` and `'x' & Null` return "x". `Len(Null)` is VT_NULL and `Len('')` is VT_I4 0.
+  - `a-null-empty-error-literals`, `d-predicate-consumers`: `CVErr` fails with 0x800A0C0D "Undefined function 'CVErr' in expression." (in a SELECT list, inside `IsError`, and in WHERE). `FindFirst("CVErr(5)")` fails with 0x800A0C00.
+  - `a-optional-arguments`: `Nz` fails 0x800A0C0D "Undefined function" (direct, and via `[pv]` QueryDefs).
+  - `a-optional-arguments`: `Mid('abcd',2,Null)` and `InStr(Null,...)` fail 0x800A005E "Invalid use of Null". `Mid('abcd',Null)` and `Round(2.5,Null)` fail 0x800A0D88. `Round(2.5)` is VT_R8 2 and `InStr(1,'abcd','C',0)` is 0 (compare 1 gives 3).
+  - `a-parameter-inputs`, declared Long parameter: Null gives Null. Empty gives VT_I4 0 (`IsNull` 0, `pl+1` = 1). The VT_ERROR marker (-2147352572) gives Null. R8 2.5 reads back VT_I4 2. BSTR "q" and BSTR "" fail at the set with 0x800A0D5D. An unset declared parameter fails at OpenRecordset with 0x800A0BF5 "Too few parameters. Expected 1."
+  - `a-parameter-inputs`, declared Text parameter: Null, Empty, the marker and empty BSTR all read back Null (`Len` Null, `pt & '|'` = "|"). "A\0B" gives `Len` 3 and a lone U+D800 gives `Len` 1. I4 7 reads back BSTR "7".
+  - `a-parameter-inputs`, undeclared `[pv]`: the same four inputs give Null. I4, R8, BOOL, CY, UI1 and I2 inputs read back as BSTR ("7", "2.5", "-1", "1.5", "255"), and DATE 0.25 reads back "06:00:00".
+  - `b-plus-versus-concat`: an undeclared parameter set to Empty or Null gives `[pe] + 7` Null and `[pe] & 'x'` "x".
+- **Branch B, operator dispatch and types**
+  - `b-numeric-text-compare`: `7 = '7'`, `7 < 'q'`, `'10' < 7`, `T = 7`, `L > T` and `D = '2.5'` open fine but fail on `Field.Value()` with 0x800A0D88. `'7' < '10'` is 0 and `7 < 10` is -1. A declared Long/Text parameter pair fails at OpenRecordset with 0x800A0D88. With undeclared `[ua]`/`[ub]`, both sides read back as text: (7,"7") gives eq -1; (7,"q") gives lt -1; (10,"9") gives lt -1.
+  - `b-plus-versus-concat`: `7 + '7'` is R8 14 (Type 7), `'7' + '7'` is "77", `7 & '7'` is "77", and `7 & Null` is "7". `'q' + 7` fails on Value with 0x800A0D88. `N + T` is Null and `N & T` is "7". `True & ''` is "-1" and `#2024-01-01# & ''` is "2024/01/01".
+  - `b-integer-widening`: `B + CByte(1)` is VT_I4 256, `I + CInt(1)` is 32768, and `L + CLng(1)`, `L * CLng(2)` and `I + L` fail 0x800A0006 on Value. `2147483647 + 1` is R8 2147483648 and `32767 + 1` is VT_I4. BIGINT (Type 16): `LL + 1` and `LL * 2` fail on Value for the max row, and `LL + 0.5` fails 0x800A0D88 on that row. The -1 row gives VT_I8 0 for `LL + 1` and `LL + 0.5`.
+  - `b-mixed-precedence` (VarType, B−F are Single=S, Currency=C, Double=D, Long=L): C+D and D+C are Currency (6), C*D and D*C are Double (5), S+L and S+D are Double (5), C+L is Currency (6). `Y+1` is 3, `Y*Y` is 2, DT+1 and DT+C are Date (7), `DT-DT` is Double (5), B+B and I+B are 3.
+  - `b-integer-conversion`: `CInt(2.5)`=2, `CInt(-2.5)`=-2, `CInt(3.5)`=4, `CInt(2.5000000000000004)`=3. `CInt(32767.5)`, `CLng(2147483647.5)`, `CByte(255.5)` and `CByte(-0.6)` fail with 0x800A0006. `CByte(1.5)`=2 (type 3, VT_I2). An undeclared parameter holding 2.5000000000000004 reads back "2.5", so `CInt([px])` = 2.
+  - `b-intdiv-mod`: `7.5 \ 2`=4, `7 \ 2.5`=3, `-7.5 \ 2`=-4, `7.5 Mod -2`=0. `5 \ 0.4`, `1 \ 0`, `1 / 0` and `1 Mod 0` fail 0x800A000B on `Value()`. `0 / 0` fails 0x800A0006 and `2147483648 \ 1` fails 0x800A0006.
+  - `b-fixed-point-fidelity`: `CCur(0.00015)` and `CCur(0.00025)` are both 0.0002; `CCur(0.00005)` is 0. A Currency parameter at max/min round-trips exactly. Max + CCur(0.0001), min − CCur(0.0001) and max*2 fail 0x800A0006 at OpenRecordset.
+  - `b-fixed-point-fidelity`: `C + 0.00005` returns VT_DECIMAL (Type 20; `show` does not print the payload). `CDec(...)` always fails 0x800A0C03 "Wrong number of arguments...".
+  - `b-floating-fidelity`: parameters 0.1 vs 0.10000000000000002 give eq 0, lt -1, diff -1.3877787807814457E-17. Single 1.1 vs Double 1.1 gives eq -1 and diff 2.3841857821338408E-08. `0.1 + 0.2 = 0.3` is -1. An undeclared parameter given NaN, ±Infinity or -0 reads back "nan", "inf", "-inf" or "-0"; the three non-finite values fail 0x800A0D88 at OpenRecordset.
+- **Branch C, DATE**
+  - `c-date-payloads`: DATE and R8 parameters with identical payloads behave identically. For -1.25 vs -1.5, lt is 0 and `CDbl` returns the raw payloads. `Hour(-0.25)`=6 and `Day(-0.25)`=30, while `DateValue(-0.25)`=0 and `TimeValue`=0.25. `DateDiff('h',-0.25,0.25)` is VT_I4 1. I did not investigate that value.
+  - `c-date-payloads`: undeclared parameters holding DATE read back as text "06:00:00", and (DATE -0.25, DATE 0.25) fails 0x800A0D88.
+  - `c-date-stored-predicates`: against Dts rows (-1.5 ... 45000.5), `D = CDate(-0.25)` selects Id 1 and `D = #12/30/1899 06:00#` selects Id 2. `D BETWEEN #12/29/1899# AND #12/31/1899#` selects 1,2,5,6,7 (not 3,4: -1.25 and -1.5), the same set as the numeric range. ORDER BY D is numeric.
+  - `c-date-text-and-literals`: `CDate('1/2/2003')` is 37623, `CDate('2003-02-01')` is 37653, `IsDate('2/30/2003')` is 0. `CDate('2/30/2003')`, `CDate(-657435)` and `CDate(2958466)` fail 0x800A0D88.
+- **Branch D, logical/bitwise**
+  - `d-logical-bitwise`: the grid (order TT,TF,TN,FT,FF,FN,NT,NF,NN) is: And -1,0,N,0,0,0,N,0,N. Or -1,-1,-1,-1,0,N,-1,N,N. Xor 0,-1,N,-1,0,N,N,N,N. Eqv -1,0,N,0,-1,N,N,N,N. Imp -1,0,N,-1,-1,-1,-1,N,N. Not gives 0,-1,Null.
+  - `d-logical-bitwise`: `6 And 3`, `6 Or 3`, `6 Eqv 3` and `6 Imp 3` are VT_I2 -1; `6 Xor 3` and `Not 6` are 0. `Null And 0` is 0 and `Null Or -1` is -1.
+  - `d-predicate-consumers`: WHERE returns the row for 1, -1, 2, 2.5, '', '1', 'q' and 'True', and no row for Null, 0 and '0'. IIf agrees except `IIf('', ...)` selects the true arm. `FindFirst("Null")` gives NoMatch -1; every other criterion fails 0x800A0BB9 with NoMatch -1.
+  - `mut-validation-rules`: field rule `[V] > 0` rejects V=-1 (3316) and accepts omitted V (Null). Required=True rejects omitted and explicit Null with 3314 (0x800A0CF2). Table rule `[V] < [R]` rejects (2,1) with 3316 and accepts (1,NULL). A table rule "Null" accepts (1,2).
+  - `mut-validation-rules`: field rule `1/0` fails Update with 0x800A0EDA (3802 "Error evaluating CHECK constraint"). With V=5, the bare field rules 0, 2, '', '1', 'q', True and False each fail Update with 0x800A0CF4 (3316, EditMode 2), but rule "Null" accepts (the rule reads back as "Null " with a trailing space).
+- **Branch E, conditional functions**
+  - `e-eager-failures`: `IIf(True,1,1/0)` is R8 1, `IIf(False,1/0,2)` is R8 2, and `IIf(True,1,CInt('q'))` is VT_I4 1. The same holds in rows (`IIf(True,1,1/[Denominator])` on Denominator=0 gives R8 1).
+  - `e-eager-failures`: `Switch(True,1,True,1/0)` and `Choose(1,'a',1/0)` fail 0x800A000B at OpenRecordset. In `1/0 + CInt('q')` the first operand's error is reported, and reversing the operands reports the other error (0x800A0D88 / 0x800A000B).
+  - `e-conditional-selection`: `IIf(Null,1,'a')` is "a" and `IIf(True,1,'a')` is BSTR "1". `IIf('',1,2)`=1. `Switch(False,1)` is Null. `Switch(True)` and `Switch(True,1,False)` fail 0x800A0C03, and `Switch()` fails 0x800A0005. `Choose(0)`, `Choose(3)`, `Choose(0.5)` and `Choose(-0.5)` are Null; `Choose(1.5)`="a", `Choose(2.5)`="b", `Choose(Null,...)` fails 0x800A0D88.
+  - `e-failure-phase`: `1/[Denominator]` opens with no error and fails 0x800A000B on the Value read of row 2 (Denominator 0), for types 2, 4 and 8. Row 3 then reads Null. `CInt([TextValue])` fails 0x800A0D88 (row 2) and 0x800A005E (row 3). A WHERE that matches no rows (`Id = 999`) opens and returns no rows for `1/0` and `1/[Denominator]`. A traversal that never reads the failing column (types 4 and 2 on `CInt`) completes, including MoveLast.
+- **Defaults and ValidateOnSet**
+  - `mut-default-values`: DefaultValue `2+3` is visible after AddNew as VT_I4 5; `'x' & 'y'` gives "xy"; `#2024-01-31# + 1` gives DATE 45323. Setting DefaultValue `1/0` fails 0x800A000B, and `'q'` on a Long field fails 0x800A000D (both at the property set). An explicit Null assignment in AddNew persists as Null, and SQL INSERT omitting A stores 5.
+  - `stage-validate-on-set`: with ValidateOnSet True, V=-1 fails 0x800A0CF4 on the Value set (source DAO.Field), V stays 5 and EditMode is 1. With False, the set succeeds (V reads -1) and Update fails 0x800A0CF4 (source DAO.Recordset), and CancelUpdate restores the old value. With W=-1 and V=-1 both invalid, the V message is returned in both assignment orders. `Errors` keeps the 3316 entry after a later successful Update.
+- **Patterns**
+  - `pat-01-wildcard-modes`: DAO `LIKE 'Q%'` matches only the literal "Q%" (Id 3), and `LIKE 'Q*'` matches all 7 subjects. DAO `ALIKE` and ADO `LIKE` give the reverse: `'Q%'` matches all 7, `'Q*'` matches only "Q*", and `'Q_'` matches "Q*", "Q%" and "Q7". These are single-fixture results.
+  - `pat-02-bracket-classes`: `LIKE` and `ALIKE` are identical across all ten patterns. `[]` matches only "", `[[]` matches "[", `[[]]` matches "[]", `[!a]` matches `[ ] - ! ^` but not "", and `[!]` and `[^]` are literal.
+  - `pat-03-ranges`: `[C-A]` fails every row with 0x800A005D "Invalid pattern string". `[a-C]` matches A–C and a–c. `[à-é]` matches à, é and æ.
+  - `pat-04-05-structural-diagnostics`: `q[`, `q*[` and `q*[C-A]` (and ALIKE `q%[...`) fail 0x800A005D only for subjects "qx" and "qabc" (not "x", "q", "" or "yq"); `xq[` fails only for "xqx". Constant `'x' LIKE 'q['` returns 0.
+  - `pat-06-null-and-operand-order`: `Null LIKE 'q['` is Null with no error. `'' LIKE '*'` is -1 and `'' LIKE '?'` is 0. An undeclared (ps="5", pp="5") gives -1; Empty and "" inputs give Null.
+  - `pat-07-08-expansion-and-classes`: `LIKE` treats "æ" as one unit (matches `?`, not `??`, `ae` or `a?`), while `S = 'ae'` is -1 for æ and Æ. `[æa]e` does not match "æ", `[æa]?` matches "ae", and `a[ef]` matches "ae" only.
+  - `pat-09-contraction` (General vs Spanish): `?`, `??` and `c?` give identical results in both sorts. `S > 'cz'` is 0 for "ch" in General and -1 in Spanish. ORDER BY S places "ch" after "cz" in Spanish only. `StrComp(S,'d',2)` fails 0x800A0005 on every row.
+  - `pat-10-13-character-boundaries`: `?` consumes one UTF-16 unit. The surrogate pair gives `??` -1 and Len 2, and lone D800 and DC00 each match `?` with Len 1. `#` matches U+FF11 but not U+0661, and `[0-9]` matches only ASCII.
+  - `pat-12-14-17-literal-shape`: `'A ' = 'A'` is -1 and `StrComp` gives 1. `LIKE 'A'` does not match "A " (it matches "A"/"a"), and NBSP and tab give eq 0. `LIKE 'MN'` matches only the whole subject (case-insensitive), and the p17 outcomes are exact with no failures.
+  - `pat-15-strcomp-selector`: `StrComp('a','A')`=0, selector 0 gives 1, selector 1 gives 0. Selectors 2, -1 and 1.5 fail 0x800A0005, 3 gives 0, 0.5 gives 1, and Null or 'x' fails 0x800A0D88.
+  - `pat-18-composition-and-folding`: decomposed e+U+0301 equals precomposed é under `=` and `StrComp(...,1)` (Len 2 vs 1), but `LIKE 'é'` does not match it. `ß = 'ss'` is -1. `ı` and `İ` equal neither "i" nor "I"; `UCase('ı')` and `LCase('İ')` return the same character. Half-width ｱ equals ア.
+- **Inventory/runtime**
+  - `host-routes-domain-eval`: `DLookup`, `DSum` and `DCount` work, but `Eval` fails 0x800A0C0D "Undefined function".
+  - `runtime-rnd-now`: `Rnd()` returns the same value in every row within one execution and different values across executions. `Rnd(Id)` differs per row, and `Rnd(0)` equals the preceding `Rnd()` in the same row. `Now()` is identical across rows and columns.
+  - `inv-string-functions`, `inv-date-and-info`, `inv-number-conversion-financial`: see the records for individual values. `IsArray` is undefined, and `VarType(1.5)` and `VarType(2147483648)` are 14.
+  - `bind-names-and-literals`: `[a!b]` as an alias fails 0x800A0C35. Four nesting forms fail 0x800A0C03 "Expression too complex" (at 32 levels or more).
+
+**Probe or fixture defects**
+
+- `r-expr-1-main` (`create-main`): `CREATE TABLE Vals ... DECIMAL(28,4)` failed 0x800A0CDC (3292), so Vals is missing. The 34 `r-expr-1-main` attempts that touch Vals report "cannot find input table or query 'Vals'" (0x800A0C06). Probes that do not touch Vals are identical to main2 apart from the attempt path (0–4 diff lines). Treat the `-main` records as superseded.
+- `r-expr-1-main2` (`create-main2`): the Decimal `Vals.M` value set failed 0x800A0EAF "Scaling of decimal value resulted in data truncation" and the row was still inserted. M is therefore Null everywhere (VarType 1, Type 20). All Decimal field results in `b-mixed-precedence` and `b-fixed-point-fidelity` measure a Null, so the Decimal fidelity discriminators are not answered.
+- `b-integer-conversion`: `SELECT ... CByte(D) AS d FROM Vals` fails 0x800A0C1F (alias `d` collides with field D). It tests the alias, not conversion.
+- `bind-parameter-lifecycle`, `pat-11-16-counted-nul-and-reuse`: the worker died with 0xC0000005 inside `lrs.Requery` and `prs.Requery`. The records have `execution=Uncertain` and `capture=Incomplete` and no trace, so `show` prints "record has no capture". They are blocked by the crash recorded in `r-crash-requery` (Requery on a QueryDef-opened recordset).
+- `d-predicate-consumers`: `FindFirst` ran on one recordset for every criterion in sequence, and each call fails 0x800A0BB9 with NoMatch -1. This does not separate "criterion not accepted" from recordset state after the first NoMatch.
+- `mut-validation-rules`: with V=5 only, bare-literal field rules (0, 2, True, False, ...) cannot show whether the rule value is read as a truth value or as a comparison to the field.
+- The first query of `a-null-empty-error-literals` on main (not main2) and several `a-optional-arguments` branches only record "undefined function" for `Nz` and `CVErr`.
+
+**Revisit**
+
+- Branch A: no real Error value was ever made (`CVErr` undefined), so `IsError(Error)`, Error consumers, optional-argument markers for functions that exist, and Find/validation with Error remain open. Array/object inputs are not covered.
+- Branch B: Decimal fidelity (high word, scale), numeric pairs through declared parameters, native fields and host code (only fields, literals and some parameters were run), and cases pairing the same payload with a different declared origin.
+- Branch C: Date/Time Extended, an indexed access versus a residual predicate, formatting.
+- Branch D: And/Or results fed to Find and to validation/default contexts, AllowZeroLength, Error-valued predicates.
+- Branch E: the `Nz` replacement matrix, marker-based effect order (no host route), prepared-plan/reprepare status, object default-member coercion.
+- EXPR-BIND: parameter lifecycle, SQL replacement and schema-change invalidation (crash), and the lack of an A/A repeat for any main2 attempt.
+- EXPR-STAGE and EXPR-MUTATION: no host markers, no clock/random defaults on a field, and no transaction rollback or `CancelUpdate`-after-default combinations.
+- Patterns: no second database option setting for PAT-01; ADO only for PAT-01; Binary/Text/Database profiles for PAT-03; PAT-11/16 (crash). PAT-17 timing, resource use and memo-state counters are not captured.
+- The loaded ACEDAO.DLL is 16.0.20527.20196, not the build the card names (20016). The card's expected-build wording needs reconciling.
+
+### r-crash-1-kill
+
+Scope: process termination only, with the OS and cache alive (`TerminateProcess` on writer A, the exit code recorded in every killed record is 32343). This is not power loss, and no write recording was done. Each kill point has an ACCDB (ACE 16.0.20527.20196) and an MDB variant. After the kill, process B waits 1.5 s, freezes the file bytes and then opens. All 32 kill records read as `execution=Terminated capture=Complete`. The 2 `create-*` records are `ReturnedSuccess` fixture builds, and no fixture with failed creation calls belongs to this card.
+
+**Observed**
+
+*Common to every ACE-first and Compact-first opener (B) in these probes*
+- B's `eng.OpenDatabase` returned hr=0 (shared read/write), and `eng.Errors().Count` was VT_I2 0 before and after the reads. B did not see an error, a repair request or an ACE error number in any record. Every compact-first `CompactDatabase` also returned hr=0 with Errors count 0, and the compacted output opened (read-only flag `VT_BOOL -1`).
+- Frozen lock file: 64 B in all shared-writer kills, hash `1f4a82a98356`, identical for `.laccdb` and `.ldb`. B read it natively (`ok read 64 bytes`). Its bytes are not displayed by `show`. The `after-opener` file listings list only the database file (plus the compacted file), so the lock file was absent after B's close.
+- A's database file was byte-identical (same hash) at the kill, in B's frozen copy and after B's open and close. B did not change the database file. In the compact-first probes the source stayed at its pre-kill hash, so nothing here says ACE repaired the source.
+
+*Kill with changes uncommitted or not yet committed (the file stayed at the fixture hash)*
+- `accdb-kill-txn-uncommitted-ace-first` / `mdb-kill-txn-uncommitted-ace-first`: after BeginTrans plus an UPDATE of ten rows (returned hr=0), B read COUNT 100 (VT_I4), SUM(N) 5050 (VT_R8), MAX(LEN(M)) 500, MAX(ID) 100, and rows 1–10 with N=ID. The fixture file hash was unchanged (ACCDB `18c44ffaf110`, MDB `8fd13bd956e2`).
+- `*-addnew-pending-*`: with AddNew and fields set but no Update, B saw the same 100/5050/500/100, with no row 9001 (MAX(ID)=100).
+- `*-edit-updated-ace-first`: after Edit, Value and Update returned hr=0 on a dynaset kept open, B still saw row 1 with `S="row"`, not the edited text. The file hash was unchanged.
+- `*-implicit-update-ace-first`: after `Execute` of the UPDATE (hr=0, dbFailOnError, no explicit transaction) and the kill, B saw SUM(N)=5050 and N=ID for rows 1–10. The file hash was unchanged at kill, at freeze and after B. The update was therefore not in the file 1.5 s after the kill, even though `Execute` had returned.
+- `*-lv-replace-ace-first`: after the 40,000-character memo UPDATE returned, B saw MAX(LEN(M))=500, so the replacement was not visible. The file hash was unchanged.
+- `*-bulk-insert-ace-first`: after `INSERT … SELECT` of 100 rows returned, B saw COUNT 100 (not 200) and MAX(ID) 100. The file hash was unchanged.
+- Compact-first from the uncommitted, AddNew-pending and LV-replace kill states (all 6 probes): the compacted output read 100 / 5050 / 500 / 100, with row 1 N=1. Compacted sizes were ACCDB 294,912 B and MDB 200,704 B, equal to the sources.
+
+*Kill after commit or Close*
+- `*-txn-committed-ace-first` (CommitTrans default): the file changed before the kill (ACCDB `24b5a4d29bf1`, MDB `51ec79af5fa0`). B saw SUM(N)=15050 and N=1001..1010.
+- `*-txn-committed-forceflush-ace-first` (CommitTrans(dbForceOSFlush), arg VT_I4 1): same hashes and same B result as the default commit.
+- `*-after-close-ace-first` (Close before the kill, control): same hashes and values as committed. No lock file was listed at kill or freeze.
+- In these probes, the default commit and the dbForceOSFlush commit are not distinguished by file hash or by what B saw.
+
+*DDL*
+- `*-ddl-create-ace-first`: after CREATE TABLE X and CREATE INDEX, the file had grown at kill (ACCDB 311,296 B `99fe4d3d1615`; MDB 217,088 B `72581f1683d1`). B's `TableDefs.Count` was VT_I2 7 (ACCDB) and 6 (MDB), against 6 and 5 for every other kill point. B's T data was unchanged (100 / 5050). The probe does not query table X itself.
+
+*Exclusive writer (`open-only`, `implicit-update`; both formats)*
+- B's native read of the lock file failed with Win32 error 2 at open, so no lock file was present after the kill. B's open succeeded and read the unchanged fixture (hash `18c44ffaf110` / `8fd13bd956e2`; SUM(N) 5050, N=ID). For `implicit-update-exclusive` the update was not visible, as in the shared case.
+- A's own `before-kill` file read failed with `IOException 0x80070020` (sharing violation), so the file state at kill was not captured. See below.
+
+*`open-only`*: reads were the unchanged fixture (100 / 5050 / 500 / 100), with hash unchanged and the lock file as above.
+
+**Probe or fixture defects**
+- Exclusive probes: A's `files[before-kill]` shows the database as `unread: IOException (HRESULT 0x80070020)` because the file is exclusively held. In these four records the pre-kill file state is missing. Only B's frozen hash is available.
+- No other harness or fixture defect was found. The `modules[deliberate-truncation]` lines are the intended kill instrumentation, not an error.
+
+**Revisit**
+- The aggregate rows and the first ten rows show nothing about whether the lost writes were really in ACE's own buffers. No write trace exists: the card's recording route and offline reconstruction are not covered.
+- Not covered: power loss, torn, partial or reordered writes, Access-first openers, and CalcDb cut images. Only ACE-first (shared, plus two exclusive points) and Compact-first (three points) were run. Compact-first was not run for the committed, forceflush, DDL, implicit, bulk-insert or edit-updated points.
+- The 1.5 s wait before freezing is a single timing sample. Whether the unwritten implicit-update, LV-replace and bulk-insert state could still reach the file later is untested. The fact that `Execute` returned without the data being on disk by 1.5 s is a single observation per format.
+- Process-kill points are untested for map-capacity transitions and splits, multi-file or nested Workspaces, concurrent lockers, rollback, and a kill during commit. The kill occurs only at API call boundaries, not between internal writes.
+- The 64-byte lock-file bytes were not compared between probes (only hashes). The lock file's content with the exclusive writer was not observable (no file).

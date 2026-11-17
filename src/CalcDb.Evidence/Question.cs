@@ -150,6 +150,8 @@ public enum DispatchKind
 [JsonDerivedType(typeof(TerminateSelf), "terminateSelf")]
 [JsonDerivedType(typeof(SetReadOnly), "setReadOnly")]
 [JsonDerivedType(typeof(WriteFileBytes), "writeFile")]
+[JsonDerivedType(typeof(OnThread), "onThread")]
+[JsonDerivedType(typeof(QueryInterfaces), "queryInterfaces")]
 public abstract record Operation
 {
     internal abstract void Write(CanonicalWriter w);
@@ -353,6 +355,34 @@ public sealed record WriteFileBytes(string File, string Hex) : Operation
     internal override void Write(CanonicalWriter w) => w.Begin("writeFile").Text("file", File).Text("hex", Hex);
 
     internal override void Validate(IReadOnlySet<string> inputRoles) => new NativeOpen("x", File, 0, 0, 0).CheckReference(inputRoles);
+}
+
+/// <summary>
+/// R-ACT-1 ACT-THREAD: run <see cref="Body"/> on a new thread initialised as <c>mta</c> or <c>sta</c> (no message
+/// pump), and wait for it. Objects the body binds are released on that thread when it ends; the body must not
+/// use objects bound on another thread (that would be unmarshalled cross-apartment use).
+/// </summary>
+public sealed record OnThread(string Apartment, IReadOnlyList<Operation> Body) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("onThread").Text("apartment", Apartment).List("body", Body, (cw, op) => op.Write(cw));
+
+    internal override void Validate(IReadOnlySet<string> inputRoles)
+    {
+        if (Apartment is not ("mta" or "sta"))
+        {
+            throw new EvidenceFormatException($"Apartment '{Apartment}' is not mta or sta.");
+        }
+        foreach (Operation op in Body)
+        {
+            op.Validate(inputRoles);
+        }
+    }
+}
+
+/// <summary>QueryInterface a bound object for each IID (braced GUIDs) and record which succeed.</summary>
+public sealed record QueryInterfaces(string Target, IReadOnlyList<string> Iids) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("queryInterfaces").Text("target", Target).List("iids", Iids, (cw, s) => cw.Text("iid", s));
 }
 
 /// <summary>A typed argument. The tag is part of the question key (T-EVID-01).</summary>

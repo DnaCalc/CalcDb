@@ -93,6 +93,7 @@ internal static class Show
             return "-";
         }
         string payload = v.Text is not null ? "\"" + v.Text + "\""
+            : v.Bytes is { Length: > 0 } raw ? $"bytes {(raw.Length > 96 ? raw[..96] + "…" : raw)} ({v.ByteLength} B)"
             : v.Integer ?? v.Display ?? v.Bits ?? v.Unsupported
                 ?? (v.Array is { } a ? $"[{string.Join(",", a.Bounds.Select(b => $"{b.LowerBound}+{b.Count}"))}] {(a.Bytes is { Length: > 96 } h ? h[..96] + "…" : a.Bytes)}" : null)
                 ?? (v.Identity is not null ? $"{v.Identity} {v.TypeName} {v.TypeIid}" : "");

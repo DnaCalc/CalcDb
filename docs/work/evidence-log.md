@@ -62,6 +62,25 @@ images.
 - Deferred (the card's main route): recording ACE writes and flushes, offline reconstruction, power-loss and
   torn-write models, Access-first openers, and the precise classification.
 
+### R-ACT-1 ACT-THREAD, SAME-STA and MTA-CREATE without a message pump — 6 records
+`evidence/r-act-1-thread`:
+- DAO.DBEngine.120 and its Database, created on the main STA, answer `E_NOINTERFACE` for IClientSecurity,
+  IMultiQI and IMarshal: direct objects.
+- Created from an MTA thread, both answer IClientSecurity, IMultiQI and IMarshal: COM returned a proxy to an
+  object in another apartment, consistent with Apartment registration. Calls work through it, and a 3011
+  failure arrives with the same EXCEPINFO scode and source (`0x800A0BC3`, `DAO.Database`).
+- ADODB.Connection created from an MTA answers IMarshal but not IClientSecurity: not a proxy.
+- Deferred: OWNER-BUSY, RAW-UNMARSHALLED, FINAL-RELEASE, ENGINE-IDENTITY, LOCAL-CONFLICT with two caller
+  threads, and the managed caller lanes.
+
+### R-LOCK-1 EX-PERM, R-LOCK-2 RO-PERM with file attributes — 10 records
+`evidence/r-lock-perm`, ACCDB and MDB alike:
+- On a read-only database file, DAO opens in read/write modes fail with 3051 (`0x800A0BEB`), and read-only
+  modes open and read.
+- A read-only lock file present before the first open adds 3050 (`0x800A0BEA`, could not lock file).
+- A stale 64-byte lock file of zeros present before the first open stops none of the four modes.
+- Deferred: ACLs, folder permissions and network shares.
+
 ### R-LOCK-1/2 (native_open_probe, native_reader_probe)
 - Two-process mode built tonight (participants with barriers, W-PROBE native driver). First observation:
   DAO exclusive read/write in one process makes another process's DAO shared read-only open fail with

@@ -1,0 +1,158 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-act-1-thread/ado-new-mta",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-THREAD",
+    "SAME-STA",
+    "MTA-CREATE",
+    "R-ADO-1"
+  ],
+  "description": "ADODB.Connection created on a new MTA thread: the thread's apartment, QueryInterface results, Version and State, then a deliberate Open of an absent ACE database (Provider=Microsoft.ACE.OLEDB.12.0) with the Connection's Errors collection, then release.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "onThread",
+      "apartment": "mta",
+      "body": [
+        {
+          "op": "create",
+          "progId": "ADODB.Connection",
+          "bind": "cn"
+        },
+        {
+          "op": "observeModules",
+          "label": "after-create"
+        },
+        {
+          "op": "queryInterfaces",
+          "target": "cn",
+          "iids": [
+            "{00000000-0000-0000-C000-000000000046}",
+            "{00020400-0000-0000-C000-000000000046}",
+            "{0000013D-0000-0000-C000-000000000046}",
+            "{00000020-0000-0000-C000-000000000046}",
+            "{00000003-0000-0000-C000-000000000046}",
+            "{00000018-0000-0000-C000-000000000046}",
+            "{94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90}",
+            "{00000021-0000-0010-8000-00AA006D2EA4}"
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Version",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "State",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Open",
+          "kind": "method",
+          "args": [
+            {
+              "type": "bstr",
+              "text": "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=C:\\CalcDbProbe\\absent\\absent.accdb"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "Errors",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "cerrs"
+        },
+        {
+          "op": "forEachItem",
+          "target": "cerrs",
+          "bind": "ce",
+          "maxItems": 8,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "ce",
+              "member": "Number",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ce",
+              "member": "Description",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ce",
+              "member": "Source",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ce",
+              "member": "SQLState",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "ce",
+              "member": "NativeError",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "cerrs"
+        },
+        {
+          "op": "invoke",
+          "target": "cn",
+          "member": "State",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "release",
+          "target": "cn"
+        }
+      ]
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    }
+  ]
+}

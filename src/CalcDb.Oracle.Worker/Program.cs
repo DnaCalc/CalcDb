@@ -223,6 +223,12 @@ internal sealed unsafe class Run : IDisposable
                 case WriteFileBytes wf:
                     _events.Add(_native.WriteBytes(++_seq, path, wf));
                     break;
+                case QueryInterfaces qi:
+                    DoQueryInterfaces(qi, path);
+                    break;
+                case OnThread onThread:
+                    DoOnThread(onThread, path);
+                    break;
                 case Pause pause:
                     Thread.Sleep(pause.Ms);
                     _events.Add(new SyncEvent { Seq = ++_seq, ProgramPath = path, Kind = "pause", Name = pause.Ms.ToString(CultureInfo.InvariantCulture) + " ms", AtUtc = DateTimeOffset.UtcNow });
@@ -263,6 +269,78 @@ internal sealed unsafe class Run : IDisposable
         Trace(path, "TerminateProcess");
         Program.WriteCapture(_attemptDir, _attempt, _participant == "a" ? "" : "." + _participant, capture);
         _ = Native.TerminateProcess(Native.GetCurrentProcess(), (uint)exitCode);
+    }
+
+    private void DoQueryInterfaces(QueryInterfaces qi, string path)
+    {
+        if (!_bound.TryGetValue(qi.Target, out nint obj))
+        {
+            _events.Add(new SkippedEvent { Seq = ++_seq, ProgramPath = path, Reason = $"Target '{qi.Target}' is not bound." });
+            return;
+        }
+        var results = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string iid in qi.Iids)
+        {
+            int hr = Native.QueryInterface(obj, Guid.Parse(iid), out nint p);
+            if (hr >= 0 && p != 0)
+            {
+                Native.Release(p);
+            }
+            results[iid] = Native.Hr(hr);
+        }
+        _events.Add(new InterfacesEvent { Seq = ++_seq, ProgramPath = path, Target = qi.Target, Results = results });
+    }
+
+    /// <summary>Run a block on a new thread of the requested apartment; its own binds are released there.</summary>
+    private void DoOnThread(OnThread block, string path)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            uint coinit = block.Apartment == "mta" ? 0x0u : 0x2u; // COINIT_MULTITHREADED / COINIT_APARTMENTTHREADED
+            int hr = Native.CoInitializeEx(0, coinit);
+            int aptHr = Native.CoGetApartmentType(out int aptType, out int aptQualifier);
+            _events.Add(new ThreadEvent
+            {
+                Seq = ++_seq, ProgramPath = path, Kind = "start", Requested = block.Apartment, CoInitializeHresult = Native.Hr(hr),
+                ApartmentType = aptHr < 0 ? Native.Hr(aptHr) : $"type {aptType} qualifier {aptQualifier}", ThreadId = (int)Native.GetCurrentThreadId(),
+            });
+            var before = new HashSet<string>(_bindOrder, StringComparer.Ordinal);
+            try
+            {
+                RunProgram(block.Body, path + ".");
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+            for (int i = _bindOrder.Count - 1; i >= 0; i--)
+            {
+                if (!before.Contains(_bindOrder[i]))
+                {
+                    DoRelease(_bindOrder[i], path + ".end", isImplicit: true);
+                }
+            }
+            _events.Add(new ThreadEvent { Seq = ++_seq, ProgramPath = path, Kind = "end", Requested = block.Apartment, ThreadId = (int)Native.GetCurrentThreadId() });
+            if (hr >= 0)
+            {
+                Native.CoUninitialize();
+            }
+        });
+        if (block.Apartment == "sta")
+        {
+            thread.SetApartmentState(ApartmentState.STA);
+        }
+        else
+        {
+            thread.SetApartmentState(ApartmentState.MTA);
+        }
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+        {
+            throw new InvalidOperationException("onThread body failed", failure);
+        }
     }
 
     private void DoCreate(CreateObject create, string path)
