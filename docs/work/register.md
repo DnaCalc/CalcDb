@@ -14,6 +14,7 @@ done, listed) · `ready` (all prerequisites done) · `blocked` (waiting on the n
 `not started`. A status says what is built or observed. An ACE behaviour is qualified only by a note in
 [qualified.md](qualified.md), under the rule of The Plan §8.1.
 [qualification-report.md](qualification-report.md) gives the status of every card branch and construction slice.
+Where evidence contradicts the book, the proposed book change is in [book-proposals.md](book-proposals.md).
 
 ## Milestone: W-01 / R-ORACLE-1 first result (The Plan §6)
 
@@ -51,8 +52,8 @@ with the slice's own remaining branches listed.
 | P1 | 3 | W-03/read-cache | M, initial | W-03/positioned-native, W-03/cache-algorithms | — | partial, usable as a start input: `FilePageSource` puts the cache over the native adapter (incarnation, domain and extent checks before any read; full-page reads only); open: as W-03/positioned-native | `kncn` |
 | P1 | 3 | W-04/row-catalog-algorithms | L, initial | W-03/cache-algorithms, W-04/description-inspector | — | partial, usable as a start input: text grammar (`TextCodec`), long-value plans and bounded traversal, overflow resolution keeping root identity, owned-map scans, typed native field values (`CalcDb.Isam`), catalog bootstrap from page 2 with fields bound by name and type, namespaces discovered, ambiguity kept, encrypted files refused as NotPlaintext (`CalcDb.Catalog`); native sweep: 1,686 retained oracle databases bootstrap (27 not plaintext), 3,011 LvProp values traverse to MR2 blobs, T1 reads exactly as DAO did; open: MR2 property sections (CAT-P), query records (CAT-Q), Decimal and Extended Date/Time codecs, calculated wrappers, identifier equality for name lookup, encryption detection from header fields (R-ENC-1 ENC-PROFILE) | `x4cx` |
 | P1 | 4 | W-04/rows-catalog-read | L, initial | W-03/read-cache, W-04/row-catalog-algorithms | — | partial, usable as a start input: the same algorithms over `FilePageSource` and `WindowsFile` on a real file (catalog and T1 read through the native adapter); open: as W-04/row-catalog-algorithms | `7djx` |
-| P1 | 4 | W-04/cursor-algorithms | M, initial | W-04/row-catalog-algorithms | — | ready | `w98c` |
-| P1 | 5 | W-04/table-cursor | M, initial | W-02/native-declarations-values, W-04/rows-catalog-read, W-04/cursor-algorithms | — | not started | `bnj6` |
+| P1 | 4 | W-04/cursor-algorithms | M, initial | W-04/row-catalog-algorithms | — | partial, usable as a start input: `ScanNavigator` (owned-page root traversal both ways, empty pages skipped, bodies never candidates), `RowToken`, `TableBookmark` (matches ACE's table-type bookmarks at six ordinals of the 2048-row fixture), `PositionState` (the qualified CUR-POS rule set; NoMatch cleared by Move as ACE does, see book-proposals.md), `OccurrenceStore` (the CUR-POP frontier, shared by clones per CUR-LIFE); open: retained views and visibility (W-03/private-images-coherence), deleted-current transitions (3021/3167), AbsolutePosition/PercentPosition, Requery, dynaset bookmark numbering (not required to match) | `w98c` |
+| P1 | 5 | W-04/table-cursor | M, initial | W-02/native-declarations-values, W-04/rows-catalog-read, W-04/cursor-algorithms | — | ready | `bnj6` |
 | P1 | 6 | W-08/native-read | M, initial | W-04/table-cursor, W-08/factory-host-core | — | not started | `thhj` |
 | P1 | 7 | W-01/dao-cost | M, continuous | W-01/corpus-comparison, W-08/native-read | — | not started | `kmxv` |
 | P2 | 1 | W-03/private-images-coherence | M, initial | W-03/cache-algorithms | — | ready | `gcvf` |
