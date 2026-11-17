@@ -56,15 +56,15 @@ unless retained evidence says so (The Plan §8).
 | **W-08/native-read**: first joined goal | M | W-08/factory-host-core, W-04/table-cursor | blocked | — | — |
 | W-01/dao-cost (R-STRING-1) | M | W-01/corpus-comparison, W-08/native-read | blocked | — | — |
 
-## Oracle service (proposed, [oracle-service.md](oracle-service.md); D-ORACLE-1)
+## Oracle service (approved 2026-11-17, [oracle-service.md](oracle-service.md); D-ORACLE-1)
 
 | Step | Depends on | Status | Task |
 | --- | --- | --- | --- |
-| 1. Long-lived worker protocol, reset and prehistory | W-01/capture-core | waiting for owner review of the design | `tdt9` |
+| 1. Long-lived worker protocol, reset and prehistory | W-01/capture-core | ready | `tdt9` |
 | 2. Windows broker: queue, batcher, answer cache, pool, logs, status | step 1 | blocked | — |
 | 3. Crash bisection, isolation worker, crash budget | step 2 | blocked | `npmg` |
 | 4. Relay and Linux client | step 2 | blocked | — |
-| 5. Private-desktop launcher and guard for every start path | — | ready | `b8sx` |
+| 5. Private-desktop launcher and guard for every start path | — | partial: the owned-attempt runner has both; the broker, pooled workers and Office processes do not exist yet | `b8sx` |
 | 6. Continuous leakage checks (OR-REUSE) | steps 1–2 | blocked | `tdt9` |
 
 Later rows (W-05 to W-12, browser and later packages) enter this register when one of their
