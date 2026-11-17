@@ -129,6 +129,44 @@ then X1 and X2 (U2, no Office). The U1 experiments follow only if they still loo
 the gate (same ACE build, activation, byte and lock-file fidelity), then W5, W8, W9, and W7 under the macro policy. A
 recommendation is made per use: U2 after W1, W6, X1 and X2; U1 after W1, W3, W4 and W8 (tier 1) and W5 and W6 (tier 2).
 
+## Results
+
+### mxc v1.1.0, 2026-11-17 (owner approved download, run and telemetry)
+
+Release archive `mxc-release-binaries.zip`, SHA-256 `31A44963…37B3`, unpacked outside the repository; every x64 binary
+carries a valid Microsoft Corporation Authenticode signature. Every run went through `calcdb-oracle desktop-run`, which
+starts the command on a private desktop inside a kill-on-close job and records the visible windows of every process in
+the job. No window was recorded on the owner's desktop in any run.
+
+- **M1, backend probe** (`wxc-exec --probe`): tier `base-container`, `needsDaclAugmentation` false, every UI block
+  available (clipboard, input injection, desktop switching and others), isolation sessions and Hyperlight available.
+- **M2, ACE in `processcontainer`.** The target was PowerShell creating `DAO.DBEngine.120`, making an ACCDB in the
+  granted scratch folder, adding a table and a row and reading it back. Three runs:
+  - UI disabled (the default): PowerShell cannot start, `STATUS_DLL_INIT_FAILED` (`0xC0000142`); it needs Win32k.
+  - UI enabled, on our usual private desktop: the same failure. That desktop's default security admits only the
+    owner and SYSTEM.
+  - UI enabled, on a second private desktop whose DACL also grants ALL APPLICATION PACKAGES and ALL RESTRICTED
+    APPLICATION PACKAGES: **ACE works.** `DBEngine.Version` 16.0, the database created, the row read back as `1,abc`,
+    2.3 s for the whole container run. So a container's processes land on the desktop they are launched on, provided
+    that desktop admits AppContainer identities.
+- **M2, the boundary** (same container policy, only the scratch folder granted read-write). The process runs as a
+  Low-integrity AppContainer, with TEMP in a per-run folder under `AppData\Local\Packages\sandbox.{…}\AC\Temp`.
+  Denied: writing next to the scratch folder or into the repository, reading the repository's README, listing the
+  user profile, and DNS for an internet name. Allowed: reading the Office binaries (`ACEDAO.DLL` has the host's size).
+  No file appeared outside the scratch folder.
+- **A probe defect, corrected.** The first boundary run reported every write as "ok". Its PowerShell script did not
+  set `$ErrorActionPreference = 'Stop'`, so refused operations were non-terminating errors and passed as success.
+  The rerun with terminating errors gave the denials above. Rule for these experiments: make every refusal raise.
+
+What M2 does not show: whether ACE's answers inside equal the host oracle's. PowerShell late binding is not our raw
+IDispatch lane. The next step is to run the oracle worker itself in the container, under the same policy, and compare
+its capture with a retained record. M3's `CreateDesktop` from inside, M4 (the ODBC dialog) and M5 (what survives a
+stop) are still to run.
+
+For U2 and U3 this is already a usable shape. A Low-integrity AppContainer on a private desktop, with one granted
+folder and no network, could run ACE and our own code with a narrow, enforced boundary, at about one to three seconds
+per container start.
+
 ## Where the sources are silent
 
 Office, COM and GUI programs inside mxc; mxc's reset and edition requirements; Windows Sandbox start times, snapshots,

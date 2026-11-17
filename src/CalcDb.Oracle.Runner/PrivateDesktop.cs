@@ -17,16 +17,53 @@ namespace CalcDb.Oracle.Runner;
 internal static partial class PrivateDesktop
 {
     public const string Name = "CalcDbOracle";
-    private static readonly Lazy<nint> Desktop = new(Create);
+
+    /// <summary>
+    /// A second private desktop for isolation experiments whose processes run under an AppContainer identity (an mxc
+    /// process container): its DACL also grants ALL APPLICATION PACKAGES (S-1-15-2-1) and ALL RESTRICTED APPLICATION
+    /// PACKAGES (S-1-15-2-2), which the default desktop security does not. Oracle workers never use it.
+    /// </summary>
+    public const string ContainerName = "CalcDbOracleContainers";
+
+    private const string ContainerSddl = "D:(A;;GA;;;SY)(A;;GA;;;OW)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)";
+    private static readonly Lazy<nint> Desktop = new(() => Create(Name, null));
+    private static readonly Lazy<nint> ContainerDesktop = new(() => Create(ContainerName, ContainerSddl));
 
     /// <summary>The desktop handle, opened once for the runner's lifetime.</summary>
     public static nint Handle => Desktop.Value;
 
-    private static nint Create()
+    public static nint HandleOf(string desktop) => desktop == ContainerName ? ContainerDesktop.Value : Desktop.Value;
+
+    private static nint Create(string name, string? sddl)
     {
         const uint GenericAll = 0x10000000;
-        nint h = CreateDesktopW(Name, 0, 0, 0, GenericAll, 0);
-        return h != 0 ? h : throw new Win32Exception(Marshal.GetLastPInvokeError(), "CreateDesktop failed");
+        nint sd = 0;
+        if (sddl is not null && !ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out sd, 0))
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "security descriptor");
+        }
+        try
+        {
+            var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = sd, InheritHandle = 0 };
+            nint saPtr = Marshal.AllocHGlobal(Marshal.SizeOf<SecurityAttributes>());
+            try
+            {
+                Marshal.StructureToPtr(sa, saPtr, false);
+                nint h = CreateDesktopW(name, 0, 0, 0, GenericAll, sd == 0 ? 0 : saPtr);
+                return h != 0 ? h : throw new Win32Exception(Marshal.GetLastPInvokeError(), "CreateDesktop failed");
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(saPtr);
+            }
+        }
+        finally
+        {
+            if (sd != 0)
+            {
+                _ = LocalFree(sd);
+            }
+        }
     }
 
     /// <summary>A launched, still suspended worker: its handles and the write end of its stdin pipe.</summary>
@@ -63,9 +100,9 @@ internal static partial class PrivateDesktop
         }
     }
 
-    public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath)
+    public static Launched StartSuspended(string exe, IReadOnlyList<string> args, string workingDirectory, string logPath, string desktop = Name)
     {
-        _ = Handle;
+        _ = HandleOf(desktop);
         var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), InheritHandle = 1 };
         if (!CreatePipe(out SafeFileHandle readEnd, out SafeFileHandle writeEnd, ref sa, 0))
         {
@@ -80,7 +117,7 @@ internal static partial class PrivateDesktop
         var si = new StartupInfo
         {
             Cb = Marshal.SizeOf<StartupInfo>(),
-            Desktop = "WinSta0\\" + Name,
+            Desktop = "WinSta0\\" + desktop,
             Flags = 0x100, // STARTF_USESTDHANDLES
             StdInput = readEnd.DangerousGetHandle(),
             StdOutput = log.DangerousGetHandle(),
@@ -102,12 +139,12 @@ internal static partial class PrivateDesktop
     }
 
     /// <summary>Top-level windows of the given processes on the owner's desktop and on the private desktop.</summary>
-    public static (List<string> OnUserDesktop, List<string> OnPrivateDesktop) WindowsOf(IReadOnlySet<int> pids)
+    public static (List<string> OnUserDesktop, List<string> OnPrivateDesktop) WindowsOf(IReadOnlySet<int> pids, string desktop = Name)
     {
         var user = new List<string>();
         var priv = new List<string>();
         EnumWindows((hwnd, _) => { Note(hwnd, pids, user); return true; }, 0);
-        EnumDesktopWindows(Handle, (hwnd, _) => { Note(hwnd, pids, priv); return true; }, 0);
+        EnumDesktopWindows(HandleOf(desktop), (hwnd, _) => { Note(hwnd, pids, priv); return true; }, 0);
         return (user, priv);
     }
 
@@ -157,6 +194,12 @@ internal static partial class PrivateDesktop
         public nint Process, Thread;
         public int ProcessId, ThreadId;
     }
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, uint revision, out nint sd, nint size);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint LocalFree(nint h);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint CreateDesktopW(string name, nint device, nint mode, int flags, uint access, nint sa);

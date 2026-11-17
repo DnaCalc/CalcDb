@@ -33,6 +33,10 @@ internal static class Program
             Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch [options]");
             return 2;
         }
+        if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
+        {
+            return DesktopRun.Run(args);
+        }
         var options = Options.Parse(args.Skip(1));
         string repo = RepositoryRoot();
         string evidenceDir = Path.Combine(repo, "evidence");

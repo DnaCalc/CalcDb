@@ -130,7 +130,7 @@ internal static partial class OwnedWorker
     }
 
     [SupportedOSPlatform("windows")]
-    private sealed partial class JobObject : IDisposable
+    internal sealed partial class JobObject : IDisposable
     {
         private const int JobObjectExtendedLimitInformation = 9;
         private const uint JobObjectLimitKillOnJobClose = 0x2000;
@@ -152,6 +152,33 @@ internal static partial class OwnedWorker
             bool ok = AssignProcessToJobObject(_handle, process);
             error = ok ? 0 : Marshal.GetLastPInvokeError();
             return ok;
+        }
+
+        /// <summary>The ids of every process now in the job, children included (JobObjectBasicProcessIdList).</summary>
+        public HashSet<int> ProcessIds()
+        {
+            const int JobObjectBasicProcessIdList = 3;
+            int capacity = 256;
+            nint buffer = Marshal.AllocHGlobal(8 + (capacity * nint.Size));
+            try
+            {
+                Marshal.WriteInt32(buffer, capacity);
+                if (!QueryInformationJobObject(_handle, JobObjectBasicProcessIdList, buffer, (uint)(8 + (capacity * nint.Size)), 0))
+                {
+                    return [];
+                }
+                int count = Marshal.ReadInt32(buffer, 4);
+                var ids = new HashSet<int>();
+                for (int i = 0; i < count; i++)
+                {
+                    _ = ids.Add((int)Marshal.ReadIntPtr(buffer, 8 + (i * nint.Size)));
+                }
+                return ids;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
         }
 
         public void Dispose()
@@ -177,6 +204,10 @@ internal static partial class OwnedWorker
         [LibraryImport("kernel32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static partial bool CloseHandle(nint handle);
+
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool QueryInformationJobObject(nint job, int infoClass, nint info, uint length, nint returnLength);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct BasicLimitInformation

@@ -103,6 +103,12 @@ src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-inde
 src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe verify
 ```
 
+For an experiment that is not an oracle question but must keep every window off the owner's desktop (an isolation
+environment, a tool under test), `calcdb-oracle desktop-run [--timeout S] [--log FILE] [--container-desktop] -- EXE
+ARGS` runs the command on the private desktop inside a kill-on-close job and reports the visible windows of every
+process in the job, children included. Use `--container-desktop` for AppContainer processes such as an mxc process
+container: that second private desktop also admits the AppContainer groups (isolated-environments.md, M2).
+
 The store lives in `.oracle-runs/` (ignored by git): transient attempts, dry runs and
 failures stay there. Only `retain` writes to `evidence/`, and it never overwrites a record.
 Retain a capture because it shows something about ACE, including surprising or negative
