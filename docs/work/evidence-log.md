@@ -4,8 +4,9 @@ What has been asked of ACE, what was retained, and what remains open, card by ca
 (the native starter graph, [II-16 §25](../book/II-16-development.md), F-223). Captures and records are in
 `evidence/<card>/`; probe definitions in [tools/CalcDb.Probes/Cards](../../tools/CalcDb.Probes/Cards); generated
 questions in `probes/<card>/`. A retained record is a complete capture of ACE's answer to one designed
-question; a "ReturnedFailure" record is an ACE error answer, not a failed test. Nothing here claims CalcDb
-compatibility (The Plan §8 (b) and (c) only).
+question; a "ReturnedFailure" record is an ACE error answer, not a failed test. These are observations (The Plan §8 (b)); a
+behaviour counts as qualified (c) only through a note in [qualified.md](qualified.md), and nothing here claims
+CalcDb compatibility (d).
 
 Environment for all records so far: Windows 11 x64, Office C2R x64 16.0.20527.20196, ACEDAO.DLL
 16.0.20527.20196 (ACEERR 16.0.20527.20016, ACEINTL 16.0.20326.20022), caller `native-idispatch/x64`

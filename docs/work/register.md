@@ -10,8 +10,8 @@ register only points to them. Update a row when its status changes; do not copy 
 
 **Status:** `done` (implemented and verified for the stated scope) · `partial` (some branches
 done, listed) · `ready` (all prerequisites done) · `blocked` (waiting on the named row) ·
-`not started`. A status says what is built or observed, never that ACE behaviour is qualified
-unless retained evidence says so (The Plan §8).
+`not started`. A status says what is built or observed. An ACE behaviour is qualified only by a note in
+[qualified.md](qualified.md), under the rule of The Plan §8.1.
 
 ## Milestone: W-01 / R-ORACLE-1 first result (The Plan §6)
 
@@ -74,8 +74,8 @@ start inputs becomes `ready`; until then the construction index is their record.
 
 Records are complete captures of ACE's answers to designed probes (an error answer is an observation, not a
 failed test). Findings and open items are in [evidence-log.md](evidence-log.md); per-card digests in
-[evidence-summaries.md](evidence-summaries.md). "Partial" means some branches have evidence; no ACE behaviour
-is called qualified here.
+[evidence-summaries.md](evidence-summaries.md). "Partial" means some branches have evidence; qualified behaviours
+are in [qualified.md](qualified.md).
 
 | Graph result | Cards | Evidence folders (records) | Status |
 | --- | --- | --- | --- |

@@ -132,6 +132,35 @@ Choose each at the first real dependency boundary, document the choice briefly, 
 
 ## 8. Definition of meaningful progress
 
-Track separately (a) a tool or subsystem implemented, (b) a meaningful Access observation captured and retained, (c) an ACE behavior qualified, (d) a CalcDb behavior demonstrated compatible in the relevant client lane, and (e) complexity/performance characterized. None automatically implies the next. Report limits and significant negative ACE outcomes honestly without preserving every failed tooling attempt. Maintain the Book's existing scope, qualification language, and unmet experimental obligations.
+Track separately (a) a tool or subsystem implemented, (b) a meaningful Access observation captured and retained, (c) an ACE behavior qualified, (d) a CalcDb behavior demonstrated compatible in the relevant client lane, and (e) complexity/performance characterized. None automatically implies the next. Report limits and significant negative ACE outcomes honestly without preserving every failed tooling attempt. Maintain the Book's existing scope, qualification language, and unmet experimental obligations. Section 8.1 says when an ACE behavior counts as qualified.
+
+### 8.1 Qualifying an ACE behavior
+
+**The reference build.** The ACE installation under test, identified by OR-IDENT (today Office Click-to-Run
+16.0.20527.20196 x64), is representative enough for our development work. CalcDb libraries that behave like this one
+version and build are the acceptable goal. Qualification never waits for other builds, and we do not explore other
+builds proactively.
+
+**Differences between builds are of high interest when they appear.** If documentation, notes, KB articles, bug
+reports, or later runs against another version show that a behavior varies across ACE versions or builds, record it at
+once, confirm its details by test, and note the discrepancy beside the qualified behavior, naming both builds and their
+records.
+
+**What qualified means.** An ACE behavior is qualified for the reference build when designed probes have established
+its shape:
+
+- the variants that decide the rule were each asked, one element varied at a time;
+- a result at a timing boundary was repeated;
+- no retained record contradicts it, and any competing explanation the records suggested was ruled out by a
+  discriminating probe.
+
+It does not require testing every possible argument value. A single case is an observation, not a qualified behavior;
+a well-chosen handful that covers the boundaries is enough.
+
+**Process relief.** Qualification is a short note: the claim, its conditions, the supporting and discriminating
+records, and the open follow-up questions. Write it as soon as the records support the claim. Follow-up questions are
+normal and do not block it; a later contradicting record reopens it. The further probes a claim needs to become
+qualified are run at high priority, in the next batch, without undue delay. There is no separate approval step; the
+notes are checked like other work (Section 5), and the owner is asked only when the evidence conflicts.
 
 **In short:** the Book defines what to learn and build; CodeAlta initially coordinates how agents work; .NET 11 tooling probes Access and automatically captures useful observations; Windows hosts the real ACE oracle while agents may work from Linux; idiomatic C# tests the full architectural hypothesis without being constrained by Rust; and a continuous, measured improvement loop refines our tools, skills, coding process, and ultimately the next design.
