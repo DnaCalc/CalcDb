@@ -121,7 +121,8 @@ internal abstract unsafe class DaoObject : DispatchObject
         return CallResult.OfOwnedObject(head);
     }
 
-    public static CallResult Text(string text) => CallResult.Of(OwnedVariant.FromText(text));
+    /// <summary>A string result as an inline owned BSTR of its exact units (no OwnedVariant; task hdw6).</summary>
+    public static CallResult Text(string text) => CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Length, text, static (dest, s) => s.AsSpan().CopyTo(dest)));
 
     public static CallResult Int16(int value) => CallResult.OfScalar(VarType.I2, (short)value);
 

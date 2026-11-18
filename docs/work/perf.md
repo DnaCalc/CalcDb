@@ -160,6 +160,13 @@ parked wrappers at its own release). Same seeds, against ACE (pass 4):
 
 The compared questions give identical per-question differences before and after.
 
+String properties (`Name` and the others, `DaoObject.Text`) return the same inline owned BSTR as `Field.Value`; the
+compared questions are unchanged.
+
+Page pins stay objects for now. Making them values changes every holder (holds, row views, the catalog), and pooling
+the objects is unsafe: a stale holder would read a reused pin's new page instead of failing. Scattered reads pay about
+96 bytes per page change.
+
 **Where the same habits apply next**
 - About 240 bytes per row remain in the named body's Fields and Item calls, not yet attributed.
 - A page pin is an object (`PagePin`, about 96 bytes): scattered reads (Seek, bookmarks) pay one per page change.
