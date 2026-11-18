@@ -7,10 +7,11 @@ using CalcDb.Foundation.Windows;
 namespace CalcDb.Com.Com;
 
 /// <summary>
-/// An operation's result: an owned value, an inline scalar, nothing, or a failure. Both adapters reach the same
-/// operation (II-13 §3). An inline scalar is a VARIANT that owns no resource (a number, a date, a Boolean, Null): the
-/// adapters copy it into the caller's slot, so a scalar getter allocates nothing (task 6p9q). A value that owns a
-/// resource (BSTR, array, object) is an OwnedVariant.
+/// An operation's result: an owned value, an inline VARIANT, nothing, or a failure. Both adapters reach the same
+/// operation (II-13 §3). An inline VARIANT is written to the caller's slot without an object: a scalar that owns no
+/// resource (a number, a date, a Boolean, Null; task 6p9q), or a BSTR the result owns (task n7mw), which the adapter
+/// moves into the slot or frees when the caller takes no result. Other values that own a resource (arrays, objects)
+/// are an OwnedVariant.
 /// </summary>
 internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure)
 {
@@ -18,7 +19,28 @@ internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure
 
     public bool HasScalar { get; private init; }
 
+    /// <summary>The inline VARIANT owns its BSTR: whoever does not move it to the caller frees it.</summary>
+    public bool OwnsScalar { get; private init; }
+
     public static CallResult Of(OwnedVariant value) => new(value, null);
+
+    /// <summary>An inline VT_BSTR result that takes ownership of <paramref name="bstr"/>.</summary>
+    public static CallResult OfOwnedBstr(nint bstr)
+    {
+        NativeVariant v = default;
+        v.Vt = (ushort)VarType.Bstr;
+        v.Pointer = bstr;
+        return new CallResult(null, null) { Scalar = v, HasScalar = true, OwnsScalar = true };
+    }
+
+    /// <summary>Frees an owned inline result that was not moved to a caller.</summary>
+    public void ReleaseUntaken()
+    {
+        if (OwnsScalar)
+        {
+            Bstrs.Free(Scalar.Pointer);
+        }
+    }
 
     /// <summary>A scalar result; <paramref name="value"/> must own no resource.</summary>
     public static CallResult OfScalar(VarType type, long payload)
@@ -127,8 +149,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         {
             return HResults.S_OK;
         }
-        string name = new(names[0]);
-        MemberDecl[] members = Declaration.Members.Where(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        MemberDecl[] members = Declaration.MembersNamed(MemoryMarshal.CreateReadOnlySpanFromNullTerminated(names[0]));
         int hr = HResults.S_OK;
         ids[0] = members.Length == 0 ? -1 : members[0].MemberId;
         if (members.Length == 0)
@@ -137,7 +158,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         }
         for (uint i = 1; i < count; i++)
         {
-            string p = new(names[i]);
+            ReadOnlySpan<char> p = MemoryMarshal.CreateReadOnlySpanFromNullTerminated(names[i]);
             int index = -1;
             foreach (MemberDecl m in members)
             {
@@ -156,11 +177,11 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         return hr;
     }
 
-    private static int IndexOf(IReadOnlyList<ParamDecl> parameters, string name)
+    private static int IndexOf(IReadOnlyList<ParamDecl> parameters, ReadOnlySpan<char> name)
     {
         for (int k = 0; k < parameters.Count; k++)
         {
-            if (string.Equals(parameters[k].Name, name, StringComparison.OrdinalIgnoreCase))
+            if (name.Equals(parameters[k].Name, StringComparison.OrdinalIgnoreCase))
             {
                 return k;
             }
@@ -260,6 +281,10 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                 {
                     *result = outcome.Scalar;
                     CostCounters.Current.ResultValues++;
+                }
+                else
+                {
+                    outcome.ReleaseUntaken();
                 }
             }
             else if (outcome.Value is { } value)
@@ -463,8 +488,12 @@ internal static unsafe class TypedCall
             {
                 if (retval != 0)
                 {
-                    StoreScalar(member.ReturnType, outcome.Scalar, retval);
+                    StoreScalar(member.ReturnType, outcome, retval);
                     CostCounters.Current.ResultValues++;
+                }
+                else
+                {
+                    outcome.ReleaseUntaken();
                 }
             }
             else if (outcome.Value is { } value)
@@ -552,14 +581,30 @@ internal static unsafe class TypedCall
         }
     }
 
-    /// <summary>An inline scalar written by the declared return type (it owns nothing, so it is copied).</summary>
-    private static void StoreScalar(string returnType, NativeVariant v, nint retval)
+    /// <summary>
+    /// An inline VARIANT written by the declared return type: a scalar is copied, an owned BSTR moves to the caller as a
+    /// VARIANT or a BSTR (and is freed under any other declared type, which is then a defect).
+    /// </summary>
+    private static void StoreScalar(string returnType, in CallResult outcome, nint retval)
     {
+        NativeVariant v = outcome.Scalar;
+        if (outcome.OwnsScalar && returnType == "VT_BSTR")
+        {
+            *(nint*)retval = v.Pointer;
+            return;
+        }
+        if (returnType == "VT_VARIANT")
+        {
+            *(NativeVariant*)retval = v;
+            return;
+        }
+        if (outcome.OwnsScalar)
+        {
+            outcome.ReleaseUntaken();
+            throw new InvalidOperationException($"no typed return rule for an owned BSTR as {returnType}");
+        }
         switch (returnType)
         {
-            case "VT_VARIANT":
-                *(NativeVariant*)retval = v;
-                return;
             case "VT_I2" or "VT_BOOL":
                 *(short*)retval = (short)v.Int64;
                 return;

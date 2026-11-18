@@ -239,6 +239,22 @@ public sealed unsafe class OwnedVariant : IDisposable
     /// VariantChangeType of a borrowed value into a new owned one (a VT_BYREF source is read through its reference), or
     /// null with the failing HRESULT (DISP_E_TYPEMISMATCH, DISP_E_OVERFLOW).
     /// </summary>
+    /// <summary>
+    /// VariantChangeType to a type that owns no resource (a number, a date, a Boolean), into a caller's stack cell: no
+    /// object and no native cell (task v4n6). False with the HRESULT when the conversion fails.
+    /// </summary>
+    public static bool TryChangeScalar(NativeVariant* source, VarType target, out NativeVariant result, out int hr)
+    {
+        if (target is not (VarType.I2 or VarType.I4 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Bool or VarType.UI1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(target), "a scalar target that owns no resource");
+        }
+        NativeVariant cell = default;
+        hr = OleAut.VariantChangeType(&cell, source, 0, (ushort)target);
+        result = cell;
+        return hr >= 0;
+    }
+
     public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, out int hr)
     {
         var result = new OwnedVariant();

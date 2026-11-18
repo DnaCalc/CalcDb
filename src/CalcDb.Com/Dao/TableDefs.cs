@@ -18,6 +18,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     private readonly (nint Vtable, OperationTable Operations) _shape;
     private readonly DatabaseObject _database;
     private readonly IReadOnlyList<string> _names;
+    private readonly CollectionNames _lookup;
     private readonly Func<DefinitionCollection, int, DaoObject> _make;
     private readonly Dictionary<int, DaoObject> _held = [];
 
@@ -33,6 +34,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         _shape = shape;
         _database = database;
         _names = names;
+        _lookup = new CollectionNames(names);
         _make = make;
         _holdsDatabase = holdsDatabase;
         if (holdsDatabase)
@@ -78,7 +80,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
 
     private CallResult Item(nint index)
     {
-        int? ordinal = CollectionLookup.Find(index, _names.Count, i => _names[i], out bool objectIndex);
+        int? ordinal = CollectionLookup.Find(index, _lookup, out bool objectIndex);
         if (objectIndex)
         {
             return CallResult.Fail(Failure.NotImplemented("a definition collection's Item with an object index"));

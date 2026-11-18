@@ -69,4 +69,63 @@ public sealed class AllocationTests(ITestOutputHelper output)
         Assert.True(move < 16, $"movement allocates {move:F1} B/row");
         Assert.True(read < 32, $"movement and a Long read allocate {read:F1} B/row");
     }
+
+    [Fact]
+    public void Resident_text_read_allocations_per_row()
+    {
+        TableCursor rs = Open();
+        ColumnDescriptor v = rs.Table.Columns.Single(c => c.Name == "V");
+        double read = PerRow(rs, r => r.Read(v));
+        double borrowed = PerRow(rs, r => r.ReadText(v));
+        int rows = 0, compressed = 0;
+        for (rs.MoveFirst(); !rs.Eof; rs.MoveNext(), rows++)
+        {
+            compressed += rs.ReadText(v).Shape.Compressed ? 1 : 0;
+        }
+        output.WriteLine($"move+read(V) {read:F1} B/row, move+borrowed read(V) {borrowed:F1} B/row; {compressed} of {rows} values compressed");
+        // Budget (The Plan §3.2, task n7mw): a decoded Text read copies its payload once, into its string; the borrowed
+        // read for direct BSTR construction (D-STRING-1) copies nothing. 2026-11-18 measured 234.6 and 10.6 B/row.
+        Assert.True(read < (2 * 120) + 64, $"movement and a Text(120) read allocate {read:F1} B/row");
+        Assert.True(borrowed < 16, $"movement and a borrowed Text read allocate {borrowed:F1} B/row");
+    }
+
+    [Fact]
+    public void Resident_seek_allocations_per_call()
+    {
+        // The ISAM side of perf/cases/big-id-seek-vtable (tasks x8d9, v4n6): Seek "=" on every ID of PK_Big in the
+        // body's scattered order, each found, with and without reading its ID. No assertion runs inside a measured
+        // loop: an xunit assertion allocates, about 500 bytes per call here.
+        TableCursor rs = Open();
+        Assert.Equal(IndexRefusal.None, rs.SetIndex("PK_Big"));
+        ColumnDescriptor id = rs.Table.Columns.Single(c => c.Name == "ID");
+        var keys = new SeekKey[1];
+        (long Sum, int Misses) Pass(bool read)
+        {
+            long sum = 0;
+            int misses = 0;
+            for (long k = 0; k < 2048; k++)
+            {
+                keys[0] = new SeekKey(new KeyValue(KeyValueKind.Integer, 1 + (k * 997 % 2048)));
+                misses += rs.Seek(SeekOperator.Equal, keys, out bool found) == IndexRefusal.None && found ? 0 : 1;
+                sum += read ? rs.Read(id).Value.Integer : 0;
+            }
+            return (sum, misses);
+        }
+        double PerCall(bool read)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            (long sum, int misses) = Pass(read);
+            double bytes = (GC.GetAllocatedBytesForCurrentThread() - before) / 2048.0;
+            Assert.Equal((read ? 2048L * 2049 / 2 : 0, 0), (sum, misses));
+            return bytes;
+        }
+        double cold = PerCall(read: true);
+        double seekAndRead = PerCall(read: true);
+        double seek = PerCall(read: false);
+        output.WriteLine($"Seek = {seek:F1} B/call, Seek = and read(ID) {seekAndRead:F1} B/call; first pass, index pages decoded, {cold:F1} B/call");
+        // Budget (The Plan §3.2): the Seek allocates nothing; the read after it pins the row's page, one PagePin per
+        // page change (scattered keys change page on nearly every call). 2026-11-18 measured 0 and 96 B/call.
+        Assert.True(seek < 1, $"a resident Seek allocates {seek:F1} B/call");
+        Assert.True(seekAndRead < 128, $"a resident Seek and a Long read allocate {seekAndRead:F1} B/call");
+    }
 }

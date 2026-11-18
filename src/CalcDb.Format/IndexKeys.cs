@@ -40,16 +40,24 @@ public static class IndexKeys
     public static bool Encodes(byte type) => type is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
         or NativeTypes.Currency or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime;
 
-    /// <summary>Append one field's contribution; false when the type is not encodable or the value does not fit it.</summary>
-    public static bool AppendField(List<byte> key, byte type, bool ascending, KeyValue value)
+    /// <summary>The most bytes one scalar field contributes: the marker and an 8-byte payload.</summary>
+    public const int MaxFieldBytes = 9;
+
+    /// <summary>
+    /// Write one field's contribution at the start of <paramref name="key"/> (at least <see cref="MaxFieldBytes"/>
+    /// long); false, with nothing written, when the type is not encodable or the value does not fit it.
+    /// </summary>
+    public static bool TryWriteField(Span<byte> key, byte type, bool ascending, KeyValue value, out int written)
     {
+        written = 0;
         if (!Encodes(type))
         {
             return false;
         }
         if (value.Kind == KeyValueKind.Null)
         {
-            key.Add(ascending ? (byte)0x00 : (byte)0xFF);
+            key[0] = ascending ? (byte)0x00 : (byte)0xFF;
+            written = 1;
             return true;
         }
         Span<byte> payload = stackalloc byte[8];
@@ -93,11 +101,12 @@ public static class IndexKeys
             default:
                 return false;
         }
-        key.Add(ascending ? (byte)0x7F : (byte)0x80);
+        key[0] = ascending ? (byte)0x7F : (byte)0x80;
         for (int i = 0; i < width; i++)
         {
-            key.Add(ascending ? payload[i] : (byte)~payload[i]);
+            key[1 + i] = ascending ? payload[i] : (byte)~payload[i];
         }
+        written = 1 + width;
         return true;
     }
 

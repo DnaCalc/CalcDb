@@ -131,6 +131,39 @@ internal abstract unsafe class DaoObject : DispatchObject
     public static CallResult Bool(bool value) => CallResult.OfScalar(VarType.Bool, value ? 0xFFFF : 0);
 }
 
+/// <summary>
+/// The item names of a collection, prepared once for lookup (R-DAO-1 DAO-COLL, task fbh8): composed (FormC) and
+/// compared case-insensitively, the first item of a name winning. A request in ASCII, already composed, is looked up
+/// by its borrowed characters; any other is composed first.
+/// </summary>
+internal sealed class CollectionNames
+{
+    private readonly Dictionary<string, int> _first;
+    private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _byChars;
+
+    public CollectionNames(IReadOnlyList<string> names)
+    {
+        Count = names.Count;
+        _first = new Dictionary<string, int>(names.Count, StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < names.Count; i++)
+        {
+            _first.TryAdd(names[i].Normalize(System.Text.NormalizationForm.FormC), i);
+        }
+        _byChars = _first.GetAlternateLookup<ReadOnlySpan<char>>();
+    }
+
+    public int Count { get; }
+
+    public int? Find(ReadOnlySpan<char> name)
+    {
+        if (System.Text.Ascii.IsValid(name))
+        {
+            return _byChars.TryGetValue(name, out int i) ? i : null;
+        }
+        return _first.TryGetValue(new string(name).Normalize(System.Text.NormalizationForm.FormC), out int j) ? j : null;
+    }
+}
+
 /// <summary>Collection lookup by a VARIANT index (R-DAO-1 DAO-COLL).</summary>
 internal static unsafe class CollectionLookup
 {
@@ -139,8 +172,9 @@ internal static unsafe class CollectionLookup
     /// UI1, R8 (rounded to nearest even), BOOL 0 and DATE are ordinals; digit strings, BOOL -1, Null, Empty and Missing
     /// name nothing. An object index is not handled here (ACE gives 3001 and 3421).
     /// </summary>
-    public static int? Find(nint index, int count, Func<int, string> nameAt, out bool objectIndex)
+    public static int? Find(nint index, CollectionNames names, out bool objectIndex)
     {
+        int count = names.Count;
         objectIndex = false;
         CostCounters counters = CostCounters.Current;
         counters.CollectionLookups++;
@@ -157,21 +191,15 @@ internal static unsafe class CollectionLookup
         }
         if (vt == VarType.Bstr)
         {
+            counters.CollectionNameProbes++;
+            if (Args.TypeOf(index) == VarType.Bstr)
+            {
+                // The BSTR's characters, borrowed for the call (embedded NUL kept); a null BSTR names nothing.
+                nint bstr = v->Pointer;
+                return bstr == 0 ? null : names.Find(Bstrs.Chars(bstr));
+            }
             string? name = Args.Text(index);
-            if (name is null)
-            {
-                return null;
-            }
-            string wanted = name.Normalize(System.Text.NormalizationForm.FormC);
-            for (int i = 0; i < count; i++)
-            {
-                counters.CollectionNameProbes++;
-                if (string.Equals(nameAt(i).Normalize(System.Text.NormalizationForm.FormC), wanted, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-            return null;
+            return name is null ? null : names.Find(name);
         }
         if (vt == VarType.Bool)
         {

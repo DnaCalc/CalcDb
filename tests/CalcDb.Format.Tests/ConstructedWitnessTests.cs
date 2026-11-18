@@ -221,10 +221,19 @@ public sealed class ConstructedWitnessTests
         Assert.True(l.IsLeaf);
         Assert.Equal(3605, l.FreeCount);
         Assert.Equal(0x20u, l.Owner);
-        Assert.Equal([9, 10, 11], l.Entries.Select(e => e.End));
-        Assert.All(l.Entries, e => Assert.Equal(0x012345u, e.DataPage));
-        Assert.Equal([(byte)2, (byte)7, (byte)0xFE], l.Entries.Select(e => e.RowSlot));
-        Assert.All(l.Entries, e => Assert.Equal(Convert.FromHexString("7F8000002A"), e.Key));
+        Assert.Equal(3, l.Count);
+        Assert.Equal(8, l.PrefixLength);
+        byte[] slots = [2, 7, 0xFE];
+        for (int k = 0; k < l.Count; k++)
+        {
+            // Entries 1 and 2 store one byte each: the key and the start of the trailer come from the prefix (F-31).
+            IndexEntryView e = l.Entry(k);
+            Assert.Equal(9 + k, e.End);
+            Assert.Equal(0x012345u, e.DataPage);
+            Assert.Equal(slots[k], e.RowSlot);
+            Assert.Equal(Convert.FromHexString("7F8000002A"), e.Key.ToArray());
+            Assert.Null(e.ChildPage);
+        }
 
         byte[] interior = IndexPage("03010A0E2000000000000000000000000000000002010000040001", [(0x1C, 0x20), (0x1D, 0x40)], "7F8000000A0012340700000100" + "140012350900000101");
         IndexPage i = IndexPages.Decode(interior, D, out string? g)!;
@@ -232,9 +241,9 @@ public sealed class ConstructedWitnessTests
         Assert.False(i.IsLeaf);
         Assert.Equal(0x102u, i.TailChild);
         Assert.Equal(1, i.Level);
-        Assert.Equal([13, 22], i.Entries.Select(e => e.End));
-        Assert.Equal([0x100u, 0x101u], i.Entries.Select(e => e.ChildPage!.Value));
-        Assert.Equal([(0x001234u, (byte)7), (0x001235u, (byte)9)], i.Entries.Select(e => (e.DataPage, e.RowSlot)));
+        Assert.Equal(2, i.Count);
+        Assert.Equal((13, 0x100u, 0x001234u, (byte)7), (i.Entry(0).End, i.Entry(0).ChildPage!.Value, i.Entry(0).DataPage, i.Entry(0).RowSlot));
+        Assert.Equal((22, 0x101u, 0x001235u, (byte)9), (i.Entry(1).End, i.Entry(1).ChildPage!.Value, i.Entry(1).DataPage, i.Entry(1).RowSlot));
     }
 
     [Fact]

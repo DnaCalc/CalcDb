@@ -41,6 +41,28 @@ public sealed unsafe class OwnedVariantTests
     }
 
     [Fact]
+    public void Text_filled_in_place_is_exact_and_an_empty_one_is_allocated()
+    {
+        // D-STRING-1 direct construction (task n7mw): the units are written into the BSTR's own buffer.
+        string text = "a\0b\uD800c";
+        nint direct = Bstrs.FromUnits(text.Length, text, static (dest, s) => s.AsSpan().CopyTo(dest));
+        nint empty = Bstrs.FromUnits(0, 0, static (dest, _) => { });
+        try
+        {
+            Assert.Equal((uint)text.Length * 2, OleAut.SysStringByteLen(direct));
+            Assert.Equal(MemoryMarshal.AsBytes(text.AsSpan()).ToArray(), new ReadOnlySpan<byte>((void*)direct, text.Length * 2).ToArray());
+            Assert.NotEqual(0, empty);
+            Assert.Equal(0u, OleAut.SysStringByteLen(empty));
+        }
+        finally
+        {
+            OleAut.SysFreeString(direct);
+            OleAut.SysFreeString(empty);
+        }
+        Assert.Throws<InvalidOperationException>(() => Bstrs.FromUnits(3, 0, static (dest, _) => throw new InvalidOperationException()));
+    }
+
+    [Fact]
     public void Odd_byte_BSTR_and_null_versus_empty_stay_distinct()
     {
         using OwnedVariant odd = OwnedVariant.FromBstrBytes([0x41, 0x00, 0xFF]);

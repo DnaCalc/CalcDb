@@ -1,11 +1,90 @@
 namespace CalcDb.Format;
 
-/// <summary>A reconstructed index entry: key bytes and the big-endian row location, plus the child page on interior pages.</summary>
-public sealed record IndexEntry(byte[] Key, uint DataPage, byte RowSlot, uint? ChildPage, int End);
-
-/// <summary>A decoded index page envelope (II-05 §2): header fields, the page-wide prefix and the reconstructed entries.</summary>
-public sealed record IndexPage
+/// <summary>
+/// The key bytes of one index entry as two borrowed spans (II-05 §2's two-span entry view): <see cref="Head"/> from the
+/// page-wide prefix (or the whole first entry), then <see cref="Tail"/> from the stored suffix. Compared without
+/// concatenation.
+/// </summary>
+public readonly ref struct IndexKeyView(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail)
 {
+    public ReadOnlySpan<byte> Head { get; } = head;
+
+    public ReadOnlySpan<byte> Tail { get; } = tail;
+
+    public int Length => Head.Length + Tail.Length;
+
+    /// <summary>The order of this key's first <paramref name="cut"/> bytes against <paramref name="key"/>'s (cut is at most both lengths).</summary>
+    public int ComparePrefix(ReadOnlySpan<byte> key, int cut)
+    {
+        int h = Math.Min(Head.Length, cut);
+        int c = IndexKeys.Compare(Head[..h], key[..h]);
+        return c != 0 ? c : IndexKeys.Compare(Tail[..(cut - h)], key[h..cut]);
+    }
+
+    public bool StartsWith(ReadOnlySpan<byte> key) => Length >= key.Length && ComparePrefix(key, key.Length) == 0;
+
+    public byte[] ToArray() => [.. Head, .. Tail];
+}
+
+/// <summary>
+/// One entry of a decoded index page, borrowed from the page's entry area (II-05 §2): its stored bytes are the prefix
+/// and the stored suffix (the first entry is whole), key first, then the big-endian trailer: data page, row slot, and
+/// on interior pages the child page. The trailer may begin inside the prefix (II-05 F-31).
+/// </summary>
+public readonly ref struct IndexEntryView
+{
+    private readonly ReadOnlySpan<byte> _head;
+    private readonly ReadOnlySpan<byte> _tail;
+    private readonly int _keyLength;
+    private readonly bool _leaf;
+
+    internal IndexEntryView(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, int trailer, bool leaf, int end)
+    {
+        _head = head;
+        _tail = tail;
+        _keyLength = head.Length + tail.Length - trailer;
+        _leaf = leaf;
+        End = end;
+    }
+
+    /// <summary>The entry's exclusive end in the entry area (its boundary bit).</summary>
+    public int End { get; }
+
+    public IndexKeyView Key => _keyLength <= _head.Length
+        ? new IndexKeyView(_head[.._keyLength], default)
+        : new IndexKeyView(_head, _tail[..(_keyLength - _head.Length)]);
+
+    public uint DataPage => (uint)((At(0) << 16) | (At(1) << 8) | At(2));
+
+    public byte RowSlot => At(3);
+
+    public uint? ChildPage => _leaf ? null : (uint)((At(4) << 24) | (At(5) << 16) | (At(6) << 8) | At(7));
+
+    private byte At(int trailerOffset)
+    {
+        int i = _keyLength + trailerOffset;
+        return i < _head.Length ? _head[i] : _tail[i - _head.Length];
+    }
+}
+
+/// <summary>
+/// A decoded index page (II-05 §2): header fields, and a directory of entry ends over one copy of the used entry area.
+/// Entries are views borrowed from that copy, so a decode makes three objects whatever the entry count (task x8d9).
+/// </summary>
+public sealed class IndexPage
+{
+    private readonly byte[] _area;
+    private readonly int[] _ends;
+    private readonly int _trailer;
+
+    internal IndexPage(byte[] area, int[] ends, int prefixLength, int trailer)
+    {
+        _area = area;
+        _ends = ends;
+        PrefixLength = prefixLength;
+        _trailer = trailer;
+    }
+
     public required bool IsLeaf { get; init; }
     public required int FreeCount { get; init; }
     public required uint Owner { get; init; }
@@ -13,8 +92,21 @@ public sealed record IndexPage
     public required uint NextPeer { get; init; }
     public required uint TailChild { get; init; }
     public required int Level { get; init; }
-    public required byte[] Prefix { get; init; }
-    public required IReadOnlyList<IndexEntry> Entries { get; init; }
+
+    public int PrefixLength { get; }
+
+    public ReadOnlySpan<byte> Prefix => _area.AsSpan(0, PrefixLength);
+
+    public int Count => _ends.Length;
+
+    public IndexEntryView Entry(int i)
+    {
+        int end = _ends[i];
+        // The first stored entry contains the prefix; later stored spans are suffixes after it.
+        return i == 0
+            ? new IndexEntryView(_area.AsSpan(0, end), default, _trailer, IsLeaf, end)
+            : new IndexEntryView(_area.AsSpan(0, PrefixLength), _area.AsSpan(_ends[i - 1], end - _ends[i - 1]), _trailer, IsLeaf, end);
+    }
 }
 
 /// <summary>
@@ -44,7 +136,8 @@ public static class IndexPages
         int prefixLength = (int)r.PrefixLength.Read(page);
         ReadOnlySpan<byte> mask = page.Slice(r.EntryMaskOffset, r.EntryMaskBytes);
         ReadOnlySpan<byte> payload = page.Slice(r.EntryAreaOffset, r.EntryAreaBytes);
-        var ends = new List<int>();
+        // Check and count the boundaries first, so the directory is one array of the exact size.
+        int count = 0;
         for (int b = 0; b < mask.Length * 8; b++)
         {
             if ((mask[b / 8] & (1 << (b % 8))) == 0)
@@ -61,39 +154,38 @@ public static class IndexPages
                 failure = $"boundary {b} claims an end outside the {r.EntryAreaBytes}-byte entry area";
                 return null;
             }
-            ends.Add(b);
+            count++;
         }
-        if (ends.Count == 0 && prefixLength != 0)
+        int[] ends = count == 0 ? [] : new int[count];
+        for (int b = 0, n = 0; n < count; b++)
+        {
+            if ((mask[b / 8] & (1 << (b % 8))) != 0)
+            {
+                ends[n++] = b;
+            }
+        }
+        if (count == 0 && prefixLength != 0)
         {
             failure = $"{r.PrefixLength.Id}: an empty page with prefix length {prefixLength}";
             return null;
         }
-        if (ends.Count > 0 && prefixLength > ends[0])
+        if (count > 0 && prefixLength > ends[0])
         {
             failure = $"{r.PrefixLength.Id}: prefix {prefixLength} exceeds the first entry end {ends[0]}";
             return null;
         }
-        byte[] prefix = payload[..prefixLength].ToArray();
-        var entries = new List<IndexEntry>(ends.Count);
         int start = 0;
-        for (int i = 0; i < ends.Count; i++)
+        for (int i = 0; i < count; i++)
         {
-            int end = ends[i];
-            // The first stored entry contains the prefix; later stored spans are suffixes after it.
-            byte[] full = i == 0 ? payload[..end].ToArray() : [.. prefix, .. payload[start..end]];
-            if (full.Length < trailer)
+            int stored = i == 0 ? ends[0] : prefixLength + (ends[i] - start);
+            if (stored < trailer)
             {
-                failure = $"entry {i} has {full.Length} bytes, fewer than its {trailer}-byte trailer";
+                failure = $"entry {i} has {stored} bytes, fewer than its {trailer}-byte trailer";
                 return null;
             }
-            int keyLength = full.Length - trailer;
-            uint dataPage = (uint)((full[keyLength] << 16) | (full[keyLength + 1] << 8) | full[keyLength + 2]);
-            byte slot = full[keyLength + 3];
-            uint? child = leaf ? null : (uint)((full[keyLength + 4] << 24) | (full[keyLength + 5] << 16) | (full[keyLength + 6] << 8) | full[keyLength + 7]);
-            entries.Add(new IndexEntry(full[..keyLength], dataPage, slot, child, end));
-            start = end;
+            start = ends[i];
         }
-        return new IndexPage
+        return new IndexPage(count == 0 ? [] : payload[..ends[^1]].ToArray(), ends, prefixLength, trailer)
         {
             IsLeaf = leaf,
             FreeCount = (int)r.FreeCount.Read(page),
@@ -102,8 +194,6 @@ public static class IndexPages
             NextPeer = (uint)r.NextPeer.Read(page),
             TailChild = (uint)r.TailChild.Read(page),
             Level = (int)r.Level.Read(page),
-            Prefix = prefix,
-            Entries = entries,
         };
     }
 }

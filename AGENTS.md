@@ -27,6 +27,9 @@ scope or design, the book wins.
   force push or `reset --hard`.
 - Commit messages start with the book ID they serve where there is one, and end with the
   model's `Co-Authored-By` line. Agents commit as themselves.
+- A follow-up task you find goes into the register and out of the CodeAlta Inbox (`alta task later`, or
+  `start` when you do it now). The implementing agent takes it in register order, itself or as a sub-session; the
+  owner does not schedule it.
 - MIT licence. Record third-party exact material (the Jackcess ports) in a licence
   ledger as it enters. GitHub CI stays disabled.
 

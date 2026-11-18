@@ -5,9 +5,9 @@ public sealed class IndexKeyTests
 {
     private static string Key(byte type, bool ascending, KeyValue value)
     {
-        var key = new List<byte>();
-        Assert.True(IndexKeys.AppendField(key, type, ascending, value));
-        return Convert.ToHexString([.. key]);
+        Span<byte> key = stackalloc byte[IndexKeys.MaxFieldBytes];
+        Assert.True(IndexKeys.TryWriteField(key, type, ascending, value, out int written));
+        return Convert.ToHexString(key[..written]);
     }
 
     private static KeyValue I(long v) => new(KeyValueKind.Integer, Integer: v);
@@ -41,9 +41,10 @@ public sealed class IndexKeyTests
     [Fact]
     public void Text_and_out_of_range_values_are_refused_without_a_partial_key()
     {
-        var key = new List<byte>();
-        Assert.False(IndexKeys.AppendField(key, NativeTypes.Text, true, I(1)));
-        Assert.False(IndexKeys.AppendField(key, NativeTypes.Integer, true, I(40000)));
-        Assert.Empty(key);
+        byte[] key = new byte[IndexKeys.MaxFieldBytes];
+        Assert.False(IndexKeys.TryWriteField(key, NativeTypes.Text, true, I(1), out int a));
+        Assert.False(IndexKeys.TryWriteField(key, NativeTypes.Integer, true, I(40000), out int b));
+        Assert.Equal((0, 0), (a, b));
+        Assert.All(key, x => Assert.Equal(0, x));
     }
 }

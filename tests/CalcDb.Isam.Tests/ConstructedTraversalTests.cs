@@ -100,6 +100,15 @@ public sealed class ConstructedTraversalTests
         Assert.Null(f);
         Assert.Equal(expected, value);
         Assert.Equal(4080, value!.Length);
+
+        // Budget (The Plan §3.2, task 7jdb): a resident read allocates its result and one pin per chunk; the chain's
+        // visited set is on the stack. 2026-11-18 measured 4296 bytes (4104 of them the result).
+        PageCache cache = Cache(pages);
+        _ = LongValueReader.Read(plan, ChainDefinition, cache, D, 1 << 20, out _);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        _ = LongValueReader.Read(plan, ChainDefinition, cache, D, 1 << 20, out _);
+        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(bytes < 4104 + (2 * 128), $"a resident two-chunk read allocates {bytes} bytes");
     }
 
     [Fact]

@@ -29,7 +29,8 @@ public sealed record PerformanceCase(
     string Consumer,
     int Passes,
     long MaxRows,
-    string Description)
+    string Description,
+    string? Index = null)
 {
     public const string CurrentSchema = "calcdb.perf-case/1";
 
@@ -40,6 +41,7 @@ public sealed record PerformanceCase(
         "repeated" => (2 + Repeat) * rows + 1,
         "cached-fields" => 4 * rows + 1,
         "named" or "ordinal" => 5 * rows + 1,
+        "seek" => 3 * rows,
         _ => throw new InvalidDataException("unknown body " + Body),
     };
 
@@ -49,6 +51,7 @@ public sealed record PerformanceCase(
         "repeated" => $"{2 + Repeat}n+1: EOF, {Repeat} Value, MoveNext per row and the final EOF",
         "cached-fields" => "4n+1: EOF, Item, Value, MoveNext per row and the final EOF; Fields acquired at setup",
         "named" or "ordinal" => "5n+1: EOF, Fields, Item, Value, MoveNext per row and the final EOF",
+        "seek" => "3n: Seek \"=\", NoMatch, Value per key; Index set at setup",
         _ => "unknown",
     };
 
@@ -67,6 +70,10 @@ public sealed record PerformanceCase(
             throw new InvalidDataException("unknown consumer " + Consumer);
         }
         _ = DeclaredEntries(1);
+        if (Body == "seek" && string.IsNullOrEmpty(Index))
+        {
+            throw new InvalidDataException("a seek body names its Index");
+        }
         if (Passes < 1 || MaxRows < 1 || Repeat < 1)
         {
             throw new InvalidDataException("passes, maxRows and repeat must be positive");
@@ -163,7 +170,7 @@ public sealed record Sample(
 }
 
 /// <summary>The block plan of a run: the seed and the recorded random order of each block (II-15 §29 paired blocks).</summary>
-public sealed record RunPlan(string Schema, string RunId, string Case, string CaseSha256, int Seed, IReadOnlyList<string> Variants, IReadOnlyList<IReadOnlyList<string>> Orders, string Deployment, string CreatedUtc)
+public sealed record RunPlan(string Schema, string RunId, string Case, string CaseSha256, int Seed, IReadOnlyList<string> Variants, IReadOnlyList<IReadOnlyList<string>> Orders, string Deployment, string CreatedUtc, string? Deployment2 = null)
 {
     public const string CurrentSchema = "calcdb.perf-plan/1";
 }

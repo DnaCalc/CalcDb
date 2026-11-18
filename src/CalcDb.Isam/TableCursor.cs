@@ -24,6 +24,42 @@ public enum CursorFailure
 public readonly record struct FieldResult(NativeValue Value, CursorFailure? Failure, string? Detail = null)
 {
     public bool Succeeded => Failure is null && Value.Kind != NativeKind.Failed;
+
+    /// <summary>The result of a decoded value: a failed value is a storage failure with its predicate.</summary>
+    public static FieldResult Of(NativeValue value) => value.Kind == NativeKind.Failed ? new FieldResult(value, CursorFailure.Storage, value.Failure) : new FieldResult(value, null);
+}
+
+/// <summary>
+/// A Text or Memo field read for direct construction of its final form (D-STRING-1, task n7mw): when
+/// <see cref="HasText"/>, the checked encoded bytes with their measured shape, borrowed until the cursor moves (from the
+/// row's held page for Text, from the assembled long value for Memo). Otherwise <see cref="Result"/> is the value
+/// (Null) or the failure, exactly as <see cref="IRecordCursor.Read"/> gives it.
+/// </summary>
+public readonly ref struct TextFieldRead
+{
+    public TextFieldRead(FieldResult result)
+    {
+        Result = result;
+    }
+
+    public TextFieldRead(ReadOnlySpan<byte> encoded, TextShape shape)
+    {
+        Result = new FieldResult(new NativeValue(NativeKind.Text), null);
+        Encoded = encoded;
+        Shape = shape;
+        HasText = true;
+    }
+
+    public FieldResult Result { get; }
+
+    public bool HasText { get; }
+
+    public ReadOnlySpan<byte> Encoded { get; }
+
+    public TextShape Shape { get; }
+
+    /// <summary>Writes the text's units into <paramref name="dest"/>, whose length is <see cref="TextShape.Units"/>.</summary>
+    public void DecodeInto(Span<char> dest) => TextCodec.DecodeInto(Encoded, dest);
 }
 
 /// <summary>
@@ -57,6 +93,9 @@ public interface IRecordCursor : IDisposable
     CursorFailure? SetBookmark(ReadOnlySpan<byte> bookmark);
 
     FieldResult Read(ColumnDescriptor column);
+
+    /// <summary>A Text or Memo field borrowed for direct construction (D-STRING-1); other columns read as <see cref="Read"/>.</summary>
+    TextFieldRead ReadText(ColumnDescriptor column);
 }
 
 /// <summary>
@@ -69,7 +108,48 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     private readonly PageHold _hold = new(cache);
     private RowView? _bound;
 
+    // Where the bound row's Text fields lie once read (D-STRING-1 bounded scratch, task n7mw): one entry per column,
+    // allocated once per binding, valid while its generation is the binding's. A repeated read borrows the bytes
+    // again without locating and checking them again; it still builds its result directly from them.
+    private TextLocation[]? _texts;
+    private long _generation = 1; // never 0, the generation of an empty entry
+
+    private readonly record struct TextLocation(long Generation, Range At, TextShape Shape);
+
     public FieldResult Read(RowId? current, ColumnDescriptor column)
+    {
+        if (Bind(current) is { } unbound)
+        {
+            return unbound;
+        }
+        NativeValue value = FieldDecoder.Read(_bound!.Value, table, column, cache, d);
+        CostCounters.Current.FieldDecodes++;
+        return FieldResult.Of(value);
+    }
+
+    public TextFieldRead ReadText(RowId? current, ColumnDescriptor column)
+    {
+        if (Bind(current) is { } unbound)
+        {
+            return new TextFieldRead(unbound);
+        }
+        RowView row = _bound!.Value;
+        if (_texts is { } texts && texts[column.Ordinal] is var held && held.Generation == _generation)
+        {
+            CostCounters.Current.TextDecodedUnits += held.Shape.Units;
+            return new TextFieldRead(row.Body[held.At], held.Shape);
+        }
+        CostCounters.Current.FieldDecodes++;
+        TextFieldRead read = FieldDecoder.ReadText(row, table, column, cache, d, out Range? location);
+        if (location is { } at)
+        {
+            (_texts ??= new TextLocation[table.Columns.Count])[column.Ordinal] = new TextLocation(_generation, at, read.Shape);
+        }
+        return read;
+    }
+
+    /// <summary>Binds the current row if needed; null when it is bound, else the failure.</summary>
+    private FieldResult? Bind(RowId? current)
     {
         if (current is not { } root)
         {
@@ -85,15 +165,14 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
             }
             CostCounters.Current.RowBinds++;
         }
-        NativeValue value = FieldDecoder.Read(_bound.Value, table, column, cache, d);
-        CostCounters.Current.FieldDecodes++;
-        return value.Kind == NativeKind.Failed ? new FieldResult(value, CursorFailure.Storage, value.Failure) : new FieldResult(value, null);
+        return null;
     }
 
     public void Unbind()
     {
         _bound?.Dispose();
         _bound = null;
+        _generation++;
     }
 
     /// <summary>Unbind and release the held page (cursor Close).</summary>
@@ -177,6 +256,7 @@ public sealed class TableCursor : IRecordCursor
     private IOrderedSource<TableOccurrence> _order;
     private PositionState<TableOccurrence> _position;
     private IndexNavigator? _index;
+    private ColumnDescriptor?[] _keyColumns = []; // the current index's key columns, resolved once per SetIndex (task v4n6)
 
     private TableCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
@@ -247,6 +327,7 @@ public sealed class TableCursor : IRecordCursor
     {
         IndexNavigator? navigator = null;
         LogicalIndex? logical = null;
+        ColumnDescriptor?[] keyColumns = [];
         if (!string.IsNullOrEmpty(name))
         {
             logical = Table.FindIndex(name);
@@ -255,6 +336,7 @@ public sealed class TableCursor : IRecordCursor
                 return IndexRefusal.UnknownIndex;
             }
             navigator = new IndexNavigator(_cache, _d, physical, Table.FirstPage);
+            keyColumns = [.. physical.Columns.Select(ic => Table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber))];
         }
         IOrderedSource<TableOccurrence> order = navigator is null ? new StorageOrder(_scan) : new IndexOrder(navigator);
         var position = new PositionState<TableOccurrence>(order, forwardOnly: false);
@@ -264,6 +346,7 @@ public sealed class TableCursor : IRecordCursor
         }
         _row.Unbind();
         _index = navigator;
+        _keyColumns = keyColumns;
         _order = order;
         _position = position;
         Index = logical;
@@ -279,34 +362,43 @@ public sealed class TableCursor : IRecordCursor
     /// a short key the bounds are field prefixes, `>` lands like `>=` and `<=` like `<`. A miss sets NoMatch and the
     /// seek-miss state of its direction. A refusal changes nothing.
     /// </summary>
-    public IndexRefusal Seek(SeekOperator op, IReadOnlyList<SeekKey> keys, out bool found)
+    /// <summary>The column of the current index's key field <paramref name="i"/>, or null when the table has none.</summary>
+    public ColumnDescriptor? KeyColumn(int i) => _keyColumns[i];
+
+    private const int StackKeyColumns = 16;
+
+    public IndexRefusal Seek(SeekOperator op, ReadOnlySpan<SeekKey> keys, out bool found)
     {
         found = false;
         if (_index is not { } index)
         {
             return IndexRefusal.NoCurrentIndex;
         }
-        if (keys.Count > index.Index.Columns.Count)
+        int columns = index.Index.Columns.Count;
+        if (keys.Length > columns)
         {
             return IndexRefusal.TooManyKeys;
         }
-        var key = new List<byte>();
+        // The key is built on the stack (task v4n6); a wider index than any Jet allows would use the heap.
+        Span<byte> buffer = columns <= StackKeyColumns ? stackalloc byte[StackKeyColumns * IndexKeys.MaxFieldBytes] : new byte[columns * IndexKeys.MaxFieldBytes];
+        int length = 0;
         bool inexact = false;
-        foreach ((SeekKey k, IndexColumn ic) in keys.Zip(index.Index.Columns))
+        for (int i = 0; i < keys.Length; i++)
         {
-            ColumnDescriptor? column = Table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber);
-            if (column is null || !IndexKeys.AppendField(key, column.TypeCode, ic.Ascending, k.Value))
+            ColumnDescriptor? column = _keyColumns[i];
+            if (column is null || !IndexKeys.TryWriteField(buffer[length..], column.TypeCode, index.Index.Columns[i].Ascending, keys[i].Value, out int written))
             {
                 return IndexRefusal.KeyNotEncodable;
             }
-            if (k.InexactAbove)
+            length += written;
+            if (keys[i].InexactAbove)
             {
                 inexact = true;
                 break;
             }
         }
-        byte[] q = [.. key];
-        bool full = !inexact && keys.Count == index.Index.Columns.Count;
+        ReadOnlySpan<byte> q = buffer[..length];
+        bool full = !inexact && keys.Length == columns;
         IndexPosition? lowerBound = index.LowerBound(KeyBound.Low(q));
         IndexPosition? landing;
         if (index.LastFailure is not null)
@@ -325,7 +417,7 @@ public sealed class TableCursor : IRecordCursor
         }
         else
         {
-            bool matches = lowerBound is { } lb && index.KeyAt(lb) is { } k0 && KeyBound.Low(q).Matches(k0);
+            bool matches = lowerBound is { } lb && index.KeyMatches(lb, KeyBound.Low(q));
             landing = op switch
             {
                 SeekOperator.Equal => matches ? lowerBound : null,
@@ -382,6 +474,8 @@ public sealed class TableCursor : IRecordCursor
     }
 
     public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
+
+    public TextFieldRead ReadText(ColumnDescriptor column) => _row.ReadText(CurrentRoot, column);
 
     public void Dispose()
     {
@@ -513,6 +607,8 @@ public sealed class PopulationCursor : IRecordCursor
     }
 
     public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
+
+    public TextFieldRead ReadText(ColumnDescriptor column) => _row.ReadText(CurrentRoot, column);
 
     public void Dispose()
     {

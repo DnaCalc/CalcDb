@@ -61,6 +61,25 @@ internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableByte
 
     public delegate*<nint*, void> FillEntries { get; } = fillEntries;
 
+    /// <summary>
+    /// The members of a name, case-insensitive, in declaration order (GetIDsOfNames; task fbh8): a dictionary built on
+    /// first use, looked up by the caller's characters. Empty when no member has the name.
+    /// </summary>
+    public MemberDecl[] MembersNamed(ReadOnlySpan<char> name) =>
+        (_byName ??= BuildByName()).GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(name, out MemberDecl[]? found) ? found : [];
+
+    private Dictionary<string, MemberDecl[]>? _byName;
+
+    private Dictionary<string, MemberDecl[]> BuildByName()
+    {
+        var byName = new Dictionary<string, MemberDecl[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (IGrouping<string, MemberDecl> g in Members.GroupBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            byName[g.Key] = [.. g];
+        }
+        return byName;
+    }
+
     public MemberDecl Member(string name, InvokeKind kind) =>
         Members.Single(m => m.Kind == kind && string.Equals(m.Name, name, StringComparison.Ordinal));
 

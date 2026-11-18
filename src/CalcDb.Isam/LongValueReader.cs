@@ -11,6 +11,8 @@ namespace CalcDb.Isam;
 /// </summary>
 public static class LongValueReader
 {
+    private const int ChainOnStack = 16;
+
     public static byte[]? Read(LongValuePlan plan, ReadOnlySpan<byte> field, PageCache cache, FormatDescriptor d, long budgetBytes, out TraversalFailure? failure)
     {
         failure = null;
@@ -25,7 +27,8 @@ public static class LongValueReader
         }
         byte[] result = new byte[plan.Length];
         int filled = 0;
-        var seen = new HashSet<RowId>();
+        // The chain's visited rows: the first ones on the stack, a long chain's on the heap (task 7jdb).
+        var seen = new VisitedSet<RowId>(stackalloc RowId[ChainOnStack], int.MaxValue);
         RowId at = RowId.From(plan.First);
         while (true)
         {

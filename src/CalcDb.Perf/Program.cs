@@ -10,7 +10,9 @@ namespace CalcDb.Perf;
 /// <item><c>run --case FILE [--blocks N] [--seed S] [--variants ace,calcdb] [--deployment DIR] [--out DIR] [--timeout SECONDS]</c>:
 /// plan paired blocks with a recorded random order, run every sample as a new owned process on the private desktop
 /// (through <c>calcdb-oracle desktop-run</c>, with its window guard), keep every attempt in the journal, then compare.
-/// A variant <c>calcdb~2</c> is a second, independent copy of <c>calcdb</c> for an A/A control.</item>
+/// A variant <c>calcdb~2</c> is a second, independent copy of <c>calcdb</c> for an A/A control; with
+/// <c>--deployment2 DIR</c> it runs that other CalcDb build instead, for a paired comparison of two candidates
+/// (R-STRING-1's direct versus cached construction, for example).</item>
 /// <item><c>compare --run DIR [--baseline ace] [--candidate calcdb] [--resamples N] [--seed S]</c>: (re)compute the comparison of a run.</item>
 /// <item><c>sample ...</c>: one sample in this process; started by <c>run</c>.</item>
 /// </list>
@@ -72,6 +74,7 @@ internal static class Program
         int seed = int.Parse(o.Get("seed") ?? Environment.TickCount.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
         string[] variants = (o.Get("variants") ?? "ace,calcdb").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         string deployment = Path.GetFullPath(o.Get("deployment") ?? Path.Combine(repo, "artifacts", "native"));
+        string? deployment2 = o.Get("deployment2") is { } second ? Path.GetFullPath(second) : null;
         int timeout = int.Parse(o.Get("timeout") ?? "300", CultureInfo.InvariantCulture);
         string oracle = o.Get("oracle") ?? Path.Combine(repo, "src", "CalcDb.Oracle.Runner", "bin", "Debug", "net11.0", "calcdb-oracle.exe");
         string runId = DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "-s" + seed.ToString(CultureInfo.InvariantCulture);
@@ -86,7 +89,7 @@ internal static class Program
             random.Shuffle(order);
             orders.Add(order);
         }
-        var plan = new RunPlan(RunPlan.CurrentSchema, runId, c.Name, Hashing.Sha256File(casePath), seed, variants, orders, deployment, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        var plan = new RunPlan(RunPlan.CurrentSchema, runId, c.Name, Hashing.Sha256File(casePath), seed, variants, orders, deployment, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), deployment2);
         EvidenceJson.WriteAtomic(Path.Combine(runDir, "plan.json"), plan);
         Console.WriteLine($"run {runId}: {blocks} blocks of {string.Join("/", variants)}, case {c.Name}");
 
@@ -103,7 +106,7 @@ internal static class Program
                 var start = new ProcessStartInfo(oracle) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
                 foreach (string a in (string[])["desktop-run", "--timeout", timeout.ToString(CultureInfo.InvariantCulture), "--log", log, "--", self,
                     "sample", "--case", casePath, "--variant", v, "--out", samplePath, "--run-id", runId,
-                    "--block", b.ToString(CultureInfo.InvariantCulture), "--position", p.ToString(CultureInfo.InvariantCulture), "--deployment", deployment, "--desktop", "private"])
+                    "--block", b.ToString(CultureInfo.InvariantCulture), "--position", p.ToString(CultureInfo.InvariantCulture), "--deployment", v == "calcdb~2" && deployment2 is not null ? deployment2 : deployment, "--desktop", "private"])
                 {
                     start.ArgumentList.Add(a);
                 }

@@ -35,7 +35,7 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"))))
         .Put("Index", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetIndex(value)); })
         .Method("Requery", (self, args) => Live(self, r => r.Requery()))
-        .Method("Seek", (self, args) => { nint[] copy = args.ToArray(); return Live(self, r => r.Seek(copy)); })
+        .Method("Seek", static (self, args) => (RecordsetObject)self is { Closed: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).Seek(args))
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     private FieldsObject? _fields;
@@ -54,6 +54,11 @@ internal sealed unsafe class RecordsetObject : DaoObject
     public string TableName { get; }
 
     public IRecordCursor Cursor { get; }
+
+    /// <summary>The field names for Fields lookups, prepared once per recordset (its columns do not change; task fbh8).</summary>
+    public CollectionNames FieldNames => _fieldNames ??= new CollectionNames([.. Cursor.Table.Columns.Select(c => c.Name)]);
+
+    private CollectionNames? _fieldNames;
 
     /// <summary>RecordsetTypeEnum: 1 table, 2 dynaset, 4 snapshot, 8 forward-only.</summary>
     public int RecordsetType { get; }
@@ -87,13 +92,15 @@ internal sealed unsafe class RecordsetObject : DaoObject
     /// with 3001, no Index with 3019, more keys than index columns with 3250, a key that does not convert with 3421; a
     /// refusal leaves the position. A Missing key cuts the key there; Null and Empty are the Null key value.
     /// </summary>
-    private CallResult Seek(nint[] args)
+    private CallResult Seek(ReadOnlySpan<nint> args)
     {
         if (Cursor is not TableCursor table)
         {
             return Fail(3251, DaoErrors.NotSupportedForType);
         }
-        SeekOperator? op = Args.Text(args[0]) switch
+        // The comparison as the BSTR's own characters (no string per call, task v4n6); other types convert as before.
+        // An omitted comparison (pointer 0) names no operator, as Args.Text gives it.
+        SeekOperator? op = (args[0] != 0 && Args.TypeOf(args[0]) == VarType.Bstr ? Bstrs.Chars(Args.Cell(args[0])->Pointer) : (Args.Text(args[0]) ?? "").AsSpan()) switch
         {
             "=" => SeekOperator.Equal,
             ">=" => SeekOperator.GreaterOrEqual,
@@ -119,17 +126,18 @@ internal sealed unsafe class RecordsetObject : DaoObject
         {
             return Fail(3250, DaoErrors.CouldNotBuildKey);
         }
-        var keys = new List<SeekKey>(given);
+        // At most 13 keys (Key1..Key13), on the stack; the key columns were resolved once by Index (task v4n6).
+        Span<SeekKey> keys = stackalloc SeekKey[given];
         for (int i = 0; i < given; i++)
         {
-            ColumnDescriptor? column = table.Table.Columns.FirstOrDefault(c => c.PhysicalNumber == physical.Columns[i].PhysicalNumber);
+            ColumnDescriptor? column = table.KeyColumn(i);
             bool converted = true;
             SeekKey? key = column is null ? null : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out converted);
             if (key is null)
             {
                 return column is not null && !converted ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (Text needs W-04/weight-tables-per-sort-order)"));
             }
-            keys.Add(key.Value);
+            keys[i] = key.Value;
         }
         IndexRefusal refusal = table.Seek(op.Value, keys, out _);
         return refusal switch
@@ -168,13 +176,12 @@ internal sealed unsafe class RecordsetObject : DaoObject
         {
             return null;
         }
-        using OwnedVariant? c = OwnedVariant.ChangeType(v, target.Value, out _);
-        if (c is null)
+        if (!OwnedVariant.TryChangeScalar(v, target.Value, out NativeVariant changed, out _))
         {
             converted = false;
             return null;
         }
-        NativeVariant* x = c.Pointer;
+        NativeVariant* x = &changed;
         switch (type)
         {
             case NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long:
@@ -341,8 +348,7 @@ internal sealed unsafe class FieldsObject : DaoObject
 
     private CallResult Item(nint index)
     {
-        IReadOnlyList<ColumnDescriptor> columns = Recordset.Cursor.Table.Columns;
-        int? ordinal = CollectionLookup.Find(index, columns.Count, i => columns[i].Name, out bool objectIndex);
+        int? ordinal = CollectionLookup.Find(index, Recordset.FieldNames, out bool objectIndex);
         if (objectIndex)
         {
             return CallResult.Fail(Failure.NotImplemented("Fields.Item with an object index (ACE: 3001 and 3421)"));
@@ -421,7 +427,23 @@ internal sealed unsafe class FieldObject : DaoObject
         {
             return Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true);
         }
-        FieldResult read = Recordset.Cursor.Read(Column);
+        ColumnDescriptor column = Column;
+        if (column.TypeCode is NativeTypes.Text or NativeTypes.Memo)
+        {
+            // D-STRING-1 (task n7mw): the final BSTR is built straight from the encoded field bytes.
+            TextFieldRead text = Recordset.Cursor.ReadText(column);
+            if (text.HasText)
+            {
+                return CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Shape.Units, text, static (dest, t) => t.DecodeInto(dest)));
+            }
+            return Published(text.Result);
+        }
+        return Published(Recordset.Cursor.Read(column));
+    }
+
+    /// <summary>The published result of a field read that is not borrowed text.</summary>
+    private CallResult Published(FieldResult read)
+    {
         if (read.Failure == CursorFailure.NoCurrentRecord)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord, publishesErrorInfo: true);
@@ -457,12 +479,12 @@ internal sealed unsafe class FieldObject : DaoObject
     };
 
     /// <summary>
-    /// The owned VARIANT of a native value that holds a resource (R-ORACLE-1 FMT1-FAMILIES): Text and Memo BSTR, Binary
-    /// and OLE a UI1 array (an empty one reads Null), GUID the BSTR "{guid {…}}".
+    /// The owned VARIANT of a native value that holds a resource (R-ORACLE-1 FMT1-FAMILIES): Binary and OLE a UI1 array
+    /// (an empty one reads Null), GUID the BSTR "{guid {…}}". Text and Memo BSTRs are built directly in
+    /// <see cref="Value"/>.
     /// </summary>
     private static OwnedVariant? Project(NativeValue v) => v.Kind switch
     {
-        NativeKind.Text => OwnedVariant.FromText(v.Text!),
         NativeKind.Binary or NativeKind.LongBinary => v.Bytes is { Length: > 0 } bytes ? ByteArray(bytes) : OwnedVariant.Null(),
         NativeKind.Guid => OwnedVariant.FromText("{guid " + new Guid(v.Bytes!).ToString("B").ToUpperInvariant() + "}"),
         _ => null,
@@ -501,7 +523,7 @@ internal sealed unsafe class ErrorsObject : DaoObject
     private CallResult Item(nint index)
     {
         List<Failure> errors = Engine.Errors;
-        int? ordinal = CollectionLookup.Find(index, errors.Count, i => errors[i].Number.ToString(System.Globalization.CultureInfo.InvariantCulture), out bool objectIndex);
+        int? ordinal = CollectionLookup.Find(index, new CollectionNames([.. errors.Select(e => e.Number.ToString(System.Globalization.CultureInfo.InvariantCulture))]), out bool objectIndex);
         if (objectIndex || ordinal is not int i)
         {
             return objectIndex ? CallResult.Fail(Failure.NotImplemented("Errors.Item with an object index")) : Fail(3265, DaoErrors.ItemNotFound);

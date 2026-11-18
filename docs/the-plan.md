@@ -92,6 +92,7 @@ Write first for clarity. When a measurement (the cost counters, `calcdb-perf`, a
 - **Failure text only on failure paths.**
 - **Call COM from the apartment it expects.** A tool that drives an apartment-threaded engine (DAO) runs on an STA. From an MTA every call is marshalled, measured 30–40 times slower.
 - **Read only what you use.** A bulk scan of evidence deserializes a projection of the fields it needs, not the full record.
+- **Time it as well as weigh it.** Fewer bytes is not faster by itself: index entry views made Seek slower until the page search became binary. Keep test assertions out of a measured loop; they allocate.
 
 A tool that takes minutes where seconds are expected has a cause: find it before adding time limits or background jobs.
 

@@ -32,7 +32,8 @@ public enum NativeKind
 }
 
 /// <summary>
-/// One native field value with its exact payload: fixed scalars as their exact bits, Text as exact UTF-16 units, Binary
+/// One native field value with its exact payload: fixed scalars as their exact bits, Text and Memo as exact UTF-16 units
+/// (in <see cref="Text"/> only; the encoded bytes are not kept, task n7mw), Binary
 /// and long values as exact bytes. Dates and Currency keep their raw representation. A value type: a fixed scalar read
 /// allocates nothing (task 6p9q).
 /// </summary>
@@ -65,23 +66,110 @@ public static class FieldDecoder
 {
     public const long DefaultLongValueBudget = 64L << 20;
 
-    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget)
+    /// <summary>
+    /// Locates the field's bytes in the row; false with the whole value when there are none to decode (a malformed
+    /// row or field, Null, a Yes/No bit).
+    /// </summary>
+    private static bool Locate(RowView row, TableDefinition table, ColumnDescriptor column, FormatDescriptor d, out ReadOnlySpan<byte> bytes, out NativeValue value) =>
+        Locate(row, table, column, d, out bytes, out value, out _);
+
+    private static bool Locate(RowView row, TableDefinition table, ColumnDescriptor column, FormatDescriptor d, out ReadOnlySpan<byte> bytes, out NativeValue value, out Range at)
     {
+        bytes = default;
+        at = default;
         if (!RowEnvelope.TryOpen(row.Body, d, out RowEnvelope envelope, out string? failure))
         {
-            return NativeValue.Fail(failure!);
+            value = NativeValue.Fail(failure!);
+            return false;
         }
         FieldRead read = envelope.ReadField(column, table.KnownFixedEnd(envelope.ColumnCount, d));
         switch (read.Outcome)
         {
             case FieldOutcome.Malformed:
-                return NativeValue.Fail(read.Failure!);
+                value = NativeValue.Fail(read.Failure!);
+                return false;
             case FieldOutcome.Null:
-                return NativeValue.Null;
+                value = NativeValue.Null;
+                return false;
             case FieldOutcome.Boolean:
-                return new NativeValue(NativeKind.Boolean) { Boolean = read.Value };
+                value = new NativeValue(NativeKind.Boolean) { Boolean = read.Value };
+                return false;
         }
-        ReadOnlySpan<byte> bytes = row.Body[read.Start..read.End];
+        at = read.Start..read.End;
+        bytes = row.Body[at];
+        value = default;
+        return true;
+    }
+
+    /// <summary>The exact payload of a Memo or OLE field's long value, or null with the failure.</summary>
+    private static byte[]? LongValue(ReadOnlySpan<byte> bytes, PageCache cache, FormatDescriptor d, long longValueBudget, out string? failure)
+    {
+        LongValuePlan? plan = LongValuePlan.Inspect(bytes, out string? planFailure);
+        if (plan is null)
+        {
+            failure = planFailure!;
+            return null;
+        }
+        byte[]? payload = LongValueReader.Read(plan, bytes, cache, d, longValueBudget, out TraversalFailure? lvFailure);
+        if (payload is null)
+        {
+            failure = lvFailure!.Predicate;
+            return null;
+        }
+        CostCounters.Current.LongValuePayloadBytes += payload.Length;
+        failure = null;
+        return payload;
+    }
+
+    /// <summary>
+    /// A Text or Memo field for direct construction (D-STRING-1, task n7mw): its encoded bytes, borrowed from the row
+    /// view's page (Text) or the assembled long value (Memo), checked and measured but not decoded. Null and failures
+    /// are those of <see cref="Read"/>; any other column reads as <see cref="Read"/>.
+    /// </summary>
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget) =>
+        ReadText(row, table, column, cache, d, out _, longValueBudget);
+
+    /// <summary>
+    /// As <see cref="ReadText(RowView, TableDefinition, ColumnDescriptor, PageCache, FormatDescriptor, long)"/>; for an
+    /// in-row Text field, <paramref name="location"/> is where its checked bytes lie in the row body, so a holder of the
+    /// row can borrow them again without locating them again.
+    /// </summary>
+    public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget)
+    {
+        location = null;
+        if (column.TypeCode is not (NativeTypes.Text or NativeTypes.Memo))
+        {
+            return new TextFieldRead(FieldResult.Of(Read(row, table, column, cache, d, longValueBudget)));
+        }
+        if (!Locate(row, table, column, d, out ReadOnlySpan<byte> bytes, out NativeValue value, out Range at))
+        {
+            return new TextFieldRead(FieldResult.Of(value));
+        }
+        if (column.TypeCode == NativeTypes.Memo)
+        {
+            byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
+            if (payload is null)
+            {
+                return new TextFieldRead(FieldResult.Of(NativeValue.Fail(failure!)));
+            }
+            bytes = payload;
+        }
+        TextShape shape = TextCodec.Measure(bytes);
+        if (!shape.Succeeded)
+        {
+            return new TextFieldRead(FieldResult.Of(NativeValue.Fail(shape.Failure!)));
+        }
+        CostCounters.Current.TextDecodedUnits += shape.Units;
+        location = column.TypeCode == NativeTypes.Text ? at : null;
+        return new TextFieldRead(bytes, shape);
+    }
+
+    public static NativeValue Read(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget = DefaultLongValueBudget)
+    {
+        if (!Locate(row, table, column, d, out ReadOnlySpan<byte> bytes, out NativeValue located))
+        {
+            return located;
+        }
         switch (column.TypeCode)
         {
             case NativeTypes.Byte:
@@ -106,28 +194,22 @@ public static class FieldDecoder
             {
                 TextDecode text = TextCodec.Decode(bytes);
                 CostCounters.Current.TextDecodedUnits += text.Text?.Length ?? 0;
-                return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text, Bytes = bytes.ToArray() } : NativeValue.Fail(text.Failure!);
+                return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text } : NativeValue.Fail(text.Failure!);
             }
             case NativeTypes.Binary:
                 return new NativeValue(NativeKind.Binary) { Bytes = bytes.ToArray() };
             case NativeTypes.Memo or NativeTypes.Ole:
             {
-                LongValuePlan? plan = LongValuePlan.Inspect(bytes, out string? planFailure);
-                if (plan is null)
-                {
-                    return NativeValue.Fail(planFailure!);
-                }
-                byte[]? payload = LongValueReader.Read(plan, bytes, cache, d, longValueBudget, out TraversalFailure? lvFailure);
+                byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
                 if (payload is null)
                 {
-                    return NativeValue.Fail(lvFailure!.Predicate);
+                    return NativeValue.Fail(failure!);
                 }
-                CostCounters.Current.LongValuePayloadBytes += payload.Length;
                 if (column.TypeCode == NativeTypes.Memo)
                 {
                     TextDecode memo = TextCodec.Decode(payload);
                     CostCounters.Current.TextDecodedUnits += memo.Text?.Length ?? 0;
-                    return memo.Succeeded ? new NativeValue(NativeKind.Text) { Text = memo.Text, Bytes = payload } : NativeValue.Fail(memo.Failure!);
+                    return memo.Succeeded ? new NativeValue(NativeKind.Text) { Text = memo.Text } : NativeValue.Fail(memo.Failure!);
                 }
                 return new NativeValue(NativeKind.LongBinary) { Bytes = payload };
             }

@@ -1,0 +1,30 @@
+{
+  "schema": "calcdb.perf-case/1",
+  "name": "big-id-seek-vtable",
+  "bookRefs": [
+    "W-01/dao-cost",
+    "W-04/key-navigation",
+    "CUR-SEEK",
+    "T-INT-63",
+    "T-EVID-35"
+  ],
+  "semanticTwin": "w-01-dao-cost/seek-big",
+  "fixture": {
+    "fileName": "r-q2-cursor-dao-main.accdb",
+    "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+    "length": 786432,
+    "provenance": "r-q2-cursor-dao.create-main.05ea7b34fc.a1 output:r-q2-cursor-dao-main.accdb"
+  },
+  "table": "Big",
+  "recordsetType": 1,
+  "surface": "native-vtable/x64",
+  "body": "seek",
+  "field": "ID",
+  "fieldOrdinal": 0,
+  "repeat": 1,
+  "consumer": "xor-clng",
+  "passes": 5,
+  "maxRows": 2048,
+  "index": "PK_Big",
+  "description": "II-15 §26 Seek: Index PK_Big (ID Long) set once, then for k below 2048 Seek \"=\" on ID 1 + (k * 997 mod 2048), NoMatch, and the held Field ID read with CLng into the sink: every key once, in a scattered order (resident root and leaf after pass 0; x8d9, v4n6)."
+}

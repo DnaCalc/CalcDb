@@ -77,16 +77,79 @@ call. The vtable loop then allocates 10.6 managed bytes per row, and cache probe
 A/A controls stayed flat (calcdb/calcdb 1.03 / 1.07, ace/ace 1.02 / 1.05). The semantic twin and every compared
 question are unchanged against ACE. The habits are codified in The Plan §3.2.
 
-**Where the same habits apply next** (found by searching for the patterns; to do when each path is worked on):
-- Text reads: `FieldDecoder` copies the field bytes as well as decoding them, and `TextCodec.Decode` copies the span
-  before `string.Create`: three allocations per text read (the repeated-text body's 3019 bytes per row). This is
-  R-STRING-1's decision point, with the cache-or-direct question beside it.
-- Index pages: `IndexPages.Decode` makes a `byte[]` per entry and per prefix, and each descent allocates a `HashSet`
-  (`IndexNavigator`). This hits Seek loops; a decoded directory with borrowed spans (II-05 §2's two-span entry view) fits.
-- `TableCursor.Seek` builds its key in a `List<byte>` and looks up each key column with LINQ, per call.
-- Name lookup: `CollectionLookup` normalizes each candidate name per comparison, and `GetIDsOfNames` builds a LINQ array.
-  Both matter for late-bound callers that do not cache DISPIDs, and for the named body's 747 bytes per row.
-- `LongValueReader` allocates a `HashSet` per long-value chain.
+## Text, index, Seek, name and long-value paths (tasks n7mw, x8d9, v4n6, fbh8, 7jdb)
+
+The five paths the 6p9q search found, each measured first, changed one step at a time and measured again: in-process
+with `AllocationTests` and the chain test, then with calcdb-perf against ACE (seeds as before: 20261118 plus the
+case's sorted position; the new seek case 20261124). Paired runs of two CalcDb builds use `--deployment2` (the
+A/A twin `calcdb~2` runs the second build): HEAD before the work (`75b2bd7a`) against the result.
+
+**In-process (managed bytes per call, resident)**
+
+| Path | Before | After |
+| --- | --- | --- |
+| Text(120) field read, decoded (`Read`) | 722.6 | 234.6: the payload is copied once, into its string |
+| Text field read, borrowed for a BSTR (`ReadText`) | — | 10.6 (movement only) |
+| Seek `=` on a Long key | 608 | 0 |
+| Seek `=` and a Long read | 704 | 96: one page pin when the row is on another page |
+| first pass, index pages decoded | 834 | 140 |
+| Two-chunk long value (4,080 bytes) | 4,472 | 4,296, of which 4,104 is the result |
+
+**Against ACE (ratio CalcDb/ACE, pass 0 / pass 4; bracket: pass 4, 95% block bootstrap)**
+
+| Case | Before (HEAD) | After | Bytes per row |
+| --- | --- | --- | --- |
+| big-v-repeated4-vtable (Text V read 4 times) | 1.19 / 0.92 | 0.57 / 0.45 [0.39, 0.52] | 3,019 → 10.6 |
+| big-id-seek-vtable (new: Seek `=`, NoMatch, Value; 2,048 keys in a scattered order) | 1.55 / 1.66 [1.44, 1.88] | 0.68 / 0.61 [0.56, 0.68] | 1,264 → 168 |
+| big-id-named-vtable | 0.66 / 0.56 | 0.66 / 0.49 | 747 → 643 |
+| big-id-cached-field-idispatch | 0.57 / 0.45 | 0.61 / 0.52 | 107 → 107 |
+
+Paired, after/HEAD: repeated text 0.51 / 0.59 [0.53, 0.66]; Seek 0.42 / 0.36 [0.32, 0.40] (before the COM Seek
+change below); named 1.06 / 1.02 and IDispatch 0.98 / 1.14, both unresolved: fbh8 saved 104 bytes per row but no
+measurable time, since the named body's cost is its two wrapper objects per row.
+
+**D-STRING-1 (R-STRING-1, direct versus cached).** Measured on the repeated-text body, where the Text values are all
+stored uncompressed, so a decode is one copy:
+- Direct construction (the BSTR filled from the page bytes) against a bounded per-row cache of the decoded string
+  (one string per field per row, BSTRs copied from it; a temporary build, not kept): cache/direct 0.91 / 0.79 [0.73, 0.86]. The
+  cache was faster, because each direct read located and checked the field again.
+- Direct construction that keeps the checked location of each Text field for the bound row (bounded scratch: one
+  entry per column, allocated once per cursor, validated by a generation) against the same cache: 1.07 / 0.87
+  [0.72, 1.06], unresolved, with 224 bytes per row less.
+
+Decision: direct construction into the final BSTR, for one read and for repeated reads, with the location held per
+row; no decoded-text cache. Open: compressed text (none in this fixture) and Memo values, whose payload is assembled
+per read.
+
+**Changes, in the order measured.**
+1. `TextCodec` decodes straight from the span into the string (no copy first); `TextDecode` is a value; a Text value no
+   longer keeps its encoded bytes beside its units (nothing read them).
+2. `TextFieldRead`: the cursor lends a Text or Memo field's checked bytes and shape; `Field.Value` fills the BSTR's own
+   buffer (`Bstrs.FromUnits`), and the result is an owned BSTR carried inline in `CallResult` (no `OwnedVariant`): the
+   adapters move it to the caller or free it.
+3. The bound row keeps where its Text fields lie (above).
+4. `IndexPage`: one copy of the used entry area and a directory of entry ends; entries are views (`IndexEntryView`,
+   `IndexKeyView`: prefix and suffix spans, the trailer allowed to start in the prefix as in F-31). Visited sets on
+   the stack (`VisitedSet<T>`: a descent is bounded by its budget; a peer walk or a long-value chain spills to the heap
+   after 16).
+5. Seek keys on the stack (`IndexKeys.TryWriteField`), key columns resolved once per `Index`, `KeyBound` a borrowed view.
+6. Measured slower: the views made Seek 1.24–1.26× HEAD on the resident passes, because each page was still scanned
+   entry by entry. A binary search for the first admitted entry (the bound is monotone in entry order) made it
+   0.36× HEAD.
+7. COM Seek: arguments as a span (no array or closure), the comparison matched on the BSTR's characters, keys
+   converted through a stack VARIANT (`OwnedVariant.TryChangeScalar`): 440 → 168 bytes per row, 0.70 → 0.61 of ACE.
+8. Name lookup: `CollectionNames` (names composed once per collection, a case-insensitive dictionary, looked up by
+   the BSTR's characters); GetIDsOfNames through a dictionary per declaration.
+
+Every compared question answers as before against ACE: the differences are identical to HEAD's, and the new
+`w-01-dao-cost/seek-big` twin is retained and matches (29 of 513 compared questions match except the configured
+CLSID, HEAD 28). One regression found by the comparison was fixed before the commit: an omitted Seek comparison
+reached a null argument pointer and gave the defect outcome.
+
+**Where the same habits apply next**
+- The named and ordinal bodies allocate two wrapper objects per row (`Fields` and `Field`), about 640 bytes.
+- A page pin is an object (`PagePin`, about 96 bytes): scattered reads (Seek, bookmarks) pay one per page change.
+- String properties (`Name` and others) still return an `OwnedVariant`; the inline owned BSTR fits them.
 
 **Limits.** One caller lane (native C# client, vtable and IDispatch); VBA, .NET Framework 4.8 and .NET 10 lanes are
 not measured. ACE's internal costs are unavailable, never zero. OS cache state is not controlled. No practical

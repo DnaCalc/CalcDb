@@ -37,7 +37,10 @@ internal struct ExcepInfo
 /// <summary>Bindings by documented signatures; the client side of the measured calls.</summary>
 internal static unsafe partial class Native
 {
-    public const ushort VtEmpty = 0, VtI2 = 2, VtI4 = 3, VtBstr = 8, VtBool = 11;
+    public const ushort VtEmpty = 0, VtI2 = 2, VtI4 = 3, VtBstr = 8, VtError = 10, VtBool = 11;
+
+    /// <summary>An omitted optional argument: VT_ERROR DISP_E_PARAMNOTFOUND.</summary>
+    public static Variant Missing => new() { Vt = VtError, Int64 = unchecked((int)0x80020004) };
     public const ushort DispatchMethod = 1, DispatchPropertyGet = 2;
 
     public static readonly Guid IidIDispatch = new("00020400-0000-0000-C000-000000000046");

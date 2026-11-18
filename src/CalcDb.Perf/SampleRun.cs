@@ -82,6 +82,10 @@ internal static unsafe class SampleRun
             field = InvokeObject(fields, "Item", [Bstr(c.Field)], Native.DispatchMethod | Native.DispatchPropertyGet);
             t1 = Native.Qpc();
             acquire = new Interval(t0, t1);
+            if (c.Index is { } indexName)
+            {
+                SetIndex(rs, indexName);
+            }
             int fieldType = (int)InvokeScalar(field, "Type");
             int fieldSize = (int)InvokeScalar(field, "Size");
             nint typedField = field, typedFields = fields;
@@ -249,6 +253,22 @@ internal static unsafe class SampleRun
         {
             _ = Native.Release(p);
             p = 0;
+        }
+    }
+
+    /// <summary>Recordset.Index = name through the Recordset vtable (put at byte 136), once at setup.</summary>
+    private static void SetIndex(nint rs, string name)
+    {
+        Check(Native.QueryInterface(rs, VtableLane.IidRecordset, out nint typed), "QueryInterface Recordset");
+        nint bstr = Native.SysAllocString(name);
+        try
+        {
+            Check(((delegate* unmanaged<nint, nint, int>)(*(nint**)typed)[136 / 8])(typed, bstr), "Index = " + name);
+        }
+        finally
+        {
+            Native.SysFreeString(bstr);
+            _ = Native.Release(typed);
         }
     }
 

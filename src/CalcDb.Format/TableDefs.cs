@@ -132,6 +132,9 @@ public sealed record ColumnDescriptor
     public required int Length { get; init; }
     public required bool IsFixed { get; init; }
 
+    /// <summary>The column's position in <see cref="TableDefinition.Columns"/>, for per-column state of a consumer.</summary>
+    public int Ordinal { get; init; }
+
     /// <summary>The ordinary Boolean (type 1) keeps its value in the row mask (II-04 §2).</summary>
     public bool IsMaskBoolean => TypeCode == NativeTypes.Boolean;
 }
@@ -283,8 +286,9 @@ public static class TableDefDecoder
             {
                 return null;
             }
-            var descriptors = raw.Select(r => new ColumnDescriptor
+            var descriptors = raw.Select((r, ordinal) => new ColumnDescriptor
             {
+                Ordinal = ordinal,
                 Name = names[r.Index],
                 TypeCode = (byte)c.Type.Read(r.Block),
                 PhysicalNumber = (int)c.Number.Read(r.Block),

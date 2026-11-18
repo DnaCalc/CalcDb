@@ -184,7 +184,7 @@ internal sealed unsafe class WorkspacesObject : DaoObject
     private CallResult Item(ReadOnlySpan<nint> args)
     {
         WorkspaceObject ws = Engine.DefaultWorkspace;
-        int? found = CollectionLookup.Find(args[0], 1, _ => ws.Name, out bool objectIndex);
+        int? found = CollectionLookup.Find(args[0], new CollectionNames([ws.Name]), out bool objectIndex);
         if (objectIndex)
         {
             return CallResult.Fail(Failure.NotImplemented("Workspaces.Item with an object index"));

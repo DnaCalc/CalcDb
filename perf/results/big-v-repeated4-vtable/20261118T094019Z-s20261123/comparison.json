@@ -1,0 +1,352 @@
+{
+  "schema": "calcdb.perf-comparison/1",
+  "runId": "20261118T094019Z-s20261123",
+  "case": "big-v-repeated4-vtable",
+  "baseline": "ace",
+  "candidate": "calcdb",
+  "estimator": "per pass: exp(mean over blocks of log(candidate ns/row / baseline ns/row)); below 1 favors the candidate",
+  "blocks": 10,
+  "passes": [
+    {
+      "pass": 0,
+      "eligibleBlocks": 10,
+      "ratio": 0.8333401941194681,
+      "intervalLow": 0.7076968437180625,
+      "intervalHigh": 0.9883833490667048,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 20261123, 95%"
+    },
+    {
+      "pass": 1,
+      "eligibleBlocks": 10,
+      "ratio": 0.6702217069536376,
+      "intervalLow": 0.5950106613343852,
+      "intervalHigh": 0.7428627931298895,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 20261124, 95%"
+    },
+    {
+      "pass": 2,
+      "eligibleBlocks": 10,
+      "ratio": 0.5920610116549594,
+      "intervalLow": 0.4897025469650777,
+      "intervalHigh": 0.6809686470882191,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 20261125, 95%"
+    },
+    {
+      "pass": 3,
+      "eligibleBlocks": 10,
+      "ratio": 0.6791773142849402,
+      "intervalLow": 0.5733743750412421,
+      "intervalHigh": 0.8188044186822776,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 20261126, 95%"
+    },
+    {
+      "pass": 4,
+      "eligibleBlocks": 10,
+      "ratio": 0.6950049356720694,
+      "intervalLow": 0.6113803030848312,
+      "intervalHigh": 0.7917359726140961,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 20261127, 95%"
+    }
+  ],
+  "variants": [
+    {
+      "variant": "ace",
+      "samples": 10,
+      "eligible": 10,
+      "passes": [
+        {
+          "pass": 0,
+          "medianNsPerRow": 6421.4599609375,
+          "rawNsPerRow": [
+            5470.556640625,
+            9492.67578125,
+            6205.224609375,
+            7379.19921875,
+            7946.6796875,
+            4886.474609375,
+            6148.681640625,
+            6360.205078125,
+            6482.71484375,
+            6594.921875
+          ]
+        },
+        {
+          "pass": 1,
+          "medianNsPerRow": 5172.4365234375,
+          "rawNsPerRow": [
+            4546.97265625,
+            7587.3046875,
+            4689.74609375,
+            6558.7890625,
+            5163.18359375,
+            4483.154296875,
+            4373.33984375,
+            5323.876953125,
+            5181.689453125,
+            5384.5703125
+          ]
+        },
+        {
+          "pass": 2,
+          "medianNsPerRow": 5248.876953125,
+          "rawNsPerRow": [
+            4072.998046875,
+            7460.693359375,
+            5210.83984375,
+            5388.818359375,
+            4571.19140625,
+            5243.1640625,
+            5694.287109375,
+            12487.01171875,
+            5245.8984375,
+            5251.85546875
+          ]
+        },
+        {
+          "pass": 3,
+          "medianNsPerRow": 5310.3515625,
+          "rawNsPerRow": [
+            4209.66796875,
+            6560.9375,
+            5246.240234375,
+            4706.15234375,
+            5374.462890625,
+            6004.98046875,
+            4854.39453125,
+            7928.759765625,
+            6109.86328125,
+            4819.04296875
+          ]
+        },
+        {
+          "pass": 4,
+          "medianNsPerRow": 5325.634765625,
+          "rawNsPerRow": [
+            4769.287109375,
+            6383.642578125,
+            5629.8828125,
+            4631.396484375,
+            4782.861328125,
+            6030.95703125,
+            5021.38671875,
+            7374.462890625,
+            6296.337890625,
+            4792.724609375
+          ]
+        }
+      ],
+      "medianOpenMicroseconds": 351767.5,
+      "medianCloseMicroseconds": 1112.9499999999998
+    },
+    {
+      "variant": "calcdb",
+      "samples": 10,
+      "eligible": 10,
+      "passes": [
+        {
+          "pass": 0,
+          "medianNsPerRow": 5147.998046875,
+          "rawNsPerRow": [
+            5879.78515625,
+            4833.935546875,
+            5683.935546875,
+            5089.2578125,
+            7469.7265625,
+            7040.771484375,
+            4983.642578125,
+            5206.73828125,
+            4554.1015625,
+            4879.833984375
+          ],
+          "medianCostPerRow": {
+            "com.vtable.entries": 6.00048828125,
+            "com.dispatch.invokes": 0,
+            "com.dispatch.names": 0,
+            "com.queryinterface": 0,
+            "com.addref": 0,
+            "com.release": 0,
+            "dao.collection.lookups": 0,
+            "dao.collection.name-probes": 0,
+            "dao.wrappers.created": 0,
+            "isam.row.binds": 1,
+            "isam.field.decodes": 4,
+            "value.text.decoded-units": 400,
+            "value.long-value.payload-bytes": 0,
+            "value.bstr.allocations": 4,
+            "value.bstr.payload-bytes": 800,
+            "value.results": 5.00048828125,
+            "cache.probes": 0,
+            "cache.hits": 0.0556640625,
+            "cache.misses": 0.05517578125,
+            "cache.loads": 0.05517578125,
+            "managed.allocated-bytes": 224.390625
+          }
+        },
+        {
+          "pass": 1,
+          "medianNsPerRow": 3544.7998046875,
+          "rawNsPerRow": [
+            3141.455078125,
+            3382.421875,
+            3710.009765625,
+            3618.06640625,
+            3404.052734375,
+            3504.1015625,
+            3757.470703125,
+            3798.33984375,
+            3352.05078125,
+            3585.498046875
+          ],
+          "medianCostPerRow": {
+            "com.vtable.entries": 6.00048828125,
+            "com.dispatch.invokes": 0,
+            "com.dispatch.names": 0,
+            "com.queryinterface": 0,
+            "com.addref": 0,
+            "com.release": 0,
+            "dao.collection.lookups": 0,
+            "dao.collection.name-probes": 0,
+            "dao.wrappers.created": 0,
+            "isam.row.binds": 1,
+            "isam.field.decodes": 4,
+            "value.text.decoded-units": 400,
+            "value.long-value.payload-bytes": 0,
+            "value.bstr.allocations": 4,
+            "value.bstr.payload-bytes": 800,
+            "value.results": 5.00048828125,
+            "cache.probes": 0,
+            "cache.hits": 0.11083984375,
+            "cache.misses": 0,
+            "cache.loads": 0,
+            "managed.allocated-bytes": 170.640625
+          }
+        },
+        {
+          "pass": 2,
+          "medianNsPerRow": 3407.275390625,
+          "rawNsPerRow": [
+            3047.119140625,
+            3354.296875,
+            3539.453125,
+            3460.25390625,
+            3282.91015625,
+            3317.724609375,
+            3637.6953125,
+            3554.296875,
+            3301.5625,
+            3643.1640625
+          ],
+          "medianCostPerRow": {
+            "com.vtable.entries": 6.00048828125,
+            "com.dispatch.invokes": 0,
+            "com.dispatch.names": 0,
+            "com.queryinterface": 0,
+            "com.addref": 0,
+            "com.release": 0,
+            "dao.collection.lookups": 0,
+            "dao.collection.name-probes": 0,
+            "dao.wrappers.created": 0,
+            "isam.row.binds": 1,
+            "isam.field.decodes": 4,
+            "value.text.decoded-units": 400,
+            "value.long-value.payload-bytes": 0,
+            "value.bstr.allocations": 4,
+            "value.bstr.payload-bytes": 800,
+            "value.results": 5.00048828125,
+            "cache.probes": 0,
+            "cache.hits": 0.11083984375,
+            "cache.misses": 0,
+            "cache.loads": 0,
+            "managed.allocated-bytes": 170.640625
+          }
+        },
+        {
+          "pass": 3,
+          "medianNsPerRow": 3569.6533203125,
+          "rawNsPerRow": [
+            3830.17578125,
+            3332.8125,
+            3131.982421875,
+            4485.595703125,
+            3168.359375,
+            3359.326171875,
+            5713.0859375,
+            3750.732421875,
+            3483.056640625,
+            3656.25
+          ],
+          "medianCostPerRow": {
+            "com.vtable.entries": 6.00048828125,
+            "com.dispatch.invokes": 0,
+            "com.dispatch.names": 0,
+            "com.queryinterface": 0,
+            "com.addref": 0,
+            "com.release": 0,
+            "dao.collection.lookups": 0,
+            "dao.collection.name-probes": 0,
+            "dao.wrappers.created": 0,
+            "isam.row.binds": 1,
+            "isam.field.decodes": 4,
+            "value.text.decoded-units": 400,
+            "value.long-value.payload-bytes": 0,
+            "value.bstr.allocations": 4,
+            "value.bstr.payload-bytes": 800,
+            "value.results": 5.00048828125,
+            "cache.probes": 0,
+            "cache.hits": 0.11083984375,
+            "cache.misses": 0,
+            "cache.loads": 0,
+            "managed.allocated-bytes": 170.640625
+          }
+        },
+        {
+          "pass": 4,
+          "medianNsPerRow": 3798.876953125,
+          "rawNsPerRow": [
+            4593.017578125,
+            3555.029296875,
+            3506.689453125,
+            4017.236328125,
+            3440.234375,
+            3619.287109375,
+            4191.552734375,
+            3978.466796875,
+            3416.11328125,
+            4123.92578125
+          ],
+          "medianCostPerRow": {
+            "com.vtable.entries": 6.00048828125,
+            "com.dispatch.invokes": 0,
+            "com.dispatch.names": 0,
+            "com.queryinterface": 0,
+            "com.addref": 0,
+            "com.release": 0,
+            "dao.collection.lookups": 0,
+            "dao.collection.name-probes": 0,
+            "dao.wrappers.created": 0,
+            "isam.row.binds": 1,
+            "isam.field.decodes": 4,
+            "value.text.decoded-units": 400,
+            "value.long-value.payload-bytes": 0,
+            "value.bstr.allocations": 4,
+            "value.bstr.payload-bytes": 800,
+            "value.results": 5.00048828125,
+            "cache.probes": 0,
+            "cache.hits": 0.11083984375,
+            "cache.misses": 0,
+            "cache.loads": 0,
+            "managed.allocated-bytes": 170.640625
+          }
+        }
+      ],
+      "medianOpenMicroseconds": 4498.1,
+      "medianCloseMicroseconds": 1921.05
+    }
+  ],
+  "checks": [
+    "consumption: 20 of 20 samples consumed rows 2048 with sink 0 in every pass (a body check; the typed oracle is w-01-dao-cost/scan-big)",
+    "expansion: client entries equal 6n+1: EOF, 4 Value, MoveNext per row and the final EOF in every eligible pass; CalcDb's com.vtable.entries counter equals the client's count in 50 passes"
+  ],
+  "excluded": [],
+  "disposition": "reported; no practical decision criterion is declared for this case (II-15 §29: a threshold comes from measured application costs)"
+}
