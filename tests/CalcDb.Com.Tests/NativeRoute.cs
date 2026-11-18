@@ -10,6 +10,8 @@ internal static unsafe partial class NativeRoute
 {
     public const uint ClsctxInprocServer = 1;
     public const uint ClsctxLocalServer = 4;
+    public const uint ClsctxAll = 0x17;
+    public const uint RegclsMultipleUse = 1;
     public const int RegdbEClassNotReg = unchecked((int)0x80040154);
 
     public static readonly Guid IidIUnknown = new("00000000-0000-0000-C000-000000000046");
@@ -182,6 +184,27 @@ internal static unsafe partial class NativeRoute
 
     [LibraryImport("ole32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int CLSIDFromProgID(string progId, out Guid clsid);
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoRegisterClassObject(in Guid clsid, nint factory, uint context, uint flags, out uint cookie);
+
+    [LibraryImport("ole32.dll")]
+    public static partial int CoRevokeClassObject(uint cookie);
+
+    /// <summary>The CLSID the registry names for a ProgID, read-only and without CLSIDFromProgID (II-13 §15).</summary>
+    public static Guid? RegistryNames(string progId)
+    {
+        using Microsoft.Win32.RegistryKey? key = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(progId + "\\CLSID");
+        return key?.GetValue(null) is string text && Guid.TryParse(text, out Guid clsid) ? clsid : null;
+    }
+
+    /// <summary>The controlling IUnknown of an object, without keeping a reference.</summary>
+    public static nint Identity(nint unknown)
+    {
+        Assert.Equal(0, QueryInterface(unknown, IidIUnknown, out nint identity));
+        Release(identity);
+        return identity;
+    }
 
     [LibraryImport("oleaut32.dll")]
     public static partial int GetErrorInfo(uint reserved, out nint errorInfo);

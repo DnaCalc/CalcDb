@@ -50,10 +50,22 @@ public sealed unsafe class FactoryHostCoreTests
         using var scope = new Scope(Path.Combine(deploy, "CalcDb.Own.manifest"));
 
         // Name resolution and class selection are separate steps (T-INT-06). Observed: under an activation context the
-        // ProgID resolves to a context-configured CLSID, not the manifest's reference CLSID; creating through it reaches
-        // the reference class (COM hands DllGetClassObject the reference CLSID), so both give the one engine.
+        // ProgID resolves to a configured CLSID that Windows derives from the manifest file, not the manifest's reference
+        // CLSID; creating through it reaches the reference class (COM hands DllGetClassObject the reference CLSID), so both
+        // give the one engine. No manifest form avoids it (docs/work/activation-routes.md, vm83).
         Assert.Equal(0, CLSIDFromProgID("CalcDb.DBEngine", out Guid configured));
         Assert.NotEqual(OwnClsid, configured);
+        // The same manifest bytes at another path give another configured CLSID: it is derived from the manifest file.
+        string copy = Directory.CreateTempSubdirectory("calcdb-actctx-").FullName;
+        File.Copy(Path.Combine(deploy, "CalcDb.Own.manifest"), Path.Combine(copy, "CalcDb.Own.manifest"));
+        File.Copy(PublishedModule, Path.Combine(copy, "CalcDb.dll"));
+        using (new Scope(Path.Combine(copy, "CalcDb.Own.manifest")))
+        {
+            Assert.Equal(0, CLSIDFromProgID("CalcDb.DBEngine", out Guid elsewhere));
+            Assert.NotEqual(OwnClsid, elsewhere);
+            Assert.NotEqual(configured, elsewhere);
+        }
+        Directory.Delete(copy, recursive: true);
         Assert.Equal(0, Create(configured, 0, ClsctxInprocServer, IidIUnknown, out nint byName));
 
         Assert.Equal(0, Create(OwnClsid, 0, ClsctxInprocServer, IidIDispatch, out nint engine));
@@ -133,11 +145,14 @@ public sealed unsafe class FactoryHostCoreTests
         Assert.Equal(0, counts.LockUnderflows);
     }
 
-    /// <summary>T-INT-48, T-INT-47 (HOST-ABI), T-INT-09 (retained factory), HOST-BOOT: no fallback before or after the host.</summary>
+    /// <summary>
+    /// T-INT-48, T-INT-47 (HOST-ABI), T-INT-09 (retained factory), HOST-BOOT: no fallback before or after the host; the
+    /// two D-ACT-1 mechanisms, context and host registration, and the CLSID each gives the ProgID (ACT-NAME, vm83).
+    /// </summary>
     private static void CompatibilityClassUnderTheHost()
     {
         string deploy = Path.GetDirectoryName(PublishedModule)!;
-        using var scope = new Scope(Path.Combine(deploy, "CalcDb.Compat.manifest"));
+        var scope = new Scope(Path.Combine(deploy, "CalcDb.Compat.manifest"));
 
         // Before bootstrap the compatibility class is refused, and the refusal does not fall back to ACE.
         Assert.Equal(HResults.CLASS_E_CLASSNOTAVAILABLE, Create(CompatClsid, 0, ClsctxInprocServer, IidIDispatch, out nint early));
@@ -173,6 +188,7 @@ public sealed unsafe class FactoryHostCoreTests
         Assert.Equal(Path.GetFullPath(PublishedModule), ModuleOf(Vtable(engine)[6]), ignoreCase: true);
         Assert.Equal("16.0", InvokeGetText(engine, VersionDispId, out _));
         Assert.False(IsLoaded("ACEDAO.DLL"));
+        HostRegistration(engine, ref scope);
 
         // A factory retained across shutdown keeps its captured binding (T-INT-09); new creation stops (Stopping).
         Assert.Equal(0, ClassObject(CompatClsid, ClsctxInprocServer, IidIClassFactory, out nint retained));
@@ -188,6 +204,44 @@ public sealed unsafe class FactoryHostCoreTests
         Release(_outer);
         Assert.Equal(0, Counts().Objects);
         Assert.Equal((int)Host.HostLifecycle.Stopping, Counts().HostState);
+        scope.Dispose();
+    }
+
+    /// <summary>
+    /// Host-EXE registration (II-13 §17, D-ACT-1; vm83): under the context the ProgID gives a configured CLSID and the
+    /// context's class mapping precedes a registered class object. Without the context's mapping the registered CalcDb
+    /// factory serves every class context, and the ProgID gives the reference CLSID where the registry names it (the
+    /// name still comes from the registry: ACT-NAME stays open where it is absent). Leaves <paramref name="scope"/> active.
+    /// </summary>
+    private static void HostRegistration(nint engine, ref Scope scope)
+    {
+        Assert.Equal(0, CLSIDFromProgID("DAO.DBEngine.120", out Guid configured)); // the manifest names it
+        Assert.NotEqual(CompatClsid, configured);
+        Assert.Equal(0, ClassObject(CompatClsid, ClsctxInprocServer, IidIClassFactory, out nint hostFactory));
+        Assert.Equal(0, CoRegisterClassObject(CompatClsid, hostFactory, ClsctxInprocServer, RegclsMultipleUse, out uint registration));
+        Assert.Equal(0, ClassObject(CompatClsid, ClsctxInprocServer, IidIUnknown, out nint viaContext));
+        Assert.NotEqual(Identity(hostFactory), Identity(viaContext)); // each DllGetClassObject issues its own factory
+        Release(viaContext);
+
+        string manifest = Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Compat.manifest");
+        scope.Dispose();
+        if (RegistryNames("DAO.DBEngine.120") == CompatClsid)
+        {
+            Assert.Equal(0, CLSIDFromProgID("DAO.DBEngine.120", out Guid reference));
+            Assert.Equal(CompatClsid, reference);
+        }
+        Assert.Equal(0, ClassObject(CompatClsid, ClsctxAll, IidIUnknown, out nint viaRegistration));
+        Assert.Equal(Identity(hostFactory), Identity(viaRegistration));
+        Assert.Equal(0, Create(CompatClsid, 0, ClsctxAll, IidIUnknown, out nint registered));
+        Assert.Equal(Identity(engine), registered); // the one engine of this apartment and binding
+        Assert.Equal(Path.GetFullPath(PublishedModule), ModuleOf(Vtable(registered)[0]), ignoreCase: true);
+        Assert.False(IsLoaded("ACEDAO.DLL"));
+        Assert.Equal(0, CoRevokeClassObject(registration));
+        foreach (nint p in new[] { registered, viaRegistration, hostFactory })
+        {
+            Release(p);
+        }
+        scope = new Scope(manifest);
     }
 
     private static nint _outer;
