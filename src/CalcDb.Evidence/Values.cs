@@ -8,14 +8,30 @@ namespace CalcDb.Evidence;
 /// The active Automation value of a returned VARIANT, captured without lossy conversion (II-15 §5,
 /// OR-WIRE). Integers are kept as exact decimal text, floating and date/currency values as their raw
 /// bits, BSTRs as their exact byte payload (an odd byte count survives), Decimal as its fields. Fields
-/// named <c>Display</c> or <c>Text</c> are conveniences for people and are never authoritative.
+/// named <c>Display</c> are conveniences for people and are never authoritative. A BSTR's <c>Text</c> is set only when
+/// it decodes the payload exactly (well-formed UTF-16 of an even byte count); a retained record may then omit the hex
+/// <c>Bytes</c>, and <c>VtName</c>, which reading restores (calcdb.evidence/2, <see cref="EvidenceSlim"/>).
 /// Pointers and padding are not values: an object is recorded by a capture-local label.
 /// </summary>
-public sealed record CapturedValue
+public sealed record CapturedValue : IJsonOnDeserialized
 {
+    private string? _vtName;
+    private string? _bytes;
+
     public required int Vt { get; init; }
 
-    public required string VtName { get; init; }
+    public string VtName { get => _vtName ?? NameOf(Vt); init => _vtName = value; }
+
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        // Restore what a slim record omits, so every reader sees the full value.
+        _vtName ??= NameOf(Vt);
+        if (_bytes is null && Text is { } text && ByteLength == 2L * text.Length)
+        {
+            // UTF-16LE on every host; exact, because Text is only set for well-formed UTF-16.
+            _bytes = Convert.ToHexStringLower(System.Text.Encoding.Unicode.GetBytes(text));
+        }
+    }
 
     /// <summary>Exact integer value for VT_I1..VT_UI8, VT_INT/UINT, VT_BOOL (raw -1/0) and VT_ERROR (SCODE).</summary>
     public string? Integer { get; init; }
@@ -24,7 +40,7 @@ public sealed record CapturedValue
     public string? Bits { get; init; }
 
     /// <summary>Exact BSTR payload bytes as hex (from <c>SysStringByteLen</c>).</summary>
-    public string? Bytes { get; init; }
+    public string? Bytes { get => _bytes; init => _bytes = value; }
 
     public long? ByteLength { get; init; }
 

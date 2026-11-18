@@ -100,7 +100,8 @@ public sealed record InvokeEvent : CaptureEvent
 
     public required IReadOnlyList<CapturedValue> Args { get; init; }
 
-    public required string GetIdsOfNamesHresult { get; init; }
+    /// <summary>S_OK when a retained record omits it (calcdb.evidence/2).</summary>
+    public string GetIdsOfNamesHresult { get; init; } = EvidenceSlim.SOk;
 
     public int? DispId { get; init; }
 
@@ -117,7 +118,8 @@ public sealed record InvokeEvent : CaptureEvent
     public ErrorInfoObservation? ErrorInfo { get; init; }
 
     /// <summary>The order in which the result channels were observed (OR-OBS).</summary>
-    public required IReadOnlyList<string> ObservationOrder { get; init; }
+    /// <summary><see cref="EvidenceSlim.UsualObservationOrder"/> when a retained record omits it (calcdb.evidence/2).</summary>
+    public IReadOnlyList<string> ObservationOrder { get; init; } = EvidenceSlim.UsualObservationOrder;
 
     /// <summary>Named arguments: their names as passed, and the DISPIDs one GetIDsOfNames call returned for them.</summary>
     public IReadOnlyList<string>? NamedArgNames { get; init; }

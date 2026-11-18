@@ -24,7 +24,8 @@ public static class EvidenceJson
 
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options) + "\n";
 
-    private static readonly JsonSerializerOptions LineOptions = new(Options) { WriteIndented = false };
+    /// <summary>The same options on one line.</summary>
+    public static readonly JsonSerializerOptions LineOptions = new(Options) { WriteIndented = false };
 
     /// <summary>The same form on one line, for append-only JSON Lines ledgers.</summary>
     public static string SerializeLine<T>(T value) => JsonSerializer.Serialize(value, LineOptions);
@@ -44,17 +45,17 @@ public static class EvidenceJson
         File.Move(temp, path, overwrite: true);
     }
 
-    /// <summary>
-    /// Create a record that must not exist yet. Returns false if it already exists. <paramref name="compact"/> writes
-    /// it on one line (retained evidence records: indentation was about 40% of their size).
-    /// </summary>
-    public static bool TryCreateNew<T>(string path, T value, bool compact = false)
+    /// <summary>Create a record that must not exist yet. Returns false if it already exists.</summary>
+    public static bool TryCreateNew<T>(string path, T value) => TryCreateNewText(path, Serialize(value));
+
+    /// <summary>Create a file with this text that must not exist yet (a retained record in its slim form, for example).</summary>
+    public static bool TryCreateNewText(string path, string text)
     {
         try
         {
             using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
-            writer.Write(compact ? SerializeLine(value) + "\n" : Serialize(value));
+            writer.Write(text);
             return true;
         }
         catch (IOException) when (File.Exists(path))

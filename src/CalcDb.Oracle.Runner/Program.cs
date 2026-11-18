@@ -529,7 +529,7 @@ internal static class Program
         };
         string path = RecordPath(evidenceDir, question, attemptId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        if (!EvidenceJson.TryCreateNew(path, record, compact: true))
+        if (!EvidenceJson.TryCreateNewText(path, EvidenceSlim.Serialize(record)))
         {
             throw new InvalidOperationException($"{path} already exists; retained records are not rewritten.");
         }

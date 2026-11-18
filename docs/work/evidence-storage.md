@@ -75,6 +75,10 @@ is run again and replaced.
   slice that needs bytes (W-04, W-05) runs its questions again and keeps the pages it reads in the answer.
 - Records: 1,101 MB to 681 MB (2,758 records; 110 over 1 MB hold 242 MB; the largest 10.5 MB). `evidence/` is
   699 MB in the working tree instead of 3.2 GB.
+- Slim traces (owner, 2026-11-18): a retained record omits the fields reading restores exactly (`EvidenceSlim`): a
+  value's `vtName`, a BSTR's hex `bytes` when its `text` encodes them at the stated length, and an invoke's S_OK
+  `getIdsOfNamesHresult` and usual `observationOrder`. Each record was converted only after its slim form read back to
+  the same full serialization: 681 MB to 488 MB.
 - `calcdb-oracle prune [--days N]` removes the file copies of older sealed attempts from the runner store.
 - The image sweeps in the tests now cover the stored fixtures (260) instead of every retained image (1,686).
 
