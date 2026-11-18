@@ -329,7 +329,7 @@ internal static class Program
         double days = double.Parse(options.Get("days") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
         DateTime cutoff = DateTime.UtcNow.AddDays(-days);
         string attempts = Path.Combine(store.Root, "attempts");
-        int pruned = 0;
+        int pruned = 0, failed = 0;
         long bytes = 0;
         foreach (string dir in Directory.Exists(attempts) ? Directory.EnumerateDirectories(attempts) : [])
         {
@@ -342,17 +342,31 @@ internal static class Program
             foreach (string sub in (string[])["inputs", "work", "artifacts"])
             {
                 string path = Path.Combine(dir, sub);
-                if (Directory.Exists(path))
+                if (!Directory.Exists(path))
                 {
-                    bytes += Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+                    continue;
+                }
+                try
+                {
+                    // Input copies are read-only while an attempt runs; clear the attribute before deleting.
+                    foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                    {
+                        bytes += new FileInfo(file).Length;
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    }
                     Directory.Delete(path, recursive: true);
                     any = true;
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    failed++;
+                    Console.WriteLine($"not pruned: {path}: {e.Message}");
                 }
             }
             pruned += any ? 1 : 0;
         }
-        Console.WriteLine($"pruned {pruned} sealed attempts older than {days} days: {bytes / 1048576.0:F0} MB of file copies removed");
-        return 0;
+        Console.WriteLine($"pruned {pruned} sealed attempts older than {days} days: {bytes / 1048576.0:F0} MB of file copies removed; {failed} folders not removed");
+        return failed == 0 ? 0 : 1;
     }
 
     private static int SealAbandoned(JobStore store, Options options)
