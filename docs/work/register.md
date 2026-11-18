@@ -122,6 +122,19 @@ with the slice's own remaining branches listed.
 | P4 | 14 | W-L4/conservative-repair | L, later | W-L4/destination-publication | — | not started | `v3pj` |
 | P4 | 15 | W-12/network-feature-combinations | L, later | W-12/local-shared-write | — | not started | `w45w` |
 
+### Performance work items (The Plan §3.2; found after 6p9q, docs/work/perf.md)
+
+Priority P1, ahead of new construction slices of the same priority. Each is measured the same way (AllocationTests
+budget, calcdb-perf with the earlier seed) and keeps every ACE comparison unchanged.
+
+| Item | Depends on | Status | Work item |
+| --- | --- | --- | --- |
+| Text read copies the payload once; R-STRING-1 direct versus cached decision (D-STRING-1) | — | ready | `n7mw` |
+| Index pages as a directory of borrowed spans; stack-bounded visited sets | — | ready | `x8d9` |
+| Seek keys without a list or LINQ per call | `x8d9` (its Seek perf case) | ready | `v4n6` |
+| Name lookup without per-call normalization; GetIDsOfNames by dictionary | — | ready | `fbh8` |
+| Long-value chains without a HashSet per value | — | ready | `7jdb` |
+
 ### W-01/capture-core branches (R-ORACLE-1)
 
 | Branch | Status | Work item | Code / evidence |
