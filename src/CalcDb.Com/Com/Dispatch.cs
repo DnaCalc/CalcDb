@@ -6,10 +6,28 @@ using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Com;
 
-/// <summary>An operation's result: an owned value, nothing, or a failure. Both adapters reach the same operation (II-13 §3).</summary>
+/// <summary>
+/// An operation's result: an owned value, an inline scalar, nothing, or a failure. Both adapters reach the same
+/// operation (II-13 §3). An inline scalar is a VARIANT that owns no resource (a number, a date, a Boolean, Null): the
+/// adapters copy it into the caller's slot, so a scalar getter allocates nothing (task 6p9q). A value that owns a
+/// resource (BSTR, array, object) is an OwnedVariant.
+/// </summary>
 internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure)
 {
+    public NativeVariant Scalar { get; private init; }
+
+    public bool HasScalar { get; private init; }
+
     public static CallResult Of(OwnedVariant value) => new(value, null);
+
+    /// <summary>A scalar result; <paramref name="value"/> must own no resource.</summary>
+    public static CallResult OfScalar(VarType type, long payload)
+    {
+        NativeVariant v = default;
+        v.Vt = (ushort)type;
+        v.Int64 = payload;
+        return new CallResult(null, null) { Scalar = v, HasScalar = true };
+    }
 
     public static CallResult Fail(Failure failure) => new(null, failure);
 
@@ -168,15 +186,15 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         {
             return ArgumentCount(member, HResults.DISP_E_BADPARAMCOUNT, info);
         }
-        nint[] args = new nint[declared];
-        uint[] positions = new uint[declared]; // each argument's index in rgvarg, for puArgErr
+        Span<nint> args = stackalloc nint[declared];
+        Span<uint> positions = stackalloc uint[declared]; // each argument's index in rgvarg, for puArgErr
         NativeVariant* rgvarg = count == 0 ? null : (NativeVariant*)parameters->Args;
         int* namedIds = named == 0 ? null : (int*)parameters->NamedArgs;
         uint positional = count - named;
         for (uint i = 0; i < positional; i++)
         {
-            args[i] = (nint)(rgvarg + (count - 1 - i));
-            positions[i] = count - 1 - i;
+            args[(int)i] = (nint)(rgvarg + (count - 1 - i));
+            positions[(int)i] = count - 1 - i;
         }
         for (uint j = 0; j < named; j++)
         {
@@ -198,7 +216,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
             args[target] = (nint)(rgvarg + j);
             positions[target] = j;
         }
-        var coerced = new List<OwnedVariant>();
+        List<OwnedVariant>? coerced = null;
         try
         {
             for (int k = 0; k < declared; k++)
@@ -227,7 +245,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                         }
                         return hr;
                     }
-                    coerced.Add(c);
+                    (coerced ??= []).Add(c);
                     args[k] = (nint)c.Pointer;
                 }
             }
@@ -236,7 +254,15 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
             {
                 return ErrorPublication.ToExcepInfo(failure, info);
             }
-            if (outcome.Value is { } value)
+            if (outcome.HasScalar)
+            {
+                if (result is not null)
+                {
+                    *result = outcome.Scalar;
+                    CostCounters.Current.ResultValues++;
+                }
+            }
+            else if (outcome.Value is { } value)
             {
                 if (result is not null)
                 {
@@ -249,20 +275,31 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         }
         finally
         {
-            foreach (OwnedVariant c in coerced)
+            foreach (OwnedVariant c in coerced ?? [])
             {
                 c.Dispose();
             }
         }
     }
 
+    private static ReadOnlySpan<InvokeKind> ChoiceOrder => [InvokeKind.Method, InvokeKind.PropertyGet, InvokeKind.PropertyPut, InvokeKind.PropertyPutRef];
+
+    /// <summary>The member a DISPID and its invoke flags select: method first, then get, put, putref (no allocation per call).</summary>
     private MemberDecl? Choose(int dispId, ushort flags)
     {
-        foreach (InvokeKind kind in new[] { InvokeKind.Method, InvokeKind.PropertyGet, InvokeKind.PropertyPut, InvokeKind.PropertyPutRef })
+        IReadOnlyList<MemberDecl> members = Declaration.Members;
+        foreach (InvokeKind kind in ChoiceOrder)
         {
-            if ((flags & (ushort)kind) != 0 && Declaration.Members.FirstOrDefault(m => m.MemberId == dispId && m.Kind == kind) is { } m)
+            if ((flags & (ushort)kind) == 0)
             {
-                return m;
+                continue;
+            }
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i].MemberId == dispId && members[i].Kind == kind)
+                {
+                    return members[i];
+                }
             }
         }
         return null;
@@ -401,7 +438,7 @@ internal static unsafe class TypedCall
             }
             DispatchObject target = ComObject.Recover<DispatchObject>(self);
             NativeVariant* cells = stackalloc NativeVariant[Math.Max(count, 1)];
-            nint[] args = new nint[member.Parameters.Count];
+            Span<nint> args = stackalloc nint[member.Parameters.Count];
             for (int k = 0; k < count && k < args.Length; k++)
             {
                 cells[k] = default;
@@ -422,7 +459,15 @@ internal static unsafe class TypedCall
             {
                 return ErrorPublication.ToErrorInfo(failure, declaration.Iid);
             }
-            if (outcome.Value is { } value)
+            if (outcome.HasScalar)
+            {
+                if (retval != 0)
+                {
+                    StoreScalar(member.ReturnType, outcome.Scalar, retval);
+                    CostCounters.Current.ResultValues++;
+                }
+            }
+            else if (outcome.Value is { } value)
             {
                 using (value)
                 {
@@ -505,6 +550,30 @@ internal static unsafe class TypedCall
                 *(long*)retval = 0; // pointers, BSTR, 8-byte scalars
                 break;
         }
+    }
+
+    /// <summary>An inline scalar written by the declared return type (it owns nothing, so it is copied).</summary>
+    private static void StoreScalar(string returnType, NativeVariant v, nint retval)
+    {
+        switch (returnType)
+        {
+            case "VT_VARIANT":
+                *(NativeVariant*)retval = v;
+                return;
+            case "VT_I2" or "VT_BOOL":
+                *(short*)retval = (short)v.Int64;
+                return;
+            case "VT_UI1":
+                *(byte*)retval = (byte)v.Int64;
+                return;
+            case "VT_I4" or "VT_R4":
+                *(int*)retval = (int)v.Int64;
+                return;
+            case "VT_R8" or "VT_DATE" or "VT_CY":
+                *(long*)retval = v.Int64;
+                return;
+        }
+        throw new InvalidOperationException($"no typed return rule for a scalar as {returnType}");
     }
 
     private static void Store(string returnType, OwnedVariant value, nint retval)

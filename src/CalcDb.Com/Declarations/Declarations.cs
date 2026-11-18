@@ -64,7 +64,27 @@ internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableByte
     public MemberDecl Member(string name, InvokeKind kind) =>
         Members.Single(m => m.Kind == kind && string.Equals(m.Name, name, StringComparison.Ordinal));
 
-    public MemberDecl? BySlot(int slot) => Members.FirstOrDefault(m => m.Slot == slot);
+    private MemberDecl?[]? _bySlot;
+
+    /// <summary>The dispatch member of a vtable slot, from a table built once (no search per call, The Plan §3.2).</summary>
+    public MemberDecl? BySlot(int slot)
+    {
+        MemberDecl?[] table = _bySlot ??= BuildSlotTable();
+        return slot >= 0 && slot < table.Length ? table[slot] : null;
+    }
+
+    private MemberDecl?[] BuildSlotTable()
+    {
+        var table = new MemberDecl?[SlotCount];
+        foreach (MemberDecl m in Members)
+        {
+            if (m.Slot >= 0 && m.Slot < table.Length)
+            {
+                table[m.Slot] ??= m; // the first declared member of a slot, as the search found it
+            }
+        }
+        return table;
+    }
 }
 
 internal sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Name, int MemberId, int Value)> Constants);

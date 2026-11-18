@@ -123,11 +123,12 @@ internal abstract unsafe class DaoObject : DispatchObject
 
     public static CallResult Text(string text) => CallResult.Of(OwnedVariant.FromText(text));
 
-    public static CallResult Int16(int value) => CallResult.Of(OwnedVariant.FromInt16((short)value));
+    public static CallResult Int16(int value) => CallResult.OfScalar(VarType.I2, (short)value);
 
-    public static CallResult Int32(int value) => CallResult.Of(OwnedVariant.FromInt32(value));
+    public static CallResult Int32(int value) => CallResult.OfScalar(VarType.I4, (uint)value);
 
-    public static CallResult Bool(bool value) => CallResult.Of(OwnedVariant.FromBoolean(value));
+    /// <summary>VT_BOOL: VARIANT_TRUE is -1 in the low 16 bits.</summary>
+    public static CallResult Bool(bool value) => CallResult.OfScalar(VarType.Bool, value ? 0xFFFF : 0);
 }
 
 /// <summary>Collection lookup by a VARIANT index (R-DAO-1 DAO-COLL).</summary>

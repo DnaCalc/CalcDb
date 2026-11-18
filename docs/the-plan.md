@@ -1,8 +1,8 @@
 # The Plan
 ## Implementation companion to *The Book of CalcDb* v1.1
 
-**Working draft v0.2 — 16 November 2026**  
-**Status:** working implementation approach, revised after review of Sections 1–4. Further refinements may follow.  
+**Working draft v0.3 — 18 November 2026**  
+**Status:** working implementation approach, revised after review of Sections 1–4; v0.3 adds §3.2 from the first measured optimization. Further refinements may follow.  
 **Authority:** *The Book of CalcDb* v1.1 remains authoritative for product scope, behavioral requirements, architecture, experimental questions, and acceptance obligations. This companion describes how we intend to undertake the work. It is not a replacement for the Book or a claim that its planned experiments have been performed.
 
 ## 1. Purpose and operating principles
@@ -79,6 +79,21 @@ Develop in **vertical slices** tied to the Book, each with observable acceptance
 Rust remains an important potential production implementation language, but **implementing v1.1 twice is not an immediate obligation**, and anticipated Rust needs must not shape or restrict the C# implementation. Selective Rust feasibility experiments may be useful along the way to identify high-consequence technical risks and inform future decisions; they are **learning exercises, not acceptance gates for C# design**.
 
 After the **complete C# v1.1 reference** has been exercised, conduct an intentional architecture-wide reassessment. Version 1.2 or 2.0 of the Book may change design decisions substantially. The resulting improved design—not a verbatim translation of the C# code—may be the target for a high-performance Rust engine, using Rust's own strengths and implementation structures. Keep the C# implementation and retained Access evidence useful as correctness/behavior references throughout, without assuming their internal abstractions must match a later Rust design. The C# engine may also prove useful in its own right; decide that from evidence rather than assumption.
+
+### 3.2 Hot paths: measured, then free of per-call allocation
+
+Write first for clarity. When a measurement (the cost counters, `calcdb-perf`, an allocation test) shows a hot path, make its steady state allocate nothing per call. Keep the same values, errors and lifetimes, and give the path a budget test. The first DAO loop went from 1,264 to a few managed bytes per row this way (docs/work/perf.md). These habits came out of that work:
+
+- **Small results are values.** Results, outcomes and pins are record structs. A reference field inside one is fine. After the change, check every `is { }`, `?.` and `FirstOrDefault` on the type: on a struct they are always true or never null.
+- **Scalars cross COM inline.** An object is made only for a value that owns a resource (BSTR, array, interface).
+- **No closures, arrays or collections per call.** Use static lambdas or plain code, `stackalloc` for bounded scratch (arguments, a visited set with a known bound), and fields for state that lives as long as its owner.
+- **Hold what the loop revisits.** A cursor keeps the page it is on pinned and revalidates the hold on each use, instead of pinning per call.
+- **Derive schema facts once** per definition (column offsets per row width), not per row.
+- **Failure text only on failure paths.**
+- **Call COM from the apartment it expects.** A tool that drives an apartment-threaded engine (DAO) runs on an STA. From an MTA every call is marshalled, measured 30–40 times slower.
+- **Read only what you use.** A bulk scan of evidence deserializes a projection of the fields it needs, not the full record.
+
+A tool that takes minutes where seconds are expected has a cause: find it before adding time limits or background jobs.
 
 ## 4. Leg three: continuous improvement of agentic C# development
 

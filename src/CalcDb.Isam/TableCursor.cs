@@ -20,10 +20,10 @@ public enum CursorFailure
     Storage,
 }
 
-/// <summary>A field read: an owned native value, or the failure with its detail.</summary>
-public sealed record FieldResult(NativeValue? Value, CursorFailure? Failure, string? Detail = null)
+/// <summary>A field read: an owned native value, or the failure with its detail. A value type (task 6p9q).</summary>
+public readonly record struct FieldResult(NativeValue Value, CursorFailure? Failure, string? Detail = null)
 {
-    public bool Succeeded => Value is not null && Value.Kind != NativeKind.Failed;
+    public bool Succeeded => Failure is null && Value.Kind != NativeKind.Failed;
 }
 
 /// <summary>
@@ -64,26 +64,28 @@ public interface IRecordCursor : IDisposable
 /// (II-07 §4). Field values are owned copies, so they survive movement and Close (T-ISAM-04). Shared by both cursor
 /// policies, with the bookmark validation they share.
 /// </summary>
-internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefinition table)
+internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefinition table) : IDisposable
 {
+    private readonly PageHold _hold = new(cache);
     private RowView? _bound;
 
     public FieldResult Read(RowId? current, ColumnDescriptor column)
     {
         if (current is not { } root)
         {
-            return new FieldResult(null, CursorFailure.NoCurrentRecord);
+            return new FieldResult(default, CursorFailure.NoCurrentRecord);
         }
         if (_bound is null)
         {
-            _bound = RowResolver.Resolve(cache, d, root, out TraversalFailure? failure);
+            // The bound row borrows the binding's page hold: consecutive rows on one page share one pin (task 6p9q).
+            _bound = RowResolver.Resolve(_hold, d, root, out TraversalFailure? failure);
             if (_bound is null)
             {
-                return new FieldResult(null, CursorFailure.Storage, failure?.Predicate ?? $"row {root} is no longer live");
+                return new FieldResult(default, CursorFailure.Storage, failure?.Predicate ?? $"row {root} is no longer live");
             }
             CostCounters.Current.RowBinds++;
         }
-        NativeValue value = FieldDecoder.Read(_bound, table, column, cache, d);
+        NativeValue value = FieldDecoder.Read(_bound.Value, table, column, cache, d);
         CostCounters.Current.FieldDecodes++;
         return value.Kind == NativeKind.Failed ? new FieldResult(value, CursorFailure.Storage, value.Failure) : new FieldResult(value, null);
     }
@@ -92,6 +94,13 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
     {
         _bound?.Dispose();
         _bound = null;
+    }
+
+    /// <summary>Unbind and release the held page (cursor Close).</summary>
+    public void Dispose()
+    {
+        Unbind();
+        _hold.Dispose();
     }
 
     /// <summary>The live root of this table a bookmark names (CUR-ID: the root locator), or null.</summary>
@@ -369,12 +378,16 @@ public sealed class TableCursor : IRecordCursor
     public FieldResult Read(string fieldName)
     {
         ColumnDescriptor? column = Table.Columns.FirstOrDefault(c => c.Name == fieldName);
-        return column is null ? new FieldResult(null, CursorFailure.UnknownField, fieldName) : Read(column);
+        return column is null ? new FieldResult(default, CursorFailure.UnknownField, fieldName) : Read(column);
     }
 
     public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
 
-    public void Dispose() => _row.Unbind();
+    public void Dispose()
+    {
+        _row.Dispose();
+        _scan.Dispose();
+    }
 
     /// <summary>Storage order as table occurrences.</summary>
     private sealed class StorageOrder(ScanSource scan) : IOrderedSource<TableOccurrence>
@@ -406,6 +419,7 @@ public sealed class TableCursor : IRecordCursor
 public sealed class PopulationCursor : IRecordCursor
 {
     private readonly OccurrenceStore<RowId> _store;
+    private readonly ScanSource _source;
     private readonly PositionState<int> _position;
     private readonly RowBinding _row;
 
@@ -413,6 +427,7 @@ public sealed class PopulationCursor : IRecordCursor
     {
         Table = table;
         _row = new RowBinding(cache, d, table);
+        _source = source;
         // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
         // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
@@ -499,5 +514,9 @@ public sealed class PopulationCursor : IRecordCursor
 
     public FieldResult Read(ColumnDescriptor column) => _row.Read(CurrentRoot, column);
 
-    public void Dispose() => _row.Unbind();
+    public void Dispose()
+    {
+        _row.Dispose();
+        _source.Dispose();
+    }
 }

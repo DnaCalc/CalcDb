@@ -11,17 +11,17 @@ public sealed class PageCacheTests
         // T-PAGER-04
         var source = new ControlledSource { Gate = new ManualResetEventSlim(false) };
         var cache = new PageCache(source, 1, PageSize, 4);
-        PinResult? first = null;
+        PinResult first = default;
         var leader = Task.Run(() => first = cache.Pin(17));
         Assert.True(source.LoadStarted.Wait(5000));
-        PinResult? second = null;
+        PinResult second = default;
         var waiter = Task.Run(() => second = cache.Pin(17));
         SpinWait.SpinUntil(() => cache.Counters.CoalescedWaits == 1, 5000);
         source.Gate.Set();
         await Task.WhenAll(leader, waiter).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, source.Loads);
         Assert.Equal(1, cache.Counters.CoalescedWaits);
-        Assert.NotSame(first!.Pin, second!.Pin);
+        Assert.NotSame(first.Pin, second.Pin);
         Assert.Equal(first.Pin!.Frame, second.Pin!.Frame);
         Assert.Equal(ControlledSource.Marker(first.Pin.Image), first.Pin.Bytes[0]);
         Assert.Equal(2, cache.Counters.TotalPins);
@@ -38,18 +38,18 @@ public sealed class PageCacheTests
         var source = new ControlledSource { Gate = new ManualResetEventSlim(false) };
         var cache = new PageCache(source, 1, PageSize, 4);
         using var leaderCancel = new CancellationTokenSource();
-        PinResult? leaderResult = null;
+        PinResult leaderResult = default;
         var leader = Task.Run(() => leaderResult = cache.Pin(5, cancellation: leaderCancel.Token));
         Assert.True(source.LoadStarted.Wait(5000));
-        PinResult? waiterResult = null;
+        PinResult waiterResult = default;
         var waiter = Task.Run(() => waiterResult = cache.Pin(5));
         SpinWait.SpinUntil(() => cache.Counters.CoalescedWaits == 1, 5000);
         leaderCancel.Cancel();
         source.Gate.Set();
         await Task.WhenAll(leader, waiter).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(source.SawUnwanted);
-        Assert.Equal(PinFailureKind.Cancelled, leaderResult!.Failure);
-        Assert.True(waiterResult!.Succeeded);
+        Assert.Equal(PinFailureKind.Cancelled, leaderResult.Failure);
+        Assert.True(waiterResult.Succeeded);
         Assert.Equal(1, cache.Counters.TotalPins);
         waiterResult.Pin!.Dispose();
     }
@@ -62,7 +62,7 @@ public sealed class PageCacheTests
         var cache = new PageCache(source, 1, PageSize, 1);
         using var a = new CancellationTokenSource();
         using var b = new CancellationTokenSource();
-        PinResult? ra = null, rb = null;
+        PinResult ra = default, rb = default;
         var leader = Task.Run(() => ra = cache.Pin(9, cancellation: a.Token));
         Assert.True(source.LoadStarted.Wait(5000));
         var waiter = Task.Run(() => rb = cache.Pin(9, cancellation: b.Token));
@@ -76,8 +76,8 @@ public sealed class PageCacheTests
         Assert.Equal(PinFailureKind.NoFrame, cache.Pin(10).Failure);
         source.Gate.Set();
         await leader.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(PinFailureKind.Cancelled, ra!.Failure);
-        Assert.Equal(PinFailureKind.Cancelled, rb!.Failure);
+        Assert.Equal(PinFailureKind.Cancelled, ra.Failure);
+        Assert.Equal(PinFailureKind.Cancelled, rb.Failure);
         // Nothing was abandoned: the image published (it settled successfully) and the frame is reclaimable.
         Assert.Equal(0, cache.Counters.TotalPins);
         PinResult other = cache.Pin(10);
@@ -124,13 +124,13 @@ public sealed class PageCacheTests
         // T-PAGER-09/15: no late publication into a closed session.
         var source = new ControlledSource { Gate = new ManualResetEventSlim(false) };
         var cache = new PageCache(source, 1, PageSize, 2);
-        PinResult? result = null;
+        PinResult result = default;
         var leader = Task.Run(() => result = cache.Pin(1));
         Assert.True(source.LoadStarted.Wait(5000));
         cache.Close();
         source.Gate.Set();
         await leader.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(PinFailureKind.SessionClosed, result!.Failure);
+        Assert.Equal(PinFailureKind.SessionClosed, result.Failure);
         Assert.False(cache.IsResident(cache.CurrentImage(1)));
         Assert.Equal(PinFailureKind.SessionClosed, cache.Pin(2).Failure);
     }

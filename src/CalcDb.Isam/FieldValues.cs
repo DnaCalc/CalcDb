@@ -33,9 +33,10 @@ public enum NativeKind
 
 /// <summary>
 /// One native field value with its exact payload: fixed scalars as their exact bits, Text as exact UTF-16 units, Binary
-/// and long values as exact bytes. Dates and Currency keep their raw representation.
+/// and long values as exact bytes. Dates and Currency keep their raw representation. A value type: a fixed scalar read
+/// allocates nothing (task 6p9q).
 /// </summary>
-public sealed record NativeValue(NativeKind Kind)
+public readonly record struct NativeValue(NativeKind Kind)
 {
     public long Integer { get; init; }
     public ulong Bits { get; init; }
@@ -70,7 +71,7 @@ public static class FieldDecoder
         {
             return NativeValue.Fail(failure!);
         }
-        FieldRead read = envelope.ReadField(column, RowEnvelope.KnownFixedEnd(table.Columns, envelope.ColumnCount, d));
+        FieldRead read = envelope.ReadField(column, table.KnownFixedEnd(envelope.ColumnCount, d));
         switch (read.Outcome)
         {
             case FieldOutcome.Malformed:

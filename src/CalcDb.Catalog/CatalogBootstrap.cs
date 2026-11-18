@@ -153,14 +153,16 @@ public static class CatalogBootstrap
                 NativeValue type = FieldDecoder.Read(row, objectTable, bound["Type"], cache, d);
                 NativeValue flags = FieldDecoder.Read(row, objectTable, bound["Flags"], cache, d);
                 NativeValue? props = readProperties && lvProp is not null ? FieldDecoder.Read(row, objectTable, lvProp, cache, d) : null;
-                if (new[] { id, parent, name, type, flags }.FirstOrDefault(v => v.Kind == NativeKind.Failed) is { } bad)
+                NativeValue[] required = [id, parent, name, type, flags];
+                int bad = Array.FindIndex(required, v => v.Kind == NativeKind.Failed);
+                if (bad >= 0)
                 {
-                    failure = $"object table row {row.Root}: {bad.Failure}";
+                    failure = $"object table row {row.Root}: {required[bad].Failure}";
                     return null;
                 }
-                if (props?.Kind == NativeKind.Failed)
+                if (props is { Kind: NativeKind.Failed } failedProps)
                 {
-                    failure = $"object table row {row.Root} LvProp: {props.Failure}";
+                    failure = $"object table row {row.Root} LvProp: {failedProps.Failure}";
                     return null;
                 }
                 NativeValue? created = dateCreate is null ? null : FieldDecoder.Read(row, objectTable, dateCreate, cache, d);
@@ -168,8 +170,8 @@ public static class CatalogBootstrap
                 entries.Add(new CatalogEntry((int)id.Integer, (int)parent.Integer, name.Text ?? "", (short)type.Integer, (int)flags.Integer, row.Root)
                 {
                     Properties = props?.Bytes,
-                    DateCreateBits = created?.Kind == NativeKind.DateTime ? created.Bits : null,
-                    DateUpdateBits = updated?.Kind == NativeKind.DateTime ? updated.Bits : null,
+                    DateCreateBits = created is { Kind: NativeKind.DateTime } c ? c.Bits : null,
+                    DateUpdateBits = updated is { Kind: NativeKind.DateTime } u ? u.Bits : null,
                 });
             }
         }

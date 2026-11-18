@@ -1,0 +1,1125 @@
+{
+  "schema": "calcdb.perf-sample/1",
+  "runId": "20261118T065928Z-s20261120",
+  "case": "big-id-cached-fields-vtable",
+  "block": 1,
+  "position": 0,
+  "variant": "calcdb",
+  "outcome": "completed",
+  "qpcFrequency": 10000000,
+  "processStartUtcTicks": 639305819705176529,
+  "passes": [
+    {
+      "index": 0,
+      "interval": {
+        "startTicks": 779103710663,
+        "endTicks": 779103786047,
+        "ticks": 75384
+      },
+      "rows": 2048,
+      "sink": 2048,
+      "textUnits": 0,
+      "clientEntries": 8193,
+      "clientReleases": 2048,
+      "cost": {
+        "schema": "calcdb.cost-counters/1",
+        "counters": [
+          {
+            "name": "com.vtable.entries",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 8193,
+            "delta": 8193
+          },
+          {
+            "name": "com.dispatch.invokes",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "com.dispatch.names",
+            "unit": "names",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "com.queryinterface",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4,
+            "end": 2052,
+            "delta": 2048
+          },
+          {
+            "name": "com.addref",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "com.release",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 3,
+            "end": 4099,
+            "delta": 4096
+          },
+          {
+            "name": "dao.collection.lookups",
+            "unit": "lookups",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 2049,
+            "delta": 2048
+          },
+          {
+            "name": "dao.collection.name-probes",
+            "unit": "comparisons",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "dao.wrappers.created",
+            "unit": "objects",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "isam.row.binds",
+            "unit": "rows",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 2048,
+            "delta": 2048
+          },
+          {
+            "name": "isam.field.decodes",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 2048,
+            "delta": 2048
+          },
+          {
+            "name": "value.text.decoded-units",
+            "unit": "UTF-16 units",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 332,
+            "end": 332,
+            "delta": 0
+          },
+          {
+            "name": "value.long-value.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 90,
+            "end": 90,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.allocations",
+            "unit": "allocations",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.results",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6151,
+            "delta": 6145
+          },
+          {
+            "name": "cache.probes",
+            "unit": "probes",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "cache.hits",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 27,
+            "end": 141,
+            "delta": 114
+          },
+          {
+            "name": "cache.misses",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 7,
+            "end": 120,
+            "delta": 113
+          },
+          {
+            "name": "cache.loads",
+            "unit": "pages",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 7,
+            "end": 120,
+            "delta": 113
+          },
+          {
+            "name": "managed.allocated-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the managed heap, allocations by the calling thread (GC.GetAllocatedBytesForCurrentThread), counter reads excluded",
+            "start": 1386576,
+            "end": 2583888,
+            "delta": 1197312
+          }
+        ],
+        "unavailable": [
+          "native allocator capacity and frees by the client (R-STRING-1: external-free visibility)",
+          "CPU branches and cache misses (no hardware profile in this lane)"
+        ]
+      }
+    },
+    {
+      "index": 1,
+      "interval": {
+        "startTicks": 779103810130,
+        "endTicks": 779103868874,
+        "ticks": 58744
+      },
+      "rows": 2048,
+      "sink": 2048,
+      "textUnits": 0,
+      "clientEntries": 8193,
+      "clientReleases": 2048,
+      "cost": {
+        "schema": "calcdb.cost-counters/1",
+        "counters": [
+          {
+            "name": "com.vtable.entries",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8193,
+            "end": 16386,
+            "delta": 8193
+          },
+          {
+            "name": "com.dispatch.invokes",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 7,
+            "end": 7,
+            "delta": 0
+          },
+          {
+            "name": "com.dispatch.names",
+            "unit": "names",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 7,
+            "end": 7,
+            "delta": 0
+          },
+          {
+            "name": "com.queryinterface",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 2052,
+            "end": 4100,
+            "delta": 2048
+          },
+          {
+            "name": "com.addref",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "com.release",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4099,
+            "end": 8195,
+            "delta": 4096
+          },
+          {
+            "name": "dao.collection.lookups",
+            "unit": "lookups",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 2049,
+            "end": 4097,
+            "delta": 2048
+          },
+          {
+            "name": "dao.collection.name-probes",
+            "unit": "comparisons",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "dao.wrappers.created",
+            "unit": "objects",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "isam.row.binds",
+            "unit": "rows",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 2048,
+            "end": 4096,
+            "delta": 2048
+          },
+          {
+            "name": "isam.field.decodes",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 2048,
+            "end": 4096,
+            "delta": 2048
+          },
+          {
+            "name": "value.text.decoded-units",
+            "unit": "UTF-16 units",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 332,
+            "end": 332,
+            "delta": 0
+          },
+          {
+            "name": "value.long-value.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 90,
+            "end": 90,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.allocations",
+            "unit": "allocations",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.results",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6151,
+            "end": 12296,
+            "delta": 6145
+          },
+          {
+            "name": "cache.probes",
+            "unit": "probes",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "cache.hits",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 142,
+            "end": 369,
+            "delta": 227
+          },
+          {
+            "name": "cache.misses",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "cache.loads",
+            "unit": "pages",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "managed.allocated-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the managed heap, allocations by the calling thread (GC.GetAllocatedBytesForCurrentThread), counter reads excluded",
+            "start": 2584328,
+            "end": 3671080,
+            "delta": 1086752
+          }
+        ],
+        "unavailable": [
+          "native allocator capacity and frees by the client (R-STRING-1: external-free visibility)",
+          "CPU branches and cache misses (no hardware profile in this lane)"
+        ]
+      }
+    },
+    {
+      "index": 2,
+      "interval": {
+        "startTicks": 779103871696,
+        "endTicks": 779103919560,
+        "ticks": 47864
+      },
+      "rows": 2048,
+      "sink": 2048,
+      "textUnits": 0,
+      "clientEntries": 8193,
+      "clientReleases": 2048,
+      "cost": {
+        "schema": "calcdb.cost-counters/1",
+        "counters": [
+          {
+            "name": "com.vtable.entries",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 16386,
+            "end": 24579,
+            "delta": 8193
+          },
+          {
+            "name": "com.dispatch.invokes",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8,
+            "end": 8,
+            "delta": 0
+          },
+          {
+            "name": "com.dispatch.names",
+            "unit": "names",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8,
+            "end": 8,
+            "delta": 0
+          },
+          {
+            "name": "com.queryinterface",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4100,
+            "end": 6148,
+            "delta": 2048
+          },
+          {
+            "name": "com.addref",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "com.release",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8195,
+            "end": 12291,
+            "delta": 4096
+          },
+          {
+            "name": "dao.collection.lookups",
+            "unit": "lookups",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4097,
+            "end": 6145,
+            "delta": 2048
+          },
+          {
+            "name": "dao.collection.name-probes",
+            "unit": "comparisons",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "dao.wrappers.created",
+            "unit": "objects",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "isam.row.binds",
+            "unit": "rows",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4096,
+            "end": 6144,
+            "delta": 2048
+          },
+          {
+            "name": "isam.field.decodes",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 4096,
+            "end": 6144,
+            "delta": 2048
+          },
+          {
+            "name": "value.text.decoded-units",
+            "unit": "UTF-16 units",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 332,
+            "end": 332,
+            "delta": 0
+          },
+          {
+            "name": "value.long-value.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 90,
+            "end": 90,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.allocations",
+            "unit": "allocations",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.results",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 12296,
+            "end": 18441,
+            "delta": 6145
+          },
+          {
+            "name": "cache.probes",
+            "unit": "probes",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "cache.hits",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 370,
+            "end": 597,
+            "delta": 227
+          },
+          {
+            "name": "cache.misses",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "cache.loads",
+            "unit": "pages",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "managed.allocated-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the managed heap, allocations by the calling thread (GC.GetAllocatedBytesForCurrentThread), counter reads excluded",
+            "start": 3671440,
+            "end": 4758192,
+            "delta": 1086752
+          }
+        ],
+        "unavailable": [
+          "native allocator capacity and frees by the client (R-STRING-1: external-free visibility)",
+          "CPU branches and cache misses (no hardware profile in this lane)"
+        ]
+      }
+    },
+    {
+      "index": 3,
+      "interval": {
+        "startTicks": 779103922370,
+        "endTicks": 779103978331,
+        "ticks": 55961
+      },
+      "rows": 2048,
+      "sink": 2048,
+      "textUnits": 0,
+      "clientEntries": 8193,
+      "clientReleases": 2048,
+      "cost": {
+        "schema": "calcdb.cost-counters/1",
+        "counters": [
+          {
+            "name": "com.vtable.entries",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 24579,
+            "end": 32772,
+            "delta": 8193
+          },
+          {
+            "name": "com.dispatch.invokes",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 9,
+            "end": 9,
+            "delta": 0
+          },
+          {
+            "name": "com.dispatch.names",
+            "unit": "names",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 9,
+            "end": 9,
+            "delta": 0
+          },
+          {
+            "name": "com.queryinterface",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6148,
+            "end": 8196,
+            "delta": 2048
+          },
+          {
+            "name": "com.addref",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "com.release",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 12291,
+            "end": 16387,
+            "delta": 4096
+          },
+          {
+            "name": "dao.collection.lookups",
+            "unit": "lookups",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6145,
+            "end": 8193,
+            "delta": 2048
+          },
+          {
+            "name": "dao.collection.name-probes",
+            "unit": "comparisons",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "dao.wrappers.created",
+            "unit": "objects",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "isam.row.binds",
+            "unit": "rows",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6144,
+            "end": 8192,
+            "delta": 2048
+          },
+          {
+            "name": "isam.field.decodes",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6144,
+            "end": 8192,
+            "delta": 2048
+          },
+          {
+            "name": "value.text.decoded-units",
+            "unit": "UTF-16 units",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 332,
+            "end": 332,
+            "delta": 0
+          },
+          {
+            "name": "value.long-value.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 90,
+            "end": 90,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.allocations",
+            "unit": "allocations",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.results",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 18441,
+            "end": 24586,
+            "delta": 6145
+          },
+          {
+            "name": "cache.probes",
+            "unit": "probes",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "cache.hits",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 598,
+            "end": 825,
+            "delta": 227
+          },
+          {
+            "name": "cache.misses",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "cache.loads",
+            "unit": "pages",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "managed.allocated-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the managed heap, allocations by the calling thread (GC.GetAllocatedBytesForCurrentThread), counter reads excluded",
+            "start": 4758552,
+            "end": 5845304,
+            "delta": 1086752
+          }
+        ],
+        "unavailable": [
+          "native allocator capacity and frees by the client (R-STRING-1: external-free visibility)",
+          "CPU branches and cache misses (no hardware profile in this lane)"
+        ]
+      }
+    },
+    {
+      "index": 4,
+      "interval": {
+        "startTicks": 779103982600,
+        "endTicks": 779104043511,
+        "ticks": 60911
+      },
+      "rows": 2048,
+      "sink": 2048,
+      "textUnits": 0,
+      "clientEntries": 8193,
+      "clientReleases": 2048,
+      "cost": {
+        "schema": "calcdb.cost-counters/1",
+        "counters": [
+          {
+            "name": "com.vtable.entries",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 32772,
+            "end": 40965,
+            "delta": 8193
+          },
+          {
+            "name": "com.dispatch.invokes",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 10,
+            "end": 10,
+            "delta": 0
+          },
+          {
+            "name": "com.dispatch.names",
+            "unit": "names",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 10,
+            "end": 10,
+            "delta": 0
+          },
+          {
+            "name": "com.queryinterface",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8196,
+            "end": 10244,
+            "delta": 2048
+          },
+          {
+            "name": "com.addref",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "com.release",
+            "unit": "calls",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 16387,
+            "end": 20483,
+            "delta": 4096
+          },
+          {
+            "name": "dao.collection.lookups",
+            "unit": "lookups",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8193,
+            "end": 10241,
+            "delta": 2048
+          },
+          {
+            "name": "dao.collection.name-probes",
+            "unit": "comparisons",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 1,
+            "end": 1,
+            "delta": 0
+          },
+          {
+            "name": "dao.wrappers.created",
+            "unit": "objects",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 6,
+            "end": 6,
+            "delta": 0
+          },
+          {
+            "name": "isam.row.binds",
+            "unit": "rows",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8192,
+            "end": 10240,
+            "delta": 2048
+          },
+          {
+            "name": "isam.field.decodes",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 8192,
+            "end": 10240,
+            "delta": 2048
+          },
+          {
+            "name": "value.text.decoded-units",
+            "unit": "UTF-16 units",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 332,
+            "end": 332,
+            "delta": 0
+          },
+          {
+            "name": "value.long-value.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 90,
+            "end": 90,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.allocations",
+            "unit": "allocations",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.bstr.payload-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "value.results",
+            "unit": "values",
+            "exactness": "exact",
+            "scope": "the calling thread (one engine apartment), since thread start",
+            "start": 24586,
+            "end": 30731,
+            "delta": 6145
+          },
+          {
+            "name": "cache.probes",
+            "unit": "probes",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 0,
+            "end": 0,
+            "delta": 0
+          },
+          {
+            "name": "cache.hits",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 826,
+            "end": 1053,
+            "delta": 227
+          },
+          {
+            "name": "cache.misses",
+            "unit": "pins",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "cache.loads",
+            "unit": "pages",
+            "exactness": "exact",
+            "scope": "page caches of this thread's databases (closed ones folded in at Close)",
+            "start": 120,
+            "end": 120,
+            "delta": 0
+          },
+          {
+            "name": "managed.allocated-bytes",
+            "unit": "bytes",
+            "exactness": "exact",
+            "scope": "the managed heap, allocations by the calling thread (GC.GetAllocatedBytesForCurrentThread), counter reads excluded",
+            "start": 5845664,
+            "end": 6932416,
+            "delta": 1086752
+          }
+        ],
+        "unavailable": [
+          "native allocator capacity and frees by the client (R-STRING-1: external-free visibility)",
+          "CPU branches and cache misses (no hardware profile in this lane)"
+        ]
+      }
+    }
+  ],
+  "copy": {
+    "source": "C:\\Work\\DnaCalc\\CalcDb\\evidence\\artifacts\\1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+    "destination": "C:\\Users\\GovertvanDrimmelen\\AppData\\Local\\Temp\\calcdb-perf\\20261118T065928Z-s20261120\\b1-p0\\r-q2-cursor-dao-main.accdb",
+    "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+    "interval": {
+      "startTicks": 779103084020,
+      "endTicks": 779103110403,
+      "ticks": 26383
+    }
+  },
+  "open": {
+    "startTicks": 779103616423,
+    "endTicks": 779103670660,
+    "ticks": 54237
+  },
+  "acquire": {
+    "startTicks": 779103670693,
+    "endTicks": 779103672740,
+    "ticks": 2047
+  },
+  "close": {
+    "startTicks": 779104047532,
+    "endTicks": 779104061990,
+    "ticks": 14458
+  },
+  "shape": {
+    "rows": 2048,
+    "fieldType": 4,
+    "fieldSize": 4,
+    "fileLength": 786432,
+    "filePages": 192,
+    "recordsetType": 1
+  },
+  "configuration": {
+    "implementation": "calcdb",
+    "engineModule": {
+      "path": "C:\\Work\\DnaCalc\\CalcDb\\artifacts\\native\\CalcDb.dll",
+      "sha256": "00929f3288af7587bcb79c20b0a858a988bf492158a4477ddad868466350751a",
+      "fileVersion": "1.0.0.0"
+    },
+    "client": {
+      "path": "C:\\Work\\DnaCalc\\CalcDb\\src\\CalcDb.Perf\\bin\\Debug\\net11.0-windows\\win-x64\\calcdb-perf.exe",
+      "sha256": "4d42dc997fb21d46af35e81643a91029517cda682ac52d0f3e3ae4215285d733",
+      "fileVersion": "1.0.0.0"
+    },
+    "clientSource": "a09ba3a3504a92fc2acaa739c7c66e06d4aa5953+dirty",
+    "runtime": ".NET 11.0.0",
+    "os": "Microsoft Windows 10.0.26200",
+    "architecture": "X64",
+    "processorCount": 16,
+    "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+    "gc": "server False, latency Interactive",
+    "compilation": "client: .NET JIT with tiered compilation as configured: default, PGO default; CalcDb.dll: NativeAOT",
+    "instrumentation": "CalcDb cost counters always on (plain thread-local increments, no formatting); read outside timed intervals",
+    "preparation": "new process; fixture copied to a new path (not a cold-cache claim); engine session new at open; OS cache state not controlled",
+    "desktop": "private"
+  }
+}

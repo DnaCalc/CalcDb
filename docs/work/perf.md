@@ -49,6 +49,45 @@ the named ones (configured CLSID, missing lock file).
 - The `xor-length` sink of the repeated body is 0 for every row (four equal lengths cancel). It is a body check, so
   it still detects a wrong row count, but not a wrong value: the twin carries the values.
 
+## Allocation-free inner loop (task 6p9q, same cases and seeds)
+
+The 1,264 bytes per row of a held Long read came from three layers. In-process attribution was done with
+`AllocationTests` (`GC.GetAllocatedBytesForCurrentThread` over a warm pass), and each step was measured before the next:
+
+| Step | Change | ISAM bytes per row (move, move + read) |
+| --- | --- | --- |
+| Start | records for `NativeValue`, `FieldResult`, `PinResult`; a `HashSet` per row resolve; a boxed enumerator per field read; two `PagePin` objects per row | 144, 656 |
+| Values | `NativeValue`, `FieldResult` record structs; fixed-column end cached per row width on the `TableDefinition` | 144, 512 |
+| Bounded scratch | the overflow chain's visited set on the stack; `RowView`, `PinResult` structs | 101, 197 |
+| Hold the page | `PageHold`: the scan and the row binding keep their page pinned and revalidate it per use; one pin per page | 5, 11 |
+
+At the COM boundary, scalar results are written inline (`CallResult.OfScalar`: no `OwnedVariant`, no native cell, no
+closure). Argument arrays are on the stack. The slot table and Invoke's member choice no longer search with LINQ per
+call. The vtable loop then allocates 10.6 managed bytes per row, and cache probes fall from 2.06 to 0.11 per row.
+
+| Case | Before: ratio pass 0 / pass 4, bytes per row | After |
+| --- | --- | --- |
+| big-id-cached-field-vtable | 1.48 / 1.19, 1264 | 0.80 / 0.54, 10.6 |
+| big-id-cached-field-idispatch | 1.00 / 0.73, 1592 | 0.57 / 0.45, 107 |
+| big-id-named-vtable | 1.16 / 1.01, 2264 | 0.66 / 0.56, 747 |
+| big-id-ordinal-vtable | 1.03 / 0.95, 2272 | 0.71 / 0.62, 755 |
+| big-id-cached-fields-vtable | 1.12 / 0.99, 1920 | 0.79 / 0.69, 531 |
+| big-v-repeated4-vtable | 1.54 / 1.42, 4976 | 1.19 / 0.92, 3019 |
+
+A/A controls stayed flat (calcdb/calcdb 1.03 / 1.07, ace/ace 1.02 / 1.05). The semantic twin and every compared
+question are unchanged against ACE. The habits are codified in The Plan §3.2.
+
+**Where the same habits apply next** (found by searching for the patterns; to do when each path is worked on):
+- Text reads: `FieldDecoder` copies the field bytes as well as decoding them, and `TextCodec.Decode` copies the span
+  before `string.Create`: three allocations per text read (the repeated-text body's 3019 bytes per row). This is
+  R-STRING-1's decision point, with the cache-or-direct question beside it.
+- Index pages: `IndexPages.Decode` makes a `byte[]` per entry and per prefix, and each descent allocates a `HashSet`
+  (`IndexNavigator`). This hits Seek loops; a decoded directory with borrowed spans (II-05 §2's two-span entry view) fits.
+- `TableCursor.Seek` builds its key in a `List<byte>` and looks up each key column with LINQ, per call.
+- Name lookup: `CollectionLookup` normalizes each candidate name per comparison, and `GetIDsOfNames` builds a LINQ array.
+  Both matter for late-bound callers that do not cache DISPIDs, and for the named body's 747 bytes per row.
+- `LongValueReader` allocates a `HashSet` per long-value chain.
+
 **Limits.** One caller lane (native C# client, vtable and IDispatch); VBA, .NET Framework 4.8 and .NET 10 lanes are
 not measured. ACE's internal costs are unavailable, never zero. OS cache state is not controlled. No practical
 decision threshold is declared, so no comparison is a decision.

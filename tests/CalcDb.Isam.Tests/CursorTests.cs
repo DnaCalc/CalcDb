@@ -65,7 +65,7 @@ public sealed class CursorTests
         Assert.Null(source.Next(new RowId(17, 1)));
         Assert.Equal(new RowId(17, 1), source.Previous(null));
         Assert.Equal(new RowId(17, 0), source.Previous(new RowId(17, 1)));
-        using RowView first = RowResolver.Resolve(cache, D, new RowId(17, 0), out _)!;
+        using RowView first = RowResolver.Resolve(cache, D, new RowId(17, 0), out _)!.Value;
         Assert.Equal(new RowId(17, 2), first.Data); // the root resolves to its body; the body has Id 43
         Assert.Equal(43, BitConverter.ToInt32(first.Body[2..6]));
     }

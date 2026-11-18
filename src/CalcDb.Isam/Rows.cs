@@ -16,18 +16,21 @@ public sealed record TraversalFailure(string Predicate, RowId? At, bool Resource
 
 /// <summary>
 /// One logical row: its stable root identity and its final data, held by a pin on the data page (II-03 §3.3, II-04
-/// §8). The body span is valid only while the view is held; values that outlive it are copied out.
+/// §8). The body span is valid only while the view is held; values that outlive it are copied out. A value type owned
+/// by one holder, which disposes it once (task 6p9q: binding a row allocates nothing beyond its pin).
 /// </summary>
-public sealed class RowView : IDisposable
+public readonly struct RowView : IDisposable
 {
     private readonly PagePin _pin;
+    private readonly bool _borrowed;
 
-    internal RowView(RowId root, RowId data, PagePin pin, SlotView slot)
+    internal RowView(RowId root, RowId data, PagePin pin, SlotView slot, bool borrowed)
     {
         Root = root;
         Data = data;
         _pin = pin;
         Slot = slot;
+        _borrowed = borrowed;
     }
 
     /// <summary>The stable root locator: the row's identity, even when its data has moved to an overflow target.</summary>
@@ -40,7 +43,14 @@ public sealed class RowView : IDisposable
 
     public ReadOnlySpan<byte> Body => _pin.Bytes.Slice(Slot.Start, Slot.Length);
 
-    public void Dispose() => _pin.Dispose();
+    /// <summary>Release the view's pin; a view borrowed from a page hold leaves the pin to its hold.</summary>
+    public void Dispose()
+    {
+        if (!_borrowed)
+        {
+            _pin.Dispose();
+        }
+    }
 }
 
 /// <summary>Overflow resolution and table scans over the page cache (II-04 §8).</summary>
@@ -53,20 +63,30 @@ public static class RowResolver
     /// a row). An overflow root's first four bytes are the target locator; the target may carry the deleted bit and
     /// still be live data. Hops are bounded and (page, row) cycles detected.
     /// </summary>
-    public static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, out TraversalFailure? failure)
+    public static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(cache, d, root, null, out failure);
+
+    /// <summary>
+    /// Resolve through a page hold (task 6p9q): the pages come from the hold, and the view borrows the hold's pin, valid
+    /// until the hold moves to another page.
+    /// </summary>
+    public static RowView? Resolve(PageHold hold, FormatDescriptor d, RowId root, out TraversalFailure? failure) => Resolve(hold.Cache, d, root, hold, out failure);
+
+    private static RowView? Resolve(PageCache cache, FormatDescriptor d, RowId root, PageHold? hold, out TraversalFailure? failure)
     {
         failure = null;
-        var seen = new HashSet<RowId>();
+        // The visited set of a bounded chain: at most MaxOverflowHops + 1 locators, kept on the stack.
+        Span<RowId> seen = stackalloc RowId[MaxOverflowHops + 1];
         RowId at = root;
         bool atRoot = true;
         for (int hop = 0; hop <= MaxOverflowHops; hop++)
         {
-            if (!seen.Add(at))
+            if (seen[..hop].Contains(at))
             {
                 failure = new TraversalFailure("overflow cycle", at);
                 return null;
             }
-            PinResult pinned = cache.Pin(at.Page);
+            seen[hop] = at;
+            PinResult pinned = hold is null ? cache.Pin(at.Page) : hold.Get(at.Page);
             if (pinned.Pin is not { } pin)
             {
                 failure = new TraversalFailure($"page {at.Page}: {pinned.Failure} {pinned.Detail}", at);
@@ -75,39 +95,47 @@ public static class RowResolver
             ReadOnlySpan<byte> page = pin.Bytes;
             if (page[d.DataPage.Kind.Offset] != 0x01 || DataPages.IsLvalPage(page, d))
             {
-                pin.Dispose();
+                Drop(pin, hold);
                 failure = new TraversalFailure($"page {at.Page} is not an ordinary data page", at);
                 return null;
             }
             SlotView? slot = DataPages.CheckedSlot(page, at.Row, d, out string? slotFailure);
             if (slot is not { } s)
             {
-                pin.Dispose();
+                Drop(pin, hold);
                 failure = new TraversalFailure(slotFailure!, at);
                 return null;
             }
             if (atRoot && s.Deleted)
             {
-                pin.Dispose();
+                Drop(pin, hold);
                 return null;
             }
             if (!s.Overflow)
             {
-                return new RowView(root, at, pin, s);
+                return new RowView(root, at, pin, s, borrowed: hold is not null);
             }
             if (s.Length < 4)
             {
-                pin.Dispose();
+                Drop(pin, hold);
                 failure = new TraversalFailure($"overflow row of {s.Length} bytes cannot hold a locator", at);
                 return null;
             }
             RowLocator next = RowLocator.Decode(page.Slice(s.Start, 4));
-            pin.Dispose();
+            Drop(pin, hold);
             at = RowId.From(next);
             atRoot = false;
         }
         failure = new TraversalFailure($"more than {MaxOverflowHops} overflow hops", root, ResourceLimit: true);
         return null;
+    }
+
+    private static void Drop(PagePin pin, PageHold? hold)
+    {
+        if (hold is null)
+        {
+            pin.Dispose();
+        }
     }
 
     /// <summary>
@@ -147,9 +175,9 @@ public static class RowResolver
                 {
                     failures.Add(failure);
                 }
-                if (row is not null)
+                if (row is { } live)
                 {
-                    yield return row;
+                    yield return live;
                 }
             }
         }

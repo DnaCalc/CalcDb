@@ -331,8 +331,10 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
 }
 
 /// <summary>A table scan as an ordered source of roots (the table-type cursor's storage order, CUR-EMPTY-PAGES).</summary>
-public sealed class ScanSource(ScanNavigator navigator) : IOrderedSource<RowId>
+public sealed class ScanSource(ScanNavigator navigator) : IOrderedSource<RowId>, IDisposable
 {
+    public void Dispose() => navigator.Dispose();
+
     public TraversalFailure? LastFailure { get; private set; }
 
     public RowId? Next(RowId? after)

@@ -313,3 +313,34 @@ that the candidate answered before counting a match.
 **Next candidates.** Text keys (the weight tables slice) unblock the Text Seek questions. The expression service
 (W-06/restricted-scalar) unblocks Find. A per-question provenance summary in `batch --compare` would make the count
 script unnecessary.
+
+## 2026-11-18 (later) · Allocation-free inner loop (6p9q) and the evidence index (one session, Claude Opus 5.5)
+
+**Work observed.** The owner asked for 6p9q with experiments on allocation-free inner loops, the learnings codified
+lightly, and candidates named. The owner also flagged the 75-minute evidence index as overreach. Result: a held DAO
+Field read went from 1,264 to 10.6 managed bytes per row and from 1.2–1.5× ACE's time to 0.54–0.80×. Index build
+and verify take 5 s each. The Plan v0.3 gained §3.2.
+
+**What worked.**
+- *Attribute before changing.* A 40-line in-process test measured bytes per row by layer (movement, read). Each
+  change was measured on its own; the pin hold, not the value types, was the largest single step.
+- *Look for the cause behind a slow tool.* The index's per-row cost (0.5 ms, transaction or not) did not fit any
+  storage explanation. The apartment did: an MTA caller of an apartment-threaded engine pays a cross-apartment call
+  for every member. One attribute made it 30–40 times faster.
+- *Ask what the output is for.* 1.25 million of the index's 1.34 million rows indexed individual calls that no query
+  used and that `show` already reads per record.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| I let a 30-minute background limit absorb a 43-minute verify instead of asking why | The owner had to point out the overreach | The Plan §3.2: a tool that takes minutes where seconds are expected has a cause; find it first |
+| A struct is never null | `FirstOrDefault(...) is { } bad` on the new `NativeValue` struct would have reported every catalog row as failed | Checked every null test on the changed types; The Plan §3.2 names the trap |
+| My count script counted a killed (Uncertain) attempt as a match | The batch total was one too high | Incomplete attempts count as differences |
+| The machine slept during a batch | One attempt was killed on wake; the batch took 1 h 47 min of wall time | Checked the System log (S3 resume at 10:41) before blaming the tooling |
+| Some edits were made by scripted text replacement (test files, one source file) | Against AGENTS.md's tool practice; no harm found in review | Use the edit tools |
+
+**Rule.** Before giving a slow job more time, measure where its time goes.
+
+**Next candidates.** The pattern search in perf.md lists five paths (text reads, index pages, Seek keys, name lookup,
+long values); each is to be fixed when its path is worked on, measured the same way.

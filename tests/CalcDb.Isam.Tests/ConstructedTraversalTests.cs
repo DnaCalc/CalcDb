@@ -152,9 +152,9 @@ public sealed class ConstructedTraversalTests
         PageCache cache = Cache(pages);
         using RowView? row = RowResolver.Resolve(cache, D, new RowId(33, 0), out TraversalFailure? f);
         Assert.Null(f);
-        Assert.Equal(new RowId(33, 0), row!.Root);
-        Assert.Equal(new RowId(33, 1), row.Data);
-        Assert.Equal(target, row.Body.ToArray());
+        Assert.Equal(new RowId(33, 0), row!.Value.Root);
+        Assert.Equal(new RowId(33, 1), row.Value.Data);
+        Assert.Equal(target, row.Value.Body.ToArray());
         Assert.Null(RowResolver.Resolve(cache, D, new RowId(33, 1), out TraversalFailure? skipped)); // a deleted root is not a row
         Assert.Null(skipped);
 

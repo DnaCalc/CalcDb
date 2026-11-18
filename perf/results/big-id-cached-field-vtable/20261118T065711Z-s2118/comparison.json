@@ -1,0 +1,237 @@
+{
+  "schema": "calcdb.perf-comparison/1",
+  "runId": "20261118T065711Z-s2118",
+  "case": "big-id-cached-field-vtable",
+  "baseline": "ace",
+  "candidate": "ace~2",
+  "estimator": "per pass: exp(mean over blocks of log(candidate ns/row / baseline ns/row)); below 1 favors the candidate",
+  "blocks": 10,
+  "passes": [
+    {
+      "pass": 0,
+      "eligibleBlocks": 10,
+      "ratio": 0.9733288945573298,
+      "intervalLow": 0.7802607071368878,
+      "intervalHigh": 1.1650891513959447,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 2118, 95%"
+    },
+    {
+      "pass": 1,
+      "eligibleBlocks": 10,
+      "ratio": 0.9810228677049154,
+      "intervalLow": 0.8603026461457662,
+      "intervalHigh": 1.0842309927164764,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 2119, 95%"
+    },
+    {
+      "pass": 2,
+      "eligibleBlocks": 10,
+      "ratio": 1.0282127000197094,
+      "intervalLow": 0.8956589719025353,
+      "intervalHigh": 1.1698025411188375,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 2120, 95%"
+    },
+    {
+      "pass": 3,
+      "eligibleBlocks": 10,
+      "ratio": 0.9495778392569931,
+      "intervalLow": 0.8027487376183015,
+      "intervalHigh": 1.1463878523410127,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 2121, 95%"
+    },
+    {
+      "pass": 4,
+      "eligibleBlocks": 10,
+      "ratio": 0.9350247118186846,
+      "intervalLow": 0.7390972856135027,
+      "intervalHigh": 1.122842418792293,
+      "uncertainty": "paired percentile bootstrap over whole blocks, 10000 resamples, seed 2122, 95%"
+    }
+  ],
+  "variants": [
+    {
+      "variant": "ace",
+      "samples": 10,
+      "eligible": 10,
+      "passes": [
+        {
+          "pass": 0,
+          "medianNsPerRow": 3607.9345703125,
+          "rawNsPerRow": [
+            2905.859375,
+            3908.837890625,
+            3504.8828125,
+            3368.896484375,
+            3428.076171875,
+            3287.5,
+            11583.544921875,
+            3710.986328125,
+            3949.51171875,
+            4110.009765625
+          ]
+        },
+        {
+          "pass": 1,
+          "medianNsPerRow": 2231.640625,
+          "rawNsPerRow": [
+            2112.548828125,
+            2276.123046875,
+            2064.306640625,
+            2069.23828125,
+            2417.333984375,
+            2066.30859375,
+            4504.6875,
+            3312.98828125,
+            2187.158203125,
+            2491.748046875
+          ]
+        },
+        {
+          "pass": 2,
+          "medianNsPerRow": 2193.0419921875,
+          "rawNsPerRow": [
+            2173.046875,
+            2126.07421875,
+            2072.94921875,
+            2090.478515625,
+            2688.037109375,
+            2213.037109375,
+            4507.2265625,
+            2321.337890625,
+            2142.1875,
+            2429.052734375
+          ]
+        },
+        {
+          "pass": 3,
+          "medianNsPerRow": 2349.3408203125,
+          "rawNsPerRow": [
+            2197.55859375,
+            2902.099609375,
+            2190.625,
+            2597.75390625,
+            2686.181640625,
+            1947.802734375,
+            4188.720703125,
+            2303.41796875,
+            2200.78125,
+            2395.263671875
+          ]
+        },
+        {
+          "pass": 4,
+          "medianNsPerRow": 2365.7958984375,
+          "rawNsPerRow": [
+            2219.921875,
+            2630.517578125,
+            2226.904296875,
+            2275.5859375,
+            2477.197265625,
+            2454.19921875,
+            5896.97265625,
+            2302.734375,
+            2352.587890625,
+            2379.00390625
+          ]
+        }
+      ],
+      "medianOpenMicroseconds": 290840.65,
+      "medianCloseMicroseconds": 973.3499999999999
+    },
+    {
+      "variant": "ace~2",
+      "samples": 10,
+      "eligible": 10,
+      "passes": [
+        {
+          "pass": 0,
+          "medianNsPerRow": 3825.1708984375,
+          "rawNsPerRow": [
+            2759.228515625,
+            3196.826171875,
+            3702.197265625,
+            4294.384765625,
+            3650.146484375,
+            3035.107421875,
+            4784.9609375,
+            5620.458984375,
+            4878.857421875,
+            3948.14453125
+          ]
+        },
+        {
+          "pass": 1,
+          "medianNsPerRow": 2475.341796875,
+          "rawNsPerRow": [
+            2196.6796875,
+            2055.126953125,
+            2115.185546875,
+            2201.07421875,
+            2612.5,
+            2373.828125,
+            2625.78125,
+            2955.810546875,
+            2642.7734375,
+            2576.85546875
+          ]
+        },
+        {
+          "pass": 2,
+          "medianNsPerRow": 2472.8759765625,
+          "rawNsPerRow": [
+            2015.185546875,
+            2365.576171875,
+            2121.240234375,
+            2835.400390625,
+            2056.0546875,
+            2129.296875,
+            3133.0078125,
+            2580.17578125,
+            3034.375,
+            2781.4453125
+          ]
+        },
+        {
+          "pass": 3,
+          "medianNsPerRow": 2307.666015625,
+          "rawNsPerRow": [
+            2161.5234375,
+            1997.0703125,
+            2267.041015625,
+            2348.291015625,
+            2003.61328125,
+            2141.259765625,
+            2512.158203125,
+            2431.494140625,
+            3893.408203125,
+            2455.224609375
+          ]
+        },
+        {
+          "pass": 4,
+          "medianNsPerRow": 2445.6787109375,
+          "rawNsPerRow": [
+            2700,
+            2028.759765625,
+            2171.728515625,
+            2561.767578125,
+            1960.400390625,
+            2621.923828125,
+            2257.763671875,
+            2535.302734375,
+            3305.908203125,
+            2356.0546875
+          ]
+        }
+      ],
+      "medianOpenMicroseconds": 293760.85,
+      "medianCloseMicroseconds": 1090.05
+    }
+  ],
+  "checks": [
+    "consumption: 20 of 20 samples consumed rows 2048 with sink 2048 in every pass (a body check; the typed oracle is w-01-dao-cost/scan-big)",
+    "expansion: client entries equal 3n+1: EOF, Value, MoveNext per row and the final EOF in every eligible pass; CalcDb's com.vtable.entries counter equals the client's count in 0 passes"
+  ],
+  "excluded": [],
+  "disposition": "reported; no practical decision criterion is declared for this case (II-15 §29: a threshold comes from measured application costs)"
+}

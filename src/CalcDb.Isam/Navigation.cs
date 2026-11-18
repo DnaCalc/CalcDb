@@ -26,9 +26,10 @@ public static class TableBookmark
 /// empty pages, counts every page and slot it inspects, and yields roots, not bodies: an overflow body (deleted-marked)
 /// is never a candidate of its own. The owned-page list is taken once, at construction (the navigation view).
 /// </summary>
-public sealed class ScanNavigator
+public sealed class ScanNavigator : IDisposable
 {
     private readonly PageCache _cache;
+    private readonly PageHold _hold;
     private readonly FormatDescriptor _d;
     private readonly IReadOnlyList<uint> _pages;
     private readonly uint _owner;
@@ -36,6 +37,7 @@ public sealed class ScanNavigator
     private ScanNavigator(PageCache cache, FormatDescriptor d, IReadOnlyList<uint> pages, uint owner)
     {
         _cache = cache;
+        _hold = new PageHold(cache);
         _d = d;
         _pages = pages;
         _owner = owner;
@@ -80,7 +82,8 @@ public sealed class ScanNavigator
         while (pageIndex >= 0 && pageIndex < _pages.Count)
         {
             uint page = _pages[pageIndex];
-            using PagePin? pin = _cache.Pin(page).Pin;
+            // The scan stays on a page for many steps: the hold re-pins only when the page changes (task 6p9q).
+            PagePin? pin = _hold.Get(page).Pin;
             if (pin is null)
             {
                 failure = new TraversalFailure($"page {page} could not be pinned", new RowId(page, 0));
@@ -118,6 +121,9 @@ public sealed class ScanNavigator
         }
         return null;
     }
+
+    /// <summary>Release the held page.</summary>
+    public void Dispose() => _hold.Dispose();
 
     private int IndexOfPage(uint page)
     {

@@ -430,25 +430,38 @@ internal sealed unsafe class FieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.Value when the row cannot be read: {read.Failure} {read.Detail}"));
         }
-        return Project(read.Value!) is { } value ? CallResult.Of(value) : CallResult.Fail(Failure.NotImplemented($"Field.Value of a {read.Value!.Kind} value"));
+        if (Scalar(read.Value) is { } scalar)
+        {
+            return scalar;
+        }
+        return Project(read.Value) is { } value ? CallResult.Of(value) : CallResult.Fail(Failure.NotImplemented($"Field.Value of a {read.Value.Kind} value"));
     }
 
     /// <summary>
-    /// The VARIANT of a native value (R-ORACLE-1 FMT1-FAMILIES): Byte UI1, Integer I2, Long I4, Single R4, Double R8,
-    /// Currency CY, Date DATE, Text and Memo BSTR, Yes/No BOOL, Binary and OLE a UI1 array (an empty one reads Null),
-    /// GUID the BSTR "{guid {…}}".
+    /// The VARIANT of a native value (R-ORACLE-1 FMT1-FAMILIES), first the kinds that own no resource, written inline to
+    /// the caller's slot without an allocation (task 6p9q): Null, Yes/No BOOL, Byte UI1, Integer I2, Long I4, Currency
+    /// CY, Single R4, Double R8, Date DATE. The others are in <see cref="Project"/>.
+    /// </summary>
+    private static CallResult? Scalar(NativeValue v) => v.Kind switch
+    {
+        NativeKind.Null => CallResult.OfScalar(VarType.Null, 0),
+        NativeKind.Boolean => CallResult.OfScalar(VarType.Bool, v.Boolean ? 0xFFFF : 0),
+        NativeKind.Byte => CallResult.OfScalar(VarType.UI1, (byte)v.Integer),
+        NativeKind.Integer => CallResult.OfScalar(VarType.I2, (ushort)(short)v.Integer),
+        NativeKind.Long => CallResult.OfScalar(VarType.I4, (uint)(int)v.Integer),
+        NativeKind.Currency => CallResult.OfScalar(VarType.Currency, v.Integer),
+        NativeKind.Single => CallResult.OfScalar(VarType.R4, (uint)v.Bits),
+        NativeKind.Double => CallResult.OfScalar(VarType.R8, (long)v.Bits),
+        NativeKind.DateTime => CallResult.OfScalar(VarType.Date, (long)v.Bits),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The owned VARIANT of a native value that holds a resource (R-ORACLE-1 FMT1-FAMILIES): Text and Memo BSTR, Binary
+    /// and OLE a UI1 array (an empty one reads Null), GUID the BSTR "{guid {…}}".
     /// </summary>
     private static OwnedVariant? Project(NativeValue v) => v.Kind switch
     {
-        NativeKind.Null => OwnedVariant.Null(),
-        NativeKind.Boolean => OwnedVariant.FromBoolean(v.Boolean),
-        NativeKind.Byte => OwnedVariant.FromByte((byte)v.Integer),
-        NativeKind.Integer => OwnedVariant.FromInt16((short)v.Integer),
-        NativeKind.Long => OwnedVariant.FromInt32((int)v.Integer),
-        NativeKind.Currency => OwnedVariant.FromCurrency(v.Integer),
-        NativeKind.Single => OwnedVariant.FromSingle(BitConverter.Int32BitsToSingle((int)(uint)v.Bits)),
-        NativeKind.Double => OwnedVariant.FromDouble(BitConverter.Int64BitsToDouble((long)v.Bits)),
-        NativeKind.DateTime => OwnedVariant.FromDate(BitConverter.Int64BitsToDouble((long)v.Bits)),
         NativeKind.Text => OwnedVariant.FromText(v.Text!),
         NativeKind.Binary or NativeKind.LongBinary => v.Bytes is { Length: > 0 } bytes ? ByteArray(bytes) : OwnedVariant.Null(),
         NativeKind.Guid => OwnedVariant.FromText("{guid " + new Guid(v.Bytes!).ToString("B").ToUpperInvariant() + "}"),

@@ -206,6 +206,28 @@ public sealed record TableDefinition
 
     public IReadOnlyList<LogicalIndex> LogicalIndexes { get; init; } = [];
 
+    private int[]? _fixedEnds;
+
+    /// <summary>
+    /// The end of active fixed storage for a row that records <paramref name="rowColumnCount"/> physical columns
+    /// (RowEnvelope.KnownFixedEnd), computed once per count and kept: a field read allocates nothing for it.
+    /// </summary>
+    public int KnownFixedEnd(int rowColumnCount, FormatDescriptor d)
+    {
+        int[] ends = _fixedEnds ??= new int[Math.Max(MaxColumns, ColumnCount) + 2];
+        if (rowColumnCount < 0 || rowColumnCount >= ends.Length)
+        {
+            return RowEnvelope.KnownFixedEnd(Columns, rowColumnCount, d);
+        }
+        int end = ends[rowColumnCount];
+        if (end == 0)
+        {
+            end = RowEnvelope.KnownFixedEnd(Columns, rowColumnCount, d);
+            ends[rowColumnCount] = end; // FixedBase is at least 2, so 0 means not computed yet
+        }
+        return end;
+    }
+
     /// <summary>The logical index of this name (case-insensitive, as DAO's Index property finds it), or null.</summary>
     public LogicalIndex? FindIndex(string name) => LogicalIndexes.FirstOrDefault(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
 

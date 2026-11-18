@@ -50,8 +50,8 @@ public enum PinFailureKind
     SessionClosed,
 }
 
-/// <summary>A pin, or why there is none.</summary>
-public sealed record PinResult(PagePin? Pin, PinFailureKind? Failure, string? Detail = null)
+/// <summary>A pin, or why there is none. A value type: a cache hit allocates only its pin (task 6p9q).</summary>
+public readonly record struct PinResult(PagePin? Pin, PinFailureKind? Failure, string? Detail = null)
 {
     public bool Succeeded => Pin is not null;
 }
