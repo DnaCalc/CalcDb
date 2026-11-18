@@ -1,6 +1,7 @@
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Foundation;
+using CalcDb.Foundation.Diagnostics;
 using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Dao;
@@ -57,11 +58,18 @@ internal static class DaoErrors
 /// (R-ORACLE-1 OR-OBS: the latest failure replaces the collection; a success never clears it) and its error source,
 /// "DAO.&lt;class&gt;" as ACE names it.
 /// </summary>
-internal abstract unsafe class DaoObject(InterfaceDecl declaration, nint vtable, EngineState engine, string source) : DispatchObject(declaration, vtable)
+internal abstract unsafe class DaoObject : DispatchObject
 {
-    public EngineState Engine { get; } = engine;
+    protected DaoObject(InterfaceDecl declaration, nint vtable, EngineState engine, string source) : base(declaration, vtable)
+    {
+        Engine = engine;
+        Source = source;
+        CostCounters.Current.WrappersCreated++;
+    }
 
-    public string Source { get; } = source;
+    public EngineState Engine { get; }
+
+    public string Source { get; }
 
     protected abstract OperationTable Table { get; }
 
@@ -106,6 +114,8 @@ internal static unsafe class CollectionLookup
     public static int? Find(nint index, int count, Func<int, string> nameAt, out bool objectIndex)
     {
         objectIndex = false;
+        CostCounters counters = CostCounters.Current;
+        counters.CollectionLookups++;
         if (index == 0)
         {
             return null;
@@ -127,6 +137,7 @@ internal static unsafe class CollectionLookup
             string wanted = name.Normalize(System.Text.NormalizationForm.FormC);
             for (int i = 0; i < count; i++)
             {
+                counters.CollectionNameProbes++;
                 if (string.Equals(nameAt(i).Normalize(System.Text.NormalizationForm.FormC), wanted, StringComparison.OrdinalIgnoreCase))
                 {
                     return i;

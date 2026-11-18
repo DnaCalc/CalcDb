@@ -2,6 +2,7 @@ using CalcDb.Catalog;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Format;
+using CalcDb.Foundation.Diagnostics;
 using CalcDb.Isam;
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
@@ -24,6 +25,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
 
+    /// <summary>The databases open on this thread, whose caches' live work the cost counters add (W-01/dao-cost).</summary>
+    [ThreadStatic]
+    private static List<DatabaseObject>? _openOnThread;
+
     private readonly WorkspaceObject _workspace;
     private readonly List<RecordsetObject> _recordsets = [];
     private WindowsFile? _file;
@@ -38,6 +43,19 @@ internal sealed unsafe class DatabaseObject : DaoObject
         Format = format;
         PageCount = pageCount;
         Catalog = catalog;
+        (_openOnThread ??= []).Add(this);
+    }
+
+    /// <summary>The live caches' probes, hits, misses and loads on this thread, not yet folded into the cost counters.</summary>
+    public static (long Probes, long Hits, long Misses, long Loads) LiveCacheWork()
+    {
+        (long p, long h, long m, long l) sum = default;
+        foreach (DatabaseObject d in _openOnThread ?? [])
+        {
+            CacheCounters c = d.Cache.Counters;
+            sum = (sum.p + c.Probes, sum.h + c.Hits, sum.m + c.Misses, sum.l + c.Loads);
+        }
+        return sum;
     }
 
     /// <summary>The canonical path (R-DAO-1 DAO-BOOT: Database.Name is the full path, original case).</summary>
@@ -194,6 +212,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
             r.CloseCursor();
         }
         _recordsets.Clear();
+        if (_openOnThread?.Remove(this) == true)
+        {
+            CacheCounters c = Cache.Counters;
+            CostCounters counters = CostCounters.Current;
+            counters.CacheProbes += c.Probes;
+            counters.CacheHits += c.Hits;
+            counters.CacheMisses += c.Misses;
+            counters.CacheLoads += c.Loads;
+        }
         _file?.Dispose();
         _file = null;
         _workspace.Forget(this);

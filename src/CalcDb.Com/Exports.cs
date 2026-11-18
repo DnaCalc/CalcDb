@@ -77,4 +77,69 @@ internal static unsafe class Exports
         *counts = new ModuleCounts { Objects = ModuleLifetime.Objects, Locks = ModuleLifetime.Locks, LockUnderflows = ModuleLifetime.LockUnderflows, HostState = (int)HostAnchor.State };
         return HResults.S_OK;
     }
+
+    /// <summary>
+    /// The calling thread's cost counters (W-01/dao-cost; II-15 §28) as UTF-8 JSON of schema
+    /// <c>calcdb.cost-counters/1</c>: each counter's name, unit, exactness, scope and value. A diagnostic read, made
+    /// outside a timed interval. With a buffer too small (or none), <paramref name="written"/> receives the length
+    /// needed and the result is 0x8007007A (ERROR_INSUFFICIENT_BUFFER).
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "CalcDbCostCounters")]
+    public static int CalcDbCostCounters(byte* buffer, int capacity, int* written)
+    {
+        if (written is null)
+        {
+            return HResults.E_POINTER;
+        }
+        try
+        {
+            byte[] json = CostCounterExport.Json();
+            *written = json.Length;
+            if (buffer is null || capacity < json.Length)
+            {
+                return unchecked((int)0x8007007A);
+            }
+            json.CopyTo(new Span<byte>(buffer, capacity));
+            return HResults.S_OK;
+        }
+        catch (Exception)
+        {
+            return HResults.E_UNEXPECTED;
+        }
+    }
+}
+
+/// <summary>The cost-counter snapshot of the calling thread, with the live page caches of its open databases added.</summary>
+internal static class CostCounterExport
+{
+    public static byte[] Json()
+    {
+        Foundation.Diagnostics.CostCounters counters = Foundation.Diagnostics.CostCounters.Current;
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        long[] values = counters.Snapshot(Dao.DatabaseObject.LiveCacheWork());
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var w = new System.Text.Json.Utf8JsonWriter(buffer))
+        {
+            w.WriteStartObject();
+            w.WriteString("schema", Foundation.Diagnostics.CostCounters.Schema);
+            w.WriteNumber("threadId", Environment.CurrentManagedThreadId);
+            w.WriteStartArray("counters");
+            IReadOnlyList<Foundation.Diagnostics.CounterDeclaration> declarations = Foundation.Diagnostics.CostCounters.Declarations;
+            for (int i = 0; i < declarations.Count; i++)
+            {
+                w.WriteStartObject();
+                w.WriteString("name", declarations[i].Name);
+                w.WriteString("unit", declarations[i].Unit);
+                w.WriteString("exactness", declarations[i].Exactness.ToString().ToLowerInvariant());
+                w.WriteString("scope", declarations[i].Scope);
+                w.WriteNumber("value", values[i]);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        byte[] json = buffer.WrittenSpan.ToArray();
+        counters.DiagnosticAllocatedBytes += GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        return json;
+    }
 }

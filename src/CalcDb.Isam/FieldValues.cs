@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using CalcDb.Format;
+using CalcDb.Foundation.Diagnostics;
 using CalcDb.Storage;
 
 namespace CalcDb.Isam;
@@ -103,6 +104,7 @@ public static class FieldDecoder
             case NativeTypes.Text:
             {
                 TextDecode text = TextCodec.Decode(bytes);
+                CostCounters.Current.TextDecodedUnits += text.Text?.Length ?? 0;
                 return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text, Bytes = bytes.ToArray() } : NativeValue.Fail(text.Failure!);
             }
             case NativeTypes.Binary:
@@ -119,9 +121,11 @@ public static class FieldDecoder
                 {
                     return NativeValue.Fail(lvFailure!.Predicate);
                 }
+                CostCounters.Current.LongValuePayloadBytes += payload.Length;
                 if (column.TypeCode == NativeTypes.Memo)
                 {
                     TextDecode memo = TextCodec.Decode(payload);
+                    CostCounters.Current.TextDecodedUnits += memo.Text?.Length ?? 0;
                     return memo.Succeeded ? new NativeValue(NativeKind.Text) { Text = memo.Text, Bytes = payload } : NativeValue.Fail(memo.Failure!);
                 }
                 return new NativeValue(NativeKind.LongBinary) { Bytes = payload };

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- W-01/dao-cost (II-15 §§25-30): calcdb-perf, the performance driver. It runs a versioned PerformanceCase in owned
+       sample processes against ACE and CalcDb.dll, keeps raw QPC samples and cost vectors, and compares them in paired
+       blocks. Windows x64: the samples call the real DAO interfaces. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>calcdb-perf</AssemblyName>
+    <RootNamespace>CalcDb.Perf</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalcDb.Perf.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One activation path for candidates: the worker's own source. -->
+    <Compile Include="..\CalcDb.Oracle.Worker\CandidateDeployment.cs" Link="CandidateDeployment.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Evidence\CalcDb.Evidence.csproj" />
+  </ItemGroup>
+</Project>

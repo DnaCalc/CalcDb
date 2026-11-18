@@ -119,6 +119,9 @@ public sealed unsafe class OwnedVariant : IDisposable
         result._cell->Pointer = bstr;
         result._cell->Vt = (ushort)VarType.Bstr;
         result.State = OwnershipState.Owned;
+        Diagnostics.CostCounters counters = Diagnostics.CostCounters.Current;
+        counters.BstrAllocations++;
+        counters.BstrPayloadBytes += payload.Length;
         return result;
     }
 

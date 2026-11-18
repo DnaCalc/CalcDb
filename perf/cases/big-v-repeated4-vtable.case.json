@@ -1,0 +1,29 @@
+{
+  "schema": "calcdb.perf-case/1",
+  "name": "big-v-repeated4-vtable",
+  "bookRefs": [
+    "W-01/dao-cost",
+    "T-INT-63",
+    "T-OBJ-75",
+    "T-EVID-35",
+    "R-STRING-1"
+  ],
+  "semanticTwin": "w-01-dao-cost/scan-big",
+  "fixture": {
+    "fileName": "r-q2-cursor-dao-main.accdb",
+    "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+    "length": 786432,
+    "provenance": "r-q2-cursor-dao.create-main.05ea7b34fc.a1 output:r-q2-cursor-dao-main.accdb"
+  },
+  "table": "Big",
+  "recordsetType": 1,
+  "surface": "native-vtable/x64",
+  "body": "repeated",
+  "field": "V",
+  "fieldOrdinal": 1,
+  "repeat": 4,
+  "consumer": "xor-length",
+  "passes": 5,
+  "maxRows": 100000,
+  "description": "II-15 §26 repeated value: the held Field V (Text(120)) read four times per row before MoveNext; each BSTR result's length XORed into the sink (R-STRING-1 repeated-read decode and output ownership)."
+}

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using CalcDb.Com.Declarations;
 using CalcDb.Foundation;
+using CalcDb.Foundation.Diagnostics;
 using CalcDb.Foundation.Windows;
 
 namespace CalcDb.Com.Com;
@@ -221,6 +222,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                 if (result is not null)
                 {
                     value.TransferTo(result);
+                    CostCounters.Current.ResultValues++;
                 }
                 value.Dispose();
             }
@@ -276,14 +278,23 @@ internal static unsafe class DualEntries
         {
             return HResults.E_POINTER;
         }
+        CostCounters.Current.QueryInterfaces++;
         return ComObject.Recover<ComObject>(self).QueryInterface(*iid, result);
     }
 
     [UnmanagedCallersOnly]
-    public static uint AddRef(nint self) => ComObject.Recover<ComObject>(self).AddRef();
+    public static uint AddRef(nint self)
+    {
+        CostCounters.Current.AddRefs++;
+        return ComObject.Recover<ComObject>(self).AddRef();
+    }
 
     [UnmanagedCallersOnly]
-    public static uint Release(nint self) => ComObject.Recover<ComObject>(self).Release();
+    public static uint Release(nint self)
+    {
+        CostCounters.Current.Releases++;
+        return ComObject.Recover<ComObject>(self).Release();
+    }
 
     /// <summary>One type information: the dispatch view of the object's interface in CalcDb's type library.</summary>
     [UnmanagedCallersOnly]
@@ -322,6 +333,7 @@ internal static unsafe class DualEntries
     [UnmanagedCallersOnly]
     private static int GetIDsOfNames(nint self, Guid* iid, char** names, uint count, uint lcid, int* ids)
     {
+        CostCounters.Current.DispatchNamesResolved += count;
         try
         {
             return ComObject.Recover<DispatchObject>(self).GetIds(names, count, ids);
@@ -335,6 +347,7 @@ internal static unsafe class DualEntries
     [UnmanagedCallersOnly]
     private static int Invoke(nint self, int dispId, Guid* iid, uint lcid, ushort flags, DispParams* parameters, NativeVariant* result, ExcepInfo* info, uint* argError)
     {
+        CostCounters.Current.DispatchInvokes++;
         try
         {
             return ComObject.Recover<DispatchObject>(self).Invoke(dispId, flags, parameters, result, info, argError);
@@ -355,6 +368,7 @@ internal static unsafe class TypedCall
 {
     public static int Run(nint self, InterfaceDecl declaration, int slot, ulong* raw, int count, nint retval)
     {
+        CostCounters.Current.VtableEntries++;
         MemberDecl? member = declaration.BySlot(slot);
         if (member is not null && retval != 0)
         {
@@ -396,6 +410,7 @@ internal static unsafe class TypedCall
                     if (retval != 0)
                     {
                         Store(member.ReturnType, value, retval);
+                        CostCounters.Current.ResultValues++;
                     }
                 }
             }

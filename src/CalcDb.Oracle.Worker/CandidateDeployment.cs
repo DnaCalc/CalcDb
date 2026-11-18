@@ -8,7 +8,8 @@ namespace CalcDb.Oracle.Worker;
 /// module is checked against the attempt's hash, the compatibility manifest's activation context is active on the
 /// worker's STA for the whole program, and the worker acts as the host: it loads and pins the module and bootstraps it
 /// before the program's first creation. The question's own <c>create</c> then reaches the candidate through ordinary
-/// COM creation.
+/// COM creation. The performance driver (calcdb-perf, W-01/dao-cost) compiles this same file, so both activate a
+/// candidate the same way.
 /// </summary>
 internal sealed unsafe partial class CandidateDeployment : IDisposable
 {
@@ -74,7 +75,7 @@ internal sealed unsafe partial class CandidateDeployment : IDisposable
         int hr = ((delegate* unmanaged<Offer*, Answer*, int>)export)(&offer, &answer);
         if (hr < 0)
         {
-            errors.Add($"CalcDbBootstrap failed: {Native.Hr(hr)}.");
+            errors.Add($"CalcDbBootstrap failed: 0x{(uint)hr:X8}.");
             Undo();
             return null;
         }

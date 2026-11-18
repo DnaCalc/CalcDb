@@ -1,4 +1,5 @@
 using CalcDb.Format;
+using CalcDb.Foundation.Diagnostics;
 using CalcDb.Storage;
 
 namespace CalcDb.Isam;
@@ -80,8 +81,10 @@ internal sealed class RowBinding(PageCache cache, FormatDescriptor d, TableDefin
             {
                 return new FieldResult(null, CursorFailure.Storage, failure?.Predicate ?? $"row {root} is no longer live");
             }
+            CostCounters.Current.RowBinds++;
         }
         NativeValue value = FieldDecoder.Read(_bound, table, column, cache, d);
+        CostCounters.Current.FieldDecodes++;
         return value.Kind == NativeKind.Failed ? new FieldResult(value, CursorFailure.Storage, value.Failure) : new FieldResult(value, null);
     }
 

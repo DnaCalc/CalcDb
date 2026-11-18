@@ -1,0 +1,63 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "w-01-dao-cost/scan-big",
+  "bookRefs": [
+    "W-01/dao-cost",
+    "R-STRING-1",
+    "T-EVID-35",
+    "T-INT-63",
+    "CUR-POS"
+  ],
+  "description": "The semantic twin of the perf/cases big-* performance cases (II-15 §25): open a table-type recordset on Big (2048 rows, ID Long primary key, V Text(120)) with no Index set, hold Fields, Field ID and Field V, then until EOF read ID.Value and V.Value and MoveNext (at most 2100 rows); close. Asks the exact typed value of every field of every row in storage order, which the timed bodies consume only as a checksum. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q2-cursor-dao-main.accdb",
+      "sha256": "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2",
+      "length": 786432,
+      "provenance": "r-q2-cursor-dao.create-main.05ea7b34fc.a1 qk1-05ea7b34fc2f38a65b95662ffe98f14aaf03e29857bb840f086986d4cc8fc474 output:r-q2-cursor-dao-main.accdb"
+    }
+  ],
+  "program": [
+    { "op": "observeFiles", "label": "before-open", "keep": false },
+    { "op": "create", "progId": "DAO.DBEngine.120", "bind": "eng" },
+    {
+      "op": "invoke", "target": "eng", "member": "OpenDatabase", "kind": "method",
+      "args": [ { "type": "inputPath", "role": "main" }, { "type": "bool", "value": false }, { "type": "bool", "value": true } ],
+      "bind": "db"
+    },
+    { "op": "observeFiles", "label": "after-open", "keep": false },
+    {
+      "op": "invoke", "target": "db", "member": "OpenRecordset", "kind": "method",
+      "args": [ { "type": "bstr", "text": "Big" }, { "type": "i4", "value": 1 } ],
+      "bind": "rs"
+    },
+    { "op": "invoke", "target": "rs", "member": "Fields", "kind": "propertyGet", "args": [], "bind": "sf" },
+    { "op": "invoke", "target": "sf", "member": "Item", "kind": "methodOrGet", "args": [ { "type": "bstr", "text": "ID" } ], "bind": "fid" },
+    { "op": "invoke", "target": "sf", "member": "Item", "kind": "methodOrGet", "args": [ { "type": "bstr", "text": "V" } ], "bind": "fv" },
+    {
+      "op": "loopUntil", "target": "rs", "member": "EOF", "maxIterations": 2100,
+      "body": [
+        { "op": "invoke", "target": "fid", "member": "Value", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "fv", "member": "Value", "kind": "propertyGet", "args": [] },
+        { "op": "invoke", "target": "rs", "member": "MoveNext", "kind": "method", "args": [] }
+      ]
+    },
+    { "op": "invoke", "target": "rs", "member": "EOF", "kind": "propertyGet", "args": [] },
+    { "op": "release", "target": "fv" },
+    { "op": "release", "target": "fid" },
+    { "op": "release", "target": "sf" },
+    { "op": "invoke", "target": "rs", "member": "Close", "kind": "method", "args": [] },
+    { "op": "invoke", "target": "db", "member": "Close", "kind": "method", "args": [] },
+    { "op": "observeFiles", "label": "after-close", "keep": false }
+  ]
+}
