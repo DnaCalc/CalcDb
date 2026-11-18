@@ -143,7 +143,7 @@ implementing agent takes it in priority order, itself or as a sub-session; the o
 
 | Item | Pri | Depends on | Status | Work item |
 | --- | --- | --- | --- | --- |
-| Retained evidence is answer records plus input fixtures; captures stay local (The Plan §2.4–2.5; [evidence-storage.md](evidence-storage.md), agreed 2026-11-18) | P1 | — | ready | `hvhm` |
+| Retained evidence is answer records plus input fixtures; captures stay local (The Plan §2.4–2.5; [evidence-storage.md](evidence-storage.md), agreed 2026-11-18) | P1 | — | done: schema 2 records, fixtures and answer artifacts as `.gz` (9.2 MB), `prune`; evidence/ 3.2 GB → 699 MB; trace slimming is the owner's question | `hvhm` |
 | CLSIDFromProgID gives the reference CLSID under CalcDb's compatibility activation (R-ACT-1 ACT-NAME; part of W-08/activation-route-matrix) | P2 | — | ready | `vm83` |
 
 ### W-01/capture-core branches (R-ORACLE-1)

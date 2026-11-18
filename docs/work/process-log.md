@@ -344,3 +344,35 @@ and verify take 5 s each. The Plan v0.3 gained §3.2.
 
 **Next candidates.** The pattern search in perf.md lists five paths (text reads, index pages, Seek keys, name lookup,
 long values); each is to be fixed when its path is worked on, measured the same way.
+
+## 2026-11-18 (afternoon) · Five hot paths, evidence storage, found work (one session, Claude Opus 5.5)
+
+**Work observed.** The owner asked for the five P1 performance items, then the construction slices, and mid-way for a
+review of what evidence the repository keeps. Result: the five paths measured and fixed (perf.md: repeated text 0.45
+and Seek 0.61 of ACE's time, resident), D-STRING-1 decided by measurement, the evidence redesigned with the owner and
+converted (3.2 GB to 699 MB in the tree; captures are local and disposable), and a rule that agents schedule the tasks
+they find (AGENTS.md). A sub-session took vm83.
+
+**What worked.**
+- *Pairing two builds.* `calcdb-perf --deployment2` runs HEAD and the change in the same blocks; it resolved
+  differences the ratio to ACE could not (ACE itself moved 13% between runs).
+- *Diffing the comparison, not counting it.* Comparing the compare logs line by line before and after each change
+  found a regression the totals hid, and showed that the earlier totals were wrong.
+- *Asking what development reads back* before deciding what to keep: three things (call results, fixtures, a few
+  test files), which made most of the 3 GB plainly unnecessary.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The count script counted questions without a retained ACE answer as matches | Earlier totals of 31–32 were 28 | A match needs a retained answer; register corrected |
+| xunit assertions inside a measured loop | About 500 bytes per call blamed on Seek | The Plan §3.2: keep assertions out of measured loops |
+| Fewer bytes taken for faster | Index views made Seek 1.24× slower than HEAD until the page search became binary | The Plan §3.2: time it as well as weigh it |
+| n7mw not committed before x8d9 began | Five items landed as one commit | Commit each item when it is verified |
+| A stray `python3 -` and a `du` over 67,000 files | Two shell calls hung until stopped | Read a command before running it; size large trees with .NET enumeration |
+| A few edits by `sed` | Against AGENTS.md's tool practice; no harm found | Edit tools only |
+
+**Rule.** Judge a change against the oracle by diffing per question, never by the total.
+
+**Next candidates.** The call traces are most of the remaining 681 MB of records (owner asked whether to slim them);
+`hdw6` (wrapper objects and page pins per row).
