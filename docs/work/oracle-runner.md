@@ -103,6 +103,15 @@ src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-inde
 src/CalcDb.Evidence.Index/bin/Debug/net11.0-windows/win-x64/calcdb-evidence-index.exe verify
 ```
 
+To compare CalcDb with ACE, publish CalcDb.dll to `artifacts/native` (`dotnet publish src/CalcDb.Com -r win-x64 -c
+Release -o artifacts/native`) and run `batch --dir DIR --env windows-x64-calcdb-local --compare`. A sealed candidate
+attempt is reused while the module is unchanged; add `--rerun` after a worker or runner change. Every candidate run
+ends with a module observation, so an answer that came from ACE's own modules (an ADODB route reaching the ACE OLE DB
+provider) is a provenance difference, not a match.
+
+The native driver's `nativeLockScan` operation finds the byte-range locks another handle holds on a file: it bisects
+the range with exclusive fail-immediately LockFileEx requests and records the locked bytes (R-LOCK-2 RO-NATIVE).
+
 For an experiment that is not an oracle question but must keep every window off the owner's desktop (an isolation
 environment, a tool under test), `calcdb-oracle desktop-run [--timeout S] [--log FILE] [--container-desktop] -- EXE
 ARGS` runs the command on the private desktop inside a kill-on-close job and reports the visible windows of every

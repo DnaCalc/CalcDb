@@ -48,6 +48,22 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
     {
     }
 
+    /// <summary>
+    /// The failure an Invoke with too many arguments or a missing required one publishes, or null for the standard
+    /// DISP_E_BADPARAMCOUNT and DISP_E_PARAMNOTOPTIONAL. DAO's Database and Recordset answer with their own error.
+    /// </summary>
+    protected virtual Failure? ArgumentCountFailure(MemberDecl member) => null;
+
+    private int ArgumentCount(MemberDecl member, int standard, ExcepInfo* info)
+    {
+        if (ArgumentCountFailure(member) is not { } failure)
+        {
+            return standard;
+        }
+        OnFailure(failure);
+        return ErrorPublication.ToExcepInfo(failure, info);
+    }
+
     protected override int HeadFor(in Guid iid)
     {
         if (iid == ComIids.IDispatch)
@@ -150,7 +166,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         }
         if (count > declared)
         {
-            return HResults.DISP_E_BADPARAMCOUNT;
+            return ArgumentCount(member, HResults.DISP_E_BADPARAMCOUNT, info);
         }
         nint[] args = new nint[declared];
         uint[] positions = new uint[declared]; // each argument's index in rgvarg, for puArgErr
@@ -189,10 +205,13 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
             {
                 if (args[k] == 0 || TypedCall.IsMissing((NativeVariant*)args[k]))
                 {
+                    // A required parameter that was not passed fails; one passed as Missing reaches the operation as
+                    // omitted (r-cursor-1/seek-arguments: Seek "=", Missing, 20 succeeds, Seek "=" alone is 3001).
+                    bool passed = args[k] != 0;
                     args[k] = 0;
-                    if (!member.Parameters[k].Optional)
+                    if (!passed && !member.Parameters[k].Optional)
                     {
-                        return HResults.DISP_E_PARAMNOTOPTIONAL;
+                        return ArgumentCount(member, HResults.DISP_E_PARAMNOTOPTIONAL, info);
                     }
                     continue;
                 }

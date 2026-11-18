@@ -163,9 +163,11 @@ internal sealed unsafe partial class Run : IDisposable
 
         _native.CloseAll(_events, ref _seq);
         _trace.Dispose();
-        if (!_events.OfType<ModulesEvent>().Any())
+        if (!_events.OfType<ModulesEvent>().Any() || _attempt.Implementation is not null)
         {
-            // OR-IDENT: every capture identifies the loaded modules at least once, after all lazy loads.
+            // OR-IDENT: every capture identifies the loaded modules at least once, after all lazy loads. A candidate
+            // run always ends with one, so the comparison's provenance check sees an engine module loaded after the
+            // question's own observations (an ADODB route reaching ACE's OLE DB provider, W-08/native-read).
             _events.Add(ModuleObserver.Observe(++_seq, "end", "end-implicit"));
         }
         _events.Add(ModuleObserver.ObserveTruncated(++_seq, "end"));
@@ -266,6 +268,9 @@ internal sealed unsafe partial class Run : IDisposable
                     break;
                 case NativeClose close:
                     _events.Add(_native.Close(++_seq, path, close.Handle));
+                    break;
+                case NativeLockScan scan:
+                    _events.Add(_native.LockScan(++_seq, path, scan));
                     break;
                 case SetReadOnly ro:
                     _events.Add(_native.SetReadOnly(++_seq, path, ro));

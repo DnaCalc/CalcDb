@@ -167,7 +167,26 @@ public static class NativeTypes
     };
 }
 
-/// <summary>A decoded TableDef: header counts, map locators and the columns with names.</summary>
+/// <summary>One column of a physical index: its physical column number and direction (II-05 §1.2).</summary>
+public sealed record IndexColumn(int PhysicalNumber, bool Ascending, byte Flags);
+
+/// <summary>
+/// A physical index (II-05 §1.2): one tree with its ordered columns, owner map, root page and flags. Logical indexes
+/// name it by <see cref="Number"/>; two logical indexes can share one tree.
+/// </summary>
+public sealed record PhysicalIndex(int Number, IReadOnlyList<IndexColumn> Columns, RowLocator OwnedMap, uint RootPage, byte Flags, uint UniqueEntryCount)
+{
+    public bool Unique(IndexDescriptorRules r) => (Flags & r.UniqueFlag) != 0;
+
+    public bool IgnoreNulls(IndexDescriptorRules r) => (Flags & r.IgnoreNullsFlag) != 0;
+
+    public bool Required(IndexDescriptorRules r) => (Flags & r.RequiredFlag) != 0;
+}
+
+/// <summary>A logical (public) index (II-05 §1.3): its name, numbers, the physical tree it uses and its relationship fields.</summary>
+public sealed record LogicalIndex(string Name, int Number, int PhysicalNumber, byte IndexType, byte RelatedTableType, uint RelatedIndex, uint RelatedTable);
+
+/// <summary>A decoded TableDef: header counts, map locators, the columns with names and the indexes.</summary>
 public sealed record TableDefinition
 {
     public required uint FirstPage { get; init; }
@@ -182,6 +201,15 @@ public sealed record TableDefinition
     public required RowLocator OwnedMap { get; init; }
     public required RowLocator FreeMap { get; init; }
     public required IReadOnlyList<ColumnDescriptor> Columns { get; init; }
+
+    public IReadOnlyList<PhysicalIndex> PhysicalIndexes { get; init; } = [];
+
+    public IReadOnlyList<LogicalIndex> LogicalIndexes { get; init; } = [];
+
+    /// <summary>The logical index of this name (case-insensitive, as DAO's Index property finds it), or null.</summary>
+    public LogicalIndex? FindIndex(string name) => LogicalIndexes.FirstOrDefault(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    public PhysicalIndex? PhysicalOf(LogicalIndex index) => PhysicalIndexes.FirstOrDefault(p => p.Number == index.PhysicalNumber);
 }
 
 /// <summary>Decodes a TableDef stream into its header fields and columns, every count checked against the stream.</summary>
@@ -217,29 +245,21 @@ public static class TableDefDecoder
                 raw.Add(((byte[])block.Clone(), i));
             }
             long position = namesStart;
-            var names = new List<string>();
-            byte[] lengthBytes = new byte[t.NameLengthBytes];
-            for (int i = 0; i < columns; i++)
+            List<string>? names = ReadNames(stream, t, columns, "column", ref position, out failure);
+            if (names is null)
             {
-                if (!stream.TryRead(position, lengthBytes))
-                {
-                    failure = $"name {i} length beyond the stream";
-                    return null;
-                }
-                int length = lengthBytes[0] | (lengthBytes[1] << 8);
-                if (length > MaxNameBytes || length % 2 != 0)
-                {
-                    failure = $"name {i} has an impossible byte length {length}";
-                    return null;
-                }
-                byte[] name = new byte[length];
-                if (!stream.TryRead(position + t.NameLengthBytes, name))
-                {
-                    failure = $"name {i} bytes beyond the stream";
-                    return null;
-                }
-                names.Add(Encoding.Unicode.GetString(name));
-                position += t.NameLengthBytes + length;
+                return null;
+            }
+            int logicalIndexes = (int)stream.Read(t.LogicalIndexCount);
+            if (logicalIndexes > 1000)
+            {
+                failure = $"{logicalIndexes} logical indexes do not fit the {stream.Length}-byte stream";
+                return null;
+            }
+            (List<PhysicalIndex> physical, List<LogicalIndex> logical)? indexes = ReadIndexes(stream, d, realIndexes, logicalIndexes, ref position, out failure);
+            if (indexes is null)
+            {
+                return null;
             }
             var descriptors = raw.Select(r => new ColumnDescriptor
             {
@@ -270,6 +290,8 @@ public static class TableDefDecoder
                 OwnedMap = RowLocator.FromWord((uint)stream.Read(t.OwnedMap)),
                 FreeMap = RowLocator.FromWord((uint)stream.Read(t.FreeMap)),
                 Columns = descriptors,
+                PhysicalIndexes = indexes.Value.physical,
+                LogicalIndexes = indexes.Value.logical,
             };
         }
         catch (FormatViolationException ex)
@@ -277,5 +299,102 @@ public static class TableDefDecoder
             failure = ex.Message;
             return null;
         }
+    }
+
+    /// <summary><paramref name="count"/> names of u16LE byte length then UTF-16LE bytes, from <paramref name="position"/>.</summary>
+    private static List<string>? ReadNames(TableDefSegmentView stream, TableDefRules t, int count, string what, ref long position, out string? failure)
+    {
+        failure = null;
+        var names = new List<string>(count);
+        byte[] lengthBytes = new byte[t.NameLengthBytes];
+        for (int i = 0; i < count; i++)
+        {
+            if (!stream.TryRead(position, lengthBytes))
+            {
+                failure = $"{what} name {i} length beyond the stream";
+                return null;
+            }
+            int length = lengthBytes[0] | (lengthBytes[1] << 8);
+            if (length > MaxNameBytes || length % 2 != 0)
+            {
+                failure = $"{what} name {i} has an impossible byte length {length}";
+                return null;
+            }
+            byte[] name = new byte[length];
+            if (!stream.TryRead(position + t.NameLengthBytes, name))
+            {
+                failure = $"{what} name {i} bytes beyond the stream";
+                return null;
+            }
+            names.Add(Encoding.Unicode.GetString(name));
+            position += t.NameLengthBytes + length;
+        }
+        return names;
+    }
+
+    /// <summary>
+    /// The physical descriptors, logical descriptors and logical names that follow the column names (II-05 §§1.1–1.3),
+    /// with the counter block of each physical index. A logical index naming a missing physical tree is a failure.
+    /// </summary>
+    private static (List<PhysicalIndex>, List<LogicalIndex>)? ReadIndexes(TableDefSegmentView stream, FormatDescriptor d, int realIndexes, int logicalIndexes, ref long position, out string? failure)
+    {
+        failure = null;
+        IndexDescriptorRules r = d.IndexDescriptor;
+        TableDefRules t = d.TableDef;
+        var physical = new List<PhysicalIndex>(realIndexes);
+        byte[] block = new byte[r.PhysicalBlockBytes];
+        byte[] counter = new byte[t.RealIndexRecordBytes];
+        for (int i = 0; i < realIndexes; i++)
+        {
+            if (!stream.TryRead(position, block) || !stream.TryRead(t.RealIndexRecordsOffset + ((long)i * t.RealIndexRecordBytes), counter))
+            {
+                failure = $"physical index descriptor {i} beyond the stream";
+                return null;
+            }
+            var columns = new List<IndexColumn>();
+            for (int s = 0; s < r.ColumnSlotCount; s++)
+            {
+                ReadOnlySpan<byte> slot = block.AsSpan(r.ColumnSlotsOffset + (s * r.ColumnSlotBytes), r.ColumnSlotBytes);
+                int number = (int)r.ColumnNumber.Read(slot);
+                if (number != r.UnusedColumn)
+                {
+                    byte flags = (byte)r.ColumnFlags.Read(slot);
+                    columns.Add(new IndexColumn(number, (flags & r.AscendingFlag) != 0, flags));
+                }
+            }
+            physical.Add(new PhysicalIndex(i, columns, RowLocator.FromWord((uint)r.OwnedMap.Read(block)), (uint)r.RootPage.Read(block), (byte)r.Flags.Read(block), (uint)r.UniqueEntryCount.Read(counter)));
+            position += r.PhysicalBlockBytes;
+        }
+        var raw = new List<byte[]>(logicalIndexes);
+        for (int i = 0; i < logicalIndexes; i++)
+        {
+            byte[] logical = new byte[r.LogicalBlockBytes];
+            if (!stream.TryRead(position, logical))
+            {
+                failure = $"logical index descriptor {i} beyond the stream";
+                return null;
+            }
+            raw.Add(logical);
+            position += r.LogicalBlockBytes;
+        }
+        List<string>? names = ReadNames(stream, t, logicalIndexes, "index", ref position, out failure);
+        if (names is null)
+        {
+            return null;
+        }
+        var logicals = new List<LogicalIndex>(logicalIndexes);
+        for (int i = 0; i < logicalIndexes; i++)
+        {
+            byte[] b = raw[i];
+            var index = new LogicalIndex(names[i], (int)r.LogicalNumber.Read(b), (int)r.PhysicalNumber.Read(b), (byte)r.IndexType.Read(b),
+                (byte)r.RelatedTableType.Read(b), (uint)r.RelatedIndex.Read(b), (uint)r.RelatedTable.Read(b));
+            if (physical.All(p => p.Number != index.PhysicalNumber))
+            {
+                failure = $"logical index '{index.Name}' names physical index {index.PhysicalNumber} of {realIndexes}";
+                return null;
+            }
+            logicals.Add(index);
+        }
+        return (physical, logicals);
     }
 }

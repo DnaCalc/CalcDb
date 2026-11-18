@@ -12,6 +12,7 @@ internal static unsafe partial class Kernel32
     public const uint FileShareWrite = 0x2;
     public const uint OpenExisting = 3;
     public const uint CreateAlways = 2;
+    public const uint OpenAlways = 4;
     public const uint FileFlagOverlapped = 0x40000000;
     public const uint FileAttributeNormal = 0x80;
     public const uint LockfileFailImmediately = 0x1;

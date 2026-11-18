@@ -146,7 +146,12 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a ReadOnly argument that is not Boolean"));
         }
-        CallResult result = DatabaseObject.Open(this, name, out DatabaseObject? database);
+        bool? exclusive = Args.Bool(args.Length > 1 ? args[1] : 0, omitted: false);
+        if (exclusive is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with an Options argument that is not Boolean"));
+        }
+        CallResult result = DatabaseObject.Open(this, name, exclusive.Value, out DatabaseObject? database);
         if (database is not null)
         {
             _databases.Add(database);

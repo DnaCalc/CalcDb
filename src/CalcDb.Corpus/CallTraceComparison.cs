@@ -15,7 +15,7 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 1,
+        Revision = 3,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -25,19 +25,22 @@ public static class CallTraceComparison
             new("attempt-directory", "Each attempt works on its own copy of the inputs; the attempt directory is part of every path the question passes.",
                 "Only the exact attempt directory of each capture is replaced, in text, BSTR bytes and their length together.",
                 "A different file name or relative path under the directory still differs.", ["II-15 §4 attempt-local copies"]),
-            new("run-time-fields", "Times, thread and process identifiers and the class-registration view describe the run, not the behaviour.",
-                "atUtc, lastWriteUtc, startedUtc, threadId, processId and registration are not compared.",
+            new("run-time-fields", "Times, waits, thread and process identifiers, the file identities of each attempt's own copies and the class-registration view describe the run, not the behaviour.",
+                "atUtc, lastWriteUtc, startedUtc, waitedMs, threadId, processId, fileId, volumeSerial and registration are not compared.",
                 "Event order, kinds and all results are still compared.", ["II-15 §5"]),
             new("release-count", "IUnknown::Release returns a count COM documents for test purposes only; internal references differ by implementation.",
                 "The returned count of a release event is not compared.", "A missing, extra or misplaced release still differs.", ["COM IUnknown::Release"]),
             new("module-observations", "Module lists are environment; provenance is checked separately.",
                 "Module events are not compared as events.", "A candidate run that loaded the native engine, or not the candidate module, is a provenance mismatch.", ["II-13 §15"]),
+            new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
+                "Labels are renumbered per lifetime in order of first appearance: a label that appears while the program holds no bound reference to it starts a new lifetime.",
+                "Two results the program holds at the same time still differ when one implementation returns the same object and the other a different one.", ["COM identity rules", "R-DAO-1 DAO-ID"]),
         ],
     };
 
     private static readonly HashSet<string> RunTimeFields = new(StringComparer.Ordinal)
     {
-        "atUtc", "lastWriteUtc", "startedUtc", "threadId", "processId", "registration",
+        "atUtc", "lastWriteUtc", "startedUtc", "waitedMs", "threadId", "processId", "fileId", "volumeSerial", "registration",
     };
 
     /// <summary>Modules whose presence in a candidate run means the native engine answered (II-13 §15).</summary>
@@ -68,6 +71,8 @@ public static class CallTraceComparison
         }
         CaptureEvent[] expected = oracle.Events.Where(e => e is not ModulesEvent).ToArray();
         CaptureEvent[] actual = candidate.Events.Where(e => e is not ModulesEvent).ToArray();
+        JsonNode[] expectedNodes = HeldIdentities([.. expected.Select(e => Normalized(e, oracle.Environment.AttemptDirectory))]);
+        JsonNode[] actualNodes = HeldIdentities([.. actual.Select(e => Normalized(e, candidate.Environment.AttemptDirectory))]);
         bool truncated = false;
         for (int i = 0; i < Math.Max(expected.Length, actual.Length); i++)
         {
@@ -82,9 +87,7 @@ public static class CallTraceComparison
                 differences.Add(new Difference($"event {i} ({present.ProgramPath})", i < expected.Length ? Render(expected[i]) : "(none)", i < actual.Length ? Render(actual[i]) : "(none)", "event-count"));
                 continue;
             }
-            JsonNode e = Normalized(expected[i], oracle.Environment.AttemptDirectory);
-            JsonNode a = Normalized(actual[i], candidate.Environment.AttemptDirectory);
-            if (FirstDifference(e, a, "$") is { } path)
+            if (FirstDifference(expectedNodes[i], actualNodes[i], "$") is { } path)
             {
                 differences.Add(new Difference($"{expected[i].ProgramPath} {path.Path}", path.Expected, path.Actual, KindOf(expected[i])));
             }
@@ -189,6 +192,82 @@ public static class CallTraceComparison
                 }
                 break;
         }
+    }
+
+    /// <summary>
+    /// The held-identity normalization: renumber identity labels per lifetime. The program holds a label from an event
+    /// that binds an object result until the release of that binding (or a rebinding of the name); a label met while not
+    /// held, after it was seen before, starts a new lifetime.
+    /// </summary>
+    public static JsonNode[] HeldIdentities(JsonNode[] events)
+    {
+        var current = new Dictionary<string, string>(StringComparer.Ordinal);
+        var held = new Dictionary<string, int>(StringComparer.Ordinal);
+        var bindings = new Dictionary<string, string>(StringComparer.Ordinal);
+        int lifetimes = 0;
+        foreach (JsonNode node in events)
+        {
+            if (node is not JsonObject o)
+            {
+                continue;
+            }
+            string? boundLabel = null;
+            void Relabel(JsonNode? n)
+            {
+                switch (n)
+                {
+                    case JsonObject obj:
+                        if (obj["identity"] is JsonValue v && v.TryGetValue(out string? raw))
+                        {
+                            if (!current.TryGetValue(raw, out string? life) || held.GetValueOrDefault(raw) == 0)
+                            {
+                                life = "o" + (++lifetimes).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                                current[raw] = life;
+                            }
+                            obj["identity"] = life;
+                            boundLabel ??= raw;
+                        }
+                        foreach (KeyValuePair<string, JsonNode?> p in obj.ToArray())
+                        {
+                            if (p.Key != "identity")
+                            {
+                                Relabel(p.Value);
+                            }
+                        }
+                        break;
+                    case JsonArray a:
+                        foreach (JsonNode? item in a)
+                        {
+                            Relabel(item);
+                        }
+                        break;
+                }
+            }
+            // A release ends the binding's hold before anything else of the event is read.
+            if (o["target"] is JsonValue t && t.TryGetValue(out string? target) && o["member"] is null && o["newEnumHresult"] is null && bindings.Remove(target, out string? released))
+            {
+                held[released] = Math.Max(0, held.GetValueOrDefault(released) - 1);
+            }
+            Relabel(o["result"] ?? o["object"]);
+            foreach (KeyValuePair<string, JsonNode?> p in o.ToArray())
+            {
+                if (p.Key is not ("result" or "object"))
+                {
+                    Relabel(p.Value);
+                }
+            }
+            if (o["bind"] is JsonValue b && b.TryGetValue(out string? name) && (o["result"] ?? o["object"]) is JsonObject value && value["identity"] is not null)
+            {
+                string raw = boundLabel!;
+                if (bindings.Remove(name, out string? previous))
+                {
+                    held[previous] = Math.Max(0, held.GetValueOrDefault(previous) - 1);
+                }
+                bindings[name] = raw;
+                held[raw] = held.GetValueOrDefault(raw) + 1;
+            }
+        }
+        return events;
     }
 
     private static string Replace(string s, string directory) => s.Replace(directory, "<attempt>", StringComparison.OrdinalIgnoreCase);

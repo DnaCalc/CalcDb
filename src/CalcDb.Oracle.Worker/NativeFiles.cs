@@ -97,6 +97,72 @@ internal sealed partial class NativeFiles(string attemptDir, Question question)
         }
     }
 
+    /// <summary>Bisect the range with exclusive fail-immediately locks; a refused single byte is held by another handle.</summary>
+    public unsafe HandleEvent LockScan(int seq, string path, NativeLockScan scan)
+    {
+        if (!_handles.TryGetValue(scan.Handle, out var h))
+        {
+            return new HandleEvent { Seq = seq, ProgramPath = path, Op = "lock-scan", Handle = scan.Handle, Success = false, Win32Error = -1, AtUtc = DateTimeOffset.UtcNow };
+        }
+        var locked = new List<(long Start, long Length)>();
+        int probes = 0;
+        bool incomplete = false;
+        int otherError = 0;
+        var pending = new Stack<(long Start, long Length)>();
+        pending.Push((scan.Start, scan.Length));
+        while (pending.Count > 0)
+        {
+            (long start, long length) = pending.Pop();
+            if (probes >= scan.MaxProbes)
+            {
+                incomplete = true;
+                break;
+            }
+            probes++;
+            var overlapped = new NativeOverlapped { OffsetLow = (int)(uint)start, OffsetHigh = (int)(uint)(start >> 32) };
+            // LOCKFILE_EXCLUSIVE_LOCK (2) | LOCKFILE_FAIL_IMMEDIATELY (1)
+            if (LockFileEx(h.Handle, 3, 0, (uint)length, (uint)(length >> 32), &overlapped))
+            {
+                _ = UnlockFileEx(h.Handle, 0, (uint)length, (uint)(length >> 32), &overlapped);
+                continue;
+            }
+            int error = Marshal.GetLastPInvokeError();
+            if (error != 33) // ERROR_LOCK_VIOLATION
+            {
+                otherError = error;
+                break;
+            }
+            if (length == 1)
+            {
+                if (locked.Count > 0 && locked[^1].Start + locked[^1].Length == start)
+                {
+                    locked[^1] = (locked[^1].Start, locked[^1].Length + 1);
+                }
+                else
+                {
+                    locked.Add((start, 1));
+                }
+                continue;
+            }
+            long half = length / 2;
+            pending.Push((start + half, length - half)); // the lower half is scanned first
+            pending.Push((start, half));
+        }
+        return new HandleEvent
+        {
+            Seq = seq, ProgramPath = path, Op = "lock-scan", Handle = scan.Handle, RelativePath = h.Relative, Offset = scan.Start, Success = otherError == 0, Win32Error = otherError == 0 ? null : otherError,
+            LockedRanges = [.. locked.Select(r => $"0x{r.Start:X}+{r.Length.ToString(CultureInfo.InvariantCulture)}")], Probes = probes, ScanIncomplete = incomplete, AtUtc = DateTimeOffset.UtcNow,
+        };
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool LockFileEx(SafeFileHandle file, uint flags, uint reserved, uint lengthLow, uint lengthHigh, NativeOverlapped* overlapped);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool UnlockFileEx(SafeFileHandle file, uint reserved, uint lengthLow, uint lengthHigh, NativeOverlapped* overlapped);
+
     public HandleEvent Close(int seq, string path, string name)
     {
         if (!_handles.Remove(name, out var h))

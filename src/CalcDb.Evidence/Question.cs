@@ -175,6 +175,7 @@ public enum DispatchKind
 [JsonDerivedType(typeof(NativeOpen), "nativeOpen")]
 [JsonDerivedType(typeof(NativeRead), "nativeRead")]
 [JsonDerivedType(typeof(NativeClose), "nativeClose")]
+[JsonDerivedType(typeof(NativeLockScan), "nativeLockScan")]
 [JsonDerivedType(typeof(Pause), "pause")]
 [JsonDerivedType(typeof(TerminateSelf), "terminateSelf")]
 [JsonDerivedType(typeof(SetReadOnly), "setReadOnly")]
@@ -376,6 +377,16 @@ public sealed record NativeOpen(string Bind, string File, uint Access, uint Shar
 public sealed record NativeRead(string Handle, long Offset, int Count) : Operation
 {
     internal override void Write(CanonicalWriter w) => w.Begin("nativeRead").Text("handle", Handle).Int64("offset", Offset).Int32("count", Count);
+}
+
+/// <summary>
+/// W-PROBE (R-LOCK-2 RO-NATIVE): which bytes of <see cref="Start"/>..+<see cref="Length"/> another handle holds a
+/// byte-range lock on, found by bisection with exclusive fail-immediately <c>LockFileEx</c> requests through the bound
+/// handle (each granted probe is unlocked at once). At most <see cref="MaxProbes"/> requests; a scan that runs out says so.
+/// </summary>
+public sealed record NativeLockScan(string Handle, long Start, long Length, int MaxProbes) : Operation
+{
+    internal override void Write(CanonicalWriter w) => w.Begin("nativeLockScan").Text("handle", Handle).Int64("start", Start).Int64("length", Length).Int32("maxProbes", MaxProbes);
 }
 
 /// <summary>W-PROBE: <c>CloseHandle</c> of a native handle.</summary>

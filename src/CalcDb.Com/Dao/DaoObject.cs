@@ -41,6 +41,30 @@ internal static class DaoErrors
     /// <summary>3265 (R-DAO-1 DAO-COLL).</summary>
     public const string ItemNotFound = "Item not found in this collection.";
 
+    /// <summary>3001 (R-ERR-1 ERR-EXCEP: argument-count failures of Database and Recordset members).</summary>
+    public const string InvalidArgument = "Invalid argument.";
+
+    /// <summary>3019 (r-cursor-1/seek-arguments: Seek with no Index set).</summary>
+    public const string NoCurrentIndex = "Operation invalid without a current index.";
+
+    /// <summary>3250 (r-cursor-1/seek-arguments: more keys than index columns).</summary>
+    public const string CouldNotBuildKey = "Could not build key.";
+
+    /// <summary>3251 (r-cursor-1/seek-arguments: Seek on a dynaset).</summary>
+    public const string NotSupportedForType = "Operation is not supported for this type of object.";
+
+    /// <summary>3421 (r-cursor-1/seek-arguments: a non-numeric text key for a Long column).</summary>
+    public const string ConversionError = "Data type conversion error.";
+
+    /// <summary>3032 (r-cat-1b/tabledef-members-ddl: ConflictTable, ReplicaFilter of a TableDef).</summary>
+    public const string CannotPerform = "Cannot perform this operation.";
+
+    /// <summary>3110 (r-cat-1b/tabledef-members-ddl: the Indexes of a system table for the default Admin).</summary>
+    public static string NoReadDefinitions(string name) => $"Could not read definitions; no read definitions permission for table or query '{name}'.";
+
+    /// <summary>3800 (r-cursor-1/id-index-switch).</summary>
+    public static string NotAnIndex(string name) => $"'{name}' is not an index in this table.";
+
     /// <summary>3011 (r-oracle-1/failed-call-t1).</summary>
     public static string ObjectNotFound(string name) =>
         $"The Microsoft Access database engine could not find the object '{name}'. Make sure the object exists and that you spell its name and the path name correctly. If '{name}' is not a local object, check your network connection or contact the server administrator.";
@@ -82,6 +106,9 @@ internal abstract unsafe class DaoObject : DispatchObject
             Engine.Record(failure);
         }
     }
+
+    /// <summary>DAO 3001 with an IErrorInfo, as ACE reports an argument-count failure of a Database or Recordset member (R-ERR-1 ERR-EXCEP).</summary>
+    protected Failure InvalidArgumentCount() => Failure.Dao(3001, Source, DaoErrors.InvalidArgument) with { PublishesErrorInfo = true };
 
     public CallResult Fail(int number, string description, bool publishesErrorInfo = false) =>
         CallResult.Fail(Failure.Dao(number, Source, description) with { PublishesErrorInfo = publishesErrorInfo });

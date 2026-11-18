@@ -32,6 +32,10 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Get("AbsolutePosition", (self, args) => Live(self, r => r.AbsolutePosition()))
         .Get("Bookmark", (self, args) => Live(self, r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetBookmark(value)); })
+        .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"))))
+        .Put("Index", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetIndex(value)); })
+        .Method("Requery", (self, args) => Live(self, r => r.Requery()))
+        .Method("Seek", (self, args) => { nint[] copy = args.ToArray(); return Live(self, r => r.Seek(copy)); })
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     private FieldsObject? _fields;
@@ -58,7 +62,143 @@ internal sealed unsafe class RecordsetObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
+
     private FieldsObject FieldsCollection => _fields ??= new FieldsObject(this);
+
+    /// <summary>Index put on a table-type recordset: the first row of the new order becomes current; an unknown name is 3800 (r-cursor-1/id-index-switch).</summary>
+    private CallResult SetIndex(nint value)
+    {
+        if (Cursor is not TableCursor table)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"));
+        }
+        string name = Args.Text(value) ?? "";
+        return table.SetIndex(name) switch
+        {
+            IndexRefusal.None => CallResult.Nothing,
+            IndexRefusal.UnknownIndex => Fail(3800, DaoErrors.NotAnIndex(name)),
+            var other => CallResult.Fail(Failure.NotImplemented("Index put: " + other + " " + table.LastTraversalFailure?.Predicate)),
+        };
+    }
+
+    /// <summary>
+    /// Seek(Comparison, Key1, … Key13) (R-CURSOR-1 CUR-SEEK, qualified): a dynaset refuses with 3251, an unknown comparison
+    /// with 3001, no Index with 3019, more keys than index columns with 3250, a key that does not convert with 3421; a
+    /// refusal leaves the position. A Missing key cuts the key there; Null and Empty are the Null key value.
+    /// </summary>
+    private CallResult Seek(nint[] args)
+    {
+        if (Cursor is not TableCursor table)
+        {
+            return Fail(3251, DaoErrors.NotSupportedForType);
+        }
+        SeekOperator? op = Args.Text(args[0]) switch
+        {
+            "=" => SeekOperator.Equal,
+            ">=" => SeekOperator.GreaterOrEqual,
+            ">" => SeekOperator.Greater,
+            "<=" => SeekOperator.LessOrEqual,
+            "<" => SeekOperator.Less,
+            _ => null,
+        };
+        if (op is null)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (table.Index is not { } logical || table.Table.PhysicalOf(logical) is not { } physical)
+        {
+            return Fail(3019, DaoErrors.NoCurrentIndex);
+        }
+        int given = 0;
+        while (1 + given < args.Length && args[1 + given] != 0)
+        {
+            given++;
+        }
+        if (given > physical.Columns.Count)
+        {
+            return Fail(3250, DaoErrors.CouldNotBuildKey);
+        }
+        var keys = new List<SeekKey>(given);
+        for (int i = 0; i < given; i++)
+        {
+            ColumnDescriptor? column = table.Table.Columns.FirstOrDefault(c => c.PhysicalNumber == physical.Columns[i].PhysicalNumber);
+            bool converted = true;
+            SeekKey? key = column is null ? null : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out converted);
+            if (key is null)
+            {
+                return column is not null && !converted ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (Text needs W-04/weight-tables-per-sort-order)"));
+            }
+            keys.Add(key.Value);
+        }
+        IndexRefusal refusal = table.Seek(op.Value, keys, out _);
+        return refusal switch
+        {
+            IndexRefusal.None => CallResult.Nothing,
+            IndexRefusal.TooManyKeys => Fail(3250, DaoErrors.CouldNotBuildKey),
+            IndexRefusal.KeyNotEncodable => CallResult.Fail(Failure.NotImplemented("Seek on an index whose key this codec cannot encode (Text needs W-04/weight-tables-per-sort-order)")),
+            _ => CallResult.Fail(Failure.NotImplemented("Seek: " + refusal + " " + table.LastTraversalFailure?.Predicate)),
+        };
+    }
+
+    /// <summary>
+    /// A Seek key as its column's stored value: Null and Empty are the Null key; integer columns take the numeric value
+    /// (a fraction lies between two stored values); Currency, Single, Double, Date and Boolean convert as VariantChangeType
+    /// does. Null with <paramref name="converted"/> false is a conversion failure (3421); null with it true is a column type
+    /// the codec does not encode.
+    /// </summary>
+    private static SeekKey? SeekKeyOf(NativeVariant* v, byte type, out bool converted)
+    {
+        converted = true;
+        VarType vt = (VarType)v->Vt & ~VarType.ByRef;
+        if (vt is VarType.Null or VarType.Empty)
+        {
+            return new SeekKey(KeyValue.Null);
+        }
+        VarType? target = type switch
+        {
+            NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.Double => VarType.R8,
+            NativeTypes.Single => VarType.R4,
+            NativeTypes.Currency => VarType.Currency,
+            NativeTypes.DateTime => VarType.Date,
+            NativeTypes.Boolean => VarType.Bool,
+            _ => null,
+        };
+        if (target is null)
+        {
+            return null;
+        }
+        using OwnedVariant? c = OwnedVariant.ChangeType(v, target.Value, out _);
+        if (c is null)
+        {
+            converted = false;
+            return null;
+        }
+        NativeVariant* x = c.Pointer;
+        switch (type)
+        {
+            case NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long:
+            {
+                double d = x->Double;
+                double floor = Math.Floor(d);
+                (long min, long max) = type switch { NativeTypes.Byte => (0L, 255L), NativeTypes.Integer => (short.MinValue, short.MaxValue), _ => (int.MinValue, int.MaxValue) };
+                if (double.IsNaN(d) || floor < min || floor > max)
+                {
+                    converted = false;
+                    return null;
+                }
+                return new SeekKey(new KeyValue(KeyValueKind.Integer, Integer: (long)floor), InexactAbove: floor != d);
+            }
+            case NativeTypes.Double or NativeTypes.DateTime:
+                return new SeekKey(new KeyValue(KeyValueKind.FloatBits, Bits: (ulong)x->Int64));
+            case NativeTypes.Single:
+                return new SeekKey(new KeyValue(KeyValueKind.FloatBits, Bits: (uint)*(int*)&x->Int64));
+            case NativeTypes.Currency:
+                return new SeekKey(new KeyValue(KeyValueKind.ScaledCurrency, Integer: x->Int64));
+            default:
+                return new SeekKey(new KeyValue(KeyValueKind.Boolean, Boolean: (short)x->Int64 != 0));
+        }
+    }
 
     private static CallResult Live(ComObject self, Func<RecordsetObject, CallResult> op)
     {
@@ -77,15 +217,21 @@ internal sealed unsafe class RecordsetObject : DaoObject
     };
 
     /// <summary>
-    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot; forward-only refuses it with 3219
-    /// (r-cursor-1/pos-moves-dynaset, pos-moves-forwardonly). Table-type and the value without a current row are not observed.
+    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot; forward-only refuses it with 3219 and table-type
+    /// with 3251 (r-cursor-1/pos-moves-dynaset, pos-moves-forwardonly, pop-count-table). Without a current row: not observed.
     /// </summary>
     private CallResult AbsolutePosition() => Cursor switch
     {
+        TableCursor => Fail(3251, DaoErrors.NotSupportedForType),
         PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
         PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
-        _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition on a table-type recordset or without a current row")),
+        _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition without a current row")),
     };
+
+    /// <summary>Requery: table-type refuses it with 3251 (r-cursor-1/pop-count-table); a dynaset or snapshot's re-population is not built yet.</summary>
+    private CallResult Requery() => Cursor is TableCursor
+        ? Fail(3251, DaoErrors.NotSupportedForType)
+        : CallResult.Fail(Failure.NotImplemented("Requery of a dynaset or snapshot (R-CURSOR-1 CUR-LIFE)"));
 
     private CallResult Move(nint rowsArg, nint startBookmark)
     {

@@ -28,6 +28,8 @@ public sealed record FormatDescriptor
 
     public required IndexPageRules IndexPage { get; init; }
 
+    public required IndexDescriptorRules IndexDescriptor { get; init; }
+
     public required MapRules Map { get; init; }
 
     public required CatalogRules Catalog { get; init; }
@@ -123,6 +125,33 @@ public sealed record FormatDescriptor
             LeafKind = 0x04,
             InteriorKind = 0x03,
         },
+        IndexDescriptor = new IndexDescriptorRules
+        {
+            PhysicalBlockBytes = 52,
+            ColumnSlotsOffset = 4,
+            ColumnSlotCount = 10,
+            ColumnSlotBytes = 3,
+            UnusedColumn = 0xFFFF,
+            AscendingFlag = 0x01,
+            ColumnNumber = new("jet4.index.column_number", "index column slot", 0, 2, ByteOrder.Little, "Physical column number; FFFF unused.", "S-JACK-INDEX-PIN; II-05 §1.2"),
+            ColumnFlags = new("jet4.index.column_flags", "index column slot", 2, 1, ByteOrder.Little, "Column flags: bit 01 ascending; other bits preserved.", "S-JACK-INDEX-PIN; II-05 §1.2"),
+            OwnedMap = new("jet4.index.owned_map", "physical index descriptor", 34, 4, ByteOrder.Little, "Index-owned map declaration: u8 row then u24LE page.", "S-JACK-INDEX-PIN; II-05 §1.2"),
+            RootPage = new("jet4.index.root_page", "physical index descriptor", 38, 4, ByteOrder.Little, "Root page number.", "S-JACK-INDEX-PIN; II-05 §1.2"),
+            Flags = new("jet4.index.flags", "physical index descriptor", 46, 1, ByteOrder.Little, "Index flags: 01 unique, 02 ignore nulls, 08 required, 80 preserved.", "S-JACK-INDEX-PIN; II-05 §1.2"),
+            UniqueFlag = 0x01,
+            IgnoreNullsFlag = 0x02,
+            RequiredFlag = 0x08,
+            UniqueEntryCount = new("jet4.index.unique_entry_count", "index counter block", 4, 4, ByteOrder.Little, "Source name uniqueEntryCount; not a current cardinality.", "S-JACK-INDEX-PIN; II-05 §1.1"),
+            LogicalBlockBytes = 28,
+            LogicalNumber = new("jet4.index.logical_number", "logical index descriptor", 4, 4, ByteOrder.Little, "Logical index number.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            PhysicalNumber = new("jet4.index.physical_number", "logical index descriptor", 8, 4, ByteOrder.Little, "Physical index data number: the shared tree.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            RelatedTableType = new("jet4.index.related_table_type", "logical index descriptor", 12, 1, ByteOrder.Little, "Foreign-key side: 1 primary, 2 secondary.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            RelatedIndex = new("jet4.index.related_index", "logical index descriptor", 13, 4, ByteOrder.Little, "Related logical index number; FFFFFFFF absent.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            RelatedTable = new("jet4.index.related_table", "logical index descriptor", 17, 4, ByteOrder.Little, "Related table's TableDef page.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            IndexType = new("jet4.index.type", "logical index descriptor", 23, 1, ByteOrder.Little, "1 primary key, 2 foreign key; others by profile.", "S-JACK-IDXIMPL-PIN; II-05 §1.3"),
+            PrimaryKeyType = 1,
+            ForeignKeyType = 2,
+        },
         Map = new MapRules
         {
             Type = new("jet4.map.type", "map declaration", 0, 1, ByteOrder.Little, "00 inline bitmap, 01 bitmap-page references.", "S-JACK-MAP; II-03 §1.4"),
@@ -208,6 +237,42 @@ public sealed record TableDefRules
     public required int NameLengthBytes { get; init; }
 
     public IEnumerable<FieldRule> Rules => [NextPage, DefinitionLength, RowCount, AutoNumber, TableType, MaxColumns, VariableColumns, ColumnCount, LogicalIndexCount, RealIndexCount, OwnedMap, FreeMap];
+}
+
+/// <summary>
+/// The TableDef's index structures (II-05 §§1.1–1.3): the 12-byte counter blocks, one 52-byte physical descriptor per
+/// tree (ten column slots by physical column number, owner map, root, flags) and one 28-byte logical descriptor per
+/// public index, which names its shared physical tree. In the stream they follow the column names: physical
+/// descriptors, logical descriptors, then the logical names (u16LE byte length, UTF-16LE).
+/// </summary>
+public sealed record IndexDescriptorRules
+{
+    public required int PhysicalBlockBytes { get; init; }
+    public required int ColumnSlotsOffset { get; init; }
+    public required int ColumnSlotCount { get; init; }
+    public required int ColumnSlotBytes { get; init; }
+    public required ushort UnusedColumn { get; init; }
+    public required byte AscendingFlag { get; init; }
+    public required FieldRule ColumnNumber { get; init; }
+    public required FieldRule ColumnFlags { get; init; }
+    public required FieldRule OwnedMap { get; init; }
+    public required FieldRule RootPage { get; init; }
+    public required FieldRule Flags { get; init; }
+    public required byte UniqueFlag { get; init; }
+    public required byte IgnoreNullsFlag { get; init; }
+    public required byte RequiredFlag { get; init; }
+    public required FieldRule UniqueEntryCount { get; init; }
+    public required int LogicalBlockBytes { get; init; }
+    public required FieldRule LogicalNumber { get; init; }
+    public required FieldRule PhysicalNumber { get; init; }
+    public required FieldRule RelatedTableType { get; init; }
+    public required FieldRule RelatedIndex { get; init; }
+    public required FieldRule RelatedTable { get; init; }
+    public required FieldRule IndexType { get; init; }
+    public required byte PrimaryKeyType { get; init; }
+    public required byte ForeignKeyType { get; init; }
+
+    public IEnumerable<FieldRule> Rules => [ColumnNumber, ColumnFlags, OwnedMap, RootPage, Flags, UniqueEntryCount, LogicalNumber, PhysicalNumber, RelatedTableType, RelatedIndex, RelatedTable, IndexType];
 }
 
 /// <summary>The 25-byte column-definition block (II-04 §1.3).</summary>

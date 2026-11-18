@@ -9,6 +9,11 @@ public sealed record CatalogEntry(int Id, int ParentId, string Name, short Type,
 {
     /// <summary>The raw LvProp payload, when present (an MR2 property blob, decoded lazily by the property grammar).</summary>
     public byte[]? Properties { get; init; }
+
+    /// <summary>The exact DATE bits of DateCreate and DateUpdate (DAO TableDef DateCreated, LastUpdated), when the row has them.</summary>
+    public ulong? DateCreateBits { get; init; }
+
+    public ulong? DateUpdateBits { get; init; }
 }
 
 /// <summary>A lookup result that never resolves ambiguity silently (II-06 §1).</summary>
@@ -134,6 +139,8 @@ public static class CatalogBootstrap
             bound[name] = matches[0];
         }
         ColumnDescriptor? lvProp = objectTable.Columns.SingleOrDefault(c => c.Name == "LvProp");
+        ColumnDescriptor? dateCreate = objectTable.Columns.SingleOrDefault(c => c.Name == "DateCreate" && c.TypeCode == NativeTypes.DateTime);
+        ColumnDescriptor? dateUpdate = objectTable.Columns.SingleOrDefault(c => c.Name == "DateUpdate" && c.TypeCode == NativeTypes.DateTime);
         var entries = new List<CatalogEntry>();
         var failures = new List<TraversalFailure>();
         foreach (RowView row in RowResolver.Scan(cache, d, objectTable, pageCount, failures))
@@ -156,9 +163,13 @@ public static class CatalogBootstrap
                     failure = $"object table row {row.Root} LvProp: {props.Failure}";
                     return null;
                 }
+                NativeValue? created = dateCreate is null ? null : FieldDecoder.Read(row, objectTable, dateCreate, cache, d);
+                NativeValue? updated = dateUpdate is null ? null : FieldDecoder.Read(row, objectTable, dateUpdate, cache, d);
                 entries.Add(new CatalogEntry((int)id.Integer, (int)parent.Integer, name.Text ?? "", (short)type.Integer, (int)flags.Integer, row.Root)
                 {
                     Properties = props?.Bytes,
+                    DateCreateBits = created?.Kind == NativeKind.DateTime ? created.Bits : null,
+                    DateUpdateBits = updated?.Kind == NativeKind.DateTime ? updated.Bits : null,
                 });
             }
         }

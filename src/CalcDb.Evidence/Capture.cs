@@ -365,6 +365,14 @@ public sealed record HandleEvent : CaptureEvent
 
     public string? BytesSha256 { get; init; }
 
+    /// <summary>A lock scan: the locked byte ranges another handle holds, as <c>0xSTART+LENGTH</c>, merged and in order.</summary>
+    public IReadOnlyList<string>? LockedRanges { get; init; }
+
+    /// <summary>A lock scan: the LockFileEx requests made, and whether the probe budget ran out before the scan ended.</summary>
+    public int? Probes { get; init; }
+
+    public bool? ScanIncomplete { get; init; }
+
     public required DateTimeOffset AtUtc { get; init; }
 }
 

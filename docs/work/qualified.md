@@ -734,6 +734,13 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: q2/ex-life-kill-mid-statement-exclusive/; q1/ex-life-child-and-transaction-owner/ (seven attempts after seven states); evidence/r-lock-1-2/accdb-life-close/, accdb-life-release/ (+ mdb); evidence/r-crash-1-kill/accdb-kill-open-only-exclusive-ace-first/, mdb-...
 - **Open**: pending I/O itself, inherited handles (T); each state sampled once.
 
+### R-LOCK-2 RO-NATIVE and RO-PAIR (lock-file slots): a shared session holds one lock byte per slot and writes its record at the slot
+
+- **Claim.** A DAO shared read-only session holds a one-byte lock on the lock file at 0x10000000 + n for its slot n, counted from 1, and its 64-byte record is at (n − 1) × 64: the computer name and `admin`, each NUL-terminated and space-padded to 32 bytes. A second session in another process takes slot 2 (lock 0x10000002, record at 64; the file grows to 128 B). When the second closes, its lock byte is released and its record stays; the last close deletes the file. The database file carries no byte-range lock at all. An open table-type recordset adds two lock bytes on the lock file, 0x40005401 and 0x50005401.
+- **Conditions.** ACCDB; read-only shared opens in one and in two processes; locks found by bisecting [0, 2^62) with exclusive fail-immediately LockFileEx through a separate handle.
+- **Records.** w-10-readers-only/lock-ranges-shared-readonly, lock-ranges-two-readers; r-etw-rec/readonly-session (the record write at offset 0, deletion at Close).
+- **Open.** The encoding of the recordset's lock bytes (one observation: 0x54 and slot 1 are candidates); MDB `.ldb`; slot reuse after a departed session in a third open; whether the slot lock is exclusive or shared.
+
 ### R-LOCK-2 RO-PAIR: readers coexist
 - **Claim**: Two and three shared read-only readers coexist and read (2,048 rows each); exclusive read-only is admitted beside a shared read-only reader (against the book's expectation); the lock file grows 64 → 128 B and is gone when all close.
 - **Records**: q1/ro-three-readers-and-reads-after-writer/ (a, b, c); evidence/r-lock-1-2/*-dao-shared-ro-then-dao-shared-ro, *-dao-shared-ro-then-dao-excl-ro; evidence/r-lock-perm/accdb-readonly-db-two-readers/, mdb-...
@@ -871,6 +878,13 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB; IX_ABC fixture of 13 rows, start rows chosen so no landing equals a start, plus the two-start repair fixtures.
 - **Records.** q/seek-short-keys-from-first, seek-short-keys-from-last (discriminating: identical landings from two starts), seek-omission-positions, seek-long-key-collision; c1/seek-operators, seek-duplicates, seek-duplicates-multileaf; fix/seek-arguments-from-two-starts, seek-duplicates-null-from-last, seek-operator-spelling-controls; c1b/seek-gap-keys, seek-text-index, seek-date-index, seek-repeat-sequence; fix/index-metadata-seek-pk-name. Reconciles c1b/seek-three-column-mixed (partial `>` like `>=`; NoMatch exactly when no row precedes the group).
 - **Open.** (T) Linked/ODBC and replication cases, binary and other index types, text longer than 255.
+
+### R-CURSOR-1 CUR-SEEK (miss): a Seek that finds nothing keeps BOF and EOF and parks the cursor beyond the end of its direction
+
+- **Claim.** After a Seek that finds nothing, NoMatch is True, there is no current row (Field.Value, Move 0 and Bookmark give 3021) and BOF and EOF keep the values they had before the Seek (False/False from a current row, EOF True from EOF). For `=`, `>=` and `>` the cursor is after the last row: MovePrevious lands on the last row; MoveNext sets EOF without an error, or gives 3021 when EOF was already True. For `<` and `<=` it is before the first row: MoveNext lands on the first row; MovePrevious sets BOF without an error (EOF keeps its value), or gives 3021 when BOF was already True. A miss inside the order (`=` 1,25 between existing keys) behaves as a miss past the end, not as an insertion point. NoMatch is cleared only by a move that lands on a row, MoveFirst or MoveLast; a move that only sets EOF or BOF leaves it True. Setting `Index` moves to the first row of the new index.
+- **Conditions.** ACCDB, table-type recordset, PK_C (A ASC, B DESC) over four rows; the steps share one recordset, so each Seek starts from the previous step's state.
+- **Records.** w-04-key-navigation/seek-miss-position (discriminating: a middle miss, both end misses, every move from each, flags from a current row and from EOF); c1/seek-arguments (NoMatch from a current row, then MoveNext), id-index-switch (Index moves to the first row).
+- **Open.** Move n (n not 0) from a miss; a miss on an empty table.
 
 ### R-CURSOR-1 CUR-EDIT: edit buffer lifecycle, validation order, AutoNumber reservation, FK and Required-Memo edits
 

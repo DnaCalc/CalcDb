@@ -1,0 +1,236 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "w-10-readers-only/lock-ranges-two-readers",
+  "bookRefs": [
+    "W-10/native-readers-only",
+    "R-LOCK-2",
+    "RO-PAIR",
+    "RO-NATIVE",
+    "T-LOCK-11"
+  ],
+  "description": "How two shared read-only DAO sessions in two processes share the lock file (R-LOCK-2 RO-PAIR: it grows 64 -> 128 B): which byte ranges each session holds locked, and what the file holds when both are open and after the second closes. Participant a opens r-cursor-1-nav shared read-only; b opens it the same way; a bisects [0, 2^62) of the .laccdb with exclusive fail-immediately LockFileEx requests through its own native handle and reads the file's first 256 bytes; b closes; a scans and reads again; a closes. Both files are kept at each scan. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cursor-1-nav.accdb",
+      "sha256": "49288e9c099e3b28218a88a1c5a28a0053476f2e6d078898dd091510bc93be7d",
+      "length": 266240,
+      "provenance": "r-cursor-1.create-nav.aabc31250e.a1 qk1-aabc31250e49e7d48a36c130a3ad2415f3a72c560d5c72c62b8607fffcfb1486 output:r-cursor-1-nav.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "signal",
+      "name": "a-open"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "lf",
+      "file": "lock:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "lf",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeRead",
+      "handle": "lf",
+      "offset": 0,
+      "count": 256
+    },
+    {
+      "op": "nativeClose",
+      "handle": "lf"
+    },
+    {
+      "op": "observeFiles",
+      "label": "a-alone",
+      "keep": true
+    },
+    {
+      "op": "await",
+      "name": "b-open",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "lf",
+      "file": "lock:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "lf",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeRead",
+      "handle": "lf",
+      "offset": 0,
+      "count": 256
+    },
+    {
+      "op": "nativeClose",
+      "handle": "lf"
+    },
+    {
+      "op": "observeFiles",
+      "label": "both-open",
+      "keep": true
+    },
+    {
+      "op": "signal",
+      "name": "a-scanned"
+    },
+    {
+      "op": "await",
+      "name": "b-closed",
+      "timeoutMs": 30000
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "lf",
+      "file": "lock:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "lf",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeRead",
+      "handle": "lf",
+      "offset": 0,
+      "count": 256
+    },
+    {
+      "op": "nativeClose",
+      "handle": "lf"
+    },
+    {
+      "op": "observeFiles",
+      "label": "b-closed",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ],
+  "participants": [
+    {
+      "name": "b",
+      "program": [
+        {
+          "op": "await",
+          "name": "a-open",
+          "timeoutMs": 30000
+        },
+        {
+          "op": "create",
+          "progId": "DAO.DBEngine.120",
+          "bind": "eng"
+        },
+        {
+          "op": "invoke",
+          "target": "eng",
+          "member": "OpenDatabase",
+          "kind": "method",
+          "args": [
+            {
+              "type": "inputPath",
+              "role": "main"
+            },
+            {
+              "type": "bool",
+              "value": false
+            },
+            {
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "bind": "db"
+        },
+        {
+          "op": "signal",
+          "name": "b-open"
+        },
+        {
+          "op": "await",
+          "name": "a-scanned",
+          "timeoutMs": 30000
+        },
+        {
+          "op": "invoke",
+          "target": "db",
+          "member": "Close",
+          "kind": "method",
+          "args": []
+        },
+        {
+          "op": "signal",
+          "name": "b-closed"
+        }
+      ]
+    }
+  ]
+}

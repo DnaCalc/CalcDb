@@ -1,0 +1,204 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "w-10-readers-only/lock-ranges-shared-readonly",
+  "bookRefs": [
+    "W-10/native-readers-only",
+    "R-LOCK-2",
+    "RO-NATIVE",
+    "RO-PAIR",
+    "T-LOCK-11"
+  ],
+  "description": "Which byte ranges a DAO shared read-only session holds locked, on the lock file and on the database file (R-LOCK-2 RO-NATIVE: the record is written at offset 0; how a slot is marked in use is not known). Open r-cursor-1-nav shared read-only; open the .laccdb and the .accdb natively (GENERIC_READ, share read/write/delete) and bisect [0, 2^62) of each with exclusive fail-immediately LockFileEx requests, recording every byte another handle holds; read the lock file's first 256 bytes and keep both files. Repeat with a table-type recordset on T open after MoveLast. Close and observe the files. The fixture copy is opened read-only.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cursor-1-nav.accdb",
+      "sha256": "49288e9c099e3b28218a88a1c5a28a0053476f2e6d078898dd091510bc93be7d",
+      "length": 266240,
+      "provenance": "r-cursor-1.create-nav.aabc31250e.a1 qk1-aabc31250e49e7d48a36c130a3ad2415f3a72c560d5c72c62b8607fffcfb1486 output:r-cursor-1-nav.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "lf",
+      "file": "lock:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "lf",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeRead",
+      "handle": "lf",
+      "offset": 0,
+      "count": 256
+    },
+    {
+      "op": "nativeClose",
+      "handle": "lf"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "df",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "df",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeClose",
+      "handle": "df"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-open",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "MoveLast",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "lf",
+      "file": "lock:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "lf",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeRead",
+      "handle": "lf",
+      "offset": 0,
+      "count": 256
+    },
+    {
+      "op": "nativeClose",
+      "handle": "lf"
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "df",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeLockScan",
+      "handle": "df",
+      "start": 0,
+      "length": 4611686018427387904,
+      "maxProbes": 20000
+    },
+    {
+      "op": "nativeClose",
+      "handle": "df"
+    },
+    {
+      "op": "observeFiles",
+      "label": "recordset-open",
+      "keep": true
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -76,6 +76,9 @@ public sealed unsafe class WindowsFile : IPositionedFile
     /// <summary>Open an existing file with the admission's access and share flags; a sharing conflict is a typed failure.</summary>
     public static OpenResult Open(string path, Admission admission) => OpenCore(path, admission, Kernel32.OpenExisting);
 
+    /// <summary>Open the file, creating it empty when it does not exist (a lock file, W-10/native-readers-only).</summary>
+    public static OpenResult OpenOrCreate(string path, Admission admission) => OpenCore(path, admission, Kernel32.OpenAlways);
+
     /// <summary>Create (or truncate) a file for tests and new-database work, under the admission's share flags.</summary>
     public static OpenResult Create(string path, Admission admission) => OpenCore(path, admission, Kernel32.CreateAlways);
 

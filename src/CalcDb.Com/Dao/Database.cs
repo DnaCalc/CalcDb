@@ -23,6 +23,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, d => Text(d.Name)))
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
+        .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
 
     /// <summary>The databases open on this thread, whose caches' live work the cost counters add (W-01/dao-cost).</summary>
@@ -32,13 +33,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private readonly WorkspaceObject _workspace;
     private readonly List<RecordsetObject> _recordsets = [];
     private WindowsFile? _file;
+    private LockFile? _lockFile;
+    private DefinitionCollection? _tableDefs;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, PageCache cache, FormatDescriptor format, ulong pageCount, CatalogSnapshot catalog)
+    private const int HiddenFromTableDefs = 0x0003_0000;
+
+    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FormatDescriptor format, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
         Name = name;
         _file = file;
+        _lockFile = lockFile;
         Cache = cache;
         Format = format;
         PageCount = pageCount;
@@ -73,6 +79,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
+
     private static CallResult Live(ComObject self, Func<DatabaseObject, CallResult> op)
     {
         var d = (DatabaseObject)self;
@@ -80,10 +88,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
-    /// Open a file read-only (W-10's reader-only admission). Not yet: the lock file ACE creates beside the database
-    /// (W-10/readers-only), writable sessions (W-05), encrypted files (W-L1) and other format profiles.
+    /// Open a file read-only under W-10/native-readers-only: the database with reader-only admission (writers are
+    /// excluded while it is held), and for a shared open the lock-file slot ACE's shared sessions use (R-LOCK-2
+    /// RO-NATIVE, RO-PAIR); an exclusive open has no lock file (R-LOCK-1 EX-PROBE). Not yet: writable sessions (W-05),
+    /// reading beside a writer (W-11), encrypted files (W-L1) and other format profiles.
     /// </summary>
-    public static CallResult Open(WorkspaceObject workspace, string name, out DatabaseObject? database)
+    public static CallResult Open(WorkspaceObject workspace, string name, bool exclusive, out DatabaseObject? database)
     {
         database = null;
         string full;
@@ -123,7 +133,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         FormatDescriptor format = profile.Descriptor;
         ulong pages = file.GetExtent() / (ulong)format.PageSize;
         var cache = new PageCache(new FilePageSource(file, (uint)format.PageSize, 0xFFFFFF, uint.MaxValue), file.Incarnation, format.PageSize, CachePages);
-        CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? failure);
+        CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? failure, readProperties: true);
         if (catalog is null)
         {
             file.Dispose();
@@ -131,7 +141,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 ? "OpenDatabase of an encrypted database (W-L1)"
                 : "OpenDatabase when the catalog cannot be read: " + failure));
         }
-        database = new DatabaseObject(workspace, full, file, cache, format, pages, catalog);
+        LockFile? lockFile = null;
+        if (!exclusive)
+        {
+            lockFile = LockFile.Join(full, Environment.MachineName, workspace.UserName, out int? lockError);
+            if (lockFile is null)
+            {
+                file.Dispose();
+                return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
+            }
+        }
+        database = new DatabaseObject(workspace, full, file, lockFile, cache, format, pages, catalog);
         return CallResult.Nothing;
     }
 
@@ -170,9 +190,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {type}"));
         }
-        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Cache.Pin(p).Pin is { } pin ? Copy(pin) : null, Format, 64, out string? viewFailure);
-        TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out viewFailure);
-        if (table is null)
+        if (Definition(entry, out string? viewFailure) is not { } table)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the TableDef cannot be read: " + viewFailure));
         }
@@ -192,6 +210,29 @@ internal sealed unsafe class DatabaseObject : DaoObject
         CallResult result = Object(recordset);
         recordset.Release();
         return result;
+    }
+
+    /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
+    public TableDefinition? Definition(CatalogEntry entry, out string? failure)
+    {
+        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Cache.Pin(p).Pin is { } pin ? Copy(pin) : null, Format, 64, out failure);
+        return view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out failure);
+    }
+
+    /// <summary>
+    /// TableDefs: the local tables of the catalog, system tables included, in name order as ACE lists them
+    /// (r-cat-1b/tabledef-members-ddl: MSysACEs … MSysRelationships, T, U, W). One collection object per Database.
+    /// </summary>
+    private DefinitionCollection TableDefsCollection()
+    {
+        if (_tableDefs is null)
+        {
+            // ACE does not list the tables whose catalog flags carry 0x00030000 (the MSysComplexType_* tables, flags
+            // 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
+            CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
+            _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, [.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), holdsDatabase: false);
+        }
+        return _tableDefs;
     }
 
     private static ReadOnlyMemory<byte> Copy(PagePin pin)
@@ -223,6 +264,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         _file?.Dispose();
         _file = null;
+        _lockFile?.Dispose();
+        _lockFile = null;
         _workspace.Forget(this);
         return CallResult.Nothing;
     }

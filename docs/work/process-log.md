@@ -279,3 +279,37 @@ question key, editor windows, an input guard. 10 records, one note rewritten, tw
 **Rule.** On the owner's desktop the owner is a participant: record their input, never assume its absence.
 
 **Next candidates.** The private desktop for the host (by the owner's word); nested and cleanup errors (UDF-ERROR open).
+
+## 2026-11-18 · W-01/dao-cost, W-04/key-navigation, W-10/native-readers-only, W-08 TableDefs (one session, Claude Opus 5.5)
+
+**Work observed.** Cost counters in CalcDb and a performance driver (calcdb-perf) with six DAO loop cases against ACE.
+Index descriptors, a scalar key codec, an index navigator, Index and Seek. The lock-file slot protocol. TableDefs and
+Indexes. Four new designed probes (scan-big, seek-miss-position, two lock-range probes) and a lock-scan worker
+operation. The comparison rule went to revision 3. Three harness defects were found and fixed.
+
+**What worked.**
+- *A designed probe instead of a guess.* The state after a missed Seek looked like "parked at the insertion point".
+  One probe with misses at both ends and in the middle, followed by every move, showed a different and simpler rule:
+  BOF and EOF keep their values and the cursor waits beyond the end of its direction.
+- *Bisection for an unknown protocol.* The lock bytes of a shared session were not in any document. An exclusive
+  fail-immediately LockFileEx is refused exactly when another handle holds a lock in its range, so bisecting
+  [0, 2^62) found the slot byte 0x10000001 in 125 requests.
+- *A/A controls before interpreting a ratio.* calcdb/calcdb and ace/ace runs gave 0.98–1.04. Without them the
+  1.2–1.5× ratios of the cheap bodies would have been unreadable.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| I read the index-switch record as "the current row stays" | The first Index implementation kept the row; four questions mismatched until the comparison showed the first row of the new order | The note and code quote the record's values; claims about a record are made from its values, not my reading of its description |
+| ADO questions "matched" in the candidate run | 9 matches were real ACE answers through ADODB; the module observation ran before ADODB loaded | The worker ends every candidate run with a module observation; provenance flags ACECORE |
+| A sealed candidate attempt is reused while CalcDb.dll is unchanged | A worker fix did not reach the comparison | `batch --rerun` |
+| The match-count script knew only some difference kinds | One HandleEvent difference was counted as a match | Every indented difference line counts |
+| ACE reuses a freed object's address | New Fields objects carried an old label in ACE's capture | calls.trace held-identity normalization (identity is compared while the program holds the object) |
+
+**Rule.** A count of matching questions is only as good as the provenance and difference checks under it: verify
+that the candidate answered before counting a match.
+
+**Next candidates.** Text keys (the weight tables slice) unblock the Text Seek questions. The expression service
+(W-06/restricted-scalar) unblocks Find. A per-question provenance summary in `batch --compare` would make the count
+script unnecessary.

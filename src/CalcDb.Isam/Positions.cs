@@ -17,6 +17,15 @@ public enum PositionTag
     At,
     After,
     Empty,
+
+    /// <summary>
+    /// After a Seek that found nothing in the before-direction (`<`, `<=`): no current row, before the first row, with the
+    /// BOF and EOF flags the cursor had (see <see cref="PositionState{T}.SeekMissed"/>).
+    /// </summary>
+    SeekMissBefore,
+
+    /// <summary>After a Seek that found nothing in the after-direction (`=`, `>=`, `>`): no current row, after the last row.</summary>
+    SeekMissAfter,
 }
 
 /// <summary>
@@ -70,14 +79,45 @@ public sealed class PositionState<T> where T : struct
 
     public T? Current { get; private set; }
 
-    public bool Bof => Tag is PositionTag.Before or PositionTag.Empty;
+    public bool Bof => Tag is PositionTag.Before or PositionTag.Empty || (IsSeekMiss && _missBof);
 
-    public bool Eof => Tag is PositionTag.After or PositionTag.Empty;
+    public bool Eof => Tag is PositionTag.After or PositionTag.Empty || (IsSeekMiss && _missEof);
+
+    private bool IsSeekMiss => Tag is PositionTag.SeekMissBefore or PositionTag.SeekMissAfter;
+
+    private bool _missBof;
+    private bool _missEof;
 
     public bool NoMatch { get; private set; }
 
     /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS).</summary>
     public void FindFailed() => NoMatch = true;
+
+    /// <summary>A Seek that found its row: current there, NoMatch cleared (R-CURSOR-1 CUR-SEEK).</summary>
+    public void SeekFound(T occurrence)
+    {
+        Tag = PositionTag.At;
+        Current = occurrence;
+        NoMatch = false;
+    }
+
+    /// <summary>
+    /// A Seek that found nothing (R-CURSOR-1 CUR-SEEK, w-04-key-navigation/seek-miss-position on ACE): NoMatch, no current
+    /// row, and BOF and EOF keep the values they had. The cursor is after the last row for `=`, `>=` and `>` and before
+    /// the first for `<` and `<=`. From there a move toward the rows lands on the last (first) row; a move away sets
+    /// EOF (BOF) without an error, or gives NoCurrentRecord when that flag is already set; only a move that lands on a
+    /// row, MoveFirst or MoveLast clears NoMatch. Move 0 and Bookmark have no current row. An empty set stays empty.
+    /// </summary>
+    public void SeekMissed(bool afterDirection)
+    {
+        NoMatch = true;
+        if (Tag != PositionTag.Empty)
+        {
+            (_missBof, _missEof) = (Bof, Eof);
+            Tag = afterDirection ? PositionTag.SeekMissAfter : PositionTag.SeekMissBefore;
+            Current = null;
+        }
+    }
 
     /// <summary>
     /// Position directly on an occurrence the caller has validated (a bookmark). NoMatch is left unchanged: what
@@ -126,7 +166,11 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        T? next = Tag == PositionTag.Before ? _source.Next(null) : _source.Next(Current);
+        if (Tag == PositionTag.SeekMissAfter)
+        {
+            return AwayFromRows(ref _missEof);
+        }
+        T? next = Tag is PositionTag.Before or PositionTag.SeekMissBefore ? _source.Next(null) : _source.Next(Current);
         return Step(next, PositionTag.After);
     }
 
@@ -140,7 +184,11 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        T? previous = Tag == PositionTag.After ? _source.Previous(null) : _source.Previous(Current);
+        if (Tag == PositionTag.SeekMissBefore)
+        {
+            return AwayFromRows(ref _missBof);
+        }
+        T? previous = Tag is PositionTag.After or PositionTag.SeekMissAfter ? _source.Previous(null) : _source.Previous(Current);
         return Step(previous, PositionTag.Before);
     }
 
@@ -171,6 +219,17 @@ public sealed class PositionState<T> where T : struct
             }
         }
         return MoveOutcome.Moved;
+    }
+
+    /// <summary>A move away from the rows out of a seek miss: sets its end flag, or fails when it is already set; NoMatch stays.</summary>
+    private static MoveOutcome AwayFromRows(ref bool endFlag)
+    {
+        if (endFlag)
+        {
+            return MoveOutcome.NoCurrentRecord;
+        }
+        endFlag = true;
+        return MoveOutcome.ReachedBoundary;
     }
 
     private MoveOutcome Step(T? to, PositionTag boundary)

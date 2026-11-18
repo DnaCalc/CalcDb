@@ -20,7 +20,7 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>batch --dir DIR [--retain] [--freeze] [--retry-unreadable] [--note TEXT]</c>: submit and run every question file under DIR
 /// (token = probe and key prefix), print one line each, optionally retain complete captures and freeze their
 /// output files as named fixtures in <c>probes/fixtures.json</c>.</item>
-/// <item><c>batch --dir DIR --env windows-x64-calcdb-local [--deployment DIR] --compare</c>: run the same unchanged questions
+/// <item><c>batch --dir DIR --env windows-x64-calcdb-local [--deployment DIR] [--rerun] --compare</c>: run the same unchanged questions
 /// against CalcDb's published deployment (default <c>artifacts/native</c>) and compare each capture with the retained
 /// oracle capture of the same question key under <c>calls.trace</c> (W-08/native-read, T-OBJ-02). Candidate attempts are
 /// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store.</item>
@@ -214,10 +214,11 @@ internal static class Program
             {
                 unreadable = true;
             }
-            // A candidate attempt answers for the module it ran: a different deployed build is a new attempt.
-            if (candidate && existing is not null
-                && EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
-                    != SelectImplementation(environment, repo, options)!.ModuleSha256)
+            // A candidate attempt answers for the module it ran: a different deployed build is a new attempt, and
+            // --rerun asks for a new one anyway (after a worker change, which the module hash does not name).
+            if (candidate && existing is not null && (options.Has("rerun")
+                || EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
+                    != SelectImplementation(environment, repo, options)!.ModuleSha256))
             {
                 existing = null;
             }
