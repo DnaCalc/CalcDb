@@ -104,11 +104,34 @@ internal abstract unsafe class ComObject
         if (left == 0)
         {
             OnFinalRelease();
-            _self.Free();
-            NativeMemory.Free(_heads);
             ModuleLifetime.ObjectFreed();
+            if (!Park())
+            {
+                Discard();
+            }
         }
         return (uint)left;
+    }
+
+    /// <summary>
+    /// Called after the final release: true when a parent keeps this wrapper to hand out again as a new object
+    /// (<see cref="Revive"/>), with its heads and handle (task hdw6). A client sees a new object at a recycled
+    /// address, as ACE's own released objects can be; the comparison's held-identity rule covers it.
+    /// </summary>
+    protected virtual bool Park() => false;
+
+    /// <summary>Hand a parked wrapper out again with the construction reference.</summary>
+    protected void Revive()
+    {
+        _references = 1;
+        ModuleLifetime.ObjectCreated();
+    }
+
+    /// <summary>Free the heads and the handle: at the final release, or when a parent drops a parked wrapper.</summary>
+    internal void Discard()
+    {
+        _self.Free();
+        NativeMemory.Free(_heads);
     }
 
     /// <summary>Hand out the controlling identity or another head for a requested IID, as a creation result.</summary>

@@ -118,7 +118,7 @@ internal abstract unsafe class DaoObject : DispatchObject
     {
         nint head;
         target.QueryInterface(ComIids.IDispatch, &head);
-        return CallResult.Of(OwnedVariant.TakeObject(head, VarType.Dispatch));
+        return CallResult.OfOwnedObject(head);
     }
 
     public static CallResult Text(string text) => CallResult.Of(OwnedVariant.FromText(text));
@@ -209,12 +209,11 @@ internal static unsafe class CollectionLookup
         {
             return null;
         }
-        using OwnedVariant? number = OwnedVariant.ChangeType(v, VarType.R8, out _);
-        if (number is null)
+        if (!OwnedVariant.TryChangeScalar(v, VarType.R8, out NativeVariant number, out _))
         {
             return null;
         }
-        double d = Math.Round(number.Pointer->Double, MidpointRounding.ToEven);
+        double d = Math.Round(number.Double, MidpointRounding.ToEven);
         return d >= 0 && d < count ? (int)d : null;
     }
 

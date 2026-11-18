@@ -19,7 +19,7 @@ internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure
 
     public bool HasScalar { get; private init; }
 
-    /// <summary>The inline VARIANT owns its BSTR: whoever does not move it to the caller frees it.</summary>
+    /// <summary>The inline VARIANT owns its BSTR or interface reference: whoever does not move it to the caller frees it.</summary>
     public bool OwnsScalar { get; private init; }
 
     public static CallResult Of(OwnedVariant value) => new(value, null);
@@ -33,12 +33,30 @@ internal readonly record struct CallResult(OwnedVariant? Value, Failure? Failure
         return new CallResult(null, null) { Scalar = v, HasScalar = true, OwnsScalar = true };
     }
 
-    /// <summary>Frees an owned inline result that was not moved to a caller.</summary>
-    public void ReleaseUntaken()
+    /// <summary>An inline VT_DISPATCH result that takes ownership of one reference to <paramref name="dispatch"/> (task hdw6).</summary>
+    public static CallResult OfOwnedObject(nint dispatch)
     {
-        if (OwnsScalar)
+        NativeVariant v = default;
+        v.Vt = (ushort)VarType.Dispatch;
+        v.Pointer = dispatch;
+        return new CallResult(null, null) { Scalar = v, HasScalar = true, OwnsScalar = true };
+    }
+
+    /// <summary>Frees an owned inline result that was not moved to a caller.</summary>
+    public unsafe void ReleaseUntaken()
+    {
+        if (!OwnsScalar)
         {
-            Bstrs.Free(Scalar.Pointer);
+            return;
+        }
+        nint p = Scalar.Pointer;
+        if ((VarType)Scalar.Vt == VarType.Bstr)
+        {
+            Bstrs.Free(p);
+        }
+        else if (p != 0)
+        {
+            ((delegate* unmanaged<nint, uint>)(*(nint**)p)[2])(p);
         }
     }
 
@@ -588,7 +606,7 @@ internal static unsafe class TypedCall
     private static void StoreScalar(string returnType, in CallResult outcome, nint retval)
     {
         NativeVariant v = outcome.Scalar;
-        if (outcome.OwnsScalar && returnType == "VT_BSTR")
+        if (outcome.OwnsScalar && returnType == "VT_BSTR" && (VarType)v.Vt == VarType.Bstr)
         {
             *(nint*)retval = v.Pointer;
             return;
@@ -598,10 +616,17 @@ internal static unsafe class TypedCall
             *(NativeVariant*)retval = v;
             return;
         }
+        if (outcome.OwnsScalar && (VarType)v.Vt == VarType.Dispatch && returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
+        {
+            // The declared interface is queried from the owned reference, which is then released.
+            StoreObject(returnType, v.Pointer, retval);
+            outcome.ReleaseUntaken();
+            return;
+        }
         if (outcome.OwnsScalar)
         {
             outcome.ReleaseUntaken();
-            throw new InvalidOperationException($"no typed return rule for an owned BSTR as {returnType}");
+            throw new InvalidOperationException($"no typed return rule for an owned {(VarType)v.Vt} as {returnType}");
         }
         switch (returnType)
         {
@@ -647,15 +672,22 @@ internal static unsafe class TypedCall
         }
         if (returnType.StartsWith("PTR USERDEFINED ", StringComparison.Ordinal))
         {
-            // The declared interface of the returned object (a coclass name stands for its default interface).
-            InterfaceDecl? declared = DeclarationIndex.Interface(returnType[16..]);
-            nint unknown = v->Pointer;
-            nint result = 0;
-            Guid iid = declared?.Iid ?? ComIids.IDispatch;
-            int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)(*(nint**)unknown)[0])(unknown, &iid, &result);
-            *(nint*)retval = hr >= 0 ? result : 0;
+            StoreObject(returnType, v->Pointer, retval);
             return;
         }
         throw new InvalidOperationException($"no typed return rule for {returnType}");
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, InterfaceDecl?> DeclaredReturns = new(StringComparer.Ordinal);
+
+    /// <summary>The declared interface of a returned object (a coclass name stands for its default interface), queried from <paramref name="unknown"/>.</summary>
+    private static void StoreObject(string returnType, nint unknown, nint retval)
+    {
+        // Resolved once per declared return type, not per call (task hdw6).
+        InterfaceDecl? declared = DeclaredReturns.GetOrAdd(returnType, static t => DeclarationIndex.Interface(t[16..]));
+        nint result = 0;
+        Guid iid = declared?.Iid ?? ComIids.IDispatch;
+        int hr = ((delegate* unmanaged<nint, Guid*, nint*, int>)(*(nint**)unknown)[0])(unknown, &iid, &result);
+        *(nint*)retval = hr >= 0 ? result : 0;
     }
 }

@@ -146,8 +146,22 @@ Every compared question answers as before against ACE: the differences are ident
 CLSID, HEAD 28). One regression found by the comparison was fixed before the commit: an omitted Seek comparison
 reached a null argument pointer and gave the defect outcome.
 
+**Wrappers and object results (task hdw6, first part).** Object results travel inline as an owned interface pointer
+(`CallResult.OfOwnedObject`; the typed adapter queries the declared interface, then releases it), the `Fields.Item`
+closure is gone, declared return interfaces are resolved once per return type, a numeric collection index converts
+through a stack VARIANT, and a released Field wrapper is parked on its Fields collection and handed out again as the
+next new object (a client sees a recycled address, as ACE's own released objects can show; the collection frees
+parked wrappers at its own release). Same seeds, against ACE (pass 4):
+
+| Case | Before | After |
+| --- | --- | --- |
+| big-id-named-vtable | 0.49, 643 B/row | 0.40 [0.36, 0.46], 251 B/row |
+| big-id-ordinal-vtable | 0.62, 755 B/row | 0.46 [0.42, 0.51], 291 B/row |
+
+The compared questions give identical per-question differences before and after.
+
 **Where the same habits apply next**
-- The named and ordinal bodies allocate two wrapper objects per row (`Fields` and `Field`), about 640 bytes.
+- About 240 bytes per row remain in the named body's Fields and Item calls, not yet attributed.
 - A page pin is an object (`PagePin`, about 96 bytes): scattered reads (Seek, bookmarks) pay one per page change.
 - String properties (`Name` and others) still return an `OwnedVariant`; the inline owned BSTR fits them.
 

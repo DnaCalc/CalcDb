@@ -326,10 +326,13 @@ internal sealed unsafe class FieldsObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, f => Int16(f.Recordset.Cursor.Table.Columns.Count)))
-        .Get("Item", (self, args) => { nint index = args[0]; return Live(self, f => f.Item(index)); })
+        .Get("Item", static (self, args) => (FieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((FieldsObject)self).Item(args[0]))
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
     private readonly Dictionary<int, FieldObject> _held = [];
+
+    // Field wrappers released by their client, one per column at most, handed out again by Item (task hdw6).
+    private readonly Dictionary<int, FieldObject> _parked = [];
 
     public FieldsObject(RecordsetObject recordset) : base(Decl, Vtable, recordset.Engine, "DAO.Fields")
     {
@@ -361,7 +364,7 @@ internal sealed unsafe class FieldsObject : DaoObject
         {
             return Object(held);
         }
-        var field = new FieldObject(this, i);
+        FieldObject field = _parked.Remove(i, out FieldObject? parked) ? parked.Reuse() : new FieldObject(this, i);
         _held[i] = field;
         CallResult result = Object(field);
         field.Release();
@@ -369,6 +372,19 @@ internal sealed unsafe class FieldsObject : DaoObject
     }
 
     public void Released(int ordinal) => _held.Remove(ordinal);
+
+    /// <summary>Keep a released Field wrapper for its column; false when one is kept already or the recordset is closed.</summary>
+    public bool Park(int ordinal, FieldObject field) => !Recordset.Closed && _parked.TryAdd(ordinal, field);
+
+    protected override void OnFinalRelease()
+    {
+        foreach (FieldObject field in _parked.Values)
+        {
+            field.Discard();
+        }
+        _parked.Clear();
+        base.OnFinalRelease();
+    }
 }
 
 /// <summary>
@@ -497,10 +513,26 @@ internal sealed unsafe class FieldObject : DaoObject
         return OwnedVariant.TakeArray(array, VarType.UI1);
     }
 
-    protected override void OnFinalRelease()
+    protected override void OnFinalRelease() => _fields.Released(_ordinal);
+
+    /// <summary>
+    /// Parked by the Fields collection after the final release, to be handed out again (task hdw6). The hold on the
+    /// collection goes after the parking: if it was the collection's last reference, the collection discards this
+    /// wrapper with the others, and it reports kept, so it is not freed twice.
+    /// </summary>
+    protected override bool Park()
     {
-        _fields.Released(_ordinal);
+        bool kept = _fields.Park(_ordinal, this);
         _fields.Release();
+        return kept;
+    }
+
+    /// <summary>A parked wrapper handed out as a new Field: the construction reference and its hold on the collection.</summary>
+    public FieldObject Reuse()
+    {
+        Revive();
+        _fields.AddRef();
+        return this;
     }
 }
 
