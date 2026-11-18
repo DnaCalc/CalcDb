@@ -16,7 +16,7 @@ public sealed class TableCursorTests
         {
             root = Path.GetDirectoryName(root)!;
         }
-        byte[] file = File.ReadAllBytes(Path.Combine(root, "evidence", "artifacts", sha));
+        byte[] file = CalcDb.Evidence.ArtifactStore.ForRepository(root).ReadAll(sha);
         var image = new ImagePageSource(file, D.PageSize);
         var cache = new PageCache(image, 1, D.PageSize, 64);
         return (cache, image.PageCount, CatalogBootstrap.Open(cache, D, image.PageCount, out _)!);

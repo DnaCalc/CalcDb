@@ -1,14 +1,16 @@
 namespace CalcDb.Evidence;
 
 /// <summary>
-/// A retained evidence record (The Plan §2.4): the immutable question, its sealed manifest and the raw
-/// capture of one attempt, with references to binary artifacts kept by content hash under
-/// <c>evidence/artifacts/</c>. A record is composed from the attempt's own files and is never rewritten
-/// to change an observation; a richer recapture is a new record.
+/// A retained evidence record (The Plan §2.4): ACE's answer to one question, with what is needed to know where and
+/// how it was answered: the question, its sealed manifest (tooling, identities, dates, outcome) and the capture of
+/// the attempt (environment and the typed result of every call). Artifacts are kept as facts (role, kind, length,
+/// SHA-256); their bytes only where <see cref="ArtifactStore.RetainsKind"/> says. A doubted answer is run again
+/// and its record replaced. Schema 2 is the compact JSON form, with artifact bytes kept as in
+/// docs/work/evidence-storage.md.
 /// </summary>
 public sealed record EvidenceRecord
 {
-    public const string CurrentSchema = "calcdb.evidence/1";
+    public const string CurrentSchema = "calcdb.evidence/2";
 
     public string Schema { get; init; } = CurrentSchema;
 
@@ -41,5 +43,5 @@ public sealed record EvidenceRecord
     public required IReadOnlyList<RetainedArtifact> Artifacts { get; init; }
 }
 
-/// <summary>An artifact copied into the retained content store, addressed by its SHA-256.</summary>
-public sealed record RetainedArtifact(string Role, string Kind, long Length, string Sha256, string Path);
+/// <summary>An artifact of the attempt, by its SHA-256; <paramref name="Path"/> names its bytes in the content store, or is null when they are not kept.</summary>
+public sealed record RetainedArtifact(string Role, string Kind, long Length, string Sha256, string? Path = null);

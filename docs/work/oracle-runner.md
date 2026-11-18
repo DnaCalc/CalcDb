@@ -16,7 +16,7 @@ this runner is tier 2, for owned experiments with effects.
 | [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt. Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
 | [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
-| [`evidence/`](../../evidence) | data | Retained records (`<card>/<probe>/<attempt>.json`) and binary artifacts by SHA-256 (`artifacts/<sha256>`). |
+| [`evidence/`](../../evidence) | data | Retained answer records (`<card>/<probe>/<attempt>.json`, compact JSON, schema 2) and the bytes development reads back, by SHA-256 of the raw bytes (`artifacts/<sha256>.gz`: fixtures, file-I/O and lifecycle traces, lock files; [evidence-storage.md](evidence-storage.md)). |
 
 ## A question and its identities
 
@@ -156,11 +156,14 @@ conduct incidents. The default stays the private desktop.
 
 The runner always runs the worker of its own build configuration (a Debug runner runs the Debug worker).
 
-The store lives in `.oracle-runs/` (ignored by git): transient attempts, dry runs and
-failures stay there. Only `retain` writes to `evidence/`, and it never overwrites a record.
-Retain a capture because it shows something about ACE, including surprising or negative
-outcomes; do not retain tooling failures or redundant reruns (The Plan §2.4). Fixture inputs
-are found by hash in the store or in `evidence/artifacts/`, so a fresh clone can rerun a
+The store lives in `.oracle-runs/` (ignored by git): attempts, dry runs and failures stay
+there, and it is disposable: `prune [--days N]` removes the file copies of older sealed attempts.
+Only `retain` and `freeze` write to `evidence/`. `retain` writes the answer record and never
+overwrites one; it keeps every artifact as a fact (role, length, SHA-256) and its bytes only for
+traces and lock files. `freeze` keeps a fixture's bytes. Retain a capture because it answers a
+question about ACE, including surprising or negative outcomes; do not retain tooling failures or
+redundant reruns (The Plan §2.4). A doubted answer is run again and its record replaced. Fixture
+inputs are found by hash in the store or in `evidence/artifacts/`, so a fresh clone can rerun a
 retained question.
 
 ## Linux-controlled operation

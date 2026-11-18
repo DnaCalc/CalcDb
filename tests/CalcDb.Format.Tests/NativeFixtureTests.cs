@@ -24,7 +24,9 @@ public sealed class NativeFixtureTests
         throw new InvalidOperationException("Repository root not found.");
     }
 
-    private static byte[] Fixture(string sha) => File.ReadAllBytes(Path.Combine(Evidence(), "artifacts", sha));
+    internal static CalcDb.Evidence.ArtifactStore Store() => CalcDb.Evidence.ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!);
+
+    private static byte[] Fixture(string sha) => Store().ReadAll(sha);
 
     private static readonly FormatDescriptor D = FormatDescriptor.Jet4Family;
 
@@ -99,8 +101,9 @@ public sealed class NativeFixtureTests
     [Fact]
     public void A_native_Jet4_MDB_selects_the_Jet4_profile()
     {
-        // Any MDB the oracle created (R-FMT-1 fixtures): the first artifact whose header carries the Jet signature.
-        string? mdb = Directory.EnumerateFiles(Path.Combine(Evidence(), "artifacts")).Order(StringComparer.Ordinal)
+        // Any MDB fixture the oracle created (R-FMT-1 fixtures): the first stored one whose header carries the Jet signature.
+        CalcDb.Evidence.ArtifactStore store = Store();
+        string? mdb = store.Hashes().Select(store.Locate).OfType<string>()
             .FirstOrDefault(p => new FileInfo(p).Length >= 4096 && HasSignature(p, "Standard Jet DB"));
         Assert.NotNull(mdb);
         InspectionReport r = Inspector.Inspect(File.ReadAllBytes(mdb));

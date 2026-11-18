@@ -162,9 +162,9 @@ Ten rows keep a named follow-up probe, each in its note's **Open** line. Example
 
 ## Notes on evidence and tooling
 
-- Artifacts over 95 MB are kept in `evidence/artifacts-large/`, outside git, because GitHub refuses files over 100 MB.
-  One record keeps a 130 MB image there. Two 65 MB artifacts are in git with a GitHub warning. Where evidence is
-  stored (The Plan §2.4) remains the owner's decision.
+- Retained evidence is the answer records plus the bytes development reads back (fixtures, traces, lock files), all in
+  the repository (The Plan §2.4, [evidence-storage.md](evidence-storage.md), 2026-11-18). Database images before and
+  after a question are kept as facts only: role, length and SHA-256.
 - Every probe ran on the private desktop with the window guard; no window was recorded.
 - Designed kills are retained with notes taken from the killing participant's capture. Since `45e4fe85` the seal
   itself names the kill. The evidence log has an erratum for twelve earlier notes that named the wrong mechanism.

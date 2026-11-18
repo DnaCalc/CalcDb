@@ -11,12 +11,12 @@ namespace CalcDb.Evidence;
 /// </summary>
 public sealed partial class JobStore
 {
-    private readonly IReadOnlyList<string> _contentSources;
+    private readonly IReadOnlyList<ArtifactStore> _contentSources;
 
     /// <param name="root">The store directory.</param>
-    /// <param name="contentSources">Extra content-addressed directories (file name = SHA-256), such as
-    /// the retained <c>evidence/artifacts</c>, searched for input fixtures after the store's own CAS.</param>
-    public JobStore(string root, IReadOnlyList<string>? contentSources = null)
+    /// <param name="contentSources">Retained content stores, such as the repository's <c>evidence/artifacts</c>,
+    /// searched for input fixtures after the store's own CAS.</param>
+    public JobStore(string root, IReadOnlyList<ArtifactStore>? contentSources = null)
     {
         Root = Path.GetFullPath(root);
         _contentSources = contentSources ?? [];
@@ -116,10 +116,9 @@ public sealed partial class JobStore
         {
             return own;
         }
-        foreach (string source in _contentSources)
+        foreach (ArtifactStore source in _contentSources)
         {
-            string candidate = Path.Combine(source, sha256);
-            if (File.Exists(candidate))
+            if (source.Locate(sha256) is { } candidate)
             {
                 return candidate;
             }

@@ -195,7 +195,7 @@ public sealed class CursorTests
         {
             evidence = Path.GetDirectoryName(evidence)!;
         }
-        byte[] file = File.ReadAllBytes(Path.Combine(evidence, "evidence", "artifacts", "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"));
+        byte[] file = CalcDb.Evidence.ArtifactStore.ForRepository(evidence).ReadAll("37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012");
         var image = new ImagePageSource(file, D.PageSize);
         var cache = new PageCache(image, 1, D.PageSize, 64);
         CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, image.PageCount, out CatalogFailure? failure)!;

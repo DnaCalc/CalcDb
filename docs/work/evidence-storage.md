@@ -1,4 +1,4 @@
-# Evidence storage: what we keep (proposal for discussion, 2026-11-18)
+# Evidence storage: what we keep (agreed and done, 2026-11-18)
 
 **Principle (owner, 2026-11-18).** The precious result is the answer to each question the book asks about ACE, with
 enough metadata to know where and how it was answered. Execution traces and database binaries are by-products: if
@@ -63,6 +63,20 @@ fixtures of a few MB.
 **The Plan.** §2.4–2.5 describe retained evidence as records plus artifacts with hashes. They would say instead:
 retained evidence is the answer records and the input fixtures; captures are local and disposable; a doubted answer
 is run again and replaced.
+
+## Done (task `hvhm`, 2026-11-18)
+
+- Records are `calcdb.evidence/2`: compact JSON, every artifact kept as a fact, `path` only where the bytes are kept.
+  `retain` writes this form; `freeze` keeps a fixture's bytes; `ArtifactStore` is the one reader and writer of
+  `evidence/artifacts/<sha256>.gz` (raw copies cached in `.oracle-runs/cas`).
+- Bytes kept: 260 fixtures and the ETW, lifecycle-trace and lock-file artifacts, 288 files, 155 MB raw, 9.2 MB stored.
+  The other 1,463 artifacts (1.98 GB, the 130 MB file among them) are gone from the tree.
+- Byte cards: none keeps whole database images now. The format and preservation images were never interpreted; the
+  slice that needs bytes (W-04, W-05) runs its questions again and keeps the pages it reads in the answer.
+- Records: 1,101 MB to 681 MB (2,758 records; 110 over 1 MB hold 242 MB; the largest 10.5 MB). `evidence/` is
+  699 MB in the working tree instead of 3.2 GB.
+- `calcdb-oracle prune [--days N]` removes the file copies of older sealed attempts from the runner store.
+- The image sweeps in the tests now cover the stored fixtures (260) instead of every retained image (1,686).
 
 ## Decided (owner, 2026-11-18)
 

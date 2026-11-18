@@ -202,7 +202,8 @@ internal static unsafe class SampleRun
 
     private static FixtureCopy CopyFixture(string repo, CaseFixture fixture, string workDir)
     {
-        string source = Path.Combine(repo, "evidence", "artifacts", fixture.Sha256);
+        // The raw copy in the store's cache is decompressed before the timed copy (ArtifactStore).
+        string source = ArtifactStore.ForRepository(repo).Locate(fixture.Sha256) ?? throw new FileNotFoundException($"fixture {fixture.Sha256} is not in evidence/artifacts");
         string destination = Path.Combine(workDir, fixture.FileName);
         long t0 = Native.Qpc();
         File.Copy(source, destination, overwrite: false);

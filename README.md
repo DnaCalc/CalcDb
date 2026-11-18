@@ -70,7 +70,7 @@ src/CalcDb.Oracle.Worker/       Windows x64 ACE worker (raw IDispatch capture)
 src/CalcDb.Evidence.Index/      builds the derived .accdb evidence index (never committed)
 tests/                          fast unit tests
 probes/                         oracle questions, by book card
-evidence/                       retained evidence records and artifacts by SHA-256
+evidence/                       retained answer records; fixtures and small answer artifacts as <sha256>.gz
 docs/work/                      implementation register and tooling notes
 docs/the-plan.md                The Plan: implementation approach, companion to the book
 docs/book/                      The Book of CalcDb v1.1: 39 chapters + manifest + render guide

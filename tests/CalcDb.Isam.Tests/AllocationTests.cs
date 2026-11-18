@@ -22,7 +22,7 @@ public sealed class AllocationTests(ITestOutputHelper output)
         {
             root = Path.GetDirectoryName(root)!;
         }
-        byte[] file = File.ReadAllBytes(Path.Combine(root, "evidence", "artifacts", Big));
+        byte[] file = CalcDb.Evidence.ArtifactStore.ForRepository(root).ReadAll(Big);
         var image = new ImagePageSource(file, D.PageSize);
         var cache = new PageCache(image, 1, D.PageSize, 256);
         CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, image.PageCount, out _)!;

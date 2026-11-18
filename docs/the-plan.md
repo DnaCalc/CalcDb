@@ -43,20 +43,20 @@ Define a small platform-neutral job contract: immutable request and fixture iden
 
 **Capture is not the same as permanent retention.** Transient results from tool bugs, setup failures, unsuitable fixtures, redundant reruns, and uninformative failed batches may be discarded, retried, or omitted from Git. It is also acceptable to avoid retaining repeated observations that add nothing new. We are not obliged to build an archival ledger of every command, attempt, worker failure, or duplicate outcome. The important rule is that **claims of progress or compatibility rest only on the ACE observations we actually retain and can inspect**. In particular, genuine ACE errors, negative outcomes, unexpected behavior, or contradictory observations are valuable evidence; do not selectively discard them merely because they disagree with expectations.
 
-The authoritative **retained** evidence consists of version-controlled **JSON records**, optionally accompanied by binary artifacts. Whether these live in the main repository or a dedicated evidence repository may be decided later. For an observation worth retaining, the record should carry enough detail to interpret and, where practical, reproduce it:
+The authoritative **retained** evidence consists of version-controlled **JSON records**, one per answered question, in the main repository. What is precious is ACE's answer and enough metadata to know where and how it was answered; execution traces and database files are by-products that a rerun recreates. Binary artifacts are kept only where development reads their bytes: the fixtures questions start from, and small artifacts that are themselves an answer, such as file-I/O traces and lock files (docs/work/evidence-storage.md). The record should carry enough detail to interpret and reproduce the answer:
 
 - A small schema/version marker; relevant stable Book requirement/experiment/test IDs; probe identity; exact tooling source revision and applicable Book revision.
 - The tested operation and fixture/configuration identities; relevant input digests and execution conditions; the actual caller, runtime, platform, and loaded ACE/Access/ADO identities when relevant.
 - The typed Access observations, including output values, order/schema, error and diagnostic channels, and meaningful before/after file or lock-state evidence; the scope and limits of what was captured.
-- References and content hashes for any associated binary artifacts, sufficient to find and verify the precise inputs and outputs.
+- The role, length and content hash of every file the question touched, and the inputs by hash so the question can run again.
 
 Avoid lossy serialization of relevant COM values (such as BSTR payloads, floating-point bit patterns, SAFEARRAY bounds, or distinctions among Missing/Empty/Null/errors). The Book's experiment cards determine which details are material for each investigation; do not require every potential data field of every simple probe. Keep direct observations distinguishable from hypotheses, comparisons, and eventual design decisions.
 
-Retained records should not be silently rewritten to change an observation. New or improved tooling may rerun an old experiment and produce richer or corrected captures; retain those that add value, and make any replacement or correction understandable from the saved records and source history. Include a modest schema identifier so historical records can be interpreted. **Do not impose an elaborate compatibility framework or compulsory preservation of every historical run.** The evidence corpus is a curated, growing collection of what we have learned about Access.
+Retained records are not silently rewritten to change an observation. When an answer is in doubt (a tool bug, say), run the question again and replace its record; the commit says why, and source history keeps the old one. Include a modest schema identifier so historical records can be interpreted. **Do not impose an elaborate compatibility framework or compulsory preservation of every historical run.** The evidence corpus is a curated, growing collection of what we have learned about Access.
 
 ### 2.5 Derived evidence database
 
-Generate a queryable **Microsoft Access `.accdb` database** from the **retained** JSON/binary evidence. This database is a **rebuildable index and analysis view, not the source of truth**. Do not version the generated database in Git. Its importer may be rerun or revised freely; any database field, index, or derived query must be recoverable from the retained records and its transformation. The indexed population is deliberately the curated evidence collection, not a complete log of all attempts. Use the Windows Access environment to perform the import as necessary; Linux-based agents can request or consume this through the runner boundary.
+Generate a queryable **Microsoft Access `.accdb` database** from the **retained** JSON records. This database is a **rebuildable index and analysis view, not the source of truth**. Do not version the generated database in Git. Its importer may be rerun or revised freely; any database field, index, or derived query must be recoverable from the retained records and its transformation. The indexed population is deliberately the curated evidence collection, not a complete log of all attempts. Use the Windows Access environment to perform the import as necessary; Linux-based agents can request or consume this through the runner boundary.
 
 As CalcDb becomes capable, use the `.accdb` evidence corpus as an additional **dogfooding and differential-validation workload** for the reference and later Rust implementations.
 
@@ -142,7 +142,7 @@ The milestone establishes the whole development path around that Book-prescribed
 
 ## 7. Decisions intentionally deferred
 
-Do not block the first milestone on these choices: exact Linux↔Windows transport and deployment; persistent supervisor versus launch-on-demand worker arrangement; one versus separate evidence Git repositories; the long-term agent/model provider; elaborate CodeAlta dependency features; future Rust architecture or port schedule; and the ultimate lifetime of the C# implementation.
+Do not block the first milestone on these choices: exact Linux↔Windows transport and deployment; persistent supervisor versus launch-on-demand worker arrangement; the long-term agent/model provider; elaborate CodeAlta dependency features; future Rust architecture or port schedule; and the ultimate lifetime of the C# implementation.
 
 Choose each at the first real dependency boundary, document the choice briefly, and retain an easy migration path. Distinguish selected defaults from permanent requirements.
 

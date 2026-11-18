@@ -68,15 +68,6 @@ public static class CaseUsability
         return new Usability(problems.Count == 0, problems);
     }
 
-    /// <summary>A locator over the repository's content store: <c>evidence/artifacts/&lt;sha&gt;</c>, then <c>evidence/artifacts-large/&lt;sha&gt;</c>.</summary>
-    public static Func<string, string?> ContentStore(string evidenceDirectory) => sha =>
-    {
-        string small = Path.Combine(evidenceDirectory, "artifacts", sha);
-        if (File.Exists(small))
-        {
-            return small;
-        }
-        string large = Path.Combine(evidenceDirectory, "artifacts-large", sha);
-        return File.Exists(large) ? large : null;
-    };
+    /// <summary>A locator over the repository's content store (<see cref="ArtifactStore"/>): a file of the raw bytes, or null.</summary>
+    public static Func<string, string?> ContentStore(ArtifactStore store) => store.Locate;
 }

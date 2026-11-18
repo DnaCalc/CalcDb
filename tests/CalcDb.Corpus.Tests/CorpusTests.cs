@@ -23,7 +23,7 @@ public sealed class CorpusTests
     [Fact]
     public void The_sealed_native_table_read_and_failure_are_usable_cases()
     {
-        Func<string, string?> store = CaseUsability.ContentStore(Evidence());
+        Func<string, string?> store = CaseUsability.ContentStore(ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!));
         foreach (string probe in new[] { "table-read-t1", "failed-call-t1" })
         {
             EvidenceRecord record = Record(probe);
@@ -38,7 +38,7 @@ public sealed class CorpusTests
     {
         EvidenceRecord record = Record("table-read-t1");
         EvidenceRecord incomplete = record with { Manifest = record.Manifest with { Capture = "Incomplete", Problems = ["artifact output:t1.accdb missing"] } };
-        Usability u = CaseUsability.Check(incomplete, CaseUsability.ContentStore(Evidence()));
+        Usability u = CaseUsability.Check(incomplete, CaseUsability.ContentStore(ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!)));
         Assert.False(u.Usable);
         Assert.Contains(u.Problems, p => p.Reason == UnusableReason.IncompleteCapture);
     }
@@ -48,7 +48,7 @@ public sealed class CorpusTests
     {
         EvidenceRecord record = Record("table-read-t1");
         Question changed = record.Question with { InvokeLcid = record.Question.InvokeLcid + 1 };
-        Usability u = CaseUsability.Check(record with { Question = changed }, CaseUsability.ContentStore(Evidence()));
+        Usability u = CaseUsability.Check(record with { Question = changed }, CaseUsability.ContentStore(ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!)));
         Assert.False(u.Usable);
         Assert.Contains(u.Problems, p => p.Reason == UnusableReason.ConflictingQuestion);
     }
@@ -58,7 +58,7 @@ public sealed class CorpusTests
     {
         EvidenceRecord record = Record("table-read-t1");
         FixtureInput input = record.Question.Inputs[0];
-        string original = CaseUsability.ContentStore(Evidence())(input.Sha256)!;
+        string original = CaseUsability.ContentStore(ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!))(input.Sha256)!;
         string copy = Path.GetTempFileName();
         try
         {

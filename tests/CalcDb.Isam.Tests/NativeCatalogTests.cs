@@ -16,11 +16,12 @@ public sealed class NativeCatalogTests(ITestOutputHelper output)
 
     private static (PageCache Cache, ulong Pages, byte[] File) Open()
     {
-        string evidence = Evidence();
-        byte[] file = File.ReadAllBytes(Path.Combine(evidence, "artifacts", T1Fixture));
+        byte[] file = Store().ReadAll(T1Fixture);
         var source = new ImagePageSource(file, D.PageSize);
         return (new PageCache(source, 1, D.PageSize, 32), source.PageCount, file);
     }
+
+    private static CalcDb.Evidence.ArtifactStore Store() => CalcDb.Evidence.ArtifactStore.ForRepository(Path.GetDirectoryName(Evidence())!);
 
     private static string Evidence()
     {
@@ -86,10 +87,11 @@ public sealed class NativeCatalogTests(ITestOutputHelper output)
         Assert.All(catalog.Entries, e => Assert.Null(e.Properties));
     }
 
-    /// <summary>The oracle's retained databases (Jet and ACE signatures), by name; the sample bounds the unit run.</summary>
+    /// <summary>The retained database fixtures (Jet and ACE signatures), by hash; the sample bounds the unit run.</summary>
     private static IEnumerable<string> RetainedDatabases(int? sample, long maxBytes)
     {
-        IEnumerable<string> all = Directory.EnumerateFiles(Path.Combine(Evidence(), "artifacts")).Order(StringComparer.Ordinal)
+        CalcDb.Evidence.ArtifactStore store = Store();
+        IEnumerable<string> all = store.Hashes().Select(store.Locate).OfType<string>()
             .Where(p => new FileInfo(p).Length is >= 4096 && new FileInfo(p).Length <= maxBytes && IsDatabase(p));
         return sample is int n ? all.Take(n) : all;
     }

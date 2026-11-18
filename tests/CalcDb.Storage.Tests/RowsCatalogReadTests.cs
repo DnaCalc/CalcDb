@@ -20,7 +20,8 @@ public sealed class RowsCatalogReadTests
         {
             if (File.Exists(Path.Combine(dir, "CalcDb.slnx")))
             {
-                return Path.Combine(dir, "evidence", "artifacts", T1Fixture);
+                // A real file for the native adapter: the store's raw copy (ArtifactStore).
+                return CalcDb.Evidence.ArtifactStore.ForRepository(dir).Locate(T1Fixture) ?? throw new FileNotFoundException(T1Fixture);
             }
         }
         throw new InvalidOperationException("Repository root not found.");

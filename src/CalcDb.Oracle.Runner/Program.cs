@@ -9,8 +9,11 @@ namespace CalcDb.Oracle.Runner;
 /// <item><c>submit --question FILE --token T [--env LABEL]</c>: admit or query a job (T-EVID-02).</item>
 /// <item><c>run --token T [--timeout SECONDS] [--new-attempt] [--desktop private|main]</c>: prepare an attempt, run an owned worker, seal it.</item>
 /// <item><c>status --token T</c>: the job and its latest manifest.</item>
-/// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture.</item>
-/// <item><c>retain --attempt ID [--note TEXT]</c>: copy a sealed attempt into <c>evidence/</c>.</item>
+/// <item><c>freeze --attempt ID --artifact ROLE --role ROLE --file-name NAME</c>: make an output an immutable input fixture
+/// (kept as bytes in <c>evidence/artifacts/</c>).</item>
+/// <item><c>retain --attempt ID [--note TEXT]</c>: write a sealed attempt's answer record into <c>evidence/</c>; artifacts as
+/// facts, bytes only for the kinds <see cref="ArtifactStore.RetainsKind"/> names.</item>
+/// <item><c>prune [--days N]</c>: remove the file copies of sealed attempts older than N days from the runner store.</item>
 /// <item><c>show --attempt ID [--all-modules]</c> or <c>show --record FILE</c>: a compact view of a capture.</item>
 /// <item><c>fixtures [--failed-only]</c>: every named fixture of <c>probes/fixtures.json</c> with the creating attempt
 /// and each creation call that returned an error (member, error code, first text argument).</item>
@@ -34,7 +37,7 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|fixtures|seal|prune [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -49,7 +52,8 @@ internal static class Program
         string repo = RepositoryRoot();
         string evidenceDir = Path.Combine(repo, "evidence");
         string artifactsDir = Path.Combine(evidenceDir, "artifacts");
-        var store = new JobStore(options.Get("store") ?? Path.Combine(repo, ".oracle-runs"), [artifactsDir]);
+        string storeRoot = Path.GetFullPath(options.Get("store") ?? Path.Combine(repo, ".oracle-runs"));
+        var store = new JobStore(storeRoot, [new ArtifactStore(artifactsDir, Path.Combine(storeRoot, "cas"))]);
         try
         {
             return args[0] switch
@@ -63,6 +67,7 @@ internal static class Program
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
+                "prune" => Prune(store, options),
                 _ => Usage(args[0]),
             };
         }
@@ -307,8 +312,47 @@ internal static class Program
         }
         string source = Path.Combine(store.AttemptDirectory(manifest.AttemptId), output.RelativePath);
         registry[name] = store.ImportContent(source, "main", fileName, $"{manifest.AttemptId} {manifest.QuestionKey} {output.Role}");
+        // A fixture is retained as bytes: questions start from it (ArtifactStore).
+        new ArtifactStore(Path.Combine(repo, "evidence", "artifacts"), Path.Combine(store.Root, "cas")).Put(source);
         EvidenceJson.WriteAtomic(registryPath, registry);
         Console.WriteLine($"       froze fixture '{name}' = {output.Sha256[..12]}");
+    }
+
+    /// <summary>
+    /// <c>prune [--days N]</c>: remove the file copies (inputs, work, artifacts) of sealed attempts older than N days
+    /// (default 1). Manifests, captures and receipts stay, so show, comparisons and job states still work; such an
+    /// attempt can no longer be retained or frozen. The runner store is local and disposable
+    /// (docs/work/evidence-storage.md): a doubted answer is run again.
+    /// </summary>
+    private static int Prune(JobStore store, Options options)
+    {
+        double days = double.Parse(options.Get("days") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+        DateTime cutoff = DateTime.UtcNow.AddDays(-days);
+        string attempts = Path.Combine(store.Root, "attempts");
+        int pruned = 0;
+        long bytes = 0;
+        foreach (string dir in Directory.Exists(attempts) ? Directory.EnumerateDirectories(attempts) : [])
+        {
+            string manifest = Path.Combine(dir, "manifest.json");
+            if (!File.Exists(manifest) || File.GetLastWriteTimeUtc(manifest) > cutoff)
+            {
+                continue;
+            }
+            bool any = false;
+            foreach (string sub in (string[])["inputs", "work", "artifacts"])
+            {
+                string path = Path.Combine(dir, sub);
+                if (Directory.Exists(path))
+                {
+                    bytes += Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+                    Directory.Delete(path, recursive: true);
+                    any = true;
+                }
+            }
+            pruned += any ? 1 : 0;
+        }
+        Console.WriteLine($"pruned {pruned} sealed attempts older than {days} days: {bytes / 1048576.0:F0} MB of file copies removed");
+        return 0;
     }
 
     private static int SealAbandoned(JobStore store, Options options)
@@ -421,9 +465,6 @@ internal static class Program
     private static string RecordPath(string evidenceDir, Question question, string attemptId) =>
         Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
 
-    /// <summary>Artifacts above this size are kept outside git (GitHub's hard limit is 100 MB per file).</summary>
-    private const long LargeArtifactBytes = 95L * 1024 * 1024;
-
     private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir)
     {
         CaptureManifest manifest = store.GetManifest(attemptId) ?? throw new InvalidOperationException($"Attempt {attemptId} is not sealed.");
@@ -439,25 +480,21 @@ internal static class Program
             .Where(pr => pr.CaptureSha256 is not null && File.Exists(Path.Combine(attemptDir, $"capture.{pr.Name}.json")))
             .ToDictionary(pr => pr.Name, pr => EvidenceJson.Read<Capture>(Path.Combine(attemptDir, $"capture.{pr.Name}.json")));
 
-        Directory.CreateDirectory(artifactsDir);
+        // Every artifact is kept as a fact; its bytes only for the kinds that are themselves an answer (ArtifactStore).
+        var artifactStore = new ArtifactStore(artifactsDir, Path.Combine(store.Root, "cas"));
         var retained = new List<RetainedArtifact>();
         foreach (ArtifactRef artifact in manifest.Artifacts)
         {
-            // GitHub refuses files over 100 MB, so a larger artifact is kept in evidence/artifacts-large/, which git
-            // ignores: it stays on the machine that retained it, and the record names where it is.
-            bool large = artifact.Length > LargeArtifactBytes;
-            string dir = large ? Path.Combine(Path.GetDirectoryName(artifactsDir)!, "artifacts-large") : artifactsDir;
-            Directory.CreateDirectory(dir);
-            string target = Path.Combine(dir, artifact.Sha256);
-            if (!File.Exists(target))
+            string? kept = null;
+            if (ArtifactStore.RetainsKind(artifact.Kind))
             {
-                File.Copy(Path.Combine(attemptDir, artifact.RelativePath), target);
+                if (artifactStore.Put(Path.Combine(attemptDir, artifact.RelativePath)) != artifact.Sha256)
+                {
+                    throw new IOException($"Retained artifact {artifact.Sha256} does not match its digest.");
+                }
+                kept = ArtifactStore.RecordPath(artifact.Sha256);
             }
-            if (Hashing.Sha256File(target) != artifact.Sha256)
-            {
-                throw new IOException($"Retained artifact {artifact.Sha256} does not match its digest.");
-            }
-            retained.Add(new RetainedArtifact(artifact.Role, artifact.Kind, artifact.Length, artifact.Sha256, (large ? "evidence/artifacts-large/" : "evidence/artifacts/") + artifact.Sha256));
+            retained.Add(new RetainedArtifact(artifact.Role, artifact.Kind, artifact.Length, artifact.Sha256, kept));
         }
 
         var record = new EvidenceRecord
@@ -478,7 +515,7 @@ internal static class Program
         };
         string path = RecordPath(evidenceDir, question, attemptId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        if (!EvidenceJson.TryCreateNew(path, record))
+        if (!EvidenceJson.TryCreateNew(path, record, compact: true))
         {
             throw new InvalidOperationException($"{path} already exists; retained records are not rewritten.");
         }
@@ -572,7 +609,8 @@ internal static class Program
             EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(recordPath);
             manifest = record.Manifest;
             string evidence = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(recordPath))))!;
-            locate = a => File.Exists(Path.Combine(evidence, "artifacts", a.Sha256)) ? Path.Combine(evidence, "artifacts", a.Sha256) : Path.Combine(evidence, "artifacts-large", a.Sha256);
+            var artifactStore = new ArtifactStore(Path.Combine(evidence, "artifacts"), Path.Combine(store.Root, "cas"));
+            locate = a => artifactStore.Locate(a.Sha256) ?? throw new FileNotFoundException($"The record keeps artifact {a.Role} as a fact only ({a.Sha256}); show the attempt in the runner store or run the question again.");
         }
         else
         {

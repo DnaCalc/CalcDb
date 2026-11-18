@@ -44,14 +44,17 @@ public static class EvidenceJson
         File.Move(temp, path, overwrite: true);
     }
 
-    /// <summary>Create a record that must not exist yet. Returns false if it already exists.</summary>
-    public static bool TryCreateNew<T>(string path, T value)
+    /// <summary>
+    /// Create a record that must not exist yet. Returns false if it already exists. <paramref name="compact"/> writes
+    /// it on one line (retained evidence records: indentation was about 40% of their size).
+    /// </summary>
+    public static bool TryCreateNew<T>(string path, T value, bool compact = false)
     {
         try
         {
             using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
-            writer.Write(Serialize(value));
+            writer.Write(compact ? SerializeLine(value) + "\n" : Serialize(value));
             return true;
         }
         catch (IOException) when (File.Exists(path))
