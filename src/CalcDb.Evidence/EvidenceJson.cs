@@ -32,7 +32,9 @@ public static class EvidenceJson
     public static T Deserialize<T>(string json) =>
         JsonSerializer.Deserialize<T>(json, Options) ?? throw new EvidenceFormatException($"Empty {typeof(T).Name} record.");
 
-    public static T Read<T>(string path) => Deserialize<T>(File.ReadAllText(path));
+    /// <summary>Read a record from its UTF-8 bytes (no intermediate UTF-16 string of the whole file).</summary>
+    public static T Read<T>(string path) =>
+        JsonSerializer.Deserialize<T>(File.ReadAllBytes(path), Options) ?? throw new EvidenceFormatException($"Empty {typeof(T).Name} record.");
 
     /// <summary>Write via a temporary file and an atomic rename, so readers never see a partial record.</summary>
     public static void WriteAtomic<T>(string path, T value)

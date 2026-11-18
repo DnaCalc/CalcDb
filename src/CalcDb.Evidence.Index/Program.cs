@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using CalcDb.Evidence;
 using Microsoft.Office.Interop.Access.Dao;
 
@@ -14,13 +16,19 @@ namespace CalcDb.Evidence.Index;
 /// from the JSON; equality shows the index can be regenerated without losing those observations.</item>
 /// <item><c>query --sql TEXT [--db FILE]</c>: run a query against the index and print the rows.</item>
 /// </list>
-/// The index is written through the DAO primary interop assembly (package ExcelDna.Interop.Dao, types
-/// embedded): it is a consumer of ACE, not an oracle capture.
+/// The index holds what is queried across records: records, error channels, modules and artifacts. The individual
+/// calls of a capture are read from its record (calcdb-oracle show): indexing every call (1.25 million rows) made the
+/// build and verify take most of an hour. Each table loads in one transaction with its Field objects fetched once, and
+/// verify reads it back in GetRows chunks. DAO is used through the primary interop assembly (package
+/// ExcelDna.Interop.Dao, types embedded): this tool is a consumer of ACE, not an oracle capture. (The Text ISAM bulk
+/// import is refused in this process with 3251, so ACE's text import is not used.)
 /// </summary>
 internal static class Program
 {
     private const string LangGeneral = ";LANGID=0x0409;CP=1252;COUNTRY=0";
 
+    // DAO is apartment-threaded: on an MTA thread every call is marshalled to a host STA (about 0.5 ms a row here).
+    [STAThread]
     private static int Main(string[] args)
     {
         string repo = RepositoryRoot();
@@ -64,6 +72,93 @@ internal static class Program
 
     private sealed record Table(string Name, IReadOnlyList<Column> Columns, IReadOnlyList<string> Key, List<object?[]> Rows);
 
+    /// <summary>
+    /// The index reads only what it stores. These types project the evidence schema (EvidenceRecord, Capture and its
+    /// events, as written by EvidenceJson) onto those fields; the parser skips the rest of each record, which is most of
+    /// its 1.1 GB. Names follow the schema's camel-case JSON names; anything absent stays null.
+    /// </summary>
+    private static readonly JsonSerializerOptions Projection = new(EvidenceJson.Options) { RespectRequiredConstructorParameters = false, RespectNullableAnnotations = false };
+
+    private sealed class IndexedRecord
+    {
+        public string RecordId { get; set; } = "";
+        public string Probe { get; set; } = "";
+        public List<string> BookRefs { get; set; } = [];
+        public string Description { get; set; } = "";
+        public string QuestionKey { get; set; } = "";
+        public string Token { get; set; } = "";
+        public IndexedManifest Manifest { get; set; } = new();
+        public IndexedQuestion Question { get; set; } = new();
+        public IndexedCapture? Capture { get; set; }
+        public List<IndexedArtifact> Artifacts { get; set; } = [];
+    }
+
+    private sealed class IndexedManifest
+    {
+        public string Execution { get; set; } = "";
+        public string Capture { get; set; } = "";
+        public List<string> Problems { get; set; } = [];
+    }
+
+    private sealed class IndexedQuestion
+    {
+        public string CallerSurface { get; set; } = "";
+    }
+
+    private sealed class IndexedCapture
+    {
+        public IndexedEnvironment Environment { get; set; } = new();
+        public List<IndexedEvent> Events { get; set; } = [];
+    }
+
+    private sealed class IndexedEnvironment
+    {
+        public string? ToolingRevision { get; set; }
+        public string? BookRevision { get; set; }
+    }
+
+    private sealed class IndexedEvent
+    {
+        public string Event { get; set; } = "";
+        public int Seq { get; set; }
+        public IndexedChannel? ExcepInfo { get; set; }
+        public IndexedChannel? ErrorInfo { get; set; }
+        public string? Label { get; set; }
+        public bool Complete { get; set; }
+        public bool Deliberate { get; set; }
+        public List<IndexedModule>? Identities { get; set; }
+    }
+
+    private sealed class IndexedChannel
+    {
+        public string? Scode { get; set; }
+        public string? GetErrorInfoHresult { get; set; }
+        public bool Present { get; set; }
+        public IndexedText? Source { get; set; }
+        public IndexedText? Description { get; set; }
+        public uint? HelpContext { get; set; }
+    }
+
+    private sealed class IndexedText
+    {
+        public string? Text { get; set; }
+    }
+
+    private sealed class IndexedModule
+    {
+        public string Path { get; set; } = "";
+        public string? FileVersionNumber { get; set; }
+        public string? Sha256 { get; set; }
+    }
+
+    private sealed class IndexedArtifact
+    {
+        public string Role { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public long Length { get; set; }
+        public string Sha256 { get; set; } = "";
+    }
+
     /// <summary>The whole transformation from retained JSON to index rows, in one place.</summary>
     private static IReadOnlyList<Table> Derive(string evidenceDir, string repo)
     {
@@ -73,89 +168,77 @@ internal static class Program
              new("Problems", "LONGTEXT"), new("CallerSurface", "TEXT(120)"), new("ToolingRevision", "TEXT(80)"), new("BookRevision", "TEXT(255)"),
              new("RecordPath", "TEXT(255)"), new("RecordSha256", "TEXT(64)")],
             ["RecordId"], []);
-        var invocations = new Table("Invocations",
-            [new("RecordId", "TEXT(255)"), new("Seq", "LONG"), new("ProgramPath", "TEXT(120)"), new("Target", "TEXT(120)"), new("Member", "TEXT(120)"),
-             new("InvokeHresult", "TEXT(12)"), new("ResultVt", "TEXT(40)"), new("ResultValue", "LONGTEXT"), new("ResultBytes", "LONGTEXT")],
-            ["RecordId", "Seq"], []);
         var errors = new Table("ErrorChannels",
             [new("RecordId", "TEXT(255)"), new("Seq", "LONG"), new("Channel", "TEXT(40)"), new("Code", "TEXT(12)"),
-             new("Source", "LONGTEXT"), new("Description", "LONGTEXT"), new("HelpContext", "LONG")],
+             new("Source", "TEXT(255)"), new("Description", "LONGTEXT"), new("HelpContext", "LONG")],
             ["RecordId", "Seq", "Channel"], []);
-        var modules = new Table("Modules",
-            [new("RecordId", "TEXT(255)"), new("Seq", "LONG"), new("Label", "TEXT(80)"), new("Path", "LONGTEXT"), new("FileVersion", "TEXT(80)"),
-             new("Sha256", "TEXT(64)"), new("ObservationComplete", "YESNO")],
-            ["RecordId", "Seq", "Path"], []);
+        // A module observation names its module set; each distinct set is stored once (most records load the same set).
+        var observations = new Table("ModuleObservations",
+            [new("RecordId", "TEXT(255)"), new("Seq", "LONG"), new("Label", "TEXT(80)"), new("ObservationComplete", "YESNO"), new("ModuleSet", "TEXT(32)")],
+            ["RecordId", "Seq"], []);
+        var moduleSets = new Table("ModuleSets",
+            [new("ModuleSet", "TEXT(32)"), new("Path", "TEXT(255)"), new("FileVersion", "TEXT(80)"), new("Sha256", "TEXT(64)")],
+            ["ModuleSet", "Path"], []);
+        var knownSets = new HashSet<string>(StringComparer.Ordinal);
         var artifacts = new Table("Artifacts",
             [new("RecordId", "TEXT(255)"), new("Role", "TEXT(255)"), new("Kind", "TEXT(80)"), new("Sha256", "TEXT(64)"), new("ByteLength", "DOUBLE")],
             ["RecordId", "Role"], []);
 
-        foreach (string file in Directory.Exists(evidenceDir)
-                     ? Directory.EnumerateFiles(evidenceDir, "*.json", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.Ordinal)).Order(StringComparer.Ordinal)
-                     : Enumerable.Empty<string>())
+        string[] files = Directory.Exists(evidenceDir)
+            ? [.. Directory.EnumerateFiles(evidenceDir, "*.json", SearchOption.AllDirectories).Where(f => !f.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.Ordinal)).Order(StringComparer.Ordinal)]
+            : [];
+        // Reading and hashing the records is most of the derivation: it runs in parallel, the rows are then made in file order.
+        var parsed = new (IndexedRecord Record, string Sha256)[files.Length];
+        Parallel.For(0, files.Length, i =>
         {
-            EvidenceRecord record = EvidenceJson.Read<EvidenceRecord>(file);
+            byte[] bytes = File.ReadAllBytes(files[i]);
+            parsed[i] = (JsonSerializer.Deserialize<IndexedRecord>(bytes, Projection)!, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+        });
+        for (int f = 0; f < files.Length; f++)
+        {
+            string file = files[f];
+            IndexedRecord record = parsed[f].Record;
             string id = record.RecordId;
             records.Rows.Add([id, record.Probe, string.Join(" ", record.BookRefs), record.Description, record.QuestionKey, record.Token,
                 record.Manifest.Execution, record.Manifest.Capture, string.Join("\n", record.Manifest.Problems), record.Question.CallerSurface,
                 record.Capture?.Environment.ToolingRevision, record.Capture?.Environment.BookRevision,
-                Path.GetRelativePath(repo, file).Replace('\\', '/'), Hashing.Sha256File(file)]);
-            foreach (RetainedArtifact a in record.Artifacts)
+                Path.GetRelativePath(repo, file).Replace('\\', '/'), parsed[f].Sha256]);
+            foreach (IndexedArtifact a in record.Artifacts)
             {
                 artifacts.Rows.Add([id, a.Role, a.Kind, a.Sha256, (double)a.Length]);
             }
-            foreach (CaptureEvent e in record.Capture?.Events ?? [])
+            foreach (IndexedEvent e in record.Capture?.Events ?? [])
             {
-                switch (e)
+                switch (e.Event)
                 {
-                    case InvokeEvent inv:
-                        invocations.Rows.Add([id, e.Seq, e.ProgramPath, inv.Target, inv.Member, inv.InvokeHresult ?? inv.GetIdsOfNamesHresult,
-                            inv.Result?.VtName, Render(inv.Result), inv.Result?.Bytes]);
-                        if (inv.ExcepInfo is { } x)
+                    case "invoke":
+                        if (e.ExcepInfo is { } x)
                         {
-                            errors.Rows.Add([id, e.Seq, "excepinfo", x.Scode, x.Source?.Text, x.Description?.Text, (int)x.HelpContext]);
+                            errors.Rows.Add([id, e.Seq, "excepinfo", x.Scode, x.Source?.Text, x.Description?.Text, (int)x.HelpContext!.Value]);
                         }
-                        if (inv.ErrorInfo is { Present: true } ei)
+                        if (e.ErrorInfo is { Present: true } ei)
                         {
                             errors.Rows.Add([id, e.Seq, "errorInfo", ei.GetErrorInfoHresult, ei.Source?.Text, ei.Description?.Text, ei.HelpContext is { } hc ? (int)hc : null]);
                         }
                         break;
-                    case ModulesEvent m when !m.Deliberate:
-                        foreach (ModuleIdentity mi in m.Identities)
+                    case "modules" when !e.Deliberate:
+                    {
+                        IndexedEvent m = e;
+                        string set = Hashing.Sha256Hex(Encoding.UTF8.GetBytes(string.Join("\n", m.Identities!.Select(mi => $"{mi.Path}|{mi.FileVersionNumber}|{mi.Sha256}"))))[..32];
+                        observations.Rows.Add([id, e.Seq, m.Label, m.Complete, set]);
+                        if (knownSets.Add(set))
                         {
-                            modules.Rows.Add([id, e.Seq, m.Label, mi.Path, mi.FileVersionNumber, mi.Sha256, m.Complete]);
+                            foreach (IndexedModule mi in m.Identities!)
+                            {
+                                moduleSets.Rows.Add([set, mi.Path, mi.FileVersionNumber, mi.Sha256]);
+                            }
                         }
                         break;
+                    }
                 }
             }
         }
-        return [records, invocations, errors, modules, artifacts];
-    }
-
-    private static string? Render(CapturedValue? v) =>
-        v is null ? null : v.Integer ?? (v.Text is { } t ? EscapeForAce(t) : null) ?? v.Display ?? v.Bits ?? v.Identity ?? v.Unsupported;
-
-    /// <summary>
-    /// ACE stores a Text or Memo value that is the single code unit U+FEFF as an empty string: it reads back as ""
-    /// with Len 0, in ACCDB and MDB, written by DAO put or SQL literal (evidence/r-text-fffe, raw IDispatch lane). The
-    /// index is an ACE table too, so its display text writes U+FEFF as a backslash, 'u' and FEFF (and a backslash as
-    /// two) to round-trip; the exact bytes are in ResultBytes. U+FFFE and U+FFFF are kept by ACE and need no escape.
-    /// The code units are written as numbers, because editing tools turn escape sequences into the characters.
-    /// </summary>
-    private static string EscapeForAce(string text)
-    {
-        const char Bom = (char)0xFEFF, Backslash = (char)0x5C;
-        if (text.AsSpan().IndexOfAny(Bom, Backslash) < 0)
-        {
-            return text;
-        }
-        var sb = new StringBuilder(text.Length + 8);
-        foreach (char ch in text)
-        {
-            _ = ch == Bom ? sb.Append(Backslash).Append('u').Append(((int)ch).ToString("X4", CultureInfo.InvariantCulture))
-                : ch == Backslash ? sb.Append(Backslash).Append(Backslash)
-                : sb.Append(ch);
-        }
-        return sb.ToString();
+        return [records, errors, observations, moduleSets, artifacts];
     }
 
     private static void Build(string path, IReadOnlyList<Table> tables)
@@ -166,25 +249,32 @@ internal static class Program
             File.Delete(path);
         }
         var engine = new DBEngine();
+        // One transaction per table instead of an implicit one per Update; the lock limit must admit a whole table.
+        engine.SetOption((int)SetOptionEnum.dbMaxLocksPerFile, 2_000_000_000);
+        Workspace ws = engine.Workspaces[0];
         Database db = engine.CreateDatabase(path, LangGeneral, DatabaseTypeEnum.dbVersion120);
         try
         {
             foreach (Table t in tables)
             {
-                string columns = string.Join(", ", t.Columns.Select(c => $"[{c.Name}] {c.Ddl}"));
-                db.Execute($"CREATE TABLE [{t.Name}] ({columns})");
-                Recordset rs = db.OpenRecordset(t.Name, RecordsetTypeEnum.dbOpenDynaset);
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                db.Execute($"CREATE TABLE [{t.Name}] ({string.Join(", ", t.Columns.Select(c => $"[{c.Name}] {c.Ddl}"))})");
+                ws.BeginTrans();
+                Recordset rs = db.OpenRecordset(t.Name, RecordsetTypeEnum.dbOpenTable, RecordsetOptionEnum.dbAppendOnly);
+                // Field objects are fetched once; each row is then AddNew, one Value put per column, Update.
+                Field[] fields = [.. t.Columns.Select(c => rs.Fields[c.Name])];
                 foreach (object?[] row in t.Rows)
                 {
                     rs.AddNew();
-                    for (int i = 0; i < t.Columns.Count; i++)
+                    for (int i = 0; i < fields.Length; i++)
                     {
-                        rs.Fields[t.Columns[i].Name].Value = row[i] ?? DBNull.Value;
+                        fields[i].Value = row[i] ?? DBNull.Value;
                     }
                     rs.Update();
                 }
                 rs.Close();
-                Console.WriteLine($"{t.Name}: {t.Rows.Count} rows");
+                ws.CommitTrans();
+                Console.WriteLine($"{t.Name}: {t.Rows.Count} rows ({clock.Elapsed.TotalSeconds:F1} s)");
             }
         }
         finally
@@ -202,24 +292,30 @@ internal static class Program
         {
             foreach (Table t in tables)
             {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
                 List<string> expected = t.Rows.Select(r => Canonical(r)).Order(StringComparer.Ordinal).ToList();
-                var actual = new List<string>();
-                Recordset rs = db.OpenRecordset($"SELECT * FROM [{t.Name}]", RecordsetTypeEnum.dbOpenSnapshot);
+                var actual = new List<string>(t.Rows.Count);
+                string list = string.Join(", ", t.Columns.Select(c => $"[{c.Name}]"));
+                Recordset rs = db.OpenRecordset($"SELECT {list} FROM [{t.Name}]", RecordsetTypeEnum.dbOpenForwardOnly);
+                // GetRows returns a chunk as one SAFEARRAY [column, row]: one call per chunk instead of three per cell.
                 while (!rs.EOF)
                 {
-                    var row = new object?[t.Columns.Count];
-                    for (int i = 0; i < t.Columns.Count; i++)
+                    var chunk = (object[,])rs.GetRows(50_000);
+                    for (int r = 0; r < chunk.GetLength(1); r++)
                     {
-                        object value = rs.Fields[t.Columns[i].Name].Value;
-                        row[i] = value is DBNull ? null : value;
+                        var row = new object?[t.Columns.Count];
+                        for (int i = 0; i < t.Columns.Count; i++)
+                        {
+                            object value = chunk[i, r];
+                            row[i] = value is DBNull ? null : value;
+                        }
+                        actual.Add(Canonical(row));
                     }
-                    actual.Add(Canonical(row));
-                    rs.MoveNext();
                 }
                 rs.Close();
                 actual.Sort(StringComparer.Ordinal);
                 bool same = expected.SequenceEqual(actual, StringComparer.Ordinal);
-                Console.WriteLine($"{t.Name}: {actual.Count} rows in index, {expected.Count} derived from JSON: {(same ? "identical" : "DIFFERENT")}");
+                Console.WriteLine($"{t.Name}: {actual.Count} rows in index, {expected.Count} derived from JSON: {(same ? "identical" : "DIFFERENT")} ({clock.Elapsed.TotalSeconds:F1} s)");
                 if (!same)
                 {
                     mismatches++;
