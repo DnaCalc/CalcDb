@@ -134,7 +134,7 @@ budget, calcdb-perf with the earlier seed) and keeps every ACE comparison unchan
 | Seek keys without a list or LINQ per call | `x8d9` (its Seek perf case) | done: 0 bytes per resident Seek; 0.61 of ACE | `v4n6` |
 | Name lookup without per-call normalization; GetIDsOfNames by dictionary | — | done: 104 bytes per row less, no measurable time | `fbh8` |
 | Long-value chains without a HashSet per value | — | done | `7jdb` |
-| Wrapper objects per row in the named and ordinal bodies; `PagePin` as an object; string properties as `OwnedVariant` | — | partial: inline object results and parked Field wrappers (named 643 → 251 B/row, 0.40 of ACE); open: page pins as values, string properties inline, the named body's remaining 240 B | `hdw6` |
+| Wrapper objects per row in the named and ordinal bodies; `PagePin` as an object; string properties as `OwnedVariant` | — | done: every DAO loop body 10.6 B/row (named 643, ordinal 755, cached Fields 531 before), 0.35–0.44 of ACE resident; page pins stay objects (perf.md says why) | `hdw6` |
 
 ### Found work items
 

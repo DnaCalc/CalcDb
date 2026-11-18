@@ -21,13 +21,16 @@ internal static class DeclarationIndex
     }
 
     /// <summary>The IIDs of an interface and of every library interface it derives from (all answered by one head).</summary>
-    public static IReadOnlyList<Guid> Chain(InterfaceDecl declaration)
+    /// <summary>The IIDs of a declaration and its bases, built once per declaration (QueryInterface asks on every call; task hdw6).</summary>
+    public static Guid[] Chain(InterfaceDecl declaration) => Chains.GetOrAdd(declaration, static d =>
     {
         var chain = new List<Guid>();
-        for (InterfaceDecl? i = declaration; i is not null; i = ByName.GetValueOrDefault(i.BaseName))
+        for (InterfaceDecl? i = d; i is not null; i = ByName.GetValueOrDefault(i.BaseName))
         {
             chain.Add(i.Iid);
         }
-        return chain;
-    }
+        return [.. chain];
+    });
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<InterfaceDecl, Guid[]> Chains = new(ReferenceEqualityComparer.Instance);
 }

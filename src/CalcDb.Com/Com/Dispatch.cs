@@ -128,8 +128,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         {
             return 0;
         }
-        Guid wanted = iid;
-        return DeclarationIndex.Chain(Declaration).Contains(wanted) ? 0 : -1;
+        return DeclarationIndex.Chain(Declaration).AsSpan().Contains(iid) ? 0 : -1;
     }
 
     public CallResult Run(MemberDecl member, ReadOnlySpan<nint> args)

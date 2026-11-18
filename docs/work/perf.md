@@ -167,8 +167,18 @@ Page pins stay objects for now. Making them values changes every holder (holds, 
 the objects is unsafe: a stale holder would read a reused pin's new page instead of failing. Scattered reads pay about
 96 bytes per page change.
 
+The last 240 bytes per row were the interface chain `QueryInterface` built as a new list on every call (two per row);
+it is now built once per declaration. With that, every DAO loop body allocates the same 10.6 bytes per row (same
+seeds, pass 0 / pass 4 against ACE):
+
+| Case | Start of hdw6 | End |
+| --- | --- | --- |
+| big-id-named-vtable | 0.66 / 0.49, 643 B/row | 0.57 / 0.39 [0.33, 0.44], 10.6 B/row |
+| big-id-ordinal-vtable | 0.71 / 0.62, 755 B/row | 0.52 / 0.35 [0.31, 0.38], 10.6 B/row |
+| big-id-cached-fields-vtable | 0.79 / 0.69, 531 B/row | 0.62 / 0.44 [0.38, 0.49], 10.6 B/row |
+
 **Where the same habits apply next**
-- About 240 bytes per row remain in the named body's Fields and Item calls, not yet attributed.
+- The 10.6 bytes per row common to every body are the page pin per data page (about 96 bytes, one page per 9 rows).
 - A page pin is an object (`PagePin`, about 96 bytes): scattered reads (Seek, bookmarks) pay one per page change.
 - String properties (`Name` and others) still return an `OwnedVariant`; the inline owned BSTR fits them.
 
