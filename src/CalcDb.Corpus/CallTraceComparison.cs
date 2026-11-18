@@ -15,7 +15,7 @@ public static class CallTraceComparison
     public static ComparisonRule Rule { get; } = new()
     {
         RuleId = "calls.trace",
-        Revision = 3,
+        Revision = 4,
         Relation = Relation.IdentityGraph,
         Applicability = "An unchanged native question run against a candidate implementation, compared with the retained oracle capture of the same question key.",
         RequirementIds = ["RQ-ORACLE-02", "RQ-DAO-02", "RQ-COM-01"],
@@ -29,7 +29,8 @@ public static class CallTraceComparison
                 "atUtc, lastWriteUtc, startedUtc, waitedMs, threadId, processId, fileId, volumeSerial and registration are not compared.",
                 "Event order, kinds and all results are still compared.", ["II-15 §5"]),
             new("release-count", "IUnknown::Release returns a count COM documents for test purposes only; internal references differ by implementation.",
-                "The returned count of a release event is not compared.", "A missing, extra or misplaced release still differs.", ["COM IUnknown::Release"]),
+                "The returned count of a release event, and of an activation step's Release (\"Release N\"), is not compared (revision 4, task 2nqn: ACE's activation Release gives 2, then 0 at the next Release).",
+                "A missing, extra or misplaced release still differs.", ["COM IUnknown::Release"]),
             new("module-observations", "Module lists are environment; provenance is checked separately.",
                 "Module events are not compared as events.", "A candidate run that loaded the native engine, or not the candidate module, is a provenance mismatch.", ["II-13 §15"]),
             new("held-identity", "An identity label means one object only while the client holds a reference to it (CapturedValue.Identity); ACE reuses a freed object's address, so its capture can give a new object an old label (r-cursor-1/seek-arguments: each new recordset's Fields is u4).",
@@ -135,6 +136,17 @@ public static class CallTraceComparison
         if (e is ReleaseEvent && node is JsonObject release)
         {
             release.Remove("returnedCount");
+        }
+        if (e is ActivationEvent && node is JsonObject activation && activation["steps"] is JsonArray steps)
+        {
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (steps[i] is JsonValue step && step.TryGetValue(out string? text) && text.StartsWith("Release ", StringComparison.Ordinal)
+                    && text.AsSpan(8).IndexOfAnyExceptInRange('0', '9') < 0 && text.Length > 8)
+                {
+                    steps[i] = "Release";
+                }
+            }
         }
         Walk(node, attemptDirectory.TrimEnd('\\', '/'));
         return node;
