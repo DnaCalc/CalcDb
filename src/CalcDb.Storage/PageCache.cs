@@ -74,6 +74,12 @@ public enum PhysicalState
     /// <summary>The native source is detached: the writer may overwrite the page.</summary>
     Writing,
 
+    /// <summary>
+    /// A stopped program completed the transfer of this page's final image, which is not published: the file holds a
+    /// known image no binding names, so neither the committed image nor any other is loaded from it (II-03 §6.2).
+    /// </summary>
+    Unpublished,
+
     /// <summary>An overwrite did not settle as complete: neither the old nor the new image may be reloaded from the file (II-03 §4.2).</summary>
     Uncertain,
 }

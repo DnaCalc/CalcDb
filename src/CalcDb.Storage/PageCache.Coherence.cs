@@ -54,20 +54,22 @@ public sealed class ReadView : IDisposable
     public void Dispose() => _cache.ReleaseView(this);
 }
 
-/// <summary>The result of one overwrite through the effect seam.</summary>
-public readonly record struct PageEffectResult(bool Completed, string? Detail = null)
-{
-    public static PageEffectResult Complete { get; } = new(true);
-}
-
 /// <summary>
-/// The native overwrite effect of a publication: receives the final <b>stored</b> image of each page. There is no
-/// native writer yet (W-03/native-program-executor); tests drive overwrites through this seam and may inject events
-/// at the overwrite point. A result that is not Completed leaves the page Uncertain.
+/// How a publication writes its final images (W-03/native-program-executor): the program policy, the page roles the
+/// caller knows (the cache knows none), and the cancellation classifier and request the executor observes at its
+/// checkpoints.
 /// </summary>
-public interface IPageEffects
+public sealed record PublicationOptions
 {
-    PageEffectResult Overwrite(PageObject page, ReadOnlyMemory<byte> storedImage);
+    public static PublicationOptions Default { get; } = new();
+
+    public ProgramPolicy Policy { get; init; } = ProgramPolicy.CrashOrderData;
+
+    public IReadOnlyDictionary<ulong, PageRole>? Roles { get; init; }
+
+    public CancellationClassifier? Classify { get; init; }
+
+    public CancellationToken Cancellation { get; init; }
 }
 
 public enum PublicationStep
@@ -86,8 +88,11 @@ public enum PublicationStep
     /// <summary>Settled before any native effect: bindings, sources and the overlay are as they were (T-LOCK-24).</summary>
     Abandoned,
 
-    /// <summary>An overwrite did not complete: the attempt keeps the gate and restricted admission as resolution owner.</summary>
-    Uncertain,
+    /// <summary>
+    /// The program stopped after a native effect (a known failure, an uncertain effect or a hand-off): the attempt keeps
+    /// the gate and restricted admission as resolution owner, with its program, receipts and exact page outcomes.
+    /// </summary>
+    NeedsResolution,
 }
 
 public readonly record struct PublicationOutcome(bool Succeeded, string? Failure = null)
@@ -132,6 +137,15 @@ public sealed class PublicationAttempt : IDisposable
 
     internal ManualResetEventSlim AdmissionReleased { get; } = new(false);
 
+    /// <summary>The native program the write step compiled and ran, with its receipts (null before the write step).</summary>
+    public NativeProgram? Program { get; internal set; }
+
+    /// <summary>The executor's outcome, including a handed-off continuation.</summary>
+    public NativeOutcome? Outcome { get; internal set; }
+
+    /// <summary>The exact native outcome of each page after a stopped program (II-03 §6.2); empty until then.</summary>
+    public IReadOnlyList<PageEffectOutcome> PageOutcomes { get; internal set; } = [];
+
     public PublicationOutcome ClaimAdmission() => _cache.ClaimAdmission(this);
 
     public PublicationOutcome SelectAndReserve() => _cache.SelectAndReserve(this);
@@ -146,14 +160,15 @@ public sealed class PublicationAttempt : IDisposable
 
     public PublicationOutcome Detach() => _cache.Detach(this);
 
-    public PublicationOutcome Write(IPageEffects effects) => _cache.WriteEffects(this, effects);
+    /// <summary>Compile the final images into a native program under the options' policy and run it on <paramref name="file"/>.</summary>
+    public PublicationOutcome Write(IPositionedFile file, PublicationOptions? options = null) => _cache.WriteEffects(this, file, options ?? PublicationOptions.Default);
 
     public PublicationOutcome Publish() => _cache.PublishBindings(this);
 
     /// <summary>Run every remaining step.</summary>
-    public PublicationOutcome Run(IPageEffects effects, CancellationToken cancellation = default)
+    public PublicationOutcome Run(IPositionedFile file, PublicationOptions? options = null, CancellationToken cancellation = default)
     {
-        ArgumentNullException.ThrowIfNull(effects);
+        ArgumentNullException.ThrowIfNull(file);
         PublicationOutcome outcome = PublicationOutcome.Ok;
         while (outcome.Succeeded && Step < PublicationStep.Published)
         {
@@ -166,14 +181,14 @@ public sealed class PublicationAttempt : IDisposable
                 PublicationStep.Frozen => Drain(cancellation),
                 PublicationStep.Drained => Preserve(),
                 PublicationStep.Preserved => Detach(),
-                PublicationStep.Detached => Write(effects),
+                PublicationStep.Detached => Write(file, options),
                 _ => Publish(),
             };
         }
         return outcome;
     }
 
-    /// <summary>Abandon the attempt if no native source was detached yet; after an uncertain overwrite it stays the resolution owner.</summary>
+    /// <summary>Abandon the attempt if no native source was detached yet; after a native effect it stays the resolution owner.</summary>
     public void Dispose() => _cache.DisposeAttempt(this);
 }
 
@@ -453,7 +468,7 @@ public sealed partial class PageCache
     }
 
     /// <summary>Publish an overlay through every step (a commit with no injected events).</summary>
-    public PublicationOutcome Publish(PrivateOverlay overlay, IPageEffects effects)
+    public PublicationOutcome Publish(PrivateOverlay overlay, IPositionedFile file, PublicationOptions? options = null)
     {
         PublicationStart start = BeginPublication(overlay);
         if (start.Attempt is not { } attempt)
@@ -462,7 +477,7 @@ public sealed partial class PageCache
         }
         using (attempt)
         {
-            return attempt.Run(effects);
+            return attempt.Run(file, options);
         }
     }
 
@@ -754,41 +769,131 @@ public sealed partial class PageCache
         }
     }
 
-    internal PublicationOutcome WriteEffects(PublicationAttempt attempt, IPageEffects effects)
+    /// <summary>
+    /// The write step (W-03/native-program-executor): the final stored images, one revision per page, become a
+    /// prepared unit; the policy compiles it against the file's extent and the executor runs it. A completed program
+    /// leaves the attempt Written; a stopped one settles each page by its exact outcome.
+    /// </summary>
+    internal PublicationOutcome WriteEffects(PublicationAttempt attempt, IPositionedFile file, PublicationOptions options)
     {
-        ArgumentNullException.ThrowIfNull(effects);
+        ArgumentNullException.ThrowIfNull(file);
         lock (_latch)
         {
             Expect(attempt, PublicationStep.Detached);
         }
-        foreach (AttemptPage page in attempt.Pages)
+        // Failures before the first native effect settle the attempt privately (T-TXN-35): nothing was written.
+        if (file.Incarnation != FileIncarnation)
         {
-            PageEffectResult result = effects.Overwrite(page.Old.Page, _slots[page.FinalSlot!.Value].Backing);
-            if (!result.Completed)
-            {
-                lock (_latch)
-                {
-                    // Neither the old nor the new image becomes reloadable from the file merely because the cache has
-                    // a copy (II-03 §4.2). The attempt keeps the gate and restricted admission as resolution owner;
-                    // which pages stayed unchanged is the native program executor's to settle (W-03/native-program-executor).
-                    foreach (AttemptPage affected in attempt.Pages)
-                    {
-                        _pages[affected.PageNumber].State = PhysicalState.Uncertain;
-                    }
-                    attempt.Failure = $"The overwrite of page {page.PageNumber} did not complete: {result.Detail}";
-                    attempt.Step = PublicationStep.Uncertain;
-                    _restriction = attempt.Failure;
-                    _hold = null;
-                }
-                attempt.AdmissionReleased.Set(); // waiters wake and see the restriction
-                return new PublicationOutcome(false, attempt.Failure);
-            }
+            return SettleStopped(attempt, null, $"The cache is for file incarnation {FileIncarnation}, not {file.Incarnation}.");
+        }
+        ulong extent;
+        try
+        {
+            extent = file.GetExtent();
+        }
+        catch (IOException exception)
+        {
+            return SettleStopped(attempt, null, "The file extent could not be read: " + exception.Message);
+        }
+        List<PreparedRevision> revisions = [];
+        for (int i = 0; i < attempt.Pages.Count; i++)
+        {
+            AttemptPage page = attempt.Pages[i];
+            PageRole role = options.Roles is { } roles && roles.TryGetValue(page.PageNumber, out PageRole r) ? r : PageRole.Unclassified;
+            // The reserved final frame is exclusive to the attempt until publication or resolution: immutable from here.
+            revisions.Add(new PreparedRevision(i, page.PageNumber, _slots[page.FinalSlot!.Value].Backing) { Role = role });
+        }
+        ProgramCompilation compiled = NativeProgram.Compile(new PreparedUnit(PageSize, revisions), options.Policy, FileIncarnation, extent);
+        if (compiled.Program is not { } program)
+        {
+            return SettleStopped(attempt, null, $"The program could not be compiled: {compiled.Failure}");
+        }
+        attempt.Program = program;
+        NativeOutcome outcome;
+        try
+        {
+            outcome = NativeProgramExecutor.Run(program, file, options.Classify, options.Cancellation);
+        }
+        catch (Exception exception)
+        {
+            SettleStopped(attempt, program, "The native program stopped on an exception: " + exception.Message);
+            throw;
+        }
+        attempt.Outcome = outcome;
+        if (!outcome.Completed)
+        {
+            return SettleStopped(attempt, program, $"The native program stopped at step {outcome.Step} ({outcome.Kind}): {outcome.Cause}");
         }
         lock (_latch)
         {
             attempt.Step = PublicationStep.Written;
         }
         return PublicationOutcome.Ok;
+    }
+
+    /// <summary>
+    /// Settle a stopped program page by page (II-03 §6.2, T-PAGER-13). A page no request touched is unchanged in the
+    /// file: its old image is native again. A page holding its final image is Unpublished; a mixed or possibly changed
+    /// page is Uncertain: neither old nor new is reloadable from the file. With no native effect at all, the attempt
+    /// settles as before its first effect (Abandoned, no restriction: a definite pre-submission failure is not an
+    /// uncertain mutation). Otherwise it keeps the gate and restricted admission as resolution owner, and releases only
+    /// what its unchanged pages no longer need.
+    /// </summary>
+    private PublicationOutcome SettleStopped(PublicationAttempt attempt, NativeProgram? program, string failure)
+    {
+        IReadOnlyList<PageEffectOutcome> outcomes = program?.PageOutcomes() ?? [];
+        Dictionary<ulong, PageEffectOutcome> byPage = outcomes.ToDictionary(o => o.PageNumber);
+        bool effects = outcomes.Any(o => o.Disposition != PageDisposition.Unchanged)
+            || (program is not null && program.Effects.Any(e => e.Kind == EffectKind.ResizeExtent && program.Progress[e.Step].State is EffectState.Completed or EffectState.Uncertain or EffectState.Started));
+        attempt.PageOutcomes = outcomes;
+        lock (_latch)
+        {
+            foreach (AttemptPage page in attempt.Pages)
+            {
+                PageEntry entry = _pages[page.PageNumber];
+                PageDisposition disposition = byPage.TryGetValue(page.PageNumber, out PageEffectOutcome? o) ? o.Disposition : PageDisposition.Unchanged;
+                if (disposition != PageDisposition.Unchanged)
+                {
+                    entry.State = disposition == PageDisposition.HoldsRevision ? PhysicalState.Unpublished : PhysicalState.Uncertain;
+                    continue;
+                }
+                entry.NativeSource = page.Old;
+                entry.State = PhysicalState.Readable;
+                if (_directory.TryGetValue(page.Old, out ImageRecord? old) && old.Source == ImageSource.ResidentOnly)
+                {
+                    old.Source = ImageSource.Native; // the file backs the old image again
+                }
+                if (effects)
+                {
+                    if (page.OwnsOld)
+                    {
+                        ReleaseOwner(page.Old);
+                        page.OwnsOld = false;
+                    }
+                    if (page.FinalSlot is { } final)
+                    {
+                        Unreserve(final);
+                        page.FinalSlot = null;
+                    }
+                    entry.Publication = null;
+                    TrimEntry(entry);
+                }
+            }
+        }
+        if (!effects)
+        {
+            Abandon(attempt, failure);
+            return new PublicationOutcome(false, attempt.Failure);
+        }
+        lock (_latch)
+        {
+            attempt.Failure = failure;
+            attempt.Step = PublicationStep.NeedsResolution;
+            _restriction = failure;
+            _hold = null;
+        }
+        attempt.AdmissionReleased.Set(); // waiters wake and see the restriction
+        return new PublicationOutcome(false, failure);
     }
 
     /// <summary>
@@ -864,7 +969,7 @@ public sealed partial class PageCache
     {
         lock (_latch)
         {
-            if (attempt.Step is PublicationStep.Published or PublicationStep.Abandoned or PublicationStep.Uncertain)
+            if (attempt.Step is PublicationStep.Published or PublicationStep.Abandoned or PublicationStep.NeedsResolution)
             {
                 return;
             }
@@ -877,9 +982,10 @@ public sealed partial class PageCache
     }
 
     /// <summary>
-    /// Settle an attempt before any source was detached (T-LOCK-24): reservations return, old images regain their
-    /// native source, frozen pages unfreeze, parked targets are filled from the still-unchanged file, and the overlay,
-    /// hold and gate are released. Public state is as before the attempt.
+    /// Settle an attempt before any native effect (T-LOCK-24): reservations return, old images regain their native
+    /// source, frozen pages unfreeze, parked targets are filled from the still-unchanged file, and the overlay, hold and
+    /// gate are released. Public state is as before the attempt. After a detach, <see cref="SettleStopped"/> restores
+    /// the native sources first.
     /// </summary>
     private void Abandon(PublicationAttempt attempt, string failure)
     {

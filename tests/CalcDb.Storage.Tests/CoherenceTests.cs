@@ -392,7 +392,7 @@ public sealed class CoherenceTests
         ReadView before = cache.RegisterView().View!;
         file.BeforeOverwrite = page =>
         {
-            if (page.PageNumber == 18)
+            if (page == 18)
             {
                 // Page 17 is already overwritten in the file; its current binding has not changed yet.
                 Assert.Equal(0xE1, file.Page(17)[0]);
@@ -430,8 +430,11 @@ public sealed class CoherenceTests
         b.Edit(30, new BytePatch(0, [0xBB]));
         PublicationAttempt attempt = cache.BeginPublication(a).Attempt!;
         Assert.False(attempt.Run(file).Succeeded);
-        Assert.Equal(PublicationStep.Uncertain, attempt.Step);
+        Assert.Equal(PublicationStep.NeedsResolution, attempt.Step);
         Assert.Equal(PhysicalState.Uncertain, cache.StateOf(17));
+        PageEffectOutcome outcome = Assert.Single(attempt.PageOutcomes);
+        Assert.Equal(PageDisposition.Uncertain, outcome.Disposition);
+        Assert.Equal([new ByteRange(17UL * PageSize, 18UL * PageSize)], outcome.PossibleEffects);
         Assert.Equal(ViewFailureKind.Restricted, cache.RegisterView().Failure);
         Assert.False(cache.BeginPublication(b).Succeeded);
         using (PagePin old = view.Pin(17).Pin!)

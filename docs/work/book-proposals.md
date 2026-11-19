@@ -57,3 +57,22 @@ choice is in `CalcDb.Storage.PageCache` and its tests.
   Proposed: "A spill record is released when its image has no remaining owner; a resident frame of that image is then
   an ordinary reclaimable frame."
 
+## Gaps found in construction (W-03/native-program-executor, bfsh, 2026-11-20)
+
+- **II-03 §6.1: the repeated fallback's order.** Proposed: "Each prepared revision carries its position in the repeated
+  fallback's operation sequence; one-final-image templates order by role and ignore it. Orders that hold only for a
+  repeated program are expressed by that position, not as transfer dependencies of the unit, which would form a cycle
+  when composed."
+- **II-03 §6.2 and II-08 §17: page outcomes after a stopped program.** Proposed: "After a stopped program each page has
+  one native outcome from its receipts: unchanged (old native source restored), holding a named revision (transfer
+  complete, not published, not durable), a known mixture, or uncertain over named ranges. Only the last two make the
+  source uncertain; a stop with no native effect settles as a private failure."
+- **II-03 §2.4 and §6.1: extent growth.** Proposed: "Extent growth is a selectable effect: an explicit end-of-file
+  change, or a write at the new extent's last byte (the mechanism ACE issues in r-etw-rec). Neither is assumed to have
+  the other's crash outcome."
+- **II-08 §20: cancellation.** Proposed: "The executor does not propagate cancellation into an in-flight native
+  request; it records the request and classifies it at the next checkpoint after settlement."
+- **A-02 R-CRASH-1 CRASH-ORDER: payloads.** Add "record write payloads": the ETW traces lack them, so ACE's repeated
+  writes of one page in a burst (r-etw-rec) cannot be classified as distinct images or repeats.
+
+

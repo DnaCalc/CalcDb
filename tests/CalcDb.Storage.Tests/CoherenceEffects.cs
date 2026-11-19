@@ -1,18 +1,48 @@
 namespace CalcDb.Storage.Tests;
 
+/// <summary>What a controlled write does (II-03 §8, injected native events).</summary>
+public enum WriteFaultKind
+{
+    None,
+
+    /// <summary>A successful short write: <see cref="WriteFault.Bytes"/> transferred, status Complete.</summary>
+    Short,
+
+    /// <summary><see cref="WriteFault.Bytes"/> transferred, then failure with the rest of the request possibly changed.</summary>
+    FailAfter,
+
+    /// <summary>A definite failure before submission: nothing transferred, no possible effect.</summary>
+    FailDefinite,
+
+    /// <summary>The adapter throws after submission.</summary>
+    Throw,
+
+    /// <summary>The adapter claims more bytes than the request had.</summary>
+    OverClaim,
+}
+
+public readonly record struct WriteFault(WriteFaultKind Kind, int Bytes = 0)
+{
+    public static WriteFault None { get; }
+}
+
+/// <summary>One write request as the controlled file saw it: its index among writes, page, offset and length.</summary>
+public readonly record struct WriteCall(int Index, ulong Page, ulong Offset, int Length);
+
 /// <summary>
-/// A controlled native file for W-03/private-images-coherence (II-03 §8, "controlled effects"): it is both the page
-/// source and the overwrite effect seam, so a read after an overwrite returns the new bytes, as the file would. Loads
-/// of a page can be held at a gate or failed; overwrites can be failed or observed at the overwrite point. Every load
-/// and write is logged in order.
+/// A controlled native file (II-03 §8, "controlled effects"): the page source and the positioned file the native
+/// program executor writes through, so a read after a write returns the new bytes, as the file would. Loads can be held
+/// at a gate or failed; writes can be short, fail after a prefix, fail definitely, throw or over-claim; flushes and
+/// extent changes can fail. Every load, write, flush and extent change is logged in order.
 /// </summary>
-internal sealed class ControlledFile(int pageSize) : IPageSource, IPageEffects
+internal sealed class ControlledFile(int pageSize, ulong incarnation = 1) : IPageSource, IPositionedFile
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<ulong, byte[]> _pages = [];
     private readonly List<string> _log = [];
     private readonly Dictionary<ulong, int> _loads = [];
-    private int _writes;
+    private int _writes, _writeCalls, _flushes;
+    private ulong _requests;
 
     /// <summary>Loads of these pages wait at their gate (outside the cache latch, like a pending native read).</summary>
     public Dictionary<ulong, ManualResetEventSlim> Gates { get; } = [];
@@ -21,12 +51,29 @@ internal sealed class ControlledFile(int pageSize) : IPageSource, IPageEffects
 
     public Func<ulong, bool> FailLoads { get; set; } = _ => false;
 
+    /// <summary>Writes to these pages fail with the whole request possibly changed (an uncertain overwrite).</summary>
     public Func<ulong, bool> FailWrites { get; set; } = _ => false;
 
-    /// <summary>Runs at the overwrite point, before the page's bytes change: the place to observe what the writer preserved.</summary>
-    public Action<PageObject>? BeforeOverwrite { get; set; }
+    /// <summary>The fault of each write request, by its call.</summary>
+    public Func<WriteCall, WriteFault>? Faults { get; set; }
 
+    public bool FailFlush { get; set; }
+
+    public bool FailExtent { get; set; }
+
+    /// <summary>Runs at the write point, before the page's bytes change: the place to observe what the writer preserved.</summary>
+    public Action<ulong>? BeforeOverwrite { get; set; }
+
+    public ulong Extent { get; set; } = (ulong)pageSize * 1024;
+
+    /// <summary>Write requests that changed bytes.</summary>
     public int Writes => Volatile.Read(ref _writes);
+
+    public int Flushes => Volatile.Read(ref _flushes);
+
+    public ulong Incarnation { get; } = incarnation;
+
+    public FileIdentity Identity { get; } = new("controlled", "file", "controlled");
 
     public IReadOnlyList<string> Log
     {
@@ -86,25 +133,135 @@ internal sealed class ControlledFile(int pageSize) : IPageSource, IPageEffects
         return PageLoad.Complete;
     }
 
-    public PageEffectResult Overwrite(PageObject page, ReadOnlyMemory<byte> storedImage)
+    public TransferReceipt ReadAt(ulong offset, Memory<byte> buffer, CancellationToken cancellation = default)
     {
-        BeforeOverwrite?.Invoke(page);
-        if (FailWrites(page.PageNumber))
-        {
-            lock (_lock)
-            {
-                _log.Add($"write-uncertain {page.PageNumber}");
-            }
-            return new PageEffectResult(false, "controlled uncertain overwrite");
-        }
         lock (_lock)
         {
-            _pages[page.PageNumber] = storedImage.ToArray();
-            _log.Add($"write {page.PageNumber}");
+            int available = (int)Math.Min((ulong)buffer.Length, Extent > offset ? Extent - offset : 0);
+            Copy(offset, buffer.Span[..available], toFile: false);
+            return Receipt(offset, buffer.Length, (ulong)available, available == buffer.Length ? TransferStatus.Complete : TransferStatus.EndOfFile, null, null);
         }
-        Interlocked.Increment(ref _writes);
-        return PageEffectResult.Complete;
     }
+
+    public TransferReceipt WriteAt(ulong offset, ReadOnlyMemory<byte> buffer, CancellationToken cancellation = default)
+    {
+        ulong page = offset / (ulong)pageSize;
+        int index = Interlocked.Increment(ref _writeCalls) - 1;
+        BeforeOverwrite?.Invoke(page);
+        WriteFault fault = FailWrites(page) ? new WriteFault(WriteFaultKind.FailAfter) : Faults?.Invoke(new WriteCall(index, page, offset, buffer.Length)) ?? WriteFault.None;
+        int written = fault.Kind switch
+        {
+            WriteFaultKind.None or WriteFaultKind.OverClaim => buffer.Length,
+            WriteFaultKind.Short or WriteFaultKind.FailAfter => Math.Min(fault.Bytes, buffer.Length),
+            WriteFaultKind.Throw => throw new IOException("controlled adapter exception"),
+            _ => 0,
+        };
+        lock (_lock)
+        {
+            Copy(offset, buffer.Span[..written], toFile: true);
+            Extent = Math.Max(Extent, offset + (ulong)written);
+            int inPage = (int)(offset % (ulong)pageSize);
+            string what = written == pageSize && inPage == 0 ? $"{page}" : $"{page}@{inPage}+{written}";
+            _log.Add(fault.Kind is WriteFaultKind.None or WriteFaultKind.Short or WriteFaultKind.OverClaim ? $"write {what}" : $"write-failed {what}");
+            if (written > 0)
+            {
+                _writes++;
+            }
+            var attempted = new ByteRange(offset, offset + (ulong)buffer.Length);
+            return fault.Kind switch
+            {
+                WriteFaultKind.FailAfter => Receipt(offset, buffer.Length, (ulong)written, TransferStatus.Failed, new ByteRange(offset + (ulong)written, attempted.End), 1117), // ERROR_IO_DEVICE
+                WriteFaultKind.FailDefinite => Receipt(offset, buffer.Length, 0, TransferStatus.Failed, null, 6), // refused before submission
+                WriteFaultKind.OverClaim => Receipt(offset, buffer.Length, (ulong)buffer.Length + 1, TransferStatus.Complete, null, null),
+                _ => Receipt(offset, buffer.Length, (ulong)written, TransferStatus.Complete, null, null),
+            };
+        }
+    }
+
+    public FileOperationResult Flush()
+    {
+        lock (_lock)
+        {
+            _log.Add(FailFlush ? "flush-failed" : "flush");
+            if (!FailFlush)
+            {
+                _flushes++;
+            }
+        }
+        return FailFlush ? new FileOperationResult(false, 1117, "FlushFileBuffers") : FileOperationResult.Ok("FlushFileBuffers");
+    }
+
+    public ulong GetExtent()
+    {
+        lock (_lock)
+        {
+            return Extent;
+        }
+    }
+
+    public FileOperationResult SetExtent(ulong extent)
+    {
+        lock (_lock)
+        {
+            _log.Add(FailExtent ? $"extent-failed 0x{extent:X}" : $"extent 0x{extent:X}");
+            if (FailExtent)
+            {
+                return new FileOperationResult(false, 112, "SetFileInformationByHandle(FileEndOfFileInfo)"); // ERROR_DISK_FULL
+            }
+            Extent = extent;
+            return FileOperationResult.Ok("SetFileInformationByHandle(FileEndOfFileInfo)");
+        }
+    }
+
+    public void Dispose()
+    {
+    }
+
+    /// <summary>Copy between a byte range of the file and <paramref name="bytes"/>, page by page. Under the lock.</summary>
+    private void Copy(ulong offset, ReadOnlySpan<byte> bytes, bool toFile) => CopyCore(offset, bytes.Length, toFile, bytes, default);
+
+    private void Copy(ulong offset, Span<byte> bytes, bool toFile) => CopyCore(offset, bytes.Length, toFile, default, bytes);
+
+    private void CopyCore(ulong offset, int length, bool toFile, ReadOnlySpan<byte> from, Span<byte> to)
+    {
+        int done = 0;
+        while (done < length)
+        {
+            ulong page = (offset + (ulong)done) / (ulong)pageSize;
+            int inPage = (int)((offset + (ulong)done) % (ulong)pageSize);
+            int count = Math.Min(length - done, pageSize - inPage);
+            if (!_pages.TryGetValue(page, out byte[]? bytes))
+            {
+                bytes = Default(page);
+                if (toFile)
+                {
+                    _pages[page] = bytes;
+                }
+            }
+            if (toFile)
+            {
+                from.Slice(done, count).CopyTo(bytes.AsSpan(inPage, count));
+            }
+            else
+            {
+                bytes.AsSpan(inPage, count).CopyTo(to.Slice(done, count));
+            }
+            done += count;
+        }
+    }
+
+    private TransferReceipt Receipt(ulong offset, int length, ulong proven, TransferStatus status, ByteRange? effect, int? error) => new()
+    {
+        FileIncarnation = Incarnation,
+        RequestId = Interlocked.Increment(ref _requests),
+        RequestGeneration = 1,
+        Attempted = new ByteRange(offset, offset + (ulong)length),
+        Status = status,
+        BackendReportedCount = proven,
+        ProvenPrefixBytes = proven,
+        PossibleEffect = effect,
+        NativeError = error,
+    };
 
     private byte[] Default(ulong page)
     {
@@ -226,4 +383,39 @@ internal static class Conservation
     }
 
     public static void Until(Func<bool> condition) => Assert.True(SpinWait.SpinUntil(condition, 5000), "The injected event did not happen.");
+}
+
+/// <summary>Conservation of a native program after its trace (II-03 §8, II-08 §17).</summary>
+internal static class ProgramConservation
+{
+    /// <summary>
+    /// Every submitted request settled into its receipt (none is left Started), every transfer request is in the capture
+    /// unless capture is marked truncated, nothing ran past the stop step, and the state matches the receipts.
+    /// </summary>
+    public static void Settled(NativeProgram program)
+    {
+        ProgramProgress progress = program.Progress;
+        Assert.NotEqual(ProgramState.Running, progress.State);
+        int transferRequests = 0;
+        for (int step = 0; step < progress.Count; step++)
+        {
+            EffectReceipt receipt = progress[step];
+            Assert.NotEqual(EffectState.Started, receipt.State);
+            NativeEffect effect = program.Effects[step];
+            if (effect.Kind == EffectKind.Transfer || (effect.Kind == EffectKind.ResizeExtent && effect.Growth == ExtentGrowth.WriteLastByte))
+            {
+                transferRequests += receipt.Requests;
+            }
+            Assert.True(receipt.ProvenBytes <= effect.FileRange.Length || effect.Kind != EffectKind.Transfer, $"Step {step} proves more than its range.");
+            if (progress.StoppedAt is { } stop && step > stop)
+            {
+                Assert.Equal(EffectState.Pending, receipt.State);
+            }
+        }
+        if (!progress.CaptureTruncated)
+        {
+            Assert.Equal(transferRequests, progress.Capture.Count);
+        }
+        Assert.Equal(progress.State == ProgramState.Completed, progress.StoppedAt is null);
+    }
 }
