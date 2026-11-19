@@ -25,7 +25,8 @@ public sealed class PageHold(PageCache cache) : IDisposable
             return new PinResult(held, null);
         }
         Release();
-        PinResult pinned = Cache.Pin(current, admission);
+        // The current-view pin: during a publication it waits for the binding change rather than fail (II-09 §12).
+        PinResult pinned = Cache.Pin(pageNumber, admission);
         _pin = pinned.Pin;
         Pins += _pin is null ? 0 : 1;
         return pinned;

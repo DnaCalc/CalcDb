@@ -34,3 +34,26 @@ specification quietly). Each entry names the book text, the records and the prop
   host registration of its factory without a context mapping gives unchanged clients the reference CLSID; where it
   does not, the context's configured CLSID is the only resolution, and ACT-NAME records it as a named difference.
   Host registration is process-wide and gives up the context's scoping (ACT-SCOPE, ACT-COEXIST)."
+
+## Gaps found in construction (W-03/private-images-coherence, gcvf, 2026-11-19)
+
+These are not contradicted by evidence; the book leaves the case open and the implementation had to choose. Each
+choice is in `CalcDb.Storage.PageCache` and its tests.
+
+- **II-09 §12: an unregistered current read during a publication.** §12 holds fresh *registered* views; it does not
+  say what a plain current-image read (today's cursors) does once the old source is detached. Implemented as a fresh
+  selection that waits for the binding change. Proposed: "A read that selects the current binding without a registered
+  view is a fresh selection: after detach it waits for the attempt's publication, or it was preserved as a pending
+  target before detach."
+- **II-03 §4.2: the writer's own input and preservation.** When the rebase has read the latest committed page, that
+  pinned input already is the old image; preservation takes ownership of it instead of reading again. Proposed note:
+  "Where the writer's retained input is the old image, preservation is ownership of that input; a preservation read is
+  needed only for pages the attempt did not read."
+- **II-09 T-LOCK-20: the check assumes selective preservation.** An implementation that keeps every changed page's
+  old image until publication never fails it. Proposed: "…with the hold omitted and preservation limited to the
+  selected obligations."
+- **II-03 §5.2: spill records without an owner.** The book does not say when a spill record is released when its
+  image stays resident after the last owner leaves. Implemented: released at once, the frame stays reclaimable.
+  Proposed: "A spill record is released when its image has no remaining owner; a resident frame of that image is then
+  an ordinary reclaimable frame."
+
