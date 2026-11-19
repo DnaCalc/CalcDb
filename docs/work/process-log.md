@@ -400,3 +400,34 @@ retained by the parent.
 
 **Rule.** Hand over to a new session when a stretch of work ends; the register, the notes and the process log carry
 the state, not the conversation.
+
+## 2026-11-19 (night) to 2026-11-20 · PercentPosition, private images, one writer at a time (one session, Claude Opus 5.5)
+
+**Work observed.** A fresh session after the handoff rule of the last round. `thhj` gained PercentPosition on every
+recordset type from ten designed questions (r-cursor-1-pct) and a qualification note; two binder faults found by the
+per-question diff were fixed at their cause (3421 and 3001 for arguments that do not coerce); 28 → 38 of 527 compared
+questions match. `gcvf` (W-03/private-images-coherence) was built by an Opus sub-session and reviewed here; `bfsh`
+started the same way. `685w` stopped on an owner decision: no shared conversion service the C# reference can consume.
+
+**What worked.**
+- *The handoff.* The register, notes and process log were enough to start without the old conversation.
+- *One element varied at a time.* Fresh against sequential against five start rows showed in one batch that ACE's
+  storage-order landing depends only on the value, which ruled out the start-dependent explanations at once.
+- *The per-question diff after each fix.* Each run exposed the next difference of the same questions (coercion
+  HRESULT, then IErrorInfo, then puArgErr, then Missing), so the binder rule was found from ACE's records, not guessed.
+- *A sub-session for a whole slice.* gcvf came back with tests per book check, conservation checks and four book gaps;
+  the parent's context stayed on orchestration.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| Reverse-engineering the storage-order landing by fitting formulas to the grid | About an hour without a rule | Stopped, recorded the established parts and the open shape, registered `x6bq` with discriminating probes to design |
+| A writing child in CalcDb.Storage while the parent published CalcDb.dll | The publish failed on half-finished code; one compare job ran against the old dll and was cancelled | One code writer at a time, the parent's compare runs only between children; the brief asks children to keep the tree compiling |
+| Cancelling a compare job mid-question | An attempt left `Running` blocked the next batch of its folder | `calcdb-oracle seal --token` settles it; check a batch's summary line per folder before diffing |
+| Reading the batch summary without checking every folder line | A missing folder line was nearly read as "no change" | The diff script counts the questions it compared (527) |
+
+**Rule.** A child that writes code owns the build until it reports; the parent compares only between writers.
+
+**Next candidates.** A `--dirs` list in the repository for the standard compare set, instead of a script in temp; the
+compare script's diff as a `calcdb-oracle` command (it reads the comparison ledger, so it is tooling, not analysis).
