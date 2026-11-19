@@ -132,6 +132,9 @@ public sealed record ColumnDescriptor
     public required int Length { get; init; }
     public required bool IsFixed { get; init; }
 
+    /// <summary>The raw sort descriptor of a Text or Memo column (II-05 §4), null for other types.</summary>
+    public TextSortOrder? TextSort { get; init; }
+
     /// <summary>The column's position in <see cref="TableDefinition.Columns"/>, for per-column state of a consumer.</summary>
     public int Ordinal { get; init; }
 
@@ -300,6 +303,7 @@ public static class TableDefDecoder
                 FixedOffset = (int)c.FixedOffset.Read(r.Block),
                 Length = (int)c.Length.Read(r.Block),
                 IsFixed = ((byte)c.Flags.Read(r.Block) & c.FixedFlag) != 0,
+                TextSort = (byte)c.Type.Read(r.Block) is NativeTypes.Text or NativeTypes.Memo ? TextSortOrder.Read(r.Block, c) : null,
             }).ToList();
             return new TableDefinition
             {

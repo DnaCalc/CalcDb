@@ -128,4 +128,45 @@ public sealed class AllocationTests(ITestOutputHelper output)
         Assert.True(seek < 1, $"a resident Seek allocates {seek:F1} B/call");
         Assert.True(seekAndRead < 128, $"a resident Seek and a Long read allocate {seekAndRead:F1} B/call");
     }
+
+    [Fact]
+    public void Resident_text_seek_allocations_per_call()
+    {
+        // W-04/weight-tables-per-sort-order (task 73vf): Seek "=" on a Text index (r-cursor-1/seek-duplicates-multileaf's
+        // DL.IX_K, General - Legacy, duplicates across leaves), a found 200-unit key and a missed one in turn. The key
+        // is encoded into the cursor's scratch with bounded stack scratch for the secondary streams.
+        string root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "CalcDb.slnx")))
+        {
+            root = Path.GetDirectoryName(root)!;
+        }
+        byte[] file = CalcDb.Evidence.ArtifactStore.ForRepository(root).ReadAll("640b1893caaa6a8450731932e84ffa0e2a8be91a00a0be188bae767d7a31db34");
+        var image = new ImagePageSource(file, D.PageSize);
+        var cache = new PageCache(image, 1, D.PageSize, 256);
+        CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, image.PageCount, out _)!;
+        CatalogEntry entry = catalog.LocalTables(D).Single(e => e.Name == "DL");
+        TableDefinition def = TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _)!;
+        TableCursor rs = TableCursor.Open(cache, D, def, image.PageCount, 1, out _)!;
+        Assert.Equal(IndexRefusal.None, rs.SetIndex("IX_K"));
+        SeekKey[] hit = [new(KeyValue.OfText(new string('k', 200).AsMemory()))];
+        SeekKey[] miss = [new(KeyValue.OfText("kk".AsMemory()))];
+        int Pass()
+        {
+            int found = 0;
+            for (int i = 0; i < 1000; i++)
+            {
+                rs.Seek(SeekOperator.Equal, (i & 1) == 0 ? hit : miss, out bool f);
+                found += f ? 1 : 0;
+            }
+            return found;
+        }
+        Assert.Equal(500, Pass());
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        int found = Pass();
+        double perCall = (GC.GetAllocatedBytesForCurrentThread() - before) / 1000.0;
+        Assert.Equal(500, found);
+        output.WriteLine($"Text Seek = {perCall:F1} B/call");
+        // Budget (The Plan §3.2): a resident Text Seek allocates nothing.
+        Assert.True(perCall < 1, $"a resident Text Seek allocates {perCall:F1} B/call");
+    }
 }

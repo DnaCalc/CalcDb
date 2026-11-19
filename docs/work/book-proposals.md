@@ -83,4 +83,46 @@ choice is in `CalcDb.Storage.PageCache` and its tests.
   rejection": "A removal that its prerequisite closure undoes is blocked, not a candidate: it is recorded with the
   operation that requires it, and counts toward 1-minimality as resolved."
 
+## II-05 §6: ACE's long-key digest includes the final byte
+
+- **Book.** The candidate long-key rule (from the pinned reference) digests the bytes from offset 508 and omits the
+  key's last byte; its witnesses use keys whose final byte is 00.
+- **Evidence.** In the retained fixtures every shortened Text entry differed from that rule in byte 508, always by the
+  key's final byte; with the final byte included every shortened key matches, and (A×255, Long 1) and (A×255, Long 2)
+  are distinct entries (r-sort-3/create-keys-accdb; NativeTextKeyTests).
+- **Implemented.** `IndexKeys.FinishComposite` (W-04/weight-tables-per-sort-order, 73vf).
+- **Proposed text.** "ACE digests every byte from 508 to the end: the remainder modulo 0x18005, most significant bit
+  first, stored low byte first. The pinned reference omits the final byte, a reference limitation; the (A×255, Long 1/2)
+  pair does not collide natively." The synthetic witness becomes `30 B8`.
+
+## II-05 §4 and §5.1: which General-family order a file carries; the kana prolonged sound mark
+
+- **Evidence.** Files created with dbVersion 64 and 128 carry sort order 1033 version 0 (General – Legacy); only the
+  dbVersion 256 fixture carries 1033 version 1 (General); no retained fixture carries General 97. U+30FC and U+FF70 alone
+  carry primary `FF FF` in ACE's entries, where the pinned General – Legacy resource gives the weight of "A"
+  (NativeTextKeyTests, 36 entries).
+- **Proposed text.** II-05 §4: "Files created with dbVersion 64 and 128 carry 1033/0 (General – Legacy); General 1033/1
+  appears with dbVersion 256." II-05 §5.1 or the R-SORT-3 card: "U+30FC and U+FF70 alone carry primary FF FF natively,
+  unlike the pinned resource; SORT-DERIVE resolves their context rule."
+
+## II-05 §5: rules the encoder settled from ACE's entries (W-04/weight-tables-per-sort-order, 73vf)
+
+The encoder (`TextKeys.cs`) is written from II-05 §5 and the resources; where §5 is silent it follows ACE's native
+entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual above).
+
+- **`P` without a preceding secondary.** Proposed: "If no secondary value precedes it, the modifier byte itself becomes
+  the first secondary value (ACE: U+0301 alone → `7F 01 0C 00`, General – Legacy). Whether that prefix counts as a
+  position for a later unprintable is a SORT-CHECK probe."
+- **`Z` flags.** Proposed: "A resource flag field of `1` is flag 2; an empty field is flag 3. Flags pack first-highest,
+  three per byte under bits `10`; a partial byte's unused bits are zero (ACE: `ぁ` → `A0`)."
+- **Placeholders.** Proposed: "Each S record contributes one `02` placeholder whatever the length of its expansion; an I
+  record contributes its secondary bytes as listed. Whether an expansion followed by an accent takes one placeholder or
+  one per weight is a SORT-CHECK probe (`Æé`, `Ǣ`)."
+- **General 97 secondary section.** Proposed for §5.3: "The secondary section is a leading zero nibble, the nibbles of G
+  (2) and I characters (S characters contribute none) with trailing 2s removed, then zero padding to whole bytes, at
+  least one byte (`A` → `60 00`, `é` → `66 04 00`). The 255-unit cut and trailing-space removal of §5 apply." No
+  retained fixture carries General 97, so this rests on the book's witnesses only.
+- **§5.2 positions.** Add the native confirmation "`a\x01` → `80 0B 06 03`" beside the source-derived formula, and state
+  that `06` is a constant byte between a position and its code.
+
 

@@ -136,16 +136,19 @@ internal sealed unsafe class RecordsetObject : DaoObject
         {
             return Fail(3250, DaoErrors.CouldNotBuildKey);
         }
-        // At most 13 keys (Key1..Key13), on the stack; the key columns were resolved once by Index (task v4n6).
-        Span<SeekKey> keys = stackalloc SeekKey[given];
+        // At most 10 keys reach here (no index has more columns), in arrays this recordset keeps; Text keys borrow its
+        // per-key character buffers, so a steady Seek allocates nothing (tasks v4n6, 73vf).
+        Span<SeekKey> keys = (_seekKeys ??= new SeekKey[MaxSeekKeys]).AsSpan(0, given);
         for (int i = 0; i < given; i++)
         {
             ColumnDescriptor? column = table.KeyColumn(i);
             bool converted = true;
-            SeekKey? key = column is null ? null : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out converted);
+            SeekKey? key = column is null ? null
+                : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, args[1 + i], out converted)
+                : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out converted);
             if (key is null)
             {
-                return column is not null && !converted ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (Text needs W-04/weight-tables-per-sort-order)"));
+                return column is not null && !converted ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (W-04/private-codecs)"));
             }
             keys[i] = key.Value;
         }
@@ -154,10 +157,58 @@ internal sealed unsafe class RecordsetObject : DaoObject
         {
             IndexRefusal.None => CallResult.Nothing,
             IndexRefusal.TooManyKeys => Fail(3250, DaoErrors.CouldNotBuildKey),
-            IndexRefusal.KeyNotEncodable => CallResult.Fail(Failure.NotImplemented("Seek on an index whose key this codec cannot encode (Text needs W-04/weight-tables-per-sort-order)")),
+            IndexRefusal.KeyNotEncodable => CallResult.Fail(Failure.NotImplemented("Seek on an index whose key this codec cannot encode (GUID, Binary and NUMERIC keys are W-04/private-codecs)")),
+            IndexRefusal.SortOrderNotModelled => CallResult.Fail(Failure.NotImplemented("NotModelled.SortOrder: an indexed Text seek on a sort order outside General, General - Legacy and General 97 (TextSeek)")),
+            IndexRefusal.LongKeyPrefix => CallResult.Fail(Failure.NotImplemented("Seek with a partial key longer than the 508 bytes a shortened index entry keeps")),
             _ => CallResult.Fail(Failure.NotImplemented("Seek: " + refusal + " " + table.LastTraversalFailure?.Predicate)),
         };
     }
+
+    private const int MaxSeekKeys = 13;
+
+    private SeekKey[]? _seekKeys;
+    private char[]?[]? _seekText;
+
+    /// <summary>
+    /// A Seek key for a Text or Memo column: Null and Empty are the Null key; a BSTR is its own units, copied into this
+    /// recordset's buffer for that key (only the 255 units an index keeps: II-05 §5); another type converts to a BSTR
+    /// as VariantChangeType does, or fails with 3421.
+    /// </summary>
+    private SeekKey? SeekTextKeyOf(int ordinal, nint arg, out bool converted)
+    {
+        converted = true;
+        NativeVariant* v = Args.Cell(arg);
+        VarType vt = (VarType)v->Vt & ~VarType.ByRef;
+        if (vt is VarType.Null or VarType.Empty)
+        {
+            return new SeekKey(KeyValue.Null);
+        }
+        ReadOnlySpan<char> units;
+        string? convertedText = null;
+        if (Args.TypeOf(arg) == VarType.Bstr)
+        {
+            units = v->Pointer == 0 ? default : Bstrs.Chars(v->Pointer);
+        }
+        else
+        {
+            convertedText = Args.Text(arg);
+            if (convertedText is null)
+            {
+                converted = false;
+                return null;
+            }
+            units = convertedText;
+        }
+        if (units.Length > TextIndexUnits)
+        {
+            units = units[..TextIndexUnits];
+        }
+        char[] buffer = (_seekText ??= new char[MaxSeekKeys][])[ordinal] ??= new char[TextIndexUnits];
+        units.CopyTo(buffer);
+        return new SeekKey(KeyValue.OfText(buffer.AsMemory(0, units.Length)));
+    }
+
+    private const int TextIndexUnits = 255;
 
     /// <summary>
     /// A Seek key as its column's stored value: Null and Empty are the Null key; integer columns take the numeric value

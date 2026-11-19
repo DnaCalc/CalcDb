@@ -10,7 +10,9 @@ public readonly record struct IndexPosition(uint Leaf, int Ordinal, RowId Row);
 /// A typed internal bound (II-05 §7.1) over user keys: <see cref="Low"/> is before every entry whose key, cut to the
 /// bound's length, is at or after <see cref="Key"/>; <see cref="High"/> is before every entry whose cut key is after
 /// it. With a full key these are KeyLow/KeyHigh; with the key of the first fields they are FieldPrefixLow/High, which
-/// is a byte prefix because scalar field contributions are self-delimiting (II-05 §4). The empty Low is BeforeAll and
+/// is a byte prefix because field contributions are self-delimiting (II-05 §4): scalars by width, General-family Text
+/// by its final 00, since no record payload of the pinned tables contains 00 (a secondary modifier sum that wraps to 00
+/// is the unproved case). A key cut by the long-key finish is never a prefix bound (IndexRefusal.LongKeyPrefix). The empty Low is BeforeAll and
 /// the empty High is AfterAll. No fictitious locator is serialized. The key is borrowed for the call (task v4n6).
 /// </summary>
 public readonly ref struct KeyBound(ReadOnlySpan<byte> key, bool high)
@@ -183,6 +185,9 @@ public sealed class IndexNavigator
 
     /// <summary>Whether the key of the entry at a position starts with the bound's key (an equal group), without copying it.</summary>
     public bool KeyMatches(IndexPosition at, KeyBound bound) => Page(at.Leaf) is { } p && bound.Matches(p.Entry(at.Ordinal).Key);
+
+    /// <summary>The stored user-key bytes of the entry at a position, copied (for checks against the encoder: R-SORT-3), or null.</summary>
+    public byte[]? KeyBytes(IndexPosition at) => Page(at.Leaf) is { } p ? p.Entry(at.Ordinal).Key.ToArray() : null;
 
     /// <summary>
     /// The entry naming this row, by walking the leaves in order (used when the current row moves to another index or a

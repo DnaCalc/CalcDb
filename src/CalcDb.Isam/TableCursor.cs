@@ -239,8 +239,20 @@ public enum IndexRefusal
     /// <summary>More key values than index columns: DAO 3250 (checked by the adapter as ACE counts its arguments).</summary>
     TooManyKeys,
 
-    /// <summary>A key column this codec cannot encode (Text before its weight tables, W-04/weight-tables-per-sort-order).</summary>
+    /// <summary>A key column whose type this codec does not encode yet (GUID, Binary, NUMERIC: W-04/private-codecs), or a value that does not fit it.</summary>
     KeyNotEncodable,
+
+    /// <summary>
+    /// An indexed Text seek on a column whose sort order is outside the General family: NotModelled.SortOrder, counted as
+    /// TextSeek (II-05 §4, T-IDX-06, T-CAT-05). A full scan still reads the table.
+    /// </summary>
+    SortOrderNotModelled,
+
+    /// <summary>
+    /// A key of the first fields longer than the 508 bytes a shortened entry keeps: its range under the digest has no
+    /// proved lowering (II-05 §§6, 7.1), so it is refused rather than widened.
+    /// </summary>
+    LongKeyPrefix,
 
     /// <summary>A storage or format failure in the index or the row traversal.</summary>
     Storage,
@@ -263,6 +275,9 @@ public sealed class TableCursor : IRecordCursor
     private PositionState<TableOccurrence> _position;
     private IndexNavigator? _index;
     private ColumnDescriptor?[] _keyColumns = []; // the current index's key columns, resolved once per SetIndex (task v4n6)
+    private FieldKeyCodec?[] _keyCodecs = []; // their codecs, chosen once per index (II-05 §6.1); null with the refusal below
+    private KeyCodecRefusal[] _keyRefusals = [];
+    private byte[] _keyScratch = []; // the Seek key, sized for the index's widest fields: no allocation per Seek
 
     private TableCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
@@ -334,6 +349,9 @@ public sealed class TableCursor : IRecordCursor
         IndexNavigator? navigator = null;
         LogicalIndex? logical = null;
         ColumnDescriptor?[] keyColumns = [];
+        FieldKeyCodec?[] codecs = [];
+        KeyCodecRefusal[] refusals = [];
+        int keyBytes = 0;
         if (!string.IsNullOrEmpty(name))
         {
             logical = Table.FindIndex(name);
@@ -343,6 +361,15 @@ public sealed class TableCursor : IRecordCursor
             }
             navigator = new IndexNavigator(_cache, _d, physical, Table.FirstPage);
             keyColumns = [.. physical.Columns.Select(ic => Table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber))];
+            codecs = new FieldKeyCodec?[keyColumns.Length];
+            refusals = new KeyCodecRefusal[keyColumns.Length];
+            for (int i = 0; i < keyColumns.Length; i++)
+            {
+                KeyCodecRefusal refusal = KeyCodecRefusal.TypeNotEncoded;
+                codecs[i] = keyColumns[i] is { } column ? IndexKeys.CodecFor(column, out refusal) : null;
+                refusals[i] = refusal;
+                keyBytes += codecs[i]?.MaxFieldBytes ?? 0;
+            }
         }
         IOrderedSource<TableOccurrence> order = navigator is null ? new StorageOrder(_scan) : new IndexOrder(navigator);
         var position = new PositionState<TableOccurrence>(order, forwardOnly: false);
@@ -353,6 +380,12 @@ public sealed class TableCursor : IRecordCursor
         _row.Unbind();
         _index = navigator;
         _keyColumns = keyColumns;
+        _keyCodecs = codecs;
+        _keyRefusals = refusals;
+        if (_keyScratch.Length < keyBytes)
+        {
+            _keyScratch = new byte[keyBytes];
+        }
         _order = order;
         _position = position;
         Index = logical;
@@ -371,8 +404,6 @@ public sealed class TableCursor : IRecordCursor
     /// <summary>The column of the current index's key field <paramref name="i"/>, or null when the table has none.</summary>
     public ColumnDescriptor? KeyColumn(int i) => _keyColumns[i];
 
-    private const int StackKeyColumns = 16;
-
     public IndexRefusal Seek(SeekOperator op, ReadOnlySpan<SeekKey> keys, out bool found)
     {
         found = false;
@@ -385,14 +416,24 @@ public sealed class TableCursor : IRecordCursor
         {
             return IndexRefusal.TooManyKeys;
         }
-        // The key is built on the stack (task v4n6); a wider index than any Jet allows would use the heap.
-        Span<byte> buffer = columns <= StackKeyColumns ? stackalloc byte[StackKeyColumns * IndexKeys.MaxFieldBytes] : new byte[columns * IndexKeys.MaxFieldBytes];
+        // The key is built in the cursor's scratch, sized by SetIndex for the index's codecs (task v4n6: no allocation
+        // per Seek). Only the fields the Seek gives are encoded: a later Text column of another order does not refuse
+        // a Seek on the fields before it, whose order needs no Text comparison.
+        Span<byte> buffer = _keyScratch;
         int length = 0;
         bool inexact = false;
         for (int i = 0; i < keys.Length; i++)
         {
-            ColumnDescriptor? column = _keyColumns[i];
-            if (column is null || !IndexKeys.TryWriteField(buffer[length..], column.TypeCode, index.Index.Columns[i].Ascending, keys[i].Value, out int written))
+            if (_keyCodecs[i] is not { } codec)
+            {
+                if (_keyRefusals[i] == KeyCodecRefusal.SortOrderNotModelled)
+                {
+                    CostCounters.Current.SortOrderTextSeekRefusals++;
+                    return IndexRefusal.SortOrderNotModelled;
+                }
+                return IndexRefusal.KeyNotEncodable;
+            }
+            if (!IndexKeys.TryWriteField(buffer[length..], codec, index.Index.Columns[i].Ascending, keys[i].Value, out int written))
             {
                 return IndexRefusal.KeyNotEncodable;
             }
@@ -403,8 +444,17 @@ public sealed class TableCursor : IRecordCursor
                 break;
             }
         }
-        ReadOnlySpan<byte> q = buffer[..length];
         bool full = !inexact && keys.Length == columns;
+        if (full)
+        {
+            // A complete key is stored shortened past 510 bytes (II-05 §6); the Seek key takes the same finish.
+            length = IndexKeys.FinishComposite(buffer, length);
+        }
+        else if (length > IndexKeys.RetainedPrefix)
+        {
+            return IndexRefusal.LongKeyPrefix;
+        }
+        ReadOnlySpan<byte> q = buffer[..length];
         IndexPosition? lowerBound = index.LowerBound(KeyBound.Low(q));
         IndexPosition? landing;
         if (index.LastFailure is not null)

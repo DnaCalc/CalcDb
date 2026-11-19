@@ -54,6 +54,10 @@ public sealed class CostCounters
     public long BstrPayloadBytes { get; set; }
     public long ResultValues { get; set; }
 
+    // Named refusals (II-05 §4, T-IDX-06): indexed Text seeks and Text key writes on a sort order outside the General family.
+    public long SortOrderTextSeekRefusals { get; set; }
+    public long SortOrderTextKeyWriteRefusals { get; set; }
+
     // Page cache work of databases this thread closed (live databases add their own at snapshot).
     public long CacheProbes { get; set; }
     public long CacheHits { get; set; }
@@ -82,6 +86,8 @@ public sealed class CostCounters
         new("value.bstr.allocations", "allocations", CounterExactness.Exact, ThreadScope, "BSTRs CalcDb requested from SysAllocStringByteLen; allocator capacity and frees by clients are not visible"),
         new("value.bstr.payload-bytes", "bytes", CounterExactness.Exact, ThreadScope, "payload bytes copied into those BSTRs (prefix and terminator excluded)"),
         new("value.results", "values", CounterExactness.Exact, ThreadScope, "VARIANT results written to a caller's slot"),
+        new("refusal.sort-order.text-seek", "calls", CounterExactness.Exact, ThreadScope, "indexed Text seeks refused as NotModelled.SortOrder (a sort order outside the General family)"),
+        new("refusal.sort-order.text-key-write", "calls", CounterExactness.Exact, ThreadScope, "Text index-key writes refused as NotModelled.SortOrder (no key writer counts yet: W-05)"),
         new("cache.probes", "probes", CounterExactness.Exact, "page caches of this thread's databases (closed ones folded in at Close)", "page cache directory probes"),
         new("cache.hits", "pins", CounterExactness.Exact, "page caches of this thread's databases (closed ones folded in at Close)", "pins satisfied by a resident image"),
         new("cache.misses", "pins", CounterExactness.Exact, "page caches of this thread's databases (closed ones folded in at Close)", "pins that needed a load"),
@@ -98,6 +104,7 @@ public sealed class CostCounters
         VtableEntries, DispatchInvokes, DispatchNamesResolved, QueryInterfaces, AddRefs, Releases,
         CollectionLookups, CollectionNameProbes, WrappersCreated,
         RowBinds, FieldDecodes, TextDecodedUnits, LongValuePayloadBytes, BstrAllocations, BstrPayloadBytes, ResultValues,
+        SortOrderTextSeekRefusals, SortOrderTextKeyWriteRefusals,
         CacheProbes + liveCache.Probes, CacheHits + liveCache.Hits, CacheMisses + liveCache.Misses, CacheLoads + liveCache.Loads,
         GC.GetAllocatedBytesForCurrentThread() - DiagnosticAllocatedBytes,
     ];

@@ -95,6 +95,9 @@ public sealed record FormatDescriptor
             VariableIndex = new("jet4.column.variable_index", "column block", 7, 2, ByteOrder.Little, "Variable-directory index.", Reference + "; II-04 §1.3"),
             ColumnId = new("jet4.column.id", "column block", 9, 2, ByteOrder.Little, "Distinct column ID (not the mask index).", Reference + "; II-04 §1.3"),
             TypeInfo = new("jet4.column.type_info", "column block", 11, 4, ByteOrder.Little, "Type/profile-dependent: precision/scale, sort information or complex ID.", Reference + "; II-04 §1.3"),
+            SortIdentifier = new("jet4.column.sort_identifier", "column block", 11, 2, ByteOrder.Little, "Text/Memo: sort identifier (1033 the General family); zero is not replaced by a default.", "S-JACK-COL; II-05 §4"),
+            SortReserved = new("jet4.column.sort_reserved", "column block", 13, 1, ByteOrder.Little, "Text/Memo: sort descriptor byte +2, not interpreted, preserved.", "S-JACK-COL; II-05 §4"),
+            SortVersion = new("jet4.column.sort_version", "column block", 14, 1, ByteOrder.Little, "Text/Memo: signed sort version: 1 General, 0 General - Legacy, -1 (FF) General 97.", "S-JACK-COL; II-05 §4"),
             Flags = new("jet4.column.flags", "column block", 15, 1, ByteOrder.Little, "Flags; bit 0 set for fixed storage.", Reference + "; II-04 §1.3"),
             ExtendedFlags = new("jet4.column.extended_flags", "column block", 16, 1, ByteOrder.Little, "Extended type/profile-dependent flags.", Reference + "; II-04 §1.3"),
             FixedOffset = new("jet4.column.fixed_offset", "column block", 21, 2, ByteOrder.Little, "Fixed-data offset from row byte 2.", Reference + "; II-04 §1.3"),
@@ -284,13 +287,19 @@ public sealed record ColumnBlockRules
     public required FieldRule VariableIndex { get; init; }
     public required FieldRule ColumnId { get; init; }
     public required FieldRule TypeInfo { get; init; }
+
+    /// <summary>Text/Memo sort descriptor fields inside <see cref="TypeInfo"/> (II-05 §4).</summary>
+    public required FieldRule SortIdentifier { get; init; }
+    public required FieldRule SortReserved { get; init; }
+    public required FieldRule SortVersion { get; init; }
+
     public required FieldRule Flags { get; init; }
     public required FieldRule ExtendedFlags { get; init; }
     public required FieldRule FixedOffset { get; init; }
     public required FieldRule Length { get; init; }
     public required byte FixedFlag { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [Type, Number, VariableIndex, ColumnId, TypeInfo, Flags, ExtendedFlags, FixedOffset, Length];
+    public IEnumerable<FieldRule> Rules => [Type, Number, VariableIndex, ColumnId, TypeInfo, SortIdentifier, SortReserved, SortVersion, Flags, ExtendedFlags, FixedOffset, Length];
 }
 
 /// <summary>The ordinary row envelope (II-04 §2).</summary>
