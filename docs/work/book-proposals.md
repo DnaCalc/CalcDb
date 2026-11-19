@@ -75,4 +75,12 @@ choice is in `CalcDb.Storage.PageCache` and its tests.
 - **A-02 R-CRASH-1 CRASH-ORDER: payloads.** Add "record write payloads": the ETW traces lack them, so ACE's repeated
   writes of one page in a burst (r-etw-rec) cannot be classified as distinct images or repeats.
 
+## Gap found in construction (W-01/reduction, n764, 2026-11-20)
+
+- **II-15 §23: a removal its prerequisite closure undoes.** F-201 says to retain the rejection of a candidate that
+  fails prerequisite closure, but not what a removal is when the closure puts the removed operation back. Implemented:
+  it is recorded as blocked, with the operation that requires it, and is not a trial. Proposed, after "retain
+  rejection": "A removal that its prerequisite closure undoes is blocked, not a candidate: it is recorded with the
+  operation that requires it, and counts toward 1-minimality as resolved."
+
 

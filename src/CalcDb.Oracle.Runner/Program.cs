@@ -27,6 +27,9 @@ namespace CalcDb.Oracle.Runner;
 /// against CalcDb's published deployment (default <c>artifacts/native</c>) and compare each capture with the retained
 /// oracle capture of the same question key under <c>calls.trace</c> (W-08/native-read, T-OBJ-02). Candidate attempts are
 /// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store.</item>
+/// <item><c>reduce --question FILE [--max-trials N]</c>: find a smaller question with the same defining failure as the
+/// question's latest mismatched CalcDb comparison, every candidate run fresh on ACE and on CalcDb; writes the reduction chain
+/// under <c>reductions/</c> in the store and prints the reduced program (W-01/reduction, II-15 §23).</item>
 /// </list>
 /// Common options: <c>--store DIR</c> (default <c>.oracle-runs</c> in the repository), <c>--worker EXE</c>.
 /// </summary>
@@ -37,7 +40,7 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|fixtures|seal|prune [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -68,6 +71,11 @@ internal static class Program
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
                 "prune" => Prune(store, options),
+                "reduce" => ReduceCommand.Run(store, options, evidenceDir, (token, environment, question) =>
+                {
+                    store.SubmitOrQuery(token, question, environment);
+                    return RunAttempt(store, token, options, repo);
+                }),
                 _ => Usage(args[0]),
             };
         }
@@ -137,7 +145,7 @@ internal static class Program
     }
 
     /// <summary>The job token of a question file: its probe name and a key prefix, so a changed question is a new job.</summary>
-    private static string TokenOf(Question question, string environment) =>
+    internal static string TokenOf(Question question, string environment) =>
         question.Probe.Replace('/', '.') + "." + question.Key()[4..14] + (environment == ImplementationSelection.CalcDbEnvironment ? ".calcdb" : "");
 
     /// <summary>The candidate implementation a job's environment selects, or null for the native installation.</summary>
@@ -476,7 +484,7 @@ internal static class Program
         return 0;
     }
 
-    private static string RecordPath(string evidenceDir, Question question, string attemptId) =>
+    internal static string RecordPath(string evidenceDir, Question question, string attemptId) =>
         Path.Combine(evidenceDir, question.Probe.Replace('/', Path.DirectorySeparatorChar), attemptId + ".json");
 
     private static string RetainAttempt(JobStore store, string attemptId, string? note, string evidenceDir, string artifactsDir)

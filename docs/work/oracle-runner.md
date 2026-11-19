@@ -12,7 +12,7 @@ this runner is tier 2, for owned experiments with effects.
 | Component | Platform | Role |
 | --- | --- | --- |
 | [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
-| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`. |
+| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`, `batch`, `reduce`. |
 | [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt. Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
 | [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
@@ -108,6 +108,24 @@ Release -o artifacts/native`) and run `batch --dir DIR --env windows-x64-calcdb-
 attempt is reused while the module is unchanged; add `--rerun` after a worker or runner change. Every candidate run
 ends with a module observation, so an answer that came from ACE's own modules (an ADODB route reaching the ACE OLE DB
 provider) is a provenance difference, not a match.
+
+**Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
+[--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and
+looks for a smaller question with the same defining failure: the first non-provenance difference's kind, field path and
+the operation it falls on (the operation's own JSON, never its index). Candidates drop top-level `invoke`,
+`describeType` and `queryInterfaces` operations (ddmin chunks, then single removals). An operation that binds a name
+stays while a kept operation uses that binding, a `release` follows the operation that bound its object, and creation,
+opening, observations and the failing operation stay. Every candidate runs fresh on ACE and then on CalcDb (never the
+original ACE answer) and goes through the same `calls.trace` comparer. Outcomes: *same failure* (accepted), *different
+failure*, *pass*, *invalid candidate* (ACE fails at a call the original ACE run did not fail), *replay divergence* (the two
+traces no longer line up: event count, order) and *evidence unavailable* (a side incomplete, or the candidate not run on
+CalcDb); an unavailable run is never accepted and blocks the 1-minimality claim. The unchanged original runs first as a
+baseline and must reproduce the signature. 1-minimality is claimed only when every single removal of the final program ran
+(or was blocked by a dependency) without keeping the failure; a program that ran as an earlier chunk is not run again.
+The chain (accepted steps with question keys, both attempt ids and the verdict), every trial and the reduced question are
+written to `.oracle-runs/reductions/<probe>.<key>.<run>.json` after each trial, so a failure part way leaves the latest
+accepted child usable. Candidate attempts stay in the disposable store, are never retained, and their comparisons do not
+enter `comparisons.jsonl`, so the compatibility accounting is unchanged. Questions with further participants are refused.
 
 The native driver's `nativeLockScan` operation finds the byte-range locks another handle holds on a file: it bisects
 the range with exclusive fail-immediately LockFileEx requests and records the locked bytes (R-LOCK-2 RO-NATIVE).
