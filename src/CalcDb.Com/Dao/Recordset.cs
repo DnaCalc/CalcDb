@@ -30,6 +30,8 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Method("MovePrevious", (self, args) => Live(self, r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Live(self, r => r.Move(rows, start)); })
         .Get("AbsolutePosition", (self, args) => Live(self, r => r.AbsolutePosition()))
+        .Get("PercentPosition", (self, args) => Live(self, r => r.PercentPosition()))
+        .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetPercentPosition(value)); })
         .Get("Bookmark", (self, args) => Live(self, r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetBookmark(value)); })
         .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"))))
@@ -68,6 +70,14 @@ internal sealed unsafe class RecordsetObject : DaoObject
     protected override OperationTable Table => Operations;
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
+
+    /// <summary>
+    /// A scalar argument that does not coerce is 3421 (CUR-POS: Move(Null) and Move("abc"), r-cursor-1b/move-argument-forms;
+    /// PercentPosition = Null, percent-assign); Missing for a required one is 3001 (Move(Missing); Seek(Missing, 4),
+    /// seek-operator-spelling). Both publish IErrorInfo.
+    /// </summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
+        missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true };
 
     private FieldsObject FieldsCollection => _fields ??= new FieldsObject(this);
 
@@ -233,6 +243,58 @@ internal sealed unsafe class RecordsetObject : DaoObject
         PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
         PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
         _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition without a current row")),
+    };
+
+    /// <summary>
+    /// PercentPosition (R-CURSOR-1 CUR-POP): forward-only refuses it with 3219 as it does AbsolutePosition
+    /// (r-cursor-1/pop-count-forwardonly); without a current row a dynaset or snapshot gives 3021; the scales are the
+    /// cursors' (TableCursor, PopulationCursor). The value is a Single.
+    /// </summary>
+    private CallResult PercentPosition()
+    {
+        if (Cursor is PopulationCursor { ForwardOnly: true })
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        CursorFailure? failure = null;
+        float? value = Cursor switch
+        {
+            TableCursor t => t.PercentPosition(out failure),
+            PopulationCursor p => p.PercentPosition(out failure),
+            _ => null,
+        };
+        return value is float v ? CallResult.OfScalar(VarType.R4, BitConverter.SingleToUInt32Bits(v)) : PositionFailure(failure, "PercentPosition");
+    }
+
+    /// <summary>
+    /// PercentPosition assignment: the value converts to Single as VariantChangeType does (a digit string converts, Empty
+    /// is 0, Null fails 3421; r-cursor-1b/percent-assign); out of range is 3001 and leaves the position; forward-only 3219.
+    /// </summary>
+    private CallResult SetPercentPosition(nint value)
+    {
+        if (Cursor is PopulationCursor { ForwardOnly: true })
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.R4, out NativeVariant changed, out _))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        float percent = BitConverter.Int32BitsToSingle((int)changed.Int64);
+        CursorFailure? failure = Cursor switch
+        {
+            TableCursor t => t.SetPercentPosition(percent),
+            PopulationCursor p => p.SetPercentPosition(percent),
+            _ => CursorFailure.NotObserved,
+        };
+        return failure is null ? CallResult.Nothing : PositionFailure(failure, "PercentPosition put");
+    }
+
+    private CallResult PositionFailure(CursorFailure? failure, string member) => failure switch
+    {
+        CursorFailure.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
+        CursorFailure.OutOfRange => Fail(3001, DaoErrors.InvalidArgument),
+        _ => CallResult.Fail(Failure.NotImplemented($"{member}: {failure}")),
     };
 
     /// <summary>Requery: table-type refuses it with 3251 (r-cursor-1/pop-count-table); a dynaset or snapshot's re-population is not built yet.</summary>

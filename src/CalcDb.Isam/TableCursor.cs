@@ -18,6 +18,12 @@ public enum CursorFailure
 
     /// <summary>A storage or format failure while binding the row (the traversal failure carries the predicate).</summary>
     Storage,
+
+    /// <summary>An assigned position outside the recordset (PercentPosition): DAO 3001.</summary>
+    OutOfRange,
+
+    /// <summary>A state whose answer ACE has not been asked yet; the caller names it instead of guessing.</summary>
+    NotObserved,
 }
 
 /// <summary>A field read: an owned native value, or the failure with its detail. A value type (task 6p9q).</summary>
@@ -456,6 +462,97 @@ public sealed class TableCursor : IRecordCursor
         return TableBookmark.Encode(root);
     }
 
+    /// <summary>
+    /// PercentPosition (R-CURSOR-1 CUR-POP, qualified in qualified.md; T-ISAM-12): 0 at BOF; at EOF 100 in storage order,
+    /// also on an empty table, and 0 under an index. In storage order the scale is the usage map's data pages, empty ones included: 100 * (page ordinal +
+    /// rank among the page's live rows / its live rows) / pages (r-cursor-1-pct/getter-walk-u, -h, -g; percent-table-pages).
+    /// Under an index it is 100 * (ordinal - 1) / RecordCount, 0 on the first row (r-cursor-1-pct/index-u). ACE gives the
+    /// ordinal itself at some rows (every fifth of index-g's 175); that estimate is not identified, so those rows differ.
+    /// </summary>
+    public float? PercentPosition(out CursorFailure? failure)
+    {
+        failure = null;
+        if (_position.Eof)
+        {
+            // Under an index EOF reads 0 (r-def-cursor-dao/mdb-pos-table, PK_T); in storage order 100 (percent-table-pages).
+            return _index is null ? 100f : 0f;
+        }
+        if (_position.Bof)
+        {
+            return 0f;
+        }
+        if (_position.Current is not { } current)
+        {
+            failure = CursorFailure.NotObserved; // the seek-miss state: neither BOF nor EOF, no current row
+            return null;
+        }
+        if (_index is { } index)
+        {
+            long ordinal = 0;
+            for (IndexPosition? p = index.First(); p is { } at && at.Row != current.Root; p = index.Next(at))
+            {
+                ordinal++;
+            }
+            return (float)(100.0 * Math.Max(ordinal - 1, 0) / RecordCount);
+        }
+        ScanNavigator scan = _scan.Navigator;
+        if (scan.PagePosition(current.Root, out _) is not (int page, int rank, int live))
+        {
+            failure = CursorFailure.Storage;
+            return null;
+        }
+        return (float)(100.0 * ((double)page * live + rank) / ((double)scan.PageCount * live));
+    }
+
+    /// <summary>
+    /// PercentPosition assignment. Under an index (qualified: r-cursor-1-pct/index-u, index-g): the row at ordinal
+    /// trunc(percent * RecordCount / 100), RecordCount itself giving the last row; outside that, 3001 as on a dynaset (the
+    /// index bounds are not observed separately). An empty table refuses with 3001 (r-cursor-1b/position-assign-empty-single).
+    /// In storage order ACE's landing is a function of the value alone, not of the start (r-cursor-1-pct/assign-starts-u,
+    /// assign-sequential-u), but its shape is open (qualified.md): it is not monotone in the value. CalcDb takes the
+    /// getter's inverse instead, a named approximation (<see cref="StoragePercentLanding"/>), and the questions count the
+    /// difference.
+    /// </summary>
+    public CursorFailure? SetPercentPosition(float percent)
+    {
+        if (_position.Tag == PositionTag.Empty)
+        {
+            return CursorFailure.OutOfRange;
+        }
+        TableOccurrence? landing;
+        if (_index is { } index)
+        {
+            long count = RecordCount;
+            double target = Math.Truncate(percent * (double)count / 100.0);
+            if (target < 0 || target > count)
+            {
+                return CursorFailure.OutOfRange;
+            }
+            long steps = Math.Min((long)target, count - 1);
+            IndexPosition? p = index.First();
+            for (long i = 0; i < steps && p is { } at; i++)
+            {
+                p = index.Next(at);
+            }
+            landing = p is { } hit ? new TableOccurrence(hit.Row, hit) : null;
+        }
+        else
+        {
+            RowId? root = StoragePercentLanding.Approximate(_scan.Navigator, percent, out CursorFailure? refusal);
+            if (refusal is not null)
+            {
+                return refusal;
+            }
+            landing = root is { } r ? new TableOccurrence(r, null) : _order.Previous(null);
+        }
+        if (landing is not { } occurrence)
+        {
+            return CursorFailure.Storage;
+        }
+        _row.Unbind();
+        return _position.Seek(occurrence) ? null : CursorFailure.Storage;
+    }
+
     /// <summary>Position on the row a bookmark names, when it is a live row of this table, in the current order.</summary>
     public CursorFailure? SetBookmark(ReadOnlySpan<byte> bookmark)
     {
@@ -499,6 +596,55 @@ public sealed class TableCursor : IRecordCursor
 
         public TableOccurrence? Previous(TableOccurrence? before) =>
             (before?.Entry is { } e ? index.Previous(e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
+    }
+}
+
+/// <summary>
+/// CalcDb's landing for a PercentPosition assigned to a table-type recordset in storage order, named as an approximation
+/// (R-CURSOR-1 CUR-POP, open in qualified.md): the getter's inverse. With t = percent * pages / 100 it takes the live row
+/// of rank floor((t - floor t) * live rows) on the page of ordinal floor t, or the first live row after that page; t
+/// below 0 gives the first row and t at or past the last page the last row. Outside one row of the end page beyond
+/// either end it refuses (3001). This is ACE's answer on a one-page table (r-cursor-1b/percent-assign,
+/// percent-assign-bounds) and not on larger ones, where ACE lands on rows its getter does not give back
+/// (r-cursor-1-pct/assign-fresh-*); a null result means the last row.
+/// </summary>
+internal static class StoragePercentLanding
+{
+    public static RowId? Approximate(ScanNavigator scan, float percent, out CursorFailure? refusal)
+    {
+        refusal = null;
+        int pages = scan.PageCount;
+        int? firstLive = scan.LiveCount(0, out TraversalFailure? f1);
+        int? lastLive = scan.LiveCount(pages - 1, out TraversalFailure? f2);
+        if (firstLive is null || lastLive is null || f1 is not null || f2 is not null)
+        {
+            refusal = CursorFailure.Storage;
+            return null;
+        }
+        double t = percent * (double)pages / 100.0;
+        if (t <= -1.0 / Math.Max(firstLive.Value, 1) || t >= pages + 1.0 / Math.Max(lastLive.Value, 1))
+        {
+            refusal = CursorFailure.OutOfRange;
+            return null;
+        }
+        if (t >= pages)
+        {
+            return null;
+        }
+        int page = t < 0 ? 0 : (int)Math.Floor(t);
+        int? live = scan.LiveCount(page, out TraversalFailure? f3);
+        if (live is null || f3 is not null)
+        {
+            refusal = CursorFailure.Storage;
+            return null;
+        }
+        int rank = t < 0 ? 0 : (int)Math.Floor((t - page) * live.Value);
+        RowId? row = scan.RowAtRank(page, rank, out TraversalFailure? f4);
+        if (f4 is not null)
+        {
+            refusal = CursorFailure.Storage;
+        }
+        return row;
     }
 }
 
@@ -551,6 +697,41 @@ public sealed class PopulationCursor : IRecordCursor
 
     /// <summary>The zero-based ordinal of the current occurrence (DAO AbsolutePosition), or null without a current row.</summary>
     public int? Ordinal => _position.Current;
+
+    /// <summary>
+    /// PercentPosition on a dynaset or snapshot (R-CURSOR-1 CUR-POP, qualified): 100 * ordinal / the populated count, so a
+    /// partly populated recordset reads on its frontier (r-cursor-1b/percent-partial-population: 0.1996008 at the first
+    /// row of 501). No current row: NoCurrentRecord (3021 at EOF and on an empty recordset, r-dao-1b/recordset-members-at-eof,
+    /// r-cursor-1b/position-assign-empty-single).
+    /// </summary>
+    public float? PercentPosition(out CursorFailure? failure)
+    {
+        failure = _position.Current is null ? CursorFailure.NoCurrentRecord : null;
+        return _position.Current is int ordinal ? (float)(100.0 * ordinal / _store.ObservedCount) : null;
+    }
+
+    /// <summary>
+    /// PercentPosition assignment on a dynaset or snapshot (qualified): the ordinal trunc(percent * count / 100) over the
+    /// populated count, which assignment never extends; the count itself gives the last populated row and anything outside
+    /// 0..count refuses (3001; r-cursor-1b/percent-assign, percent-assign-bounds: 199 accepted and 200 refused at count 1).
+    /// No current row: NoCurrentRecord, observed on an empty recordset (position-assign-empty-single); BOF and EOF of a
+    /// non-empty one are taken to answer the same and are not observed.
+    /// </summary>
+    public CursorFailure? SetPercentPosition(float percent)
+    {
+        if (_position.Current is null)
+        {
+            return CursorFailure.NoCurrentRecord;
+        }
+        long count = _store.ObservedCount;
+        double target = Math.Truncate(percent * (double)count / 100.0);
+        if (target < 0 || target > count)
+        {
+            return CursorFailure.OutOfRange;
+        }
+        _row.Unbind();
+        return _position.Seek((int)Math.Min((long)target, count - 1)) ? null : CursorFailure.OutOfRange;
+    }
 
     public MoveOutcome MoveFirst() => Moved(_position.MoveFirst());
 

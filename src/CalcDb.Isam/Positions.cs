@@ -335,6 +335,9 @@ public sealed class ScanSource(ScanNavigator navigator) : IOrderedSource<RowId>,
 {
     public void Dispose() => navigator.Dispose();
 
+    /// <summary>The storage scan itself, for the positions PercentPosition reads (CUR-POP).</summary>
+    public ScanNavigator Navigator => navigator;
+
     public TraversalFailure? LastFailure { get; private set; }
 
     public RowId? Next(RowId? after)
