@@ -376,3 +376,27 @@ they find (AGENTS.md). A sub-session took vm83.
 
 **Next candidates.** The call traces are most of the remaining 681 MB of records (owner asked whether to slim them);
 `hdw6` (wrapper objects and page pins per row).
+
+## 2026-11-18 (evening) to 2026-11-19 · Slim traces, hdw6, the first slice sub-session (same session, Claude Opus 5.5)
+
+**Work observed.** Records slimmed (681 → 488 MB; `evidence/` 506 MB), `hdw6` done (every DAO loop body 10.6 bytes per
+row), `vm83` and `2nqn` done. The first construction-slice sub-session (W-08/native-read) designed and ran three
+PercentPosition probes, then stopped on the account's weekly usage limit before it reported; its ACE answers were
+retained by the parent.
+
+**What worked.**
+- *A sub-session for a side question.* vm83 came back with a route, its evidence and a follow-up it had registered
+  itself (`2nqn`), under the new rule.
+- *Attribute before fixing.* The last 240 bytes per row of the named body were one list per `QueryInterface`,
+  found by reading the call path, not by guessing a pool.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| The comparer reports at most 16 differences per question | Removing the CLSID line let a 16th, older difference show, which looked like a change | Diff against the run just before, made under the same rule |
+| One session ran for two days | A very long context; each turn re-read much of it | Start a new session per stretch of work, with a handoff prompt |
+| A writing child on the same account as the parent | Both stop together at the usage limit | Use Sonnet children for well-specified implementation; Opus where judgment is needed |
+
+**Rule.** Hand over to a new session when a stretch of work ends; the register, the notes and the process log carry
+the state, not the conversation.
