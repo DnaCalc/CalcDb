@@ -394,7 +394,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
-                bookmarkBase: recordsetType == 2 && Engine.KeysetRecordsetsOpened == 0 ? KeysetBookmark.FirstBase : null);
+                bookmarkBase: Engine.KeysetRecordsetsOpened != 0 ? null : recordsetType == 2 ? KeysetBookmark.FirstBase : recordsetType == 4 ? FirstSnapshotBase(table) : null);
         if (cursor is not null && recordsetType is 2 or 4)
         {
             Engine.KeysetRecordsetsOpened++;
@@ -427,6 +427,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>A new recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
+    /// <summary>
+    /// The bookmark base of a session's first snapshot (qualified.md R-CURSOR-1 CUR-ID, r-q6-bookmarks rounds 2-5): 0x0200
+    /// over a table of one or two LONG columns, 0x0300 over every other table asked (three or more LONGs, one BYTE, TEXT or
+    /// MEMO column, a LONG with a second column of any type); the row count and a reopened file do not matter.
+    /// </summary>
+    private static uint FirstSnapshotBase(TableDefinition table) =>
+        table.Columns.Count <= 2 && table.Columns.All(c => c.TypeCode == NativeTypes.Long) ? KeysetBookmark.FirstBase : 0x0300;
+
     public CallResult Adopt(SelectRecordsetObject recordset)
     {
         Engine.KeysetRecordsetsOpened++;
