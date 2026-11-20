@@ -12,7 +12,7 @@ this runner is tier 2, for owned experiments with effects.
 | Component | Platform | Role |
 | --- | --- | --- |
 | [`CalcDb.Evidence`](../../src/CalcDb.Evidence) | any (.NET 11) | Questions and exact keys, captured values, captures, jobs, attempts, receipts, manifests, sealing, retained records. The one evidence schema. |
-| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`, `batch`, `reduce`. |
+| [`calcdb-oracle`](../../src/CalcDb.Oracle.Runner) | any; `run` needs Windows | Runner CLI: `submit`, `run`, `status`, `show`, `freeze`, `retain`, `batch`, `compare-set`, `reduce`. |
 | [`CalcDb.Oracle.Worker`](../../src/CalcDb.Oracle.Worker) | Windows x64 | One process per attempt, or with `--serve` a long-lived worker that answers several questions (below). Interprets the operation program on an STA through raw `IDispatch` (caller surface `native-idispatch/x64`) and captures every result channel. |
 | [`calcdb-evidence-index`](../../src/CalcDb.Evidence.Index) | Windows x64 | Builds and verifies the derived `.accdb` index from retained JSON (The Plan §2.5), through typed DAO from the `ExcelDna.Interop.Dao` package. |
 | [`probes/`](../../probes) | data | Question files, one per probe, named by book card. |
@@ -108,6 +108,16 @@ Release -o artifacts/native`) and run `batch --dir DIR --env windows-x64-calcdb-
 attempt is reused while the module is unchanged; add `--rerun` after a worker or runner change. Every candidate run
 ends with a module observation, so an answer that came from ACE's own modules (an ADODB route reaching the ACE OLE DB
 provider) is a provenance difference, not a match.
+
+**The compare set (W-01/corpus-comparison, T-OBJ-02).** `calcdb-oracle compare-set` runs that batch over every folder
+of [probes/compare-set.json](../../probes/compare-set.json) (`--dirs A,B` for a subset), writes the run as one line per
+question (status, difference count, the oracle member the first difference stops at, the first difference) to
+`.oracle-runs/compare-sets/NAME.tsv`, prints counts per folder and the census of first stops, and diffs the run per
+question against an earlier one: gained, lost (a regression until explained), status changes, moved first differences,
+added and removed questions. `--against` takes a run name, a file, `git:REV` (the baseline as committed at REV) or
+`none`; the default is the committed baseline [compare-baseline.tsv](compare-baseline.tsv). `--record` makes the run
+the baseline, committed with the change it measures, so its git diff shows the per-question change. `--diff NAME` diffs
+a written run without running anything; `--verbose` shows the batch lines.
 
 **Reduction (W-01/reduction, [II-15 §23](../book/II-15-evidence.md), T-EVID-31).** `calcdb-oracle reduce --question FILE
 [--max-trials N]` (default 60) takes a question whose latest `comparisons.jsonl` verdict against CalcDb is a mismatch and

@@ -27,6 +27,11 @@ namespace CalcDb.Oracle.Runner;
 /// against CalcDb's published deployment (default <c>artifacts/native</c>) and compare each capture with the retained
 /// oracle capture of the same question key under <c>calls.trace</c> (W-08/native-read, T-OBJ-02). Candidate attempts are
 /// never retained as evidence; comparison records are appended to <c>comparisons.jsonl</c> in the store.</item>
+/// <item><c>compare-set [--set FILE] [--dirs A,B] [--deployment DIR] [--rerun] [--name NAME] [--against RUN|FILE|none] [--record]</c>:
+/// run <c>batch --compare</c> against CalcDb over the standing compare set (<c>probes/compare-set.json</c>), write the run
+/// as one line per question to <c>compare-sets/NAME.tsv</c> in the store, and diff it per question against an earlier run
+/// (default: the committed baseline <c>docs/work/compare-baseline.tsv</c>); <c>--record</c> makes this run the baseline.
+/// <c>compare-set --diff A --against B</c> diffs two written runs without running anything (<see cref="CompareSetCommand"/>).</item>
 /// <item><c>reduce --question FILE [--max-trials N]</c>: find a smaller question with the same defining failure as the
 /// question's latest mismatched CalcDb comparison, every candidate run fresh on ACE and on CalcDb; writes the reduction chain
 /// under <c>reductions/</c> in the store and prints the reduced program (W-01/reduction, II-15 §23).</item>
@@ -42,7 +47,7 @@ internal static partial class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|reuse|fixtures|seal|prune|reduce [options]");
+            Console.Error.WriteLine("usage: calcdb-oracle submit|run|status|freeze|retain|show|batch|compare-set|reuse|fixtures|seal|prune|reduce [options]");
             return 2;
         }
         if (args[0] == "desktop-run" && OperatingSystem.IsWindows())
@@ -70,6 +75,7 @@ internal static partial class Program
                 "retain" => Retain(store, options, evidenceDir, artifactsDir),
                 "show" => ShowAttempt(store, options),
                 "batch" => Batch(store, options, repo, evidenceDir, artifactsDir),
+                "compare-set" => CompareSetCommand(store, options, repo, evidenceDir, artifactsDir),
                 "reuse" => OperatingSystem.IsWindows() ? Reuse(store, options, repo, evidenceDir, artifactsDir) : throw new InvalidOperationException("The long-lived ACE worker runs only on a Windows oracle host."),
                 "seal" => SealAbandoned(store, options),
                 "fixtures" => FixturesReport(store, repo, options),
@@ -182,25 +188,29 @@ internal static partial class Program
             .LastOrDefault();
     }
 
-    private static Corpus.ComparisonRecord CompareWithOracle(JobStore store, CaptureManifest manifest, Question question, string evidenceDir)
+    /// <summary>The verdict of a candidate attempt against the retained oracle answer, with the oracle capture it used (if any).</summary>
+    private static (Corpus.ComparisonRecord Verdict, Capture? Oracle) CompareWithOracle(JobStore store, CaptureManifest manifest, Question question, string evidenceDir)
     {
         string capturePath = Path.Combine(store.AttemptDirectory(manifest.AttemptId), "capture.json");
         EvidenceRecord? oracle = OracleRecord(evidenceDir, question);
         if (oracle is null || !File.Exists(capturePath))
         {
-            return new Corpus.ComparisonRecord
+            return (new Corpus.ComparisonRecord
             {
                 CaseId = question.Probe,
                 OracleCapture = oracle?.Manifest.AttemptId ?? "(none retained)",
                 CandidateCapture = manifest.AttemptId,
                 Rule = Corpus.CallTraceComparison.Rule.Key,
                 Status = Corpus.ComparisonStatus.Missing,
-            };
+            }, null);
         }
-        return Corpus.CallTraceComparison.Compare(question.Probe, oracle.Manifest.AttemptId, oracle.Capture!, manifest.AttemptId, EvidenceJson.Read<Capture>(capturePath), "CalcDb.dll");
+        return (Corpus.CallTraceComparison.Compare(question.Probe, oracle.Manifest.AttemptId, oracle.Capture!, manifest.AttemptId, EvidenceJson.Read<Capture>(capturePath), "CalcDb.dll"), oracle.Capture);
     }
 
-    private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir)
+    /// <summary>One question of a batch: its attempt and, when compared, the verdict and the oracle capture it used.</summary>
+    internal sealed record BatchOutcome(Question Question, CaptureManifest Manifest, Corpus.ComparisonRecord? Verdict, Capture? Oracle);
+
+    private static int Batch(JobStore store, Options options, string repo, string evidenceDir, string artifactsDir, Action<BatchOutcome>? observe = null)
     {
         string dir = Path.GetFullPath(options.Require("dir"));
         bool retain = options.Has("retain");
@@ -260,6 +270,7 @@ internal static partial class Program
             Console.WriteLine($"{(manifest.IsComplete ? "OK  " : "INC ")} {question.Probe,-58} {manifest.Execution,-15} {failed}");
             if (!manifest.IsComplete)
             {
+                observe?.Invoke(new BatchOutcome(question, manifest, null, null));
                 incomplete++;
                 foreach (string problem in manifest.Problems)
                 {
@@ -270,7 +281,8 @@ internal static partial class Program
             complete++;
             if (compare)
             {
-                Corpus.ComparisonRecord verdict = CompareWithOracle(store, manifest, question, evidenceDir);
+                (Corpus.ComparisonRecord verdict, Capture? oracleCapture) = CompareWithOracle(store, manifest, question, evidenceDir);
+                observe?.Invoke(new BatchOutcome(question, manifest, verdict, oracleCapture));
                 ledger.Append(verdict);
                 File.AppendAllText(Path.Combine(store.Root, "comparisons.jsonl"), EvidenceJson.SerializeLine(verdict) + "\n");
                 Console.WriteLine($"       {verdict.Status} against {verdict.OracleCapture}{(verdict.DifferencesTruncated ? " (differences truncated)" : "")}");
