@@ -30,6 +30,13 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        if (args.Contains("--selftest"))
+        {
+            // Needs no elevation and no kernel session: the file-naming decision on synthetic event sequences.
+            string? failure = FileNames.SelfTest();
+            Console.Error.WriteLine(failure ?? "selftest ok");
+            return failure is null ? 0 : 1;
+        }
         int q = Array.IndexOf(args, "--queue");
         if (q < 0 || q + 1 >= args.Length)
         {
@@ -58,8 +65,8 @@ internal static class Program
             string output = Validate(watch, request.Out);
             string devicePrefix = DevicePath(watch);
             using var writer = new StreamWriter(output, append: false, new UTF8Encoding(false)) { AutoFlush = false };
-            int written = Record(request, queue, watch, devicePrefix, writer);
-            File.WriteAllText(done, $"ok {written} events");
+            (int written, string unnamed) = Record(request, queue, watch, devicePrefix, writer);
+            File.WriteAllText(done, $"ok {written} events ({unnamed})");
             return 0;
         }
         catch (Exception ex)
@@ -69,9 +76,9 @@ internal static class Program
         }
     }
 
-    private static int Record(Request request, string queue, string watch, string devicePrefix, StreamWriter writer)
+    private static (int Written, string Unnamed) Record(Request request, string queue, string watch, string devicePrefix, StreamWriter writer)
     {
-        var names = new Dictionary<ulong, string>();
+        var names = new FileNames();
         int written = 0;
         using var session = new TraceEventSession("CalcDbEtwRecorder-" + Safe(request.Id));
         session.StopOnDispose = true;
@@ -81,23 +88,7 @@ internal static class Program
             ulong fileObject = Ulong(e, "FileObject");
             ulong fileKey = Ulong(e, "FileKey");
             string? name = e.PayloadIndex("FileName") >= 0 ? e.PayloadByName("FileName") as string : null;
-            if (name is not null)
-            {
-                if (fileObject != 0)
-                {
-                    names[fileObject] = name;
-                }
-                if (fileKey != 0)
-                {
-                    names[fileKey] = name;
-                }
-            }
-            string? known = name ?? (names.TryGetValue(fileObject, out string? a) ? a : names.TryGetValue(fileKey, out string? b) ? b : null);
-            if (known is not null && fileObject != 0 && fileKey != 0)
-            {
-                names.TryAdd(fileObject, known);
-                names.TryAdd(fileKey, known);
-            }
+            string? known = names.Resolve(e.EventName, fileObject, fileKey, name);
             if (known is null || !known.StartsWith(devicePrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return;
@@ -134,7 +125,9 @@ internal static class Program
         session.Stop();
         processing.Wait(TimeSpan.FromSeconds(30));
         writer.Flush();
-        return written;
+        // How many events (of any file, any process) never got a name: a trace where this is high is missing writes.
+        string unnamed = $"{names.Unnamed} events unnamed, {names.UnnamedWrites} of them writes";
+        return (written, unnamed);
     }
 
     private static ulong Ulong(TraceEvent e, string field)
