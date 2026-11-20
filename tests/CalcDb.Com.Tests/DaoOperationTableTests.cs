@@ -14,7 +14,7 @@ public sealed class DaoOperationTableTests
         typeof(DBEngineObject), typeof(WorkspaceObject), typeof(WorkspacesObject), typeof(DatabasesObject), typeof(EmptyCollection),
         typeof(DatabaseObject), typeof(DefinitionCollection), typeof(TableDefObject), typeof(IndexObject), typeof(DefinitionFieldObject),
         typeof(QueryDefObject), typeof(ParameterObject), typeof(PropertiesObject), typeof(PropertyObject), typeof(RecordsetObject),
-        typeof(ContainerObject), typeof(DocumentObject), typeof(RelationObject), typeof(RelationFieldObject),
+        typeof(FieldObject), typeof(ContainerObject), typeof(DocumentObject), typeof(RelationObject), typeof(RelationFieldObject),
     };
 
     [Theory]

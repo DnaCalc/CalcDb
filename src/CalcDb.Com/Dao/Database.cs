@@ -3,9 +3,12 @@ using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Format;
 using CalcDb.Foundation.Diagnostics;
+using CalcDb.Expressions;
 using CalcDb.Isam;
+using CalcDb.Isam.Edit;
 using CalcDb.Storage;
 using CalcDb.Storage.Windows;
+using CalcDb.Values.Scalar;
 
 namespace CalcDb.Com.Dao;
 
@@ -57,6 +60,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private QueryCatalog? _queries;
     private string? _queriesFailure;
     private DatabaseSql? _sql;
+    private Dictionary<int, TableEditContext>? _editContexts;
+    private ExpressionRuleBinder? _ruleBinder;
+    private IReadOnlyList<Relationship>? _relationships;
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
@@ -240,6 +246,53 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         database = new DatabaseObject(workspace, full, readOnly, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
         return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// The shared edit state of a table of this Database (II-07 §14; W-05/edit-frames): its <see cref="MutationSemantics"/>
+    /// compiled once from the TableDef and its stored property blob (CAT-P: Required, AllowZeroLength, DefaultValue,
+    /// ValidationRule and ValidationText; v8qw's PropertyBlobs) through the expression service's adapters
+    /// (<see cref="ExpressionRuleBinder"/>), its AutoNumber counter, the unique probe over its stored trees, and whether a
+    /// relationship names it (MSysRelationships). Made at the first edit member of a recordset over the table and shared by
+    /// every recordset of this Database over it; null with the reason when the table's definition or blob cannot be read.
+    /// </summary>
+    public TableEditContext? EditContext(CatalogEntry entry, out string? failure)
+    {
+        failure = null;
+        if ((_editContexts ??= []).TryGetValue(entry.Id, out TableEditContext? known))
+        {
+            return known;
+        }
+        if (Definition(entry, out failure) is not { } table)
+        {
+            return null;
+        }
+        PropertyBlob? blob = Blob(entry, out failure);
+        if (failure is not null)
+        {
+            return null;
+        }
+        if (_relationships is null)
+        {
+            _relationships = RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out failure);
+            if (_relationships is null)
+            {
+                failure = "MSysRelationships cannot be read: " + failure;
+                return null;
+            }
+        }
+        // The text compare and LCID of the session, as Find binds its criteria (W-06/restricted-scalar).
+        _ruleBinder ??= new ExpressionRuleBinder(new ExpressionContext((uint)System.Globalization.CultureInfo.CurrentCulture.LCID, TextCompareMode.Database, Collation, ExpressionUse.Query));
+        var semantics = MutationSemantics.Compile(entry.Name, table, blob, _ruleBinder, Format.IndexDescriptor);
+        bool related = _relationships.Any(r => string.Equals(r.Table, entry.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(r.ForeignTable, entry.Name, StringComparison.OrdinalIgnoreCase));
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, PageCount), related);
+        Engine.Changes.Register(semantics, Name);
+        if (context.Counter is { } counter)
+        {
+            Engine.Changes.Register(Name, entry.Name, counter, table.AutoNumber);
+        }
+        _editContexts.Add(entry.Id, context);
+        return context;
     }
 
     /// <summary>The database as the SQL layer binds and runs against it, made once per Database.</summary>
@@ -561,6 +614,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _relations = null;
         _properties?.Release();
         _properties = null;
+        // Database.Close keeps the Workspace's level (TXN-CLOSE): accepted changes keep their semantics; the bound rules go.
+        if (_editContexts is { } contexts)
+        {
+            foreach (TableEditContext context in contexts.Values)
+            {
+                context.Semantics.Dispose();
+            }
+            _editContexts = null;
+        }
         return CallResult.Nothing;
     }
 

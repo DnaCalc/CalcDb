@@ -1,6 +1,8 @@
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
 
 namespace CalcDb.Com.Dao;
 
@@ -32,6 +34,14 @@ internal sealed class EngineState(HostBinding binding)
 
     /// <summary>The Workspaces after the default one, in Append order; duplicates allowed (DAO-BOOT).</summary>
     public List<WorkspaceObject> Appended { get; } = [];
+
+    /// <summary>The accepted, unpublished changes of this engine's Workspaces, as its reads ask for them (W-05/edit-frames).</summary>
+    public UnpublishedChanges Changes { get; } = new();
+
+    private static long s_lockers;
+
+    /// <summary>A locker identity for a new Workspace: each Workspace is a locker of its own (II-09; D-TXN-1), unique in the process.</summary>
+    public static LockerId NextLocker() => new((ulong)Interlocked.Increment(ref s_lockers));
 }
 
 /// <summary>
@@ -56,7 +66,12 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Get("DefaultType", (self, args) => Int32(2))
         .Get("SystemDB", (self, args) => Text(((DBEngineObject)self).Engine.Touched ? "system.mdb" : ""))
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
-        .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args));
+        .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args))
+        // DBEngine's transaction members are the default Workspace's: the first touch creates it (DAO-BOOT) and its
+        // failures come from DAO.Workspace (r-dao-1-err-1/boot-first-begintrans: eng.Rollback 3034 "DAO.Workspace").
+        .Method("BeginTrans", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.BeginTrans())
+        .Method("CommitTrans", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.CommitTrans(args.Length > 0 ? args[0] : 0))
+        .Method("Rollback", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.Rollback());
 
     [ThreadStatic]
     private static Apartment? t_apartment;
@@ -74,6 +89,15 @@ internal sealed unsafe class DBEngineObject : DaoObject
     }
 
     protected override OperationTable Table => Operations;
+
+    /// <summary>An argument-count or conversion failure of DBEngine's transaction members is not recorded (the Workspace's is).</summary>
+    protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback"
+        ? Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.{member.Name} with a wrong argument count (recorded on Workspace only)")
+        : null;
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => member.Name == "CommitTrans"
+        ? Failure.NotModelled("NotModelled.EngineTransactionArguments", "DBEngine.CommitTrans with an Options value that does not convert (recorded on Workspace only)")
+        : null;
 
     private WorkspacesObject WorkspacesCollection => _workspaces ??= new WorkspacesObject(Engine);
 
@@ -183,6 +207,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         .Get("Groups", (self, args) => Live(self, w => Object(w._groups ??= new EmptyCollection(DaoTypes.Groups, "DAO.Groups", w))))
         .Get("Properties", (self, args) => Live(self, w => Object(w._properties ??= new PropertiesObject(w, BuiltInProperties.Workspace))))
         .Method("OpenDatabase", static (self, args) => (WorkspaceObject)self is { Invalid: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((WorkspaceObject)self).OpenDatabase(args))
+        .Method("BeginTrans", (self, args) => Live(self, w => w.BeginTrans()))
+        .Method("CommitTrans", (self, args) => { nint options = args.Length > 0 ? args[0] : 0; return Live(self, w => w.CommitTrans(options)); })
+        .Method("Rollback", (self, args) => Live(self, w => w.Rollback()))
         .Method("Close", (self, args) => Live(self, w => w.Close()));
 
     private readonly List<DatabaseObject> _databases = [];
@@ -198,7 +225,15 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         Name = name;
         UserName = userName;
         _isDefault = isDefault;
+        Transactions = new TransactionCoordinator(EngineState.NextLocker());
+        engine.Changes.Add(Transactions);
     }
+
+    /// <summary>
+    /// The Workspace's transaction owner (II-08 §1 WorkspaceCoordinator; W-05/edit-frames): its BeginTrans levels, its
+    /// recordsets' edit frames and its accepted changes. One per Workspace; a second Workspace nests independently (TXN-NEST).
+    /// </summary>
+    public TransactionCoordinator Transactions { get; }
 
     public string Name { get; }
 
@@ -212,11 +247,35 @@ internal sealed unsafe class WorkspaceObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    /// <summary>
+    /// BeginTrans(1), CommitTrans(0, 0) and Rollback(1) are 3001 "Invalid argument." from DAO.Workspace with an IErrorInfo
+    /// (r-txn-1b/txn-call-argument-counts; R-ERR-1 ERR-EXCEP); BeginTrans(1) starts no level (TXN-NEST). Other members'
+    /// argument counts are not recorded here.
+    /// </summary>
+    protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name is "BeginTrans" or "CommitTrans" or "Rollback" ? InvalidArgumentCount() : null;
+
+    /// <summary>CommitTrans(Null) is 3421 from DAO.Workspace with an IErrorInfo (r-txn-1b/commit-option-vartypes).</summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
+        member.Name == "CommitTrans" && !missing ? Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true } : null;
+
     private static CallResult Live(ComObject self, Func<WorkspaceObject, CallResult> op)
     {
         var w = (WorkspaceObject)self;
         return w.Invalid ? w.Fail(3420, DaoErrors.ObjectInvalid) : op(w);
     }
+
+    /// <summary>BeginTrans: a new level, or 3003 at the eighth (R-TXN-1 TXN-NEST, nest-exhaustion).</summary>
+    public CallResult BeginTrans() => Transactions.BeginTrans() is { } refused ? EditPublication.Published(refused) : CallResult.Nothing;
+
+    /// <summary>
+    /// CommitTrans(Options): the declared Long, coerced by the binder (TXN-NEST, commit-option-vartypes: Missing, Empty,
+    /// I2 1, UI1 1, R8 1.0 and "1" are accepted; BOOL True is -1, refused 3001 with the level open; Null 3421 at the
+    /// binder). Without a level 3034. An outer commit with changes answers the named publication case (EditPublication).
+    /// </summary>
+    public CallResult CommitTrans(nint options) => EditPublication.Of(Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0));
+
+    /// <summary>Rollback of the current level; without a level 3034 (nest-resolve-without-level). The outermost drops pending edits (TXN-CLOSE).</summary>
+    public CallResult Rollback() => EditPublication.Of(Transactions.Rollback());
 
     /// <summary>
     /// OpenDatabase(Name, Options, ReadOnly, Connect): the shared operation of DBEngine and Workspace (source
@@ -260,6 +319,8 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     /// <summary>Close: its Databases close; an appended Workspace leaves Workspaces and is invalid; the default one stays (DAO-BOOT, CAT-V).</summary>
     private CallResult Close()
     {
+        // Close with open levels rolls every level back and returns without error (TXN-CLOSE, workspace-close-depth-1 and -3).
+        Transactions.Close();
         foreach (DatabaseObject d in _databases.ToArray())
         {
             d.Run(DaoTypes.Database.Member("Close", InvokeKind.Method), []);
@@ -275,8 +336,11 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         return CallResult.Nothing;
     }
 
+    /// <summary>Releasing a Workspace without Close also rolls back (TXN-CLOSE, wsrelease-no-close-depth-1).</summary>
     protected override void OnFinalRelease()
     {
+        Transactions.Close();
+        Engine.Changes.Remove(Transactions);
         _databasesCollection?.Release();
         _users?.Release();
         _groups?.Release();
