@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using CalcDb.Com.Com;
-using CalcDb.Foundation.Windows;
+using CalcDb.Values;
 using static CalcDb.Com.Tests.NativeRoute;
 
 namespace CalcDb.Com.Tests;

@@ -86,7 +86,7 @@ public static class TargetDeclarations
 {
     /// <summary>
     /// Windows x64 (II-02 §2): a 24-byte VARIANT aligned to 8, payload at 8, the record arm's two pointers at 8 and 16,
-    /// the DECIMAL overlay from offset 0. Verified against oleaut32 by <c>CalcDb.Foundation.Windows</c>'s
+    /// the DECIMAL overlay from offset 0. Verified against oleaut32 by <c>CalcDb.Values</c>'s
     /// declaration check (tests: WindowsX64DeclarationTests), which reads every offset through the platform's own
     /// services rather than through CalcDb's struct.
     /// </summary>

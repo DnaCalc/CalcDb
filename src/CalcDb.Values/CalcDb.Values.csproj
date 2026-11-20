@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The value layer (W-02/native-declarations-values, W-02/shared-scalar-services; II-02, II-10 §§5-8): the real
+       Automation VARIANT, BSTR and SAFEARRAY through oleaut32, CaptureValueStructural, and CalcDb's own scalar rules
+       above oleaut32 (owner decision 2026-11-20, docs/work/oleaut32-usage.md). Portable: oleaut32 is bound once at
+       startup (OleAut), and the Temporary/ stand-ins answer only where no oleaut32 loads. -->
+  <PropertyGroup>
+    <RootNamespace>CalcDb.Values</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalcDb.Values.Tests" />
+    <!-- CalcDb.Com (assembly CalcDb) calls the one oleaut32 declarations class for error info and type libraries. -->
+    <InternalsVisibleTo Include="CalcDb" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
+  </ItemGroup>
+</Project>

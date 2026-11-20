@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace CalcDb.Foundation.Tests;
+namespace CalcDb.Values.Tests;
 
 /// <summary>
 /// A minimal native IUnknown (own vtable, no CLR wrapper) that counts references and can run a callback inside AddRef,

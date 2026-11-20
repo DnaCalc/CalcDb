@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using CalcDb.Foundation.Windows;
+using CalcDb.Values;
 
 namespace CalcDb.Com.Com;
 
@@ -98,7 +98,7 @@ internal static unsafe partial class ErrorPublication
 
     public static int ToErrorInfo(Failure failure, in Guid iid)
     {
-        if (CreateErrorInfo(out nint create) >= 0 && create != 0)
+        if (OleAut.CreateErrorInfo(out nint create) >= 0 && create != 0)
         {
             nint** vt = (nint**)create;
             Guid g = iid;
@@ -124,7 +124,7 @@ internal static unsafe partial class ErrorPublication
             if (((delegate* unmanaged<nint, Guid*, nint*, int>)(*vt)[0])(create, &errorInfo, &info) >= 0 && info != 0)
             {
                 // A failed SetErrorInfo leaves no IErrorInfo; the failure's own HRESULT is still returned below.
-                _ = SetErrorInfo(0, info);
+                _ = OleAut.SetErrorInfo(0, info);
                 OleAutRelease(info);
             }
             OleAutRelease(create);
@@ -136,9 +136,4 @@ internal static unsafe partial class ErrorPublication
 
     private static void OleAutRelease(nint unknown) => ((delegate* unmanaged<nint, uint>)(*(nint**)unknown)[2])(unknown);
 
-    [LibraryImport("oleaut32.dll")]
-    private static partial int CreateErrorInfo(out nint createErrorInfo);
-
-    [LibraryImport("oleaut32.dll")]
-    private static partial int SetErrorInfo(uint reserved, nint errorInfo);
 }

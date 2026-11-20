@@ -176,7 +176,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     private CallResult DefinitionFailure() => CallResult.Fail(Failure.NotImplemented("TableDef member when the TableDef cannot be read: " + _definitionFailure));
 
     private static CallResult Date(ulong? bits) => bits is ulong b
-        ? CallResult.Of(Foundation.Windows.OwnedVariant.FromDate(BitConverter.Int64BitsToDouble((long)b)))
+        ? CallResult.Of(Values.OwnedVariant.FromDate(BitConverter.Int64BitsToDouble((long)b)))
         : CallResult.Fail(Failure.NotImplemented("TableDef date of a catalog row without that field"));
 
     /// <summary>ValidationRule and ValidationText are "" for a table without stored properties; reading them from a property blob is CAT-P (W-04/row-catalog-algorithms).</summary>

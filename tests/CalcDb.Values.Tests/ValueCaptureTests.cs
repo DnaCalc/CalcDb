@@ -1,6 +1,7 @@
-using CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+using CalcDb.Values;
 
-namespace CalcDb.Foundation.Tests;
+namespace CalcDb.Values.Tests;
 
 /// <summary>CaptureValueStructural (II-02 §4): T-INT-38 (branches, mutation by callbacks) and T-INT-41 (nested ownership).</summary>
 public sealed unsafe class ValueCaptureTests

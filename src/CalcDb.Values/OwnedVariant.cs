@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 
-namespace CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+
+namespace CalcDb.Values;
 
 /// <summary>The ownership states of II-02 §3 that an owned canonical value can be in.</summary>
 public enum OwnershipState
@@ -119,7 +121,7 @@ public sealed unsafe class OwnedVariant : IDisposable
         result._cell->Pointer = bstr;
         result._cell->Vt = (ushort)VarType.Bstr;
         result.State = OwnershipState.Owned;
-        Diagnostics.CostCounters counters = Diagnostics.CostCounters.Current;
+        Foundation.Diagnostics.CostCounters counters = Foundation.Diagnostics.CostCounters.Current;
         counters.BstrAllocations++;
         counters.BstrPayloadBytes += payload.Length;
         return result;

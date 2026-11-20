@@ -1,4 +1,6 @@
-namespace CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+
+namespace CalcDb.Values;
 
 /// <summary>
 /// SAFEARRAY creation and inspection through the documented public API (T-INT-40, FND-ARRAY). Bounds are given and

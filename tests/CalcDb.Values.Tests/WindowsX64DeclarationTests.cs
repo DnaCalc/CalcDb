@@ -1,7 +1,8 @@
 using System.Runtime.CompilerServices;
-using CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+using CalcDb.Values;
 
-namespace CalcDb.Foundation.Tests;
+namespace CalcDb.Values.Tests;
 
 /// <summary>
 /// W-02/target-declarations, T-INT-02 / FOUND-SDK for Windows x64: each published offset is read back from bytes the

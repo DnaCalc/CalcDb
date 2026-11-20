@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using CalcDb.Com.Declarations;
+using CalcDb.Values;
 
 namespace CalcDb.Com.Com;
 
@@ -72,7 +73,7 @@ internal static unsafe partial class TypeLibrary
             if (!Loaded.TryGetValue(decl, out (nint Library, int Failure) loaded))
             {
                 string path = Path.Combine(ImageDirectory, ImageFile(decl));
-                loaded.Failure = LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out loaded.Library);
+                loaded.Failure = OleAut.LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out loaded.Library);
                 if (loaded.Failure < 0)
                 {
                     loaded.Library = 0;
@@ -130,7 +131,7 @@ internal static unsafe partial class TypeLibrary
         {
             LibraryImage image = decl.Image;
             int pointerBytes = image.SysKind == 1 /* SYS_WIN32 */ ? 4 : 8;
-            Check(CreateTypeLib2(image.SysKind, saveAs, out create), "CreateTypeLib2");
+            Check(OleAut.CreateTypeLib2(image.SysKind, saveAs, out create), "CreateTypeLib2");
             Guid guid = decl.Guid;
             Check(Call(create, 6, &guid), "SetGuid");
             Check(CallText(create, 4, decl.Name), "SetName");
@@ -141,7 +142,7 @@ internal static unsafe partial class TypeLibrary
             {
                 Check(CallText(create, 7, libraryHelp), "SetDocString");
             }
-            Check(LoadTypeLibEx("stdole2.tlb", 2 /* REGKIND_NONE */, out stdole), "LoadTypeLibEx stdole2");
+            Check(OleAut.LoadTypeLibEx("stdole2.tlb", 2 /* REGKIND_NONE */, out stdole), "LoadTypeLibEx stdole2");
             Guid dispatchIid = ComIids.IDispatch;
             nint dispatchInfo = 0;
             Check(((delegate* unmanaged<nint, Guid*, nint*, int>)Vt(stdole)[6])(stdole, &dispatchIid, &dispatchInfo), "stdole IDispatch");
@@ -388,7 +389,7 @@ internal static unsafe partial class TypeLibrary
     private static void AddConstant(nint ti, int index, int memberId, string name, int value, int flags)
     {
         var desc = (VarDesc*)NativeMemory.AllocZeroed((nuint)sizeof(VarDesc));
-        var cell = (Foundation.Windows.NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(Foundation.Windows.NativeVariant));
+        var cell = (Values.NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(Values.NativeVariant));
         try
         {
             cell->Vt = 3; // VT_I4
@@ -415,8 +416,8 @@ internal static unsafe partial class TypeLibrary
     private static void AddTextConstant(nint ti, int index, int memberId, string name, string text)
     {
         var desc = (VarDesc*)NativeMemory.AllocZeroed((nuint)sizeof(VarDesc));
-        var cell = (Foundation.Windows.NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(Foundation.Windows.NativeVariant));
-        nint bstr = Foundation.Windows.OwnedVariant.FromText(text).TransferBstr();
+        var cell = (Values.NativeVariant*)NativeMemory.AllocZeroed((nuint)sizeof(Values.NativeVariant));
+        nint bstr = Values.OwnedVariant.FromText(text).TransferBstr();
         try
         {
             cell->Vt = 8; // VT_BSTR
@@ -466,7 +467,7 @@ internal static unsafe partial class TypeLibrary
                     ex->Default.Vt = (ushort)d.Vt;
                     if (d.Text is { } text)
                     {
-                        nint b = Foundation.Windows.OwnedVariant.FromText(text).TransferBstr();
+                        nint b = Values.OwnedVariant.FromText(text).TransferBstr();
                         bstrs.Add(b);
                         ex->Default.Pointer = b;
                     }
@@ -617,7 +618,7 @@ internal static unsafe partial class TypeLibrary
     private struct ParamDescEx
     {
         public uint Size;
-        public Foundation.Windows.NativeVariant Default;
+        public Values.NativeVariant Default;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -647,12 +648,6 @@ internal static unsafe partial class TypeLibrary
         public ushort VarFlags;
         public int VarKind;
     }
-
-    [LibraryImport("oleaut32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int CreateTypeLib2(int sysKind, string file, out nint createTypeLib);
-
-    [LibraryImport("oleaut32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int LoadTypeLibEx(string file, int regKind, out nint typeLib);
 
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

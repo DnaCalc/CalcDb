@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- W-02 acceptance: T-INT-02/25/33..41 on Windows x64, against the platform's own Automation services. -->
+  <!-- W-02 acceptance: T-INT-02/25/33..41 against the platform's own Automation services on Windows x64, the
+       Temporary/ stand-ins against real oleaut32 (docs/work/oleaut32-usage.md rule 5), and the scalar service
+       (T-EXPR-09..22) against retained ACE answers. -->
   <PropertyGroup>
-    <TargetFramework>net11.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PlatformTarget>x64</PlatformTarget>
@@ -17,6 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\CalcDb.Foundation\CalcDb.Foundation.csproj" />
-    <ProjectReference Include="..\..\src\CalcDb.Foundation.Windows\CalcDb.Foundation.Windows.csproj" />
+    <ProjectReference Include="..\..\src\CalcDb.Values\CalcDb.Values.csproj" />
+    <ProjectReference Include="..\..\src\CalcDb.Evidence\CalcDb.Evidence.csproj" />
   </ItemGroup>
 </Project>

@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using CalcDb.Com.Declarations;
 using CalcDb.Foundation;
 using CalcDb.Foundation.Diagnostics;
-using CalcDb.Foundation.Windows;
+using CalcDb.Values;
 
 namespace CalcDb.Com.Com;
 

@@ -1,4 +1,6 @@
-namespace CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+
+namespace CalcDb.Values;
 
 /// <summary>
 /// A platform Automation service (oleaut32) failed or could not allocate: names the service and keeps its HRESULT

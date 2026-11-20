@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 
-namespace CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+
+namespace CalcDb.Values;
 
 /// <summary>The outcome of one capture: the branch taken, and either the owned value or the typed failure.</summary>
 public sealed record CaptureResult(CaptureBranch? Branch, OwnedVariant? Value, CaptureFailure? Failure)

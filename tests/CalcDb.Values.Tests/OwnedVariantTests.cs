@@ -1,7 +1,8 @@
 using System.Runtime.InteropServices;
-using CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+using CalcDb.Values;
 
-namespace CalcDb.Foundation.Tests;
+namespace CalcDb.Values.Tests;
 
 /// <summary>W-02/native-declarations-values: ownership states and exact values (T-INT-25, T-INT-34..36, T-INT-39, T-INT-40).</summary>
 public sealed unsafe class OwnedVariantTests

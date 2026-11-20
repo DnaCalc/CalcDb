@@ -1,6 +1,8 @@
 using System.Buffers;
 
-namespace CalcDb.Foundation.Windows;
+using CalcDb.Foundation;
+
+namespace CalcDb.Values;
 
 /// <summary>BSTR construction through the Automation allocator (II-02 §4, T-INT-35/36).</summary>
 public static unsafe class Bstrs
@@ -30,7 +32,7 @@ public static unsafe class Bstrs
             OleAut.SysFreeString(bstr);
             throw;
         }
-        Diagnostics.CostCounters counters = Diagnostics.CostCounters.Current;
+        Foundation.Diagnostics.CostCounters counters = Foundation.Diagnostics.CostCounters.Current;
         counters.BstrAllocations++;
         counters.BstrPayloadBytes += units * 2;
         return bstr;
