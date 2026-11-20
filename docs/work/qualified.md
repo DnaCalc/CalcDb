@@ -871,6 +871,12 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records**: q1/write-alloc-insert-granularity/; evidence/r-lock-3-4-txn/write-alloc-insert-txn/; evidence/r-fix-cat-txn/write-alloc-counter-rollback-readid/.
 - **Open**: byte-level page identity (W-04); an earlier insert was admitted while all rows of the table were updated (write-promote), which depends on free space.
 
+### R-LOCK-4 WRITE-ALLOC, W-05 growth: a new row lands on the first page with room, in a new slot
+- **Claim**: ACE puts a new row on the first of the table's pages, in storage order, that has room for it. It appends a new slot there and does not reuse a deleted slot. With rows deleted from the first page and from a middle page, the new row went to the first page as slot 7, after the six live and two deleted slots, by recordset AddNew and by SQL INSERT alike. With rows deleted only from the first page, it went to the first page too. With no deletes, only the last page had room, and the row went there, as WRITE-ALLOC's insert into the last page did. The table-type Bookmark (slot, page) of the new row equals LastModified after the AddNew.
+- **Conditions**: ACCDB created by DAO; T(n LONG, t TEXT(255)) with 60 rows of 250-character texts, seven rows a page on nine pages, no index; one insert.
+- **Records**: `evidence/r-q9-insert-landing/` (no-free-but-last, free-first-and-middle-addnew, free-first-and-middle-sql, free-first-only-addnew).
+- **Open**: room that only a deleted slot's reuse could give; pages whose free space is fragmented (ACE's delete compacts, so it was contiguous here); a table whose FreeMap and owned map differ in order; MDB.
+
 ### R-LOCK-4 WRITE-TREE: concurrent uniqueness candidates
 - **Claim**: While another process holds an uncommitted insert, inserts of the same primary key, other keys and the same secondary-unique value fail 3260; after its rollback they insert; after its commit the same key or value gives 3022. With WRITE-ALLOC the block is the page the new row lands on.
 - **Records**: evidence/r-fix-cat-txn/write-tree-unique-secondary/; evidence/r-lock-3-4-txn/write-tree-unique-candidate/, write-alloc-insert-txn/.
