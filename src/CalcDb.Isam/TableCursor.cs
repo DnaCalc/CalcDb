@@ -737,14 +737,12 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
     private readonly RowBinding _row;
     private readonly uint? _bookmarkBase;
 
-    private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, bool snapshot, bool bookmarkBaseKnown)
+    private PopulationCursor(PageCache cache, FormatDescriptor d, TableDefinition table, ScanSource source, bool forwardOnly, uint? bookmarkBase)
     {
         Table = table;
         _row = new RowBinding(cache, d, table);
         _source = source;
-        // The base is observed only for a recordset opened with no other dynaset or snapshot open (a snapshot beside one
-        // open dynaset numbers from 0x0600, beside two from 0x0900; r-cursor-1/life-requery, c1b/clone-bookmark-sharing).
-        _bookmarkBase = !bookmarkBaseKnown ? null : snapshot ? KeysetBookmark.SnapshotBase : KeysetBookmark.DynasetBase;
+        _bookmarkBase = bookmarkBase;
         // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
         // one MoveNext); dynaset and snapshot add their 500-occurrence first-move chunk.
         _store = new OccurrenceStore<RowId>(source, firstMoveChunk: forwardOnly ? 1 : 500);
@@ -754,14 +752,13 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
     public TableDefinition Table { get; }
 
     /// <summary>
-    /// Open a dynaset, or a snapshot when <paramref name="snapshot"/> is set (its bookmark base), or forward-only.
-    /// <paramref name="bookmarkBaseKnown"/> is false when another dynaset or snapshot is open beside it: its bookmarks are then
-    /// NotObserved.
+    /// Open a dynaset, snapshot or forward-only cursor. <paramref name="bookmarkBase"/> numbers its bookmarks
+    /// (<see cref="KeysetBookmark"/>); null where ACE's base is not identified, and the bookmarks are then NotObserved.
     /// </summary>
-    public static PopulationCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, bool snapshot = false, bool bookmarkBaseKnown = true)
+    public static PopulationCursor? Open(PageCache cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase)
     {
         ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, snapshot, bookmarkBaseKnown);
+        return navigator is null ? null : new PopulationCursor(cache, d, table, new ScanSource(navigator), forwardOnly, bookmarkBase);
     }
 
     public bool Bof => _position.Bof;
@@ -834,9 +831,8 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
     }
 
     /// <summary>
-    /// The current occurrence's keyset bookmark (<see cref="KeysetBookmark"/>), or NoCurrentRecord. NotObserved where ACE's
-    /// number is not identified: an unknown base, or an ordinal past <see cref="KeysetBookmark.LinearOrdinals"/> (ACE's
-    /// number grows by 59 more somewhere between positions 400 and 500).
+    /// The current occurrence's keyset bookmark (<see cref="KeysetBookmark"/>), or NoCurrentRecord; NotObserved without a
+    /// known base.
     /// </summary>
     public byte[]? GetBookmark(out CursorFailure? failure)
     {
@@ -845,7 +841,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
             failure = CursorFailure.NoCurrentRecord;
             return null;
         }
-        if (_bookmarkBase is not uint @base || ordinal >= KeysetBookmark.LinearOrdinals)
+        if (_bookmarkBase is not uint @base)
         {
             failure = CursorFailure.NotObserved;
             return null;
@@ -876,10 +872,6 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned
         if (KeysetBookmark.Decode(bookmark, @base) is not int ordinal || ordinal >= _store.ObservedCount)
         {
             return CursorFailure.InvalidBookmark;
-        }
-        if (ordinal >= KeysetBookmark.LinearOrdinals)
-        {
-            return CursorFailure.NotObserved;
         }
         _row.Unbind();
         return _position.Seek(ordinal) ? null : CursorFailure.InvalidBookmark;

@@ -23,43 +23,41 @@ public static class TableBookmark
 }
 
 /// <summary>
-/// The dynaset and snapshot bookmark (R-CURSOR-1 CUR-ID): four bytes, a 32-bit little-endian number, the family's base
-/// plus the row's ordinal in the keyset (the occurrence store). Observed on ACE: dynaset row 1 = 00020000, row 2 =
-/// 01020000, snapshot 00030000 (c1/id-bookmark-shape, c1b/bookmark-walk-types); ordinal 254 = fe020000, 256 = 00030000
-/// (q/id-bookmark-bytes-by-row), 100 = 64020000, 400 = 90030000 (q2/id-bookmark-number-map). A row keeps its number
-/// across a key change, growth and an external delete (c1/id-key-change, id-relocation, id-delete-reinsert), and
-/// Requery numbers the new keyset from the base again (c1/life-requery). A number below the base or at or past the
-/// populated count names no row (3159: c1b/clone-bookmark-sharing, q/id-bookmark-assign-deleted-and-beyond,
-/// q2/id-bookmark-requery-populated).
-/// <para>Two differences are named and not identified; a question that meets them counts the mismatch:</para>
-/// <list type="bullet">
-/// <item><see cref="LinearOrdinals"/>: past ordinal 400 ACE's number grows by 59 more at four points, between
-/// ordinals 400 and 500, 900 and 1000, 1300 and 1400, 1800 and 1900 (q2/id-bookmark-number-map: 500 = 2f040000,
-/// 2047 = eb0a0000). This form goes on as base + ordinal.</item>
-/// <item><see cref="SnapshotBase"/> is ACE's base for a snapshot opened with no dynaset open, and after a Requery. A
-/// snapshot opened beside open dynasets has another base: 0x0600 beside one (c1/life-requery), 0x0900 beside two
-/// (c1b/clone-bookmark-sharing).</item>
-/// </list>
+/// The dynaset and snapshot bookmark (R-CURSOR-1 CUR-ID): four bytes, a 32-bit little-endian number. The keyset is numbered
+/// in blocks of 453 occurrences, each block taking 512 numbers: number = base + (ordinal div 453) * 512 + ordinal mod 453.
+/// Observed on ACE: dynaset row 1 = 00020000, row 2 = 01020000 (c1/id-bookmark-shape); ordinals 254 to 256 = fe020000,
+/// ff020000, 00030000 (q/id-bookmark-bytes-by-row); 100 to 400 = 64020000 to 90030000, 500 = 2f040000, 2047 = eb0a0000
+/// (q2/id-bookmark-number-map); ordinal 452 = c4030000 and 453 = 00040000, 906 = 00060000, 1359 = 00080000, 1812 =
+/// 000a0000 (r-q6-bookmarks/dynaset-number-steps). A row keeps its number across a key change, growth and an external
+/// delete (c1/id-key-change, id-relocation, id-delete-reinsert), and Requery numbers the new keyset again
+/// (c1/life-requery). A number that names no occurrence is 3159 (c1b/clone-bookmark-sharing,
+/// q/id-bookmark-assign-deleted-and-beyond, q2/id-bookmark-requery-populated).
+/// <para>The base: <see cref="FirstBase"/> for the first dynaset or snapshot of an engine session, of either type
+/// (r-q6-bookmarks/snapshot-base-neighbours: also every later one in a fresh database with three-row tables). Later
+/// recordsets over fixture tables number from 0x0300, 0x0600 or 0x0900 (c1/id-bookmark-shape, life-requery,
+/// c1b/clone-bookmark-sharing), by a rule not identified; the caller passes no base for them and their bookmarks are
+/// NotObserved.</para>
 /// </summary>
 public static class KeysetBookmark
 {
-    /// <summary>The number of a dynaset's first row.</summary>
-    public const uint DynasetBase = 0x0200;
+    /// <summary>The number of the first row of an engine session's first dynaset or snapshot.</summary>
+    public const uint FirstBase = 0x0200;
 
-    /// <summary>The number of a snapshot's first row when no dynaset is open.</summary>
-    public const uint SnapshotBase = 0x0300;
-
-    /// <summary>The ordinals for which ACE's number is observed to be base + ordinal (0 to 400).</summary>
-    public const int LinearOrdinals = 401;
+    /// <summary>Occurrences per numbering block, and the numbers each block takes.</summary>
+    public const int BlockEntries = 453, BlockNumbers = 512;
 
     public static byte[] Encode(uint @base, int ordinal)
     {
         var bytes = new byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(bytes, @base + (uint)ordinal);
+        uint number = @base + (uint)(ordinal / BlockEntries) * BlockNumbers + (uint)(ordinal % BlockEntries);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, number);
         return bytes;
     }
 
-    /// <summary>The keyset ordinal a bookmark names, or null when it is not four bytes or its number is below the base.</summary>
+    /// <summary>
+    /// The keyset ordinal a bookmark names, or null when it is not four bytes, is below the base, or falls in a block's
+    /// unused numbers.
+    /// </summary>
     public static int? Decode(ReadOnlySpan<byte> bookmark, uint @base)
     {
         if (bookmark.Length != 4)
@@ -67,7 +65,13 @@ public static class KeysetBookmark
             return null;
         }
         uint number = BinaryPrimitives.ReadUInt32LittleEndian(bookmark);
-        return number >= @base && number - @base <= int.MaxValue ? (int)(number - @base) : null;
+        if (number < @base)
+        {
+            return null;
+        }
+        uint offset = number - @base, block = offset / BlockNumbers, within = offset % BlockNumbers;
+        long ordinal = (long)block * BlockEntries + within;
+        return within < BlockEntries && ordinal <= int.MaxValue ? (int)ordinal : null;
     }
 }
 

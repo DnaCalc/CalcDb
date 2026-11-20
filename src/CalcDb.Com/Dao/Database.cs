@@ -393,8 +393,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
         TraversalFailure? traversal;
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(Cache, Format, table, PageCount, (ulong)entry.Id, out traversal)
-            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal, snapshot: recordsetType == 4,
-                bookmarkBaseKnown: !_recordsets.Any(r => r is SelectRecordsetObject or RecordsetObject { RecordsetType: 2 or 4 }));
+            : PopulationCursor.Open(Cache, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
+                bookmarkBase: Engine.KeysetRecordsetsOpened == 0 ? KeysetBookmark.FirstBase : null);
+        if (cursor is not null && recordsetType is 2 or 4)
+        {
+            Engine.KeysetRecordsetsOpened++;
+        }
         if (cursor is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
@@ -425,6 +429,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>A new recordset of this Database: kept until it closes, returned with the caller's reference.</summary>
     public CallResult Adopt(SelectRecordsetObject recordset)
     {
+        Engine.KeysetRecordsetsOpened++;
         _recordsets.Add(recordset);
         CallResult result = Object(recordset);
         recordset.Release();

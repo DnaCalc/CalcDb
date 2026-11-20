@@ -16,7 +16,7 @@ public sealed class KeysetBookmarkTests
     private const string Q2Main = "1473d5a4c26300ae8206b5c014d9179b424cca71dfbb02144ed21ce064d473c2"; // r-q2-cursor-dao-main
     private const string Nav = "49288e9c099e3b28218a88a1c5a28a0053476f2e6d078898dd091510bc93be7d"; // r-cursor-1-nav
 
-    private static PopulationCursor Open(string sha, string name, bool snapshot = false)
+    private static PopulationCursor Open(string sha, string name, uint bookmarkBase = KeysetBookmark.FirstBase)
     {
         byte[] file = NativeFixtures.Read(sha);
         var image = new ImagePageSource(file, D.PageSize);
@@ -24,7 +24,7 @@ public sealed class KeysetBookmarkTests
         CatalogSnapshot catalog = CatalogBootstrap.Open(cache, D, image.PageCount, out _)!;
         CatalogEntry entry = catalog.LocalTables(D).Single(e => e.Name == name);
         TableDefinition table = TableDefDecoder.Decode(TableDefSegmentView.Open((uint)entry.Id, p => cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 8, out _)!, (uint)entry.Id, D, out _)!;
-        return PopulationCursor.Open(cache, D, table, image.PageCount, forwardOnly: false, out _, snapshot)!;
+        return PopulationCursor.Open(cache, D, table, image.PageCount, forwardOnly: false, out _, bookmarkBase)!;
     }
 
     private static ReadOnlyMemory<byte> Copy(PagePin pin)
@@ -40,27 +40,31 @@ public sealed class KeysetBookmarkTests
     private static long Id(IRecordCursor rs) => rs.Read(rs.Table.Columns.Single(c => c.Name == "ID")).Value!.Integer;
 
     [Fact]
-    public void The_number_is_the_base_plus_the_ordinal_little_endian()
+    public void The_number_is_the_base_plus_the_ordinal_in_blocks_of_453()
     {
-        Assert.Equal("00020000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.DynasetBase, 0)));
-        Assert.Equal("fe020000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.DynasetBase, 254)));
-        Assert.Equal("00030000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.DynasetBase, 256)));
-        Assert.Equal("02030000", Convert.ToHexStringLower(KeysetBookmark.Encode(KeysetBookmark.SnapshotBase, 2)));
-        Assert.Equal(400, KeysetBookmark.Decode(Convert.FromHexString("90030000"), KeysetBookmark.DynasetBase));
-        Assert.Equal(2, KeysetBookmark.Decode(Convert.FromHexString("02030000"), KeysetBookmark.SnapshotBase));
-        // Below the base names no row: four zero bytes (c1/id-bookmark-shape), a dynaset bookmark on a snapshot whose
-        // base is higher (c1b/clone-bookmark-sharing).
-        Assert.Null(KeysetBookmark.Decode([0, 0, 0, 0], KeysetBookmark.DynasetBase));
-        Assert.Null(KeysetBookmark.Decode(Convert.FromHexString("02020000"), KeysetBookmark.SnapshotBase));
-        Assert.Null(KeysetBookmark.Decode([0, 2], KeysetBookmark.DynasetBase));
+        const uint b = KeysetBookmark.FirstBase;
+        // q/id-bookmark-bytes-by-row, q2/id-bookmark-number-map, r-q6-bookmarks/dynaset-number-steps.
+        (int Ordinal, string Bytes)[] ace =
+        [
+            (0, "00020000"), (254, "fe020000"), (256, "00030000"), (400, "90030000"), (452, "c4030000"), (453, "00040000"),
+            (500, "2f040000"), (906, "00060000"), (1359, "00080000"), (1812, "000a0000"), (2047, "eb0a0000"),
+        ];
+        foreach ((int ordinal, string bytes) in ace)
+        {
+            Assert.Equal(bytes, Convert.ToHexStringLower(KeysetBookmark.Encode(b, ordinal)));
+            Assert.Equal(ordinal, KeysetBookmark.Decode(Convert.FromHexString(bytes), b));
+        }
+        // Below the base, in a block's unused numbers, or not four bytes names no row (c1/id-bookmark-shape: four zero bytes).
+        Assert.Null(KeysetBookmark.Decode([0, 0, 0, 0], b));
+        Assert.Null(KeysetBookmark.Decode(Convert.FromHexString("c5030000"), b));
+        Assert.Null(KeysetBookmark.Decode([0, 2], b));
         Assert.Null(KeysetBookmark.Decode(Convert.FromHexString("ffffffff"), 0));
     }
 
     [Fact]
-    public void ACEs_dynaset_call_sequence_gives_ACEs_bookmarks_and_IDs_on_the_linear_ordinals()
+    public void ACEs_dynaset_call_sequence_gives_ACEs_bookmarks_and_IDs()
     {
-        // q/id-bookmark-bytes-by-row, OpenRecordset("Big", dbOpenDynaset): Bookmark and ID after each call. The record
-        // goes on to ordinal 999 (5d060000) and 2047 (eb0a0000), past KeysetBookmark.LinearOrdinals: not asserted.
+        // q/id-bookmark-bytes-by-row, OpenRecordset("Big", dbOpenDynaset): Bookmark and ID after each call.
         using PopulationCursor rs = Open(QMain, "Big");
         (Func<MoveOutcome>? Call, string Bookmark, long Id)[] ace =
         [
@@ -68,6 +72,9 @@ public sealed class KeysetBookmarkTests
             (() => rs.Move(254), "fe020000", 255),
             (() => rs.Move(1), "ff020000", 256),
             (() => rs.Move(1), "00030000", 257),
+            // Positions 999 and 2047 (IDs 1000 and 2048), in the third and fifth numbering block.
+            (() => rs.Move(743), "5d060000", 1000),
+            (() => rs.Move(1048), "eb0a0000", 2048),
         ];
         foreach ((Func<MoveOutcome>? call, string bookmark, long id) in ace)
         {
@@ -81,7 +88,7 @@ public sealed class KeysetBookmarkTests
     }
 
     [Fact]
-    public void The_number_map_holds_through_ordinal_400()
+    public void The_number_map_holds_through_ordinal_400_with_Move_100()
     {
         // q2/id-bookmark-number-map, OpenRecordset("Big", dbOpenDynaset) then Move 100 four times.
         using PopulationCursor rs = Open(Q2Main, "Big");
@@ -90,7 +97,6 @@ public sealed class KeysetBookmarkTests
         {
             Assert.Equal(MoveOutcome.Moved, i == 0 ? rs.MoveFirst() : rs.Move(100));
             Assert.Equal(ace[i], Bookmark(rs));
-            Assert.True(i * 100 < KeysetBookmark.LinearOrdinals);
         }
     }
 
@@ -120,14 +126,15 @@ public sealed class KeysetBookmarkTests
     public void A_snapshot_numbers_from_its_base_and_refuses_past_the_end()
     {
         // q/id-bookmark-assign-deleted-and-beyond on T: the dynaset's Move 2 reads 02020000 and 14020000 is 3159; the
-        // snapshot's Move 2 reads 02030000, its own bookmark is accepted and 14030000 is 3159.
+        // snapshot opened after it numbers from 0x0300 there (its base is passed: an engine session does not know it), its
+        // Move 2 reads 02030000, its own bookmark is accepted and 14030000 is 3159.
         using (PopulationCursor dynaset = Open(QMain, "T"))
         {
             Assert.Equal(MoveOutcome.Moved, dynaset.Move(2));
             Assert.Equal("02020000", Bookmark(dynaset));
             Assert.Equal(CursorFailure.InvalidBookmark, dynaset.SetBookmark(Convert.FromHexString("14020000")));
         }
-        using PopulationCursor snapshot = Open(QMain, "T", snapshot: true);
+        using PopulationCursor snapshot = Open(QMain, "T", bookmarkBase: 0x0300);
         Assert.Equal(MoveOutcome.Moved, snapshot.Move(2));
         Assert.Equal("02030000", Bookmark(snapshot));
         Assert.Null(snapshot.SetBookmark(Convert.FromHexString("02030000")));

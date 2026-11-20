@@ -20,6 +20,12 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     public List<DatabaseObject> Sessions { get; } = [];
 
     /// <summary>
+    /// The dynasets, snapshots and query recordsets opened in this engine session so far: only the first numbers its
+    /// bookmarks from a base ACE is seen to use (KeysetBookmark.FirstBase; R-CURSOR-1 CUR-ID).
+    /// </summary>
+    public int KeysetRecordsetsOpened { get; set; }
+
+    /// <summary>
     /// The writable file of the open Database whose cache a Workspace publishes (II-08 §19): that session's writer lease
     /// (<see cref="DatabaseObject.Writable"/>). A cache with no open Database (closed while its level stayed open,
     /// TXN-CLOSE) is not written.
