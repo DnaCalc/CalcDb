@@ -32,10 +32,11 @@ public static class TableBookmark
 /// delete (c1/id-key-change, id-relocation, id-delete-reinsert), and Requery numbers the new keyset again
 /// (c1/life-requery). A number that names no occurrence is 3159 (c1b/clone-bookmark-sharing,
 /// q/id-bookmark-assign-deleted-and-beyond, q2/id-bookmark-requery-populated).
-/// <para>The base: <see cref="FirstBase"/> for the first dynaset or snapshot of an engine session, of either type
-/// (r-q6-bookmarks/snapshot-base-neighbours: also every later one in a fresh database with three-row tables). Later
-/// recordsets over fixture tables number from 0x0300, 0x0600 or 0x0900 (c1/id-bookmark-shape, life-requery,
-/// c1b/clone-bookmark-sharing), by a rule not identified; the caller passes no base for them and their bookmarks are
+/// <para>The base: <see cref="FirstBase"/> for a dynaset that is the first dynaset or snapshot of an engine session (every
+/// record). A snapshot's base is not identified: 0x0200 in a fresh database with three-row tables, alone or beside other
+/// recordsets (r-q6-bookmarks/snapshot-base-neighbours), but 0x0300 as the first recordset over a fixture table
+/// (r-dao-1b/recordset-members-snapshot) and 0x0600 or 0x0900 beside open dynasets (c1/life-requery,
+/// c1b/clone-bookmark-sharing). The caller passes no base for a snapshot or a later recordset, whose bookmarks are then
 /// NotObserved.</para>
 /// </summary>
 public static class KeysetBookmark

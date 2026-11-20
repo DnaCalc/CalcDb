@@ -20,8 +20,8 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     public List<DatabaseObject> Sessions { get; } = [];
 
     /// <summary>
-    /// The dynasets, snapshots and query recordsets opened in this engine session so far: only the first numbers its
-    /// bookmarks from a base ACE is seen to use (KeysetBookmark.FirstBase; R-CURSOR-1 CUR-ID).
+    /// The dynasets, snapshots and query recordsets opened in this engine session so far: only the first, when it is a
+    /// dynaset, numbers its bookmarks from a base ACE is seen to use (KeysetBookmark.FirstBase; R-CURSOR-1 CUR-ID).
     /// </summary>
     public int KeysetRecordsetsOpened { get; set; }
 

@@ -87,7 +87,7 @@ internal sealed class ReplayFixture : IPublicationTarget, IDisposable
 
     public IRecordCursor? Open(TableDefinition table, int type) => type == 1
         ? TableCursor.Open(_cache, D, table, _image.PageCount, 0, out _)
-        : PopulationCursor.Open(_cache, D, table, _image.PageCount, forwardOnly: type == 8, out _, bookmarkBase: type == 8 ? null : _keysets++ == 0 ? KeysetBookmark.FirstBase : null);
+        : PopulationCursor.Open(_cache, D, table, _image.PageCount, forwardOnly: type == 8, out _, bookmarkBase: type == 8 ? null : _keysets++ == 0 && type == 2 ? KeysetBookmark.FirstBase : null);
 
     /// <summary>The keyset cursors this replay opened: as in an engine session, only the first has a known bookmark base.</summary>
     private int _keysets;
