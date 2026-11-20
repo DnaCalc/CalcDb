@@ -441,7 +441,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return Args.TypeOf(optionsArg) == Foundation.VarType.Bstr ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented("Execute with an Options argument that is not numeric"));
         }
         string sql = Args.Text(query) ?? "";
-        return SelectRoute.IsSelect(sql) ? Fail(3065, SelectRoute.CannotExecuteSelect) : CallResult.Fail(Failure.NotImplemented("Database.Execute of a statement that is not a SELECT (action queries and DDL are W-07/actions)"));
+        if (!SelectRoute.IsSelect(sql))
+        {
+            return CallResult.Fail(Failure.NotImplemented("Database.Execute of a statement that is not a SELECT (action queries and DDL are W-07/actions)"));
+        }
+        // A SELECT with a PARAMETERS clause: no record shows whether Execute answers 3061 (no values) or 3065 first
+        // (DAO-QUERY records only a saved QueryDef's Execute).
+        return sql.AsSpan().TrimStart().StartsWith("PARAMETERS", StringComparison.OrdinalIgnoreCase)
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.ExecuteParameterSelect", "Database.Execute of a SELECT with a PARAMETERS clause: 3061 or 3065 is not recorded"))
+            : Fail(3065, SelectRoute.CannotExecuteSelect);
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>

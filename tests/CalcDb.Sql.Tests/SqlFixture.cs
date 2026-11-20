@@ -98,8 +98,47 @@ internal sealed class SqlFixture : ISqlDatabase
     };
 
     /// <summary>
+    /// A recorded argument as a VARIANT (an owned BSTR for text, freed with <see cref="Free"/>), or null for a kind this
+    /// replay does not pass (arrays, Decimal, objects).
+    /// </summary>
+    public static NativeVariant? ToVariant(CapturedValue c)
+    {
+        VarType vt = (VarType)c.Vt;
+        switch (vt)
+        {
+            case VarType.Empty or VarType.Null:
+                return new NativeVariant { Vt = (ushort)vt };
+            case VarType.I2 or VarType.I4 or VarType.UI1 or VarType.Bool when c.Integer is { } i:
+                long n = long.Parse(i, System.Globalization.CultureInfo.InvariantCulture);
+                return new NativeVariant { Vt = (ushort)vt, Int64 = vt switch { VarType.I2 or VarType.Bool => (ushort)(short)n, VarType.I4 => (uint)(int)n, _ => (byte)n } };
+            case VarType.R4 or VarType.R8 or VarType.Date or VarType.Currency when c.Bits is { } bits:
+                byte[] raw = System.Convert.FromHexString(bits);
+                Array.Resize(ref raw, 8);
+                return new NativeVariant { Vt = (ushort)vt, Int64 = BinaryPrimitives.ReadInt64LittleEndian(raw) };
+            case VarType.Bstr when c.Bytes is { } hex:
+                byte[] bytes = System.Convert.FromHexString(hex);
+                if (bytes.Length % 2 != 0)
+                {
+                    return null;
+                }
+                return new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = Bstrs.FromUnits(bytes.Length / 2, bytes, static (dest, b) => MemoryMarshal.Cast<byte, char>(b).CopyTo(dest)) };
+            default:
+                return null;
+        }
+    }
+
+    public static void Free(ref NativeVariant v)
+    {
+        if (v.Vt == (ushort)VarType.Bstr)
+        {
+            Bstrs.Free(v.Pointer);
+        }
+        v = default;
+    }
+
+    /// <summary>
     /// A value converted to another VARIANT type by the kernel's conversion functions (CDbl, CLng, CInt, CSng, CCur,
-    /// CDate, CStr, CByte), as the test's stand-in for DAO's conversion of a computed column; null when it fails.
+    /// CDate, CStr, CByte, CBool), as the test's stand-in for DAO's conversion of a computed column; null when it fails.
     /// </summary>
     public static CapturedValue? Convert(NativeVariant v, VarType target, ExpressionContext context)
     {
@@ -113,6 +152,7 @@ internal sealed class SqlFixture : ISqlDatabase
             VarType.Date => ScalarOperation.CDate,
             VarType.Bstr => ScalarOperation.CStr,
             VarType.UI1 => ScalarOperation.CByte,
+            VarType.Bool => ScalarOperation.CBool,
             _ => null,
         };
         if (op is not { } operation)
@@ -120,6 +160,11 @@ internal sealed class SqlFixture : ISqlDatabase
             return null;
         }
         ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(operation, 0, OperandContract.Expression), v, context);
+        if (r.Succeeded && target == VarType.Bool && r.Type == VarType.I2)
+        {
+            // The expression service's CBool answers -1 or 0 as Integer; DAO's Boolean field gives them as VT_BOOL.
+            return CapturedValue.FromInteger((int)VarType.Bool, (short)r.Value.Int64);
+        }
         if (!r.Succeeded || r.Type != target)
         {
             if (r.Succeeded)

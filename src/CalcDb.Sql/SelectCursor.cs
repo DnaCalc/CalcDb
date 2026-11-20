@@ -12,7 +12,7 @@ namespace CalcDb.Sql;
 /// The values a result keeps (constants, group keys, aggregate results, sort keys): the kernel's and the field reads'
 /// values are scalars held inline or BSTRs, so an owned copy is the scalar itself or a new BSTR of the same units.
 /// </summary>
-internal static unsafe class Values
+internal static unsafe class SelectValues
 {
     public static NativeVariant Copy(in NativeVariant v)
     {
@@ -43,9 +43,12 @@ public enum ResultKind : byte
     ForwardOnly,
 }
 
-/// <summary>An occurrence of a SELECT's result: the source row it stands on, or its group, and its place in a materialized list.</summary>
+/// <summary>
+/// An occurrence of a SELECT's result: the source row it stands on, its joined tuple (one row or a Null extension per
+/// source slot), or its group or union row, and its place in a materialized list.
+/// </summary>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct ResultRow(RowId Root, int Group, int Index);
+public readonly record struct ResultRow(RowId Root, int Group, int Index, int Tuple = -1);
 
 /// <summary>
 /// One execution of a bound SELECT (II-11 §1 ExecutionInstance; §4 one operator interface for incremental calls): the
@@ -56,11 +59,17 @@ public readonly record struct ResultRow(RowId Root, int Group, int Index);
 /// unordered SELECT observes 1 at open and 500 more at the first move, through the one occurrence store).</item>
 /// <item>Any other SELECT reads all qualifying rows at open: groups ascending by key (PAR-ORDER), DISTINCT rows
 /// likewise, ORDER BY by its keys with ties in the order the recordset type gives (qualified.md R-SORT-3 tie order,
-/// r-q3-sql/ties-*), TOP keeping the rows tied at the cutoff (SQL-TOP). What the records leave open is named instead of
-/// answered: the snapshot tie permutation beyond 9 rows, ties among groups or DISTINCT rows, the order of ties inside
-/// TOP's kept rows, the row order of an unordered dynaset, and the spelling a group of differently spelled equal texts
-/// shows (SQL-EQ).</item>
+/// r-q3-sql/ties-*), TOP keeping the rows tied at the cutoff (SQL-TOP).</item>
+/// <item>A join (II-11 §8) reads at open by nested loops over one reader per source occurrence: an ON match is recorded
+/// before WHERE tests the pair, and an outer row with no match gets exactly one Null-extended partner. A union (§15) reads
+/// its arms in order, converts their values to the output types, and removes duplicates where an operator says UNION.</item>
 /// </list>
+/// What the records leave open is named instead of answered. Where only the order of some rows is not identified (the
+/// row order of a join, qualified.md PAR-ORDER and r-sql-13b/join-cross-forms; the snapshot tie permutation beyond 9
+/// rows, ties among groups, DISTINCT rows, joined or union rows, ties inside TOP's kept rows), the rows of each such run
+/// read normally in every column on which they agree, and a read of a column on which they differ is the named
+/// <c>NotModelled.RowOrder</c>: the position of a row in the run is the unknown. Also named: the row order of an unordered
+/// dynaset and the spelling a group of differently spelled equal texts shows (SQL-EQ).
 /// A constant column that contains a function call is evaluated once at open, so its failure fails the open; operators
 /// over literals alone are evaluated at the read (qualified.md R-EXPR-1 EXPR-STAGE). A projected column is evaluated when
 /// it is read, so its failure fails that read only. Movement follows the one position rule set (CUR-POS).
@@ -68,7 +77,10 @@ public readonly record struct ResultRow(RowId Root, int Group, int Index);
 public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 {
     private readonly BoundSelect _plan;
-    private readonly RowReader _reader;
+    private readonly RowReader[] _readers;
+    private readonly List<RowId?> _tuples;
+    private readonly bool[] _nullExtended;
+    private readonly NativeVariant[] _parameters;
     private readonly IOrderedSource<ResultRow> _producer;
     private readonly OccurrenceStore<ResultRow> _store;
     private readonly PositionState<int> _position;
@@ -78,18 +90,24 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     private readonly SqlFailure?[] _readFailures;
     private readonly List<NativeVariant> _slots;
     private readonly int _slotWidth;
+    private readonly Ambiguity? _ambiguity;
     private int _group = -1;
 
-    private SelectCursor(BoundSelect plan, RowReader reader, Prepared prepared, bool forwardOnly)
+    private SelectCursor(BoundSelect plan, RowReader[] readers, Prepared prepared, bool forwardOnly)
     {
         _plan = plan;
-        _reader = reader;
+        _readers = readers;
+        _tuples = prepared.Tuples;
+        _nullExtended = new bool[readers.Length];
+        _parameters = prepared.Parameters;
         _constants = prepared.Constants;
         _types = prepared.Types;
         _typeOpen = prepared.TypeOpen;
         _readFailures = prepared.ReadFailures;
         _slots = prepared.Slots;
         _slotWidth = prepared.SlotWidth;
+        _ambiguity = prepared.Ambiguity;
+        RecordCountOpen = prepared.RecordCountOpen;
         _producer = prepared.Rows is { } rows ? new ListSource(rows) : new FilteredScan(this);
         _store = new OccurrenceStore<ResultRow>(_producer, firstMoveChunk: forwardOnly ? 1 : 500);
         if (prepared.Rows is not null)
@@ -112,6 +130,12 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// <summary>The occurrences populated so far (CUR-POP).</summary>
     public long RecordCount => _store.ObservedCount;
 
+    /// <summary>
+    /// Why <see cref="RecordCount"/> is not ACE's at open, or null: a join or union without ORDER BY is read whole at open
+    /// here, and how ACE populates one is not recorded (CUR-POP asked single tables).
+    /// </summary>
+    public string? RecordCountOpen { get; }
+
     /// <summary>A failure met while the last move produced rows (a WHERE that failed on a streamed row), else null.</summary>
     public SqlFailure? FetchFailure { get; private set; }
 
@@ -122,17 +146,52 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         return _types[column];
     }
 
-    /// <summary>Open the plan over the database as <paramref name="kind"/>: work done at open fails the open (EXPR-STAGE, SQL-DEMAND).</summary>
-    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, out SqlFailure? failure)
+    /// <summary>Open the plan over the database as <paramref name="kind"/>, with no parameter values.</summary>
+    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, out SqlFailure? failure) =>
+        Open(plan, database, kind, null, out failure);
+
+    /// <summary>
+    /// Open the plan over the database as <paramref name="kind"/>: work done at open fails the open (EXPR-STAGE,
+    /// SQL-DEMAND). <paramref name="parameters"/> holds a value per <see cref="BoundSelect.Parameters"/> entry, adapted by
+    /// <see cref="SqlParameters.Adapt"/>, or null where none was assigned; the cursor keeps copies, so a later assignment
+    /// does not reach it (qualified.md R-EXPR-1 EXPR-BIND: a recordset opened earlier keeps its own values). A parameter
+    /// without a value fails 3061 (qualified.md R-SQL-1 SQL-B).
+    /// </summary>
+    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, out SqlFailure? failure)
     {
-        SourceSlot source = plan.Sources[0];
-        RowReader? reader = database.OpenRows(source.Table, out string? storage);
-        if (reader is null)
+        if (plan.ParametersFailure is not null)
         {
-            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
+            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.ParameterDeclarations", "an open of a statement declaring one parameter with two types (3060 at Parameters)");
             return null;
         }
-        var preparing = new Preparer(plan, reader, kind);
+        int missing = 0;
+        for (int i = 0; i < plan.Parameters.Count; i++)
+        {
+            missing += parameters is null || i >= parameters.Count || parameters[i] is null ? 1 : 0;
+        }
+        if (missing > 0)
+        {
+            failure = SqlFailure.Ace(SqlPhase.Open, 3061, SqlMessages.TooFewParameters(missing));
+            return null;
+        }
+        var values = new NativeVariant[plan.Parameters.Count];
+        for (int i = 0; i < values.Length; i++)
+        {
+            values[i] = SelectValues.Copy(parameters![i]!.Value);
+        }
+        var readers = new RowReader[plan.Sources.Count];
+        for (int s = 0; s < readers.Length; s++)
+        {
+            RowReader? reader = database.OpenRows(plan.Sources[s].Table, out string? storage);
+            if (reader is null)
+            {
+                Close(readers, values);
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage ?? "the table cannot be read");
+                return null;
+            }
+            readers[s] = reader;
+        }
+        var preparing = new Preparer(plan, readers, kind, values, database);
         Prepared? prepared = preparing.Run(out failure);
         if (prepared is not null && prepared.Rows is null && kind == ResultKind.Dynaset)
         {
@@ -143,10 +202,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         if (prepared is null)
         {
             preparing.Release();
-            reader.Dispose();
+            Close(readers, values);
             return null;
         }
-        var cursor = new SelectCursor(plan, reader, prepared, kind == ResultKind.ForwardOnly);
+        var cursor = new SelectCursor(plan, readers, prepared, kind == ResultKind.ForwardOnly);
         failure = cursor.FetchFailure;
         if (failure is not null)
         {
@@ -154,6 +213,18 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             return null;
         }
         return cursor;
+    }
+
+    private static void Close(RowReader?[] readers, NativeVariant[] parameters)
+    {
+        foreach (RowReader? r in readers)
+        {
+            r?.Dispose();
+        }
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            SelectValues.Clear(ref parameters[i]);
+        }
     }
 
     public MoveOutcome MoveFirst()
@@ -191,10 +262,17 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// failing projection fails this read only (EXPR-STAGE: "a failing projected scalar on one row fails only the Value
     /// read of that field").
     /// </summary>
-    public bool Read(int column, out NativeVariant value, out SqlFailure? failure)
+    public bool Read(int column, out NativeVariant value, out SqlFailure? failure) => Read(column, out value, out failure, false, out _);
+
+    /// <summary>
+    /// A read that, with <paramref name="anyOrder"/>, gives the value even where the row's position in its run is not
+    /// identified and says so in <paramref name="unordered"/> (a union arm's rows, whose order a distinct UNION does not keep).
+    /// </summary>
+    internal bool Read(int column, out NativeVariant value, out SqlFailure? failure, bool anyOrder, out bool unordered)
     {
         value = default;
         failure = null;
+        unordered = false;
         if (_position.Current is not int ordinal)
         {
             failure = SqlFailure.Ace(SqlPhase.Read, 3021, "No current record.");
@@ -210,7 +288,17 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             value = _constants[column];
             return true;
         }
-        Stand(_store[ordinal]);
+        ResultRow row = _store[ordinal];
+        if (_ambiguity?.Differs(row.Index, column) is { } why)
+        {
+            unordered = true;
+            if (!anyOrder)
+            {
+                failure = SqlFailure.Open(SqlPhase.Read, "NotModelled.RowOrder", why);
+                return false;
+            }
+        }
+        Stand(row);
         BoundExpression program = _plan.ColumnList[column].Program;
         if (!program.Evaluate(this))
         {
@@ -222,30 +310,45 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         return true;
     }
 
-    private void Stand(ResultRow row)
+    private void Stand(ResultRow row) => Stand(row, _readers, _tuples, _nullExtended, ref _group);
+
+    /// <summary>Place the readers on a result row: its group or union row, its joined tuple, or its one source row.</summary>
+    private static void Stand(ResultRow row, RowReader[] readers, List<RowId?> tuples, bool[] nullExtended, ref int group)
     {
         if (row.Group >= 0)
         {
-            _group = row.Group;
+            group = row.Group;
+            return;
         }
-        else
+        if (row.Tuple < 0)
         {
-            _reader.Position(row.Root);
+            readers[0].Position(row.Root);
+            return;
+        }
+        int width = readers.Length;
+        for (int s = 0; s < width; s++)
+        {
+            RowId? id = tuples[(row.Tuple * width) + s];
+            nullExtended[s] = id is null;
+            if (id is { } r)
+            {
+                readers[s].Position(r);
+            }
         }
     }
 
-    IRecordCursor? IExpressionRow.Source(int source) => _reader;
+    IRecordCursor? IExpressionRow.Source(int source) => _nullExtended[source] ? null : _readers[source];
 
-    NativeVariant IExpressionRow.Slot(int slot) => _slots[(_group * _slotWidth) + slot];
+    NativeVariant IExpressionRow.Slot(int slot) => slot >= BoundSelect.ParameterSlot0 ? _parameters[slot - BoundSelect.ParameterSlot0] : _slots[(_group * _slotWidth) + slot];
 
     public void Dispose()
     {
         for (int i = 0; i < _constants.Length; i++)
         {
-            Values.Clear(ref _constants[i]);
+            SelectValues.Clear(ref _constants[i]);
         }
         ClearSlots(_slots);
-        _reader.Dispose();
+        Close(_readers, _parameters);
     }
 
     private static void ClearSlots(List<NativeVariant> slots)
@@ -253,7 +356,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         Span<NativeVariant> all = CollectionsMarshal.AsSpan(slots);
         for (int i = 0; i < all.Length; i++)
         {
-            Values.Clear(ref all[i]);
+            SelectValues.Clear(ref all[i]);
         }
         slots.Clear();
     }
@@ -275,6 +378,25 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         public required List<NativeVariant> Slots { get; init; }
 
         public int SlotWidth { get; init; }
+
+        /// <summary>The joined tuples, a row id or a Null extension per source slot (empty for one source).</summary>
+        public required List<RowId?> Tuples { get; init; }
+
+        public required NativeVariant[] Parameters { get; init; }
+
+        public Ambiguity? Ambiguity { get; init; }
+
+        public string? RecordCountOpen { get; init; }
+    }
+
+    /// <summary>
+    /// The runs of a materialized result whose order inside the run is not identified, with, per run, the columns on which
+    /// its rows differ (a read of such a column at such a row is not decided by the records).
+    /// </summary>
+    private sealed class Ambiguity(int[] run, List<bool[]> differs, List<string> reasons)
+    {
+        public string? Differs(int row, int column) =>
+            row >= 0 && row < run.Length && run[row] is int r and >= 0 && differs[r][column] ? reasons[r] : null;
     }
 
     /// <summary>The streamed rows: the storage scan through the WHERE (no allocation per row beyond the store's list).</summary>
@@ -282,7 +404,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     {
         public ResultRow? Next(ResultRow? after)
         {
-            RowReader reader = owner._reader;
+            RowReader reader = owner._readers[0];
             BoundExpression? where = owner._plan.Where;
             for (RowId? root = reader.Scan.Next(after?.Root); root is { } r; root = reader.Scan.Next(r))
             {
@@ -329,18 +451,21 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     }
 
     /// <summary>The work of an open (II-11 §§11–14), as a small object whose failures release what it copied.</summary>
-    private sealed class Preparer(BoundSelect plan, RowReader reader, ResultKind kind) : IExpressionRow
+    private sealed class Preparer(BoundSelect plan, RowReader[] readers, ResultKind kind, NativeVariant[] parameters, ISqlDatabase database) : IExpressionRow
     {
         private readonly List<NativeVariant> _slots = [];
         private readonly List<NativeVariant> _keys = [];
+        private readonly List<RowId?> _tuples = [];
+        private readonly bool[] _nullExtended = new bool[readers.Length];
+        private readonly List<(int Start, int Count, string Reason)> _runs = [];
         private NativeVariant[] _constants = [];
         private int _slotWidth;
         private int _group = -1;
         private TextCollation? Collation => plan.Context.DatabaseOrder;
 
-        IRecordCursor? IExpressionRow.Source(int source) => reader;
+        IRecordCursor? IExpressionRow.Source(int source) => _nullExtended[source] ? null : readers[source];
 
-        NativeVariant IExpressionRow.Slot(int slot) => _slots[(_group * _slotWidth) + slot];
+        NativeVariant IExpressionRow.Slot(int slot) => slot >= BoundSelect.ParameterSlot0 ? parameters[slot - BoundSelect.ParameterSlot0] : _slots[(_group * _slotWidth) + slot];
 
         public void Release()
         {
@@ -348,13 +473,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             ClearSlots(_keys);
             for (int i = 0; i < _constants.Length; i++)
             {
-                Values.Clear(ref _constants[i]);
+                SelectValues.Clear(ref _constants[i]);
             }
         }
 
         private SqlFailure At(ExpressionFailure f) => SqlFailure.Of(f, SqlPhase.Open, plan.Source, 0, plan.Source.Length);
 
-        private static NativeVariant Copy(in NativeVariant v) => Values.Copy(v);
+        private static NativeVariant Copy(in NativeVariant v) => SelectValues.Copy(v);
 
         public Prepared? Run(out SqlFailure? failure)
         {
@@ -368,7 +493,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 ResultColumn c = plan.ColumnList[i];
                 types[i] = c.FieldType;
                 open[i] = c.TypeOpen;
-                if (!c.Program.IsConstant)
+                // r-expr-1/b-numeric-text-compare (pn = pt fails 3464 at open), r-expr-1/b-fixed-point-fidelity (pc +
+                // CCur(0.0001) overflows at open): a column over parameters and no field is computed once at open. In a
+                // plain SELECT the only slots are the parameters.
+                bool parametersOnly = !c.Program.IsConstant && c.Program.Fields.Count == 0 && !plan.Grouped && !plan.IsUnion;
+                if (!c.Program.IsConstant && !parametersOnly)
                 {
                     continue;
                 }
@@ -380,7 +509,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         failure = At(f);
                         return null;
                     }
-                    if (!c.FoldsAtOpen)
+                    if (!c.FoldsAtOpen && !parametersOnly)
                     {
                         // EXPR-STAGE: operators over literals alone are evaluated at the read (1/0, 1\0, 0/0, 'q'+7), so
                         // the failure is the read's; the read evaluates the column again.
@@ -397,26 +526,101 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     }
                 }
                 _constants[i] = Copy(c.Program.Value);
-                if (c.TypeRule == ColumnTypeRule.NullAtOpen && _constants[i].Vt == (ushort)VarType.Null)
+                if (c.TypeRule == ColumnTypeRule.NullAtOpen && (_constants[i].Vt == (ushort)VarType.Null || c.NonNullType is not null))
                 {
-                    // qualified.md "the DAO Field.Type of a projected column": a Null-literal operator whose value is Null is 9.
-                    types[i] = 9;
+                    // qualified.md "the DAO Field.Type of a projected column": a Null-literal operator whose value is Null is
+                    // 9; otherwise its operator's type where recorded (1 <> Null and False And Null are 3, 7 & Null is 10).
+                    types[i] = _constants[i].Vt == (ushort)VarType.Null ? 9 : c.NonNullType;
                     open[i] = null;
                 }
             }
             failure = null;
-            bool streams = !plan.Grouped && plan.Order.Count == 0 && plan.Predicate == SelectPredicate.All && plan.Top is null;
+            bool streams = !plan.IsUnion && plan.Tree is null && !plan.Grouped && plan.Order.Count == 0 && plan.Predicate == SelectPredicate.All && plan.Top is null;
             List<ResultRow>? rows = null;
+            Ambiguity? ambiguity = null;
             if (!streams)
             {
-                rows = Materialize(out failure);
+                rows = plan.IsUnion ? Union(out failure) : Materialize(out failure);
                 if (rows is null)
+                {
+                    return null;
+                }
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    rows[i] = rows[i] with { Index = i };
+                }
+                ambiguity = Ambiguous(rows, out failure);
+                if (failure is not null)
                 {
                     return null;
                 }
             }
             ClearSlots(_keys);
-            return new Prepared { Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth };
+            string? population = (plan.IsUnion || plan.Tree is not null) && plan.Order.Count == 0
+                ? "how ACE populates a join or union result without ORDER BY at open is not recorded (CUR-POP asked single tables)"
+                : null;
+            return new Prepared
+            {
+                Constants = _constants, Types = types, TypeOpen = open, ReadFailures = reads, Rows = rows, Slots = _slots, SlotWidth = _slotWidth,
+                Tuples = _tuples, Parameters = parameters, Ambiguity = ambiguity, RecordCountOpen = population,
+            };
+        }
+
+        /// <summary>
+        /// The runs whose order is not identified, with the columns on which their rows differ: each row of a run is read
+        /// in every column; a constant column agrees everywhere.
+        /// </summary>
+        private Ambiguity? Ambiguous(List<ResultRow> rows, out SqlFailure? failure)
+        {
+            failure = null;
+            if (_runs.Count == 0)
+            {
+                return null;
+            }
+            int[] run = new int[rows.Count];
+            Array.Fill(run, -1);
+            var differs = new List<bool[]>();
+            var reasons = new List<string>();
+            int n = plan.ColumnList.Count;
+            var first = new NativeVariant[n];
+            var firstOk = new bool[n];
+            foreach ((int start, int count, string reason) in _runs)
+            {
+                var columns = new bool[n];
+                for (int c = 0; c < n; c++)
+                {
+                    if (_constants[c].Vt != (ushort)VarType.Empty)
+                    {
+                        continue;
+                    }
+                    BoundExpression p = plan.ColumnList[c].Program;
+                    for (int i = start; i < start + count && !columns[c]; i++)
+                    {
+                        Stand(rows[i]);
+                        bool ok = p.Evaluate(this);
+                        if (i == start)
+                        {
+                            firstOk[c] = ok;
+                            first[c] = ok ? Copy(p.Value) : default;
+                            continue;
+                        }
+                        // A row whose read fails, beside one whose read succeeds, differs from it.
+                        columns[c] = ok != firstOk[c] || (ok && !Same(first[c], p.Value));
+                    }
+                    SelectValues.Clear(ref first[c]);
+                }
+                if (!columns.Any(d => d))
+                {
+                    continue;
+                }
+                differs.Add(columns);
+                reasons.Add(reason);
+                for (int i = start; i < start + count; i++)
+                {
+                    run[i] = differs.Count - 1;
+                }
+            }
+            return differs.Count == 0 ? null : new Ambiguity(run, differs, reasons);
         }
 
         /// <summary>
@@ -455,28 +659,52 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             return SqlFailure.Open(SqlPhase.Open, "NotModelled.FoldWidening", $"a folded Long overflow widened to Double under an operator ({c.Name}): its static type is not recorded");
         }
 
-        /// <summary>The qualifying source rows in scan order.</summary>
-        private List<RowId>? Qualifying(out SqlFailure? failure)
+        /// <summary>
+        /// The qualifying input rows: the one source's rows in scan order, or the join tree's tuples (<see cref="Produce"/>),
+        /// each through the WHERE.
+        /// </summary>
+        private List<ResultRow>? Qualifying(out SqlFailure? failure)
         {
             failure = null;
-            var roots = new List<RowId>();
-            for (RowId? root = reader.Scan.Next(null); root is { } r; root = reader.Scan.Next(r))
+            var roots = new List<ResultRow>();
+            if (plan.Tree is { } tree)
             {
-                reader.Position(r);
-                if (plan.Where is { } where)
+                List<RowId?[]>? tuples = Produce(tree, out failure);
+                if (tuples is null)
                 {
-                    RowTest t = where.Test(this);
-                    if (t == RowTest.Failed)
+                    return null;
+                }
+                foreach (RowId?[] t in tuples)
+                {
+                    var row = new ResultRow(default, -1, roots.Count, _tuples.Count / readers.Length);
+                    _tuples.AddRange(t);
+                    if (Where(row, out failure) is not bool keep)
                     {
-                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", where.LastFailure!.ToString());
                         return null;
                     }
-                    if (t == RowTest.NoMatch)
+                    if (keep)
                     {
-                        continue;
+                        roots.Add(row);
+                    }
+                    else
+                    {
+                        _tuples.RemoveRange(_tuples.Count - readers.Length, readers.Length);
                     }
                 }
-                roots.Add(r);
+                return roots;
+            }
+            RowReader reader = readers[0];
+            for (RowId? root = reader.Scan.Next(null); root is { } r; root = reader.Scan.Next(r))
+            {
+                var row = new ResultRow(r, -1, roots.Count);
+                if (Where(row, out failure) is not bool keep)
+                {
+                    return null;
+                }
+                if (keep)
+                {
+                    roots.Add(row);
+                }
             }
             if (reader.Scan.LastFailure is { } storage)
             {
@@ -486,19 +714,171 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             return roots;
         }
 
+        /// <summary>Whether a row passes the WHERE; null with the failure when the WHERE fails on it.</summary>
+        private bool? Where(ResultRow row, out SqlFailure? failure)
+        {
+            failure = null;
+            if (plan.Where is not { } where)
+            {
+                return true;
+            }
+            Stand(row);
+            RowTest t = where.Test(this);
+            if (t == RowTest.Failed)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", where.LastFailure!.ToString());
+                return null;
+            }
+            return t == RowTest.Match;
+        }
+
+        /// <summary>The bound on candidate pairs a join evaluates at open; beyond it the join is named, not run.</summary>
+        private const long PairBudget = 4_000_000;
+
+        /// <summary>
+        /// The tuples of a FROM subtree (II-11 §8, F-101): a table's rows in scan order; for a join, each preserved-side
+        /// tuple against each tuple of the other side, an ON match recorded before any WHERE, and exactly one Null-extended
+        /// tuple for an outer row with no match; for a comma list, the cross product. A failing ON fails the open.
+        /// </summary>
+        private List<RowId?[]>? Produce(SourceNode node, out SqlFailure? failure)
+        {
+            failure = null;
+            int width = readers.Length;
+            switch (node)
+            {
+                case TableNode table:
+                {
+                    int s = table.Slots[0];
+                    var list = new List<RowId?[]>();
+                    for (RowId? root = readers[s].Scan.Next(null); root is { } r; root = readers[s].Scan.Next(r))
+                    {
+                        var t = new RowId?[width];
+                        t[s] = r;
+                        list.Add(t);
+                    }
+                    if (readers[s].Scan.LastFailure is { } storage)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage.Predicate);
+                        return null;
+                    }
+                    return list;
+                }
+                case JoinNode join:
+                {
+                    List<RowId?[]>? left = Produce(join.Left, out failure);
+                    List<RowId?[]>? right = left is null ? null : Produce(join.Right, out failure);
+                    if (left is null || right is null)
+                    {
+                        return null;
+                    }
+                    if ((long)left.Count * right.Count > PairBudget)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.JoinSize", $"{left.Count} x {right.Count} candidate pairs: the nested loop is bounded at {PairBudget}");
+                        return null;
+                    }
+                    bool rightPreserved = join.Kind == JoinKind.Right;
+                    (List<RowId?[]> outer, List<RowId?[]> inner) = rightPreserved ? (right, left) : (left, right);
+                    var list = new List<RowId?[]>();
+                    foreach (RowId?[] o in outer)
+                    {
+                        bool matched = false;
+                        foreach (RowId?[] i in inner)
+                        {
+                            var t = new RowId?[width];
+                            for (int s = 0; s < width; s++)
+                            {
+                                t[s] = o[s] ?? i[s];
+                            }
+                            StandOn(t);
+                            RowTest test = join.On!.Test(this);
+                            if (test == RowTest.Failed)
+                            {
+                                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.OnFailure", join.On.LastFailure!.ToString());
+                                return null;
+                            }
+                            if (test == RowTest.Match)
+                            {
+                                matched = true;
+                                list.Add(t);
+                            }
+                        }
+                        if (!matched && join.Kind != JoinKind.Inner)
+                        {
+                            list.Add((RowId?[])o.Clone());
+                        }
+                    }
+                    return list;
+                }
+                case CrossNode cross:
+                {
+                    List<RowId?[]> list = [new RowId?[width]];
+                    foreach (SourceNode item in cross.Items)
+                    {
+                        List<RowId?[]>? rows = Produce(item, out failure);
+                        if (rows is null)
+                        {
+                            return null;
+                        }
+                        if ((long)list.Count * rows.Count > PairBudget)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.JoinSize", $"{list.Count} x {rows.Count} candidate pairs: the cross product is bounded at {PairBudget}");
+                            return null;
+                        }
+                        var next = new List<RowId?[]>(list.Count * rows.Count);
+                        foreach (RowId?[] a in list)
+                        {
+                            foreach (RowId?[] b in rows)
+                            {
+                                var t = new RowId?[width];
+                                for (int s = 0; s < width; s++)
+                                {
+                                    t[s] = a[s] ?? b[s];
+                                }
+                                next.Add(t);
+                            }
+                        }
+                        list = next;
+                    }
+                    return list;
+                }
+                default:
+                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Source", node.GetType().Name);
+                    return null;
+            }
+        }
+
+        /// <summary>Place the readers on a tuple under construction: its rows, and Null for the slots it does not have yet.</summary>
+        private void StandOn(RowId?[] tuple)
+        {
+            for (int s = 0; s < tuple.Length; s++)
+            {
+                _nullExtended[s] = tuple[s] is null;
+                if (tuple[s] is { } r)
+                {
+                    readers[s].Position(r);
+                }
+            }
+        }
+
         private List<ResultRow>? Materialize(out SqlFailure? failure)
         {
-            List<RowId>? roots = Qualifying(out failure);
+            List<ResultRow>? roots = Qualifying(out failure);
             if (roots is null)
             {
                 return null;
             }
             List<ResultRow>? rows = plan.Grouped ? Groups(roots, out failure)
                 : plan.Predicate == SelectPredicate.Distinct ? Distinct(roots, out failure)
-                : [.. roots.Select((r, i) => new ResultRow(r, -1, i))];
+                : roots;
             if (rows is null)
             {
                 return null;
+            }
+            if (plan.Tree is not null && !plan.Grouped && plan.Predicate != SelectPredicate.Distinct && plan.Order.Count == 0 && rows.Count > 1)
+            {
+                // qualified.md PAR-ORDER, r-par-1/order-join-duplicate-matches, r-sql-13b/join-cross-forms: the row order of a
+                // join depends on the pairing and the indexes and is not identified.
+                _runs.Add((0, rows.Count, "the row order of a join is not identified (PAR-ORDER)"));
             }
             if (plan.Order.Count > 0)
             {
@@ -511,28 +891,185 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             if (plan.Top is { } top)
             {
                 rows = Cut(rows, top, out failure);
-                if (rows is null)
-                {
-                    return null;
-                }
-            }
-            for (int i = 0; i < rows.Count; i++)
-            {
-                rows[i] = rows[i] with { Index = i };
             }
             return rows;
         }
 
-        private void Stand(ResultRow row)
+        private void Stand(ResultRow row) => SelectCursor.Stand(row, readers, _tuples, _nullExtended, ref _group);
+
+        /// <summary>
+        /// A union (II-11 §15; qualified.md SQL-UNION-01..04, PAR-ORDER, SQL-EQ representative): each arm is opened as a
+        /// snapshot with the statement's parameter values and read in its own order, each value converted to its output
+        /// column's type into a union row. The operators apply left to right: UNION ALL appends the arm's rows, UNION then
+        /// keeps one of each set of rows equal under the relational order in every column, the first in that order, and
+        /// lists them ascending (r-sql-1/union-mixed-tokens: A UNION B UNION ALL C keeps C's duplicate). A value an arm
+        /// fails to read fails the open of a statement whose operators are all UNION (r-sql-1/union-error-order, 3464); with
+        /// UNION ALL the row raises at MoveNext and then reads Null, which is named here. The order of an arm whose own
+        /// order is not identified reaches the output only through UNION ALL, as a run.
+        /// </summary>
+        private List<ResultRow>? Union(out SqlFailure? failure)
         {
-            if (row.Group >= 0)
+            failure = null;
+            List<BoundSelect> arms = plan.Arms!;
+            int width = plan.ColumnList.Count;
+            _slotWidth = width;
+            var values = new NativeVariant?[parameters.Length];
+            for (int i = 0; i < values.Length; i++)
             {
-                _group = row.Group;
+                values[i] = parameters[i];
             }
-            else
+            var current = new List<int>();
+            var unordered = new List<(int Start, int Count)>();
+            for (int a = 0; a < arms.Count; a++)
             {
-                reader.Position(row.Root);
+                SelectCursor? cursor = Open(arms[a], database, ResultKind.Snapshot, values, out failure);
+                if (cursor is null)
+                {
+                    return null;
+                }
+                int start = current.Count;
+                bool armUnordered = false;
+                using (cursor)
+                {
+                    cursor.MoveFirst();
+                    while (!cursor.Eof)
+                    {
+                        if (cursor.FetchFailure is { } fetch)
+                        {
+                            failure = fetch;
+                            return null;
+                        }
+                        int row = _slots.Count / width;
+                        for (int c = 0; c < width; c++)
+                        {
+                            if (!cursor.Read(c, out NativeVariant value, out SqlFailure? read, anyOrder: true, out bool rowUnordered))
+                            {
+                                failure = read!.IsNotModelled ? read with { Phase = SqlPhase.Open }
+                                    : plan.ArmAll.Any(all => all) ? SqlFailure.Open(SqlPhase.Open, "NotModelled.UnionAllRowFailure", $"a failing value in a UNION ALL arm ({read}): ACE raises 3071 at MoveNext and reads Null")
+                                    : read with { Phase = SqlPhase.Open };
+                                return null;
+                            }
+                            armUnordered |= rowUnordered;
+                            if (ToUnion(value, plan.ColumnList[c].Union, out NativeVariant converted) is { } conversion)
+                            {
+                                failure = conversion;
+                                return null;
+                            }
+                            _slots.Add(converted);
+                        }
+                        current.Add(row);
+                        cursor.MoveNext();
+                    }
+                    if (cursor.FetchFailure is { } last)
+                    {
+                        failure = last;
+                        return null;
+                    }
+                }
+                if (armUnordered && current.Count - start > 1)
+                {
+                    unordered.Add((start, current.Count - start));
+                }
+                if (a > 0 && !plan.ArmAll[a - 1])
+                {
+                    if (plan.ColumnList.Any(c => c.Union.DaoType == 12))
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.UnionMemo", "a UNION removing duplicates over a Memo column (its comparison is not recorded)");
+                        return null;
+                    }
+                    current = Distinct(current, width, out failure);
+                    if (failure is not null)
+                    {
+                        return null;
+                    }
+                    unordered.Clear();
+                }
             }
+            foreach ((int start, int count) in unordered)
+            {
+                _runs.Add((start, count, "the row order of a union arm is not identified"));
+            }
+            List<ResultRow> rows = [.. current.Select((g, i) => new ResultRow(default, g, i))];
+            if (plan.Order.Count > 0)
+            {
+                _runs.Clear();
+                return Sorted(rows, out failure);
+            }
+            return rows;
+        }
+
+        /// <summary>Union rows without duplicates, ascending, each set of equal rows shown by its first (SQL-EQ).</summary>
+        private List<int> Distinct(List<int> rows, int width, out SqlFailure? failure)
+        {
+            failure = null;
+            int[] order = [.. Enumerable.Range(0, rows.Count)];
+            bool refused = false;
+            Array.Sort(order, (x, y) =>
+            {
+                int c = CompareTuple(_slots, rows[x] * width, rows[y] * width, width, out bool r);
+                refused |= r;
+                return c != 0 ? c : x.CompareTo(y);
+            });
+            if (refused)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.MixedOrderTypes", "UNION over values the relational order does not rank");
+                return rows;
+            }
+            var kept = new List<int>();
+            for (int i = 0; i < order.Length; i++)
+            {
+                int row = rows[order[i]];
+                if (kept.Count > 0 && CompareTuple(_slots, kept[^1] * width, row * width, width, out _) == 0)
+                {
+                    if (!SameTuple(_slots, kept[^1] * width, row * width, width))
+                    {
+                        failure = Spelling();
+                        return rows;
+                    }
+                    continue;
+                }
+                kept.Add(row);
+            }
+            return kept;
+        }
+
+        /// <summary>
+        /// An arm's value converted to its union column's type (UnionTypes): Null stays Null; a value of the type is
+        /// copied; Yes/No widens through Integer.
+        /// </summary>
+        private SqlFailure? ToUnion(in NativeVariant value, UnionConversion to, out NativeVariant result)
+        {
+            result = default;
+            VarType vt = (VarType)value.Vt;
+            if (vt == VarType.Null || vt == to.Target)
+            {
+                result = Copy(value);
+                return null;
+            }
+            NativeVariant source = value;
+            NativeVariant widened = default;
+            if (vt == VarType.Bool && to.Target != VarType.Bool)
+            {
+                if (!SqlParameters.Convert(value, ScalarOperation.CInt, plan.Context, out widened))
+                {
+                    return SqlFailure.Open(SqlPhase.Open, "NotModelled.UnionConversion", "a Yes/No value to Integer");
+                }
+                source = widened;
+            }
+            ScalarOperation op = to.Target switch
+            {
+                VarType.UI1 => ScalarOperation.CByte,
+                VarType.I2 => ScalarOperation.CInt,
+                VarType.I4 => ScalarOperation.CLng,
+                VarType.Currency => ScalarOperation.CCur,
+                VarType.R4 => ScalarOperation.CSng,
+                VarType.R8 => ScalarOperation.CDbl,
+                VarType.Date => ScalarOperation.CDate,
+                _ => ScalarOperation.CStr,
+            };
+            bool ok = (VarType)source.Vt == to.Target ? (result = Copy(source)).Vt != 0 : SqlParameters.Convert(source, op, plan.Context, out result);
+            SelectValues.Clear(ref widened);
+            return ok ? null : SqlFailure.Open(SqlPhase.Open, "NotModelled.UnionConversion", $"a {vt} value to the union column's {to.Target}");
         }
 
         /// <summary>
@@ -576,24 +1113,42 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             _ordered = order;
             List<ResultRow> sorted = [.. order.Select(i => rows[i])];
-            int cut = plan.Top is { } top ? (int)Math.Min(sorted.Count, Count(top, sorted.Count)) : sorted.Count;
-            for (int i = 1; i < sorted.Count; i++)
+            if (tieOpen is not null)
             {
-                if (tieOpen is not null && CompareKeys(order[i - 1], order[i], k, ref refused) == 0 && (i < cut || plan.Top is null) && !Identical(sorted[i - 1], sorted[i]))
-                {
-                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.TieOrder", $"rows with equal ORDER BY keys that differ in a projected value: {tieOpen} (qualified.md R-SORT-3 tie order)");
-                    return null;
-                }
+                Runs(order, k, $"{tieOpen} (qualified.md R-SORT-3 tie order)");
             }
             return sorted;
         }
 
+        /// <summary>Record each run of two or more rows with equal ORDER BY keys as a run whose order is not identified.</summary>
+        private void Runs(int[] order, int k, string reason)
+        {
+            bool refused = false;
+            for (int start = 0; start < order.Length;)
+            {
+                int end = start + 1;
+                while (end < order.Length && CompareKeys(order[start], order[end], k, ref refused) == 0)
+                {
+                    end++;
+                }
+                if (end - start > 1)
+                {
+                    _runs.Add((start, end - start, reason));
+                }
+                start = end;
+            }
+        }
+
         /// <summary>
         /// The order of tied rows over <paramref name="count"/> rows in storage order: 1 storage order, -1 its reverse, with
-        /// null; or the reason no rule decides it (the sort then keeps storage order and names differing ties).
+        /// null; or the reason no rule decides it (the sort then keeps storage order and records the tied runs).
         /// </summary>
         private (int Ties, string? Open) TieRule(int count)
         {
+            if (plan.IsUnion || plan.Tree is not null)
+            {
+                return (1, "the order of tied joined or union rows is not recorded");
+            }
             if (plan.Grouped || plan.Predicate != SelectPredicate.All)
             {
                 return (1, "the order of tied groups or DISTINCT rows is not recorded");
@@ -611,33 +1166,6 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         }
 
         private static long Count(TopClause top, int rows) => top.Percent ? (long)Math.Ceiling(rows * top.Count / 100.0) : (long)Math.Floor(top.Count);
-
-        /// <summary>Whether two rows give the same value, type and bytes, in every column (their order cannot be seen).</summary>
-        private bool Identical(ResultRow a, ResultRow b)
-        {
-            for (int c = 0; c < plan.ColumnList.Count; c++)
-            {
-                if (_constants[c].Vt != (ushort)VarType.Empty)
-                {
-                    continue;
-                }
-                BoundExpression p = plan.ColumnList[c].Program;
-                Stand(a);
-                if (!p.Evaluate(this))
-                {
-                    return false;
-                }
-                NativeVariant first = Copy(p.Value);
-                Stand(b);
-                bool same = p.Evaluate(this) && Same(first, p.Value);
-                Values.Clear(ref first);
-                if (!same)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
 
         private static bool Same(in NativeVariant a, in NativeVariant b)
         {
@@ -687,6 +1215,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             if (plan.Order.Count == 0)
             {
+                if (plan.Tree is not null && !plan.Grouped && plan.Predicate != SelectPredicate.Distinct)
+                {
+                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.JoinTop", "TOP over a join without ORDER BY: which rows come first is not identified (PAR-ORDER)");
+                    return null;
+                }
                 return rows.GetRange(0, (int)count);
             }
             int k = plan.Order.Count;
@@ -696,14 +1229,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 end++;
             }
-            for (int i = 1; i < end; i++)
-            {
-                if (CompareKeys(_ordered![i - 1], _ordered[i], k, ref refused) == 0 && !Identical(rows[i - 1], rows[i]))
-                {
-                    failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.TopTieOrder", "TOP over tied ORDER BY keys: the order of ties inside the kept rows is unexplained (SQL-TOP)");
-                    return null;
-                }
-            }
+            // SQL-TOP: the order of ties inside the kept rows is unexplained, whatever the recordset type's tie rule.
+            _runs.RemoveAll(r => r.Start < end);
+            Runs(_ordered![..end], k, "TOP over tied ORDER BY keys: the order of ties inside the kept rows is unexplained (SQL-TOP)");
+            _runs.RemoveAll(r => r.Start >= end);
             return rows.GetRange(0, end);
         }
 
@@ -711,7 +1240,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         /// DISTINCT (qualified.md SQL-EQ, PAR-ORDER): every projected value is read at open; rows equal under the relational
         /// order are one row, shown by the first in scan order; the rows come out ascending.
         /// </summary>
-        private List<ResultRow>? Distinct(List<RowId> roots, out SqlFailure? failure)
+        private List<ResultRow>? Distinct(List<ResultRow> roots, out SqlFailure? failure)
         {
             failure = null;
             int n = plan.ColumnList.Count;
@@ -721,7 +1250,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 for (int r = 0; r < roots.Count; r++)
                 {
-                    reader.Position(roots[r]);
+                    Stand(roots[r]);
                     int start = values.Count;
                     for (int c = 0; c < n; c++)
                     {
@@ -778,7 +1307,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 ClearSlots(values);
             }
-            return [.. kept.Select((r, i) => new ResultRow(roots[r], -1, i))];
+            return [.. kept.Select((r, i) => roots[r] with { Index = i })];
         }
 
         /// <summary>
@@ -823,7 +1352,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         /// fold in that feed order; the groups come out ascending by key; with no GROUP BY there is one group even over no
         /// rows. A failing key or argument fails the open. HAVING filters the groups.
         /// </summary>
-        private List<ResultRow>? Groups(List<RowId> roots, out SqlFailure? failure)
+        private List<ResultRow>? Groups(List<ResultRow> roots, out SqlFailure? failure)
         {
             failure = null;
             int keys = plan.Keys.Count;
@@ -836,15 +1365,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 NewGroup(states);
                 sorted.Add(0);
             }
-            if (keys > 0 && roots.Count > 0 && FeedOrderOpen() is { } feedOpen)
+            if ((keys > 0 || plan.Tree is not null) && roots.Count > 0 && FeedOrderOpen() is { } feedOpen)
             {
                 failure = feedOpen;
                 return null;
             }
             NativeVariant[] probe = new NativeVariant[Math.Max(keys, 1)];
-            foreach (RowId root in roots)
+            foreach (ResultRow root in roots)
             {
-                reader.Position(root);
+                Stand(root);
                 for (int k = 0; k < keys; k++)
                 {
                     BoundExpression key = plan.Keys[k];
@@ -977,6 +1506,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 return null;
             }
+            if (plan.Tree is not null)
+            {
+                // PAR-ORDER: a join's row order is not identified, so neither is the order its rows reach an aggregate.
+                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderJoin", "an order-sensitive aggregate (First, Last, a floating Sum or Avg) over a join");
+            }
             SourceSlot s = plan.Sources[0];
             foreach (BoundExpression key in plan.Keys)
             {
@@ -992,7 +1526,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             for (int k = 0; k < count; k++)
             {
-                Values.Clear(ref probe[k]);
+                SelectValues.Clear(ref probe[k]);
             }
         }
 
@@ -1095,7 +1629,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         private static void Replace(ref NativeVariant slot, in NativeVariant value)
         {
-            Values.Clear(ref slot);
+            SelectValues.Clear(ref slot);
             slot = Copy(value);
         }
 

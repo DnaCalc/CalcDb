@@ -17,7 +17,9 @@ namespace CalcDb.Sql.Tests;
 /// read from the record (names, types, values, error numbers and texts). An observation CalcDb names as not modelled, or
 /// one on a recordset whose replay stopped at a not-modelled outcome, is counted apart, never matched. After the record
 /// changes the database (Execute, Update, Delete, Append) the database is no longer the fixture: the rest is counted as
-/// not modelled. Recordsets of a table name, QueryDef routes and members of other objects are not this slice's.
+/// not modelled. A temporary QueryDef (<c>CreateQueryDef("", sql)</c>) is replayed too: its Parameters (Count, Item,
+/// Name, Type, Value read and assigned), its Fields before an open (Count, Item, Name, Type) and its OpenRecordset with
+/// the values assigned. Recordsets of a table name, saved QueryDefs and members of other objects are not this slice's.
 /// </summary>
 public sealed class SelectReplayTests(ITestOutputHelper output)
 {
@@ -96,6 +98,9 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
 
             public BoundSelect? Plan { get; set; }
 
+            /// <summary>Whether the plan is this recordset's own (not its QueryDef's).</summary>
+            public bool OwnsPlan { get; set; } = true;
+
             public SelectCursor? Cursor { get; set; }
 
             /// <summary>Why the replay of this recordset stopped, when it did.</summary>
@@ -105,6 +110,47 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         private sealed record FieldsObject(RecordsetObject Recordset);
 
         private sealed record FieldObject(RecordsetObject Recordset, int Column);
+
+        /// <summary>A temporary QueryDef (<c>CreateQueryDef("", sql)</c>): its bound statement and its parameter values.</summary>
+        private sealed class QueryDefObject(SqlFixture image)
+        {
+            public SqlFixture Image { get; } = image;
+
+            public BoundSelect? Plan { get; set; }
+
+            public NativeVariant?[] Values { get; set; } = [];
+
+            public string? Stopped { get; set; }
+
+            public void Close()
+            {
+                for (int i = 0; i < Values.Length; i++)
+                {
+                    if (Values[i] is { } v)
+                    {
+                        SqlFixture.Free(ref v);
+                        Values[i] = null;
+                    }
+                }
+                Plan?.Dispose();
+                Plan = null;
+            }
+        }
+
+        private sealed record ParametersObject(QueryDefObject Query);
+
+        private sealed record ParameterObject(QueryDefObject Query, int Index);
+
+        private sealed record QueryFieldsObject(QueryDefObject Query);
+
+        private sealed record QueryFieldObject(QueryDefObject Query, int Column);
+
+        /// <summary>Whether text is a statement the SQL front end reads (a SELECT, a parenthesized arm, a PARAMETERS declaration).</summary>
+        private static bool IsSelectText(string sql)
+        {
+            string t = sql.TrimStart();
+            return t.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) || t.StartsWith('(') || t.StartsWith("PARAMETERS", StringComparison.OrdinalIgnoreCase);
+        }
 
         public void Run()
         {
@@ -144,15 +190,27 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                 switch (target)
                 {
                     case DatabaseObject db:
-                        if (e.Member == "OpenRecordset" && e.Args.Count > 0 && e.Args[0].Text is { } sql && sql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                        if (e.Member is "OpenRecordset" or "CreateQueryDef" && e.Args.Count > (e.Member == "OpenRecordset" ? 0 : 1)
+                            && e.Args[e.Member == "OpenRecordset" ? 0 : 1].Text is { } sql && IsSelectText(sql))
                         {
+                            if (e.Member == "CreateQueryDef" && e.Args[0].Text is not "")
+                            {
+                                continue; // a saved QueryDef: W-07/saved-definition's
+                            }
                             if (db.Fixture is not { } fixture || !SqlFixture.Retained(fixture))
                             {
-                                Bind(e, Stopped(sql, where, "NotModelled.Fixture: the database is not a retained input of the record"));
+                                Open.Add($"{where}: NotModelled.Fixture: the database is not a retained input of the record");
                                 continue;
                             }
                             db.Image ??= new SqlFixture(fixture);
-                            OpenRecordset(e, db.Image, sql, where);
+                            if (e.Member == "OpenRecordset")
+                            {
+                                OpenRecordset(e, db.Image, sql, where);
+                            }
+                            else
+                            {
+                                CreateQueryDef(e, db.Image, sql, where);
+                            }
                         }
                         break;
                     case RecordsetObject rs:
@@ -164,11 +222,291 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     case FieldObject field:
                         OnField(e, field, where);
                         break;
+                    case QueryDefObject query:
+                        OnQueryDef(e, query, where);
+                        break;
+                    case ParametersObject parameters:
+                        OnParameters(e, parameters, where);
+                        break;
+                    case ParameterObject parameter:
+                        OnParameter(e, parameter, where);
+                        break;
+                    case QueryFieldsObject queryFields:
+                        OnQueryFields(e, queryFields, where);
+                        break;
+                    case QueryFieldObject queryField:
+                        OnQueryField(e, queryField, where);
+                        break;
                 }
             }
             foreach (RecordsetObject rs in _objects.Values.OfType<RecordsetObject>().Distinct())
             {
                 Close(rs);
+            }
+            foreach (QueryDefObject q in _queries)
+            {
+                q.Close();
+            }
+        }
+
+        private readonly List<QueryDefObject> _queries = [];
+
+        /// <summary>
+        /// <c>CreateQueryDef("", sql)</c>: ACE parses the statement and checks its joins there (r-sql-13b/params-declaration-syntax
+        /// 3139 and 3129, params-positions 3296). A binding failure of another kind where ACE created the QueryDef is
+        /// answered at another phase, not recorded here: named.
+        /// </summary>
+        private void CreateQueryDef(InvokeEvent e, SqlFixture image, string sql, string where)
+        {
+            where += $"(\"{(sql.Length > 90 ? sql[..90] + "…" : sql)}\")";
+            if (_changed is { } changed)
+            {
+                Open.Add($"{where}: NotModelled.DatabaseChanged: the record changed the database at {changed}");
+                return;
+            }
+            var query = new QueryDefObject(image);
+            _queries.Add(query);
+            BoundSelect? plan = BoundSelect.Prepare(sql, image, out SqlFailure? failure);
+            if (failure is { IsNotModelled: false, Phase: SqlPhase.Bind } && failure.Number != 3296 && e.ExcepInfo is null)
+            {
+                query.Stopped = $"NotModelled.QueryDefBindPhase: CalcDb fails {failure.Number} while binding; ACE created the QueryDef";
+                Open.Add($"{where}: {query.Stopped}");
+                Bind(e, query);
+                return;
+            }
+            if (Outcome(where, e.ExcepInfo, failure))
+            {
+                query.Plan = plan;
+                query.Values = new NativeVariant?[plan!.Parameters.Count];
+                Bind(e, query);
+                return;
+            }
+            plan?.Dispose();
+        }
+
+        private bool Live(QueryDefObject q, string where)
+        {
+            if (q.Stopped is { } why)
+            {
+                Open.Add($"{where}: {why}");
+                return false;
+            }
+            return q.Plan is not null;
+        }
+
+        private void OnQueryDef(InvokeEvent e, QueryDefObject q, string where)
+        {
+            if (e.Member == "Close")
+            {
+                q.Close();
+                q.Stopped = "NotModelled.ClosedQueryDef: a call after Close";
+                return;
+            }
+            if (!Live(q, where))
+            {
+                return;
+            }
+            switch (e.Member)
+            {
+                case "Parameters" when e.Args.Count == 0:
+                    Bind(e, new ParametersObject(q));
+                    break;
+                case "Fields" when e.Args.Count == 0:
+                    Bind(e, new QueryFieldsObject(q));
+                    break;
+                case "OpenRecordset":
+                    int type = e.Args.Count > 0 && e.Args[0].Integer is { } t ? int.Parse(t, CultureInfo.InvariantCulture) : 2;
+                    var rs = new RecordsetObject(q.Plan!.Source) { Plan = q.Plan, OwnsPlan = false };
+                    if (type is not (2 or 4 or 8) || e.Args.Count > 1)
+                    {
+                        rs.Stopped = $"NotModelled.RecordsetType: type {type}, {e.Args.Count} arguments";
+                        Open.Add($"{where}: {rs.Stopped}");
+                        Bind(e, rs);
+                        return;
+                    }
+                    SelectCursor? cursor = SelectCursor.Open(q.Plan, q.Image, type switch { 2 => ResultKind.Dynaset, 4 => ResultKind.Snapshot, _ => ResultKind.ForwardOnly }, q.Values, out SqlFailure? failure);
+                    if (Outcome(where, e.ExcepInfo, failure))
+                    {
+                        rs.Cursor = cursor;
+                    }
+                    else
+                    {
+                        cursor?.Dispose();
+                        rs.Stopped = failure?.NotModelled ?? "a failed open";
+                    }
+                    Bind(e, rs);
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.QueryDefMember: {e.Member}");
+                    break;
+            }
+        }
+
+        private void OnParameters(InvokeEvent e, ParametersObject ps, string where)
+        {
+            QueryDefObject q = ps.Query;
+            if (!Live(q, where))
+            {
+                return;
+            }
+            IReadOnlyList<QueryParameter> list = q.Plan!.Parameters;
+            switch (e.Member)
+            {
+                case "Count":
+                    if (q.Plan.ParametersFailure is { } pf || e.ExcepInfo is not null)
+                    {
+                        Outcome(where, e.ExcepInfo, q.Plan.ParametersFailure);
+                        break;
+                    }
+                    Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), list.Count);
+                    break;
+                case "Item" when e.Args.Count == 1:
+                    CapturedValue arg = e.Args[0];
+                    int index = arg.Text is { } name
+                        ? list.ToList().FindIndex(p => string.Equals(p.Name is ['[', .., ']'] ? p.Name[1..^1] : p.Name, name, StringComparison.OrdinalIgnoreCase))
+                        : int.Parse(arg.Integer!, CultureInfo.InvariantCulture);
+                    bool found = index >= 0 && index < list.Count;
+                    if (found != (e.ExcepInfo is null))
+                    {
+                        Mismatches.Add($"{where}({arg.Text ?? arg.Integer}): ACE {(e.ExcepInfo is null ? "a parameter" : Render(e.ExcepInfo))}, CalcDb {(found ? "a parameter" : "no parameter")}");
+                        break;
+                    }
+                    Matched++;
+                    if (found)
+                    {
+                        Bind(e, new ParameterObject(q, index));
+                    }
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.ParametersMember: {e.Member}");
+                    break;
+            }
+        }
+
+        private void OnParameter(InvokeEvent e, ParameterObject p, string where)
+        {
+            QueryDefObject q = p.Query;
+            if (!Live(q, where))
+            {
+                return;
+            }
+            QueryParameter parameter = q.Plan!.Parameters[p.Index];
+            where += $"[{parameter.Name}]";
+            switch (e.Member)
+            {
+                case "Name" when e.ExcepInfo is null:
+                    Check(where, e.Result?.Text ?? "", parameter.Name);
+                    break;
+                case "Type" when e.ExcepInfo is null:
+                    Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), parameter.DaoType);
+                    break;
+                case "Value" when e.Args.Count == 1:
+                    if (SqlFixture.ToVariant(e.Args[0]) is not { } given)
+                    {
+                        Open.Add($"{where}: NotModelled.ParameterArgument: {e.Args[0].VtName}");
+                        q.Stopped = "NotModelled.ParameterArgument: a value this replay does not pass";
+                        break;
+                    }
+                    SqlFailure? refused = SqlParameters.Adapt(parameter, given, q.Image.Context, out NativeVariant adapted);
+                    SqlFixture.Free(ref given);
+                    if (refused is { IsNotModelled: true })
+                    {
+                        Open.Add($"{where}: {refused.NotModelled}: {refused.Message}");
+                        q.Stopped = $"{refused.NotModelled}: a parameter value is not modelled";
+                        break;
+                    }
+                    if (Outcome(where, e.ExcepInfo, refused))
+                    {
+                        if (q.Values[p.Index] is { } old)
+                        {
+                            SqlFixture.Free(ref old);
+                        }
+                        q.Values[p.Index] = adapted;
+                    }
+                    break;
+                case "Value" when e.ExcepInfo is null:
+                    // r-sql-13b/params-value-readback: an unassigned parameter reads Empty.
+                    CapturedValue mine = q.Values[p.Index] is { } held ? SqlFixture.Capture(held) : CapturedValue.Simple((int)VarType.Empty);
+                    Difference? d = new ValueComparer().Compare(e.Result, mine, where);
+                    if (d is null)
+                    {
+                        Matched++;
+                    }
+                    else
+                    {
+                        Mismatches.Add($"{where}: ACE {d.Expected}, CalcDb {d.Actual}");
+                    }
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.ParameterMember: {e.Member}");
+                    break;
+            }
+        }
+
+        /// <summary>QueryDef.Fields before an open (qualified.md SQL-META: readable before assignment): the bound columns.</summary>
+        private void OnQueryFields(InvokeEvent e, QueryFieldsObject fields, string where)
+        {
+            QueryDefObject q = fields.Query;
+            if (!Live(q, where))
+            {
+                return;
+            }
+            IReadOnlyList<ResultColumn> columns = q.Plan!.Columns;
+            switch (e.Member)
+            {
+                case "Count" when e.ExcepInfo is null:
+                    Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), columns.Count);
+                    break;
+                case "Item" when e.Args.Count == 1:
+                    CapturedValue arg = e.Args[0];
+                    int index = arg.Text is { } name
+                        ? columns.ToList().FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+                        : int.Parse(arg.Integer!, CultureInfo.InvariantCulture);
+                    bool found = index >= 0 && index < columns.Count;
+                    if (found != (e.ExcepInfo is null))
+                    {
+                        Mismatches.Add($"{where}({arg.Text ?? arg.Integer}): ACE {(e.ExcepInfo is null ? "a field" : Render(e.ExcepInfo))}, CalcDb {(found ? "a field" : "no field")}");
+                        break;
+                    }
+                    Matched++;
+                    if (found)
+                    {
+                        Bind(e, new QueryFieldObject(q, index));
+                    }
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.QueryFieldsMember: {e.Member}");
+                    break;
+            }
+        }
+
+        private void OnQueryField(InvokeEvent e, QueryFieldObject field, string where)
+        {
+            QueryDefObject q = field.Query;
+            if (!Live(q, where))
+            {
+                return;
+            }
+            ResultColumn column = q.Plan!.Columns[field.Column];
+            where += $"[{column.Name}]";
+            switch (e.Member)
+            {
+                case "Name" when e.ExcepInfo is null:
+                    Check(where, e.Result?.Text ?? "", column.Name);
+                    break;
+                case "Type" when e.ExcepInfo is null:
+                    if (column.TypeRule == ColumnTypeRule.Bound && column.FieldType is int type)
+                    {
+                        Check(where, int.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), type);
+                    }
+                    else
+                    {
+                        Open.Add($"{where}: {column.TypeOpen ?? "NotModelled.FieldType"}: ACE {e.Result!.Integer} (before open)");
+                    }
+                    break;
+                default:
+                    Open.Add($"{where}: NotModelled.QueryFieldMember: {e.Member}");
+                    break;
             }
         }
 
@@ -204,7 +542,10 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
         {
             rs.Cursor?.Dispose();
             rs.Cursor = null;
-            rs.Plan?.Dispose();
+            if (rs.OwnsPlan)
+            {
+                rs.Plan?.Dispose();
+            }
             rs.Plan = null;
         }
 
@@ -314,6 +655,11 @@ public sealed class SelectReplayTests(ITestOutputHelper output)
                     Check(where, Bool(e), c.Bof);
                     break;
                 case "RecordCount" when e.ExcepInfo is null:
+                    if (c.RecordCountOpen is { } population)
+                    {
+                        Open.Add($"{where}: NotModelled.Population: {population}: ACE {e.Result!.Integer}");
+                        break;
+                    }
                     Check(where, long.Parse(e.Result!.Integer!, CultureInfo.InvariantCulture), c.RecordCount);
                     break;
                 case "MoveNext" or "MoveFirst" or "MoveLast" or "MovePrevious":

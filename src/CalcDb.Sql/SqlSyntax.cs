@@ -47,8 +47,20 @@ public sealed record OrderItem(Fragment Expression, bool Descending);
 public readonly record struct TopClause(double Count, bool Percent, string Text);
 
 /// <summary>
-/// A parsed SELECT (II-11 §2 SelectSyntax: the source and the spans, no binding). Owns its expressions' literal texts
-/// until <see cref="Dispose"/>; the binder takes over the ones its programs keep.
+/// A PARAMETERS declaration (II-11 §2 parameter_declarations; qualified.md R-SQL-3 SQL-META parameters): its name as
+/// written, its DAO type (DataTypeEnum, Parameter.Type) and the Field.Type of a column that projects it bare, which is
+/// the same except for BigInt (16, Parameter.Type 19) and Value (0, Parameter.Type 10; not identified, null)
+/// (r-sql-13b/params-declared-type-names).
+/// </summary>
+public sealed record ParameterDeclaration(string Name, int DaoType, int? FieldType);
+
+/// <summary>A later arm of a UNION with the operator before it (II-11 §15: each UNION/ALL token kept with its arm).</summary>
+public readonly record struct UnionArm(bool All, SelectSyntax Select);
+
+/// <summary>
+/// A parsed statement (II-11 §2 QuerySyntax: the declarations, the body, the source and the spans, no binding): a SELECT,
+/// whose first arm is this object's own clauses, with its later UNION arms and the union's final ORDER BY. Owns its
+/// expressions' literal texts until <see cref="Dispose"/>; the binder takes over the ones its programs keep.
 /// </summary>
 public sealed class SelectSyntax : IDisposable
 {
@@ -58,6 +70,17 @@ public sealed class SelectSyntax : IDisposable
     }
 
     public string Source { get; }
+
+    /// <summary>The PARAMETERS declarations, in order (a statement's, never an arm's).</summary>
+    public List<ParameterDeclaration> Parameters { get; } = [];
+
+    /// <summary>The arms after the first, in order; empty for a plain SELECT.</summary>
+    public List<UnionArm> Unions { get; } = [];
+
+    /// <summary>The ORDER BY of a union, over its output (written after the last arm).</summary>
+    public List<OrderItem> UnionOrderBy { get; } = [];
+
+    public bool IsUnion => Unions.Count > 0;
 
     public SelectPredicate Predicate { get; internal set; }
 
@@ -86,6 +109,10 @@ public sealed class SelectSyntax : IDisposable
             f.Syntax.Dispose();
         }
         Fragments.Clear();
+        foreach (UnionArm arm in Unions)
+        {
+            arm.Select.Dispose();
+        }
     }
 }
 
@@ -95,13 +122,33 @@ public sealed class SelectSyntax : IDisposable
 /// clause word, a comma or the end follows. Covered: <c>SELECT [ALL|DISTINCT|DISTINCTROW] [TOP n [PERCENT]] items FROM
 /// sources [WHERE e] [GROUP BY e, …] [HAVING e] [ORDER BY e [ASC|DESC], …] [;]</c>, items <c>*</c>, <c>s.*</c> and
 /// <c>e [AS alias]</c>, sources a name with an optional alias, a comma list and <c>INNER|LEFT [OUTER]|RIGHT [OUTER] JOIN
-/// … ON …</c>, a chain of joins only parenthesized (R-SQL-1 SQL-B: unparenthesised chains fail 3075). Other statements
-/// and forms (PARAMETERS, UNION, TRANSFORM, subqueries, IN 'file') are named not-modelled cases.
+/// … ON …</c>, a chain of joins only parenthesized (R-SQL-1 SQL-B: unparenthesised chains fail 3075); a leading
+/// <c>PARAMETERS name type, …;</c>; arms joined by <c>UNION [ALL]</c>, each optionally parenthesized, with the union's
+/// ORDER BY after the last. Other statements and forms (TRANSFORM, subqueries, IN 'file') are named not-modelled cases.
 /// </summary>
 public static class SqlParser
 {
     /// <summary>3141, the SELECT statement's own syntax error (r-sql-2-3/top-arguments: TOP 0, TOP -1).</summary>
     public const string SelectSyntaxError = "The SELECT statement includes a reserved word or an argument name that is misspelled or missing, or the punctuation is incorrect.";
+
+    /// <summary>3139 (r-sql-13b/params-declaration-syntax, params-declared-type-names).</summary>
+    public const string ParameterClauseError = "Syntax error in PARAMETER clause.";
+
+    /// <summary>3129 (r-sql-13b/params-declaration-syntax: two PARAMETERS clauses; union-syntax-forms: UNION DISTINCT, UNION CORRESPONDING).</summary>
+    public const string InvalidStatement = "Invalid SQL statement; expected 'DELETE', 'INSERT', 'PROCEDURE', 'SELECT', or 'UPDATE'.";
+
+    /// <summary>
+    /// The declared type names (qualified.md R-SQL-3 SQL-META parameters, r-sql-13b/params-declared-type-names): their
+    /// DAO types, or 0 for the names ACE refuses with 3139.
+    /// </summary>
+    private static readonly Dictionary<string, int> ParameterTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Bit"] = 1, ["Byte"] = 2, ["Short"] = 3, ["Long"] = 4, ["Integer"] = 4, ["Int"] = 4, ["Currency"] = 5,
+        ["IEEESingle"] = 6, ["Single"] = 6, ["Real"] = 6, ["IEEEDouble"] = 7, ["Double"] = 7, ["Float"] = 7, ["Numeric"] = 7,
+        ["DateTime"] = 8, ["Binary"] = 9, ["Text"] = 10, ["Char"] = 10, ["VarChar"] = 10, ["Value"] = 10, ["LongBinary"] = 11,
+        ["LongText"] = 12, ["Guid"] = 15, ["BigInt"] = 19,
+        ["Decimal"] = 0, ["Memo"] = 0, ["Counter"] = 0, ["Boolean"] = 0, ["Variant"] = 0, ["TinyInt"] = 0,
+    };
 
     private static readonly HashSet<string> ClauseWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -148,6 +195,9 @@ public static class SqlParser
     private sealed class Parser(string s)
     {
         private int _p;
+
+        /// <summary>The depth of parenthesized arms the position is inside: there a ')' ends a clause.</summary>
+        private int _armDepth;
 
         private static SqlFailure Open(string name, string detail) => SqlFailure.Open(SqlPhase.Parse, name, detail);
 
@@ -330,7 +380,152 @@ public static class SqlParser
             return new SqlFailure(SqlPhase.Parse, 3075, $"Syntax error (missing operator){SqlFailure.QueryExpression}{s[start..stop]}'.") { ExcerptExact = false };
         }
 
+        /// <summary>
+        /// A statement: <c>[PARAMETERS …;] arm {UNION [ALL] arm} [;]</c> (II-11 §2, §15). The last arm's ORDER BY is the
+        /// union's; an ORDER BY on an earlier arm is not recorded. UNION is left-associative: each operator keeps its arm.
+        /// </summary>
         public SqlFailure? Select(SelectSyntax statement)
+        {
+            if (TakeWord("PARAMETERS") && Parameters(statement) is { } declarations)
+            {
+                return declarations;
+            }
+            if (IsWord("PARAMETERS"))
+            {
+                return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
+            }
+            if (Arm(statement) is { } first)
+            {
+                return first;
+            }
+            SelectSyntax last = statement;
+            while (TakeWord("UNION"))
+            {
+                bool all = TakeWord("ALL");
+                if (IsWord("DISTINCT") || IsWord("CORRESPONDING"))
+                {
+                    return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
+                }
+                if (last.OrderBy.Count > 0)
+                {
+                    return Open("NotModelled.ArmOrderBy", "an ORDER BY on an arm before UNION (ACE's answer not recorded)");
+                }
+                var arm = new SelectSyntax(s);
+                statement.Unions.Add(new UnionArm(all, arm));
+                if (Arm(arm) is { } armFailure)
+                {
+                    return armFailure;
+                }
+                last = arm;
+            }
+            if (statement.IsUnion)
+            {
+                statement.UnionOrderBy.AddRange(last.OrderBy);
+                last.OrderBy.Clear();
+            }
+            TakeSymbol(';');
+            if (!AtEnd())
+            {
+                return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// <c>PARAMETERS name type [(n)], …;</c> (qualified.md R-SQL-3 SQL-META parameters; r-sql-13b/params-declaration-syntax):
+        /// a missing ';', a missing type, an empty list, a trailing comma, <c>[p]] 2]</c> and the refused type names fail
+        /// 3139. A name may be bracketed, dotted (<c>CX.x</c>) or a keyword (<c>[Date]</c>). A length is read for Text only.
+        /// </summary>
+        private SqlFailure? Parameters(SelectSyntax statement)
+        {
+            SqlFailure clause = SqlFailure.Ace(SqlPhase.Parse, 3139, ParameterClauseError);
+            do
+            {
+                string? name = ParameterName();
+                if (name is null || BadName)
+                {
+                    return clause;
+                }
+                string? typeWord = PeekWord();
+                if (typeWord is null)
+                {
+                    return clause;
+                }
+                _p += typeWord.Length;
+                if (!ParameterTypes.TryGetValue(typeWord, out int type))
+                {
+                    return Open("NotModelled.ParameterType", $"PARAMETERS type '{typeWord}' (not among the recorded names)");
+                }
+                if (type == 0)
+                {
+                    return clause;
+                }
+                if (TakeSymbol('('))
+                {
+                    Skip();
+                    int digits = _p;
+                    while (_p < s.Length && char.IsAsciiDigit(s[_p]))
+                    {
+                        _p++;
+                    }
+                    if (type != 10 || _p == digits || !TakeSymbol(')'))
+                    {
+                        return Open("NotModelled.ParameterLength", $"a length on a {typeWord} parameter (only Text ( n ) is recorded)");
+                    }
+                }
+                statement.Parameters.Add(new ParameterDeclaration(name, type, typeWord.ToUpperInvariant() switch { "VALUE" => null, "BIGINT" => 16, _ => type }));
+            }
+            while (TakeSymbol(','));
+            return TakeSymbol(';') ? null : clause;
+        }
+
+        /// <summary>
+        /// A parameter's name as written, brackets kept (r-sql-13b/params-declaration-syntax: <c>[p 1]</c> is named "[p 1]"):
+        /// a bracketed name, or words joined by dots, keywords included.
+        /// </summary>
+        private string? ParameterName()
+        {
+            Skip();
+            int start = _p;
+            if (_p < s.Length && s[_p] == '[')
+            {
+                return Name(allowClauseWord: true) is null ? null : s[start.._p];
+            }
+            if (Name(allowClauseWord: true) is null)
+            {
+                return null;
+            }
+            while (_p < s.Length && s[_p] == '.')
+            {
+                _p++;
+                if (Name(allowClauseWord: true) is null)
+                {
+                    return null;
+                }
+            }
+            return s[start.._p];
+        }
+
+        /// <summary>One SELECT arm, bare or in parentheses (r-sql-13b/union-syntax-forms: <c>(SELECT a FROM JA) UNION (SELECT b FROM JB)</c>).</summary>
+        private SqlFailure? Arm(SelectSyntax statement)
+        {
+            int save = _p;
+            if (TakeSymbol('(') && IsWord("SELECT"))
+            {
+                _armDepth++;
+                SqlFailure? inner = ArmBody(statement);
+                _armDepth--;
+                if (inner is not null)
+                {
+                    return inner;
+                }
+                return TakeSymbol(')') ? null : Open("NotModelled.SqlSyntax", $"an unclosed parenthesized SELECT at {_p} (ACE's answer not recorded)");
+            }
+            _p = save;
+            return ArmBody(statement);
+        }
+
+        private SqlFailure? ArmBody(SelectSyntax statement)
         {
             if (!TakeWord("SELECT"))
             {
@@ -377,6 +572,11 @@ public static class SqlParser
                 statement.From.Add(source!);
             }
             while (TakeSymbol(','));
+            if (IsWord("SELECT"))
+            {
+                // r-sql-13b/union-syntax-forms: INTERSECT, EXCEPT and MINUS are read as an alias, then SELECT is 3131.
+                return SqlFailure.Ace(SqlPhase.Parse, 3131, "Syntax error in FROM clause.");
+            }
             if (TakeWord("WHERE"))
             {
                 if (Clause(statement, out Fragment? where, "GROUP", "HAVING", "ORDER") is { } f)
@@ -430,13 +630,9 @@ public static class SqlParser
                 }
                 while (TakeSymbol(','));
             }
-            TakeSymbol(';');
-            if (!AtEnd())
+            if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(_armDepth > 0 && IsSymbol(')')))
             {
-                string? word = PeekWord();
-                return word is not null && word.Equals("UNION", StringComparison.OrdinalIgnoreCase)
-                    ? Open("NotModelled.Union", "UNION (W-06/relational-spill)")
-                    : Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
+                return Open("NotModelled.SqlSyntax", $"text after the statement at {_p} (ACE's answer not recorded)");
             }
             return null;
         }
@@ -520,14 +716,9 @@ public static class SqlParser
             {
                 return f;
             }
-            if (AtEnd() || IsSymbol(',') || IsSymbol(';') || followers.Any(IsWord))
+            if (AtEnd() || IsSymbol(',') || IsSymbol(';') || IsWord("UNION") || (_armDepth > 0 && IsSymbol(')')) || followers.Any(IsWord))
             {
                 return null;
-            }
-            string? word = PeekWord();
-            if (word is not null && word.Equals("UNION", StringComparison.OrdinalIgnoreCase))
-            {
-                return Open("NotModelled.Union", "UNION (W-06/relational-spill)");
             }
             return MissingOperator(start);
         }
