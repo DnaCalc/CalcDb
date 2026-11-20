@@ -99,8 +99,10 @@ internal sealed unsafe class RecordsetObject : DaoObject
 
     /// <summary>
     /// Seek(Comparison, Key1, … Key13) (R-CURSOR-1 CUR-SEEK, qualified): a dynaset refuses with 3251, an unknown comparison
-    /// with 3001, no Index with 3019, more keys than index columns with 3250, a key that does not convert with 3421; a
-    /// refusal leaves the position. A Missing key cuts the key there; Null and Empty are the Null key value.
+    /// with 3001, no Index with 3019, a key that does not convert with 3421, a Null or Empty key for a Yes/No column with
+    /// 3162, then more keys than index columns with 3250 (r-cursor-1-seek-keys/yes-no-null-key: (a, Null, 1) on a
+    /// two-column index is 3162); a refusal leaves the position and NoMatch. A Missing key cuts the key there; otherwise
+    /// Null and Empty are the Null key value.
     /// </summary>
     private CallResult Seek(ReadOnlySpan<nint> args)
     {
@@ -132,25 +134,32 @@ internal sealed unsafe class RecordsetObject : DaoObject
         {
             given++;
         }
-        if (given > physical.Columns.Count)
-        {
-            return Fail(3250, DaoErrors.CouldNotBuildKey);
-        }
-        // At most 10 keys reach here (no index has more columns), in arrays this recordset keeps; Text keys borrow its
-        // per-key character buffers, so a steady Seek allocates nothing (tasks v4n6, 73vf).
-        Span<SeekKey> keys = (_seekKeys ??= new SeekKey[MaxSeekKeys]).AsSpan(0, given);
-        for (int i = 0; i < given; i++)
+        // The keys that have a column convert first, the count is checked after them (yes-no-null-key). At most 10 keys
+        // convert (no index has more columns), into arrays this recordset keeps; Text keys borrow its per-key character
+        // buffers, so a steady Seek allocates nothing (tasks v4n6, 73vf).
+        int columns = physical.Columns.Count;
+        Span<SeekKey> keys = (_seekKeys ??= new SeekKey[MaxSeekKeys]).AsSpan(0, Math.Min(given, columns));
+        for (int i = 0; i < keys.Length; i++)
         {
             ColumnDescriptor? column = table.KeyColumn(i);
-            bool converted = true;
+            KeyArgumentFailure failure = KeyArgumentFailure.NotEncoded;
             SeekKey? key = column is null ? null
-                : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, args[1 + i], out converted)
-                : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out converted);
+                : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, args[1 + i], out failure)
+                : SeekKeyOf(Args.Cell(args[1 + i]), column.TypeCode, out failure);
             if (key is null)
             {
-                return column is not null && !converted ? Fail(3421, DaoErrors.ConversionError) : CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (W-04/private-codecs)"));
+                return failure switch
+                {
+                    KeyArgumentFailure.Conversion => Fail(3421, DaoErrors.ConversionError),
+                    KeyArgumentFailure.NullForYesNo => Fail(3162, DaoErrors.NullToNonVariant),
+                    _ => CallResult.Fail(Failure.NotImplemented($"Seek on an index column of native type {column?.TypeCode} (W-04/private-codecs)")),
+                };
             }
             keys[i] = key.Value;
+        }
+        if (given > columns)
+        {
+            return Fail(3250, DaoErrors.CouldNotBuildKey);
         }
         IndexRefusal refusal = table.Seek(op.Value, keys, out _);
         return refusal switch
@@ -159,7 +168,6 @@ internal sealed unsafe class RecordsetObject : DaoObject
             IndexRefusal.TooManyKeys => Fail(3250, DaoErrors.CouldNotBuildKey),
             IndexRefusal.KeyNotEncodable => CallResult.Fail(Failure.NotImplemented("Seek on an index whose key this codec cannot encode (GUID, Binary and NUMERIC keys are W-04/private-codecs)")),
             IndexRefusal.SortOrderNotModelled => CallResult.Fail(Failure.NotImplemented("NotModelled.SortOrder: an indexed Text seek on a sort order outside General, General - Legacy and General 97 (TextSeek)")),
-            IndexRefusal.LongKeyPrefix => CallResult.Fail(Failure.NotImplemented("Seek with a partial key longer than the 508 bytes a shortened index entry keeps")),
             _ => CallResult.Fail(Failure.NotImplemented("Seek: " + refusal + " " + table.LastTraversalFailure?.Predicate)),
         };
     }
@@ -169,14 +177,33 @@ internal sealed unsafe class RecordsetObject : DaoObject
     private SeekKey[]? _seekKeys;
     private char[]?[]? _seekText;
 
-    /// <summary>
-    /// A Seek key for a Text or Memo column: Null and Empty are the Null key; a BSTR is its own units, copied into this
-    /// recordset's buffer for that key (only the 255 units an index keeps: II-05 §5); another type converts to a BSTR
-    /// as VariantChangeType does, or fails with 3421.
-    /// </summary>
-    private SeekKey? SeekTextKeyOf(int ordinal, nint arg, out bool converted)
+    /// <summary>Why a Seek argument gives no key value.</summary>
+    private enum KeyArgumentFailure
     {
-        converted = true;
+        None,
+
+        /// <summary>A column type the codec does not encode (W-04/private-codecs).</summary>
+        NotEncoded,
+
+        /// <summary>3421: the argument does not convert to the column's type.</summary>
+        Conversion,
+
+        /// <summary>
+        /// 3162: Null or Empty for a Yes/No column, under every operator and position (r-sort-3b/mix-seek-b; r-cursor-1-
+        /// seek-keys/yes-no-null-key). A Yes/No column holds no Null, and Empty does not convert to False here.
+        /// </summary>
+        NullForYesNo,
+    }
+
+    /// <summary>
+    /// A Seek key for a Text or Memo column: Null and Empty are the Null key; a BSTR is its own units, all of them (CUR-SEEK:
+    /// ACE compares a Seek key whole, <see cref="TextKeyExtent.WholeSeekArgument"/>), copied into this recordset's buffer for
+    /// that key, which grows once to the longest key seen; another type converts to a BSTR as VariantChangeType does, or
+    /// fails with 3421.
+    /// </summary>
+    private SeekKey? SeekTextKeyOf(int ordinal, nint arg, out KeyArgumentFailure failure)
+    {
+        failure = KeyArgumentFailure.None;
         NativeVariant* v = Args.Cell(arg);
         VarType vt = (VarType)v->Vt & ~VarType.ByRef;
         if (vt is VarType.Null or VarType.Empty)
@@ -194,34 +221,40 @@ internal sealed unsafe class RecordsetObject : DaoObject
             convertedText = Args.Text(arg);
             if (convertedText is null)
             {
-                converted = false;
+                failure = KeyArgumentFailure.Conversion;
                 return null;
             }
             units = convertedText;
         }
-        if (units.Length > TextIndexUnits)
+        char[]?[] buffers = _seekText ??= new char[MaxSeekKeys][];
+        if (buffers[ordinal] is not { } buffer || buffer.Length < units.Length)
         {
-            units = units[..TextIndexUnits];
+            buffer = buffers[ordinal] = new char[Math.Max(units.Length, TextIndexUnits)];
         }
-        char[] buffer = (_seekText ??= new char[MaxSeekKeys][])[ordinal] ??= new char[TextIndexUnits];
         units.CopyTo(buffer);
         return new SeekKey(KeyValue.OfText(buffer.AsMemory(0, units.Length)));
     }
 
+    /// <summary>The units a stored Text entry keeps, the first size of a key buffer.</summary>
     private const int TextIndexUnits = 255;
 
     /// <summary>
-    /// A Seek key as its column's stored value: Null and Empty are the Null key; integer columns take the numeric value
-    /// (a fraction lies between two stored values); Currency, Single, Double, Date and Boolean convert as VariantChangeType
-    /// does. Null with <paramref name="converted"/> false is a conversion failure (3421); null with it true is a column type
-    /// the codec does not encode.
+    /// A Seek key as its column's stored value: Null and Empty are the Null key, except for a Yes/No column (3162);
+    /// integer columns take the numeric value (a fraction lies between two stored values); Currency, Single, Double, Date
+    /// and Boolean convert as VariantChangeType does, or fail with 3421. Null with <paramref name="failure"/>
+    /// NotEncoded is a column type the codec does not encode.
     /// </summary>
-    private static SeekKey? SeekKeyOf(NativeVariant* v, byte type, out bool converted)
+    private static SeekKey? SeekKeyOf(NativeVariant* v, byte type, out KeyArgumentFailure failure)
     {
-        converted = true;
+        failure = KeyArgumentFailure.None;
         VarType vt = (VarType)v->Vt & ~VarType.ByRef;
         if (vt is VarType.Null or VarType.Empty)
         {
+            if (type == NativeTypes.Boolean)
+            {
+                failure = KeyArgumentFailure.NullForYesNo;
+                return null;
+            }
             return new SeekKey(KeyValue.Null);
         }
         VarType? target = type switch
@@ -235,11 +268,12 @@ internal sealed unsafe class RecordsetObject : DaoObject
         };
         if (target is null)
         {
+            failure = KeyArgumentFailure.NotEncoded;
             return null;
         }
         if (!OwnedVariant.TryChangeScalar(v, target.Value, out NativeVariant changed, out _))
         {
-            converted = false;
+            failure = KeyArgumentFailure.Conversion;
             return null;
         }
         NativeVariant* x = &changed;
@@ -252,7 +286,7 @@ internal sealed unsafe class RecordsetObject : DaoObject
                 (long min, long max) = type switch { NativeTypes.Byte => (0L, 255L), NativeTypes.Integer => (short.MinValue, short.MaxValue), _ => (int.MinValue, int.MaxValue) };
                 if (double.IsNaN(d) || floor < min || floor > max)
                 {
-                    converted = false;
+                    failure = KeyArgumentFailure.Conversion;
                     return null;
                 }
                 return new SeekKey(new KeyValue(KeyValueKind.Integer, Integer: (long)floor), InexactAbove: floor != d);

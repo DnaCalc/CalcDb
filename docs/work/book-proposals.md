@@ -138,4 +138,17 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   (R-FMT-1 FMT1-COLLATING)." R-FMT-1: "a dbVersion 256 creation stored database sort version 1 (General); options 64 and
   128 stored 0 (one fixture; to be qualified)." A-01 S-JACK-FMT: record the inspection of the sort-order offset and size.
 
+## II-05 §§6.1, 7.1 and 7.3: DAO Seek keys (nksv, 2026-11-20)
+
+- **Evidence.** r-cursor-1-seek-keys (long-partial-keys-accdb/-mdb, over-length-text-keys, yes-no-null-key), r-sort-3/keys-seek-*,
+  r-sort-3b/memo-text255-key and mix-seek-b; qualified.md CUR-SEEK and CUR-SEEK (long keys).
+- **Proposed text.** II-05 §6.1, after "the text-input limit is 255 code units": "That limit cuts stored values; a DAO Seek
+  argument is encoded whole, less its trailing U+0020, so a longer argument equals no entry and orders after the 255-unit
+  entries it extends (R-CURSOR-1 CUR-SEEK)." II-05 §§7.1/7.3, replacing the requirement of an explicitly proved range
+  lowering for digest keys in DAO Seek: "DAO Seek finishes every key longer than 510 bytes, complete or of the leading
+  fields, with the stored long-key rule and compares bytes: a shortened leading-field key is a prefix of no entry, so `=`
+  finds nothing and the other operators land at its digest's place among the entries sharing its first 508 bytes. This is
+  ACE's observable order, not semantic text order." II-05 §7.3, beside the explicit-Null paragraph: "A Null or Empty
+  argument for a Yes/No component is refused (3162) before the key count is checked."
+
 

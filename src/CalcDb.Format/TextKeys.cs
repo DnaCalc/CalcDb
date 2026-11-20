@@ -6,6 +6,7 @@
 // and notice in docs/work/licence-ledger.md. Rules the book leaves open are settled from native ACE index entries
 // (R-SORT-3 fixtures, CalcDb.Isam.Tests NativeTextKeyTests) and named where they are applied.
 
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
 
@@ -236,8 +237,9 @@ internal static class SortTableCompiler
 /// <summary>
 /// The Text and Memo field payload of an index key under a General-family <see cref="SortDescriptor"/> (II-05 §5;
 /// W-04/weight-tables-per-sort-order). The payload follows the 7F/80 field marker the caller writes. It is built in the
-/// caller's span with bounded stack scratch for the secondary, later-flag and positional streams: nothing is allocated
-/// per call.
+/// caller's span with stack scratch for the secondary, later-flag and positional streams up to a few thousand units; a
+/// longer Seek argument (<see cref="TextKeyExtent.WholeSeekArgument"/>) takes its scratch from the shared array pool.
+/// Nothing is allocated per call in the steady state.
 /// </summary>
 internal static class TextKeys
 {
@@ -272,14 +274,17 @@ internal static class TextKeys
     public static ReadOnlySpan<char> Indexed(ReadOnlySpan<char> text) =>
         text[..Math.Min(text.Length, MaxIndexedUnits)].TrimEnd(' ');
 
+    /// <summary>The units a key takes from <paramref name="text"/>: the indexed prefix, or the whole value less its trailing U+0020.</summary>
+    public static ReadOnlySpan<char> KeyUnits(ReadOnlySpan<char> text, TextKeyExtent extent) =>
+        extent == TextKeyExtent.WholeSeekArgument ? text.TrimEnd(' ') : Indexed(text);
+
     /// <summary>
-    /// The most bytes <see cref="Encode"/> writes for any value under this table: every one of the 255 units at the
-    /// table's widest primary, secondary and positional record, the later-flag stream and suffix, the level bytes, the
-    /// final 00 and the descending terminator.
+    /// The most bytes <see cref="Encode"/> writes for a value of <paramref name="units"/> key units under this table:
+    /// every unit at the table's widest primary, secondary and positional record, the later-flag stream and suffix, the
+    /// level bytes, the final 00 and the descending terminator.
     /// </summary>
-    public static int MaxPayloadBytes(SortDescriptor sort)
+    public static int MaxPayloadBytes(SortDescriptor sort, int units = MaxIndexedUnits)
     {
-        const int units = MaxIndexedUnits;
         if (sort.Family == TextSortFamily.General97)
         {
             return (units * sort.MaxInlineBytes) + ((units + 2 + 1) / 2);
@@ -291,15 +296,18 @@ internal static class TextKeys
 
     /// <summary>
     /// Write the payload of <paramref name="text"/> (after the field marker) at the start of <paramref name="dest"/>, at
-    /// least <see cref="MaxPayloadBytes"/> long, and return its length.
+    /// least <see cref="MaxPayloadBytes"/> long for the units <see cref="KeyUnits"/> takes, and return its length.
     /// </summary>
-    public static int Encode(SortDescriptor sort, ReadOnlySpan<char> text, bool ascending, Span<byte> dest)
+    public static int Encode(SortDescriptor sort, ReadOnlySpan<char> text, bool ascending, Span<byte> dest, TextKeyExtent extent = TextKeyExtent.IndexedPrefix)
     {
-        ReadOnlySpan<char> units = Indexed(text);
+        ReadOnlySpan<char> units = KeyUnits(text, extent);
         return sort.Family == TextSortFamily.General97
             ? EncodeGeneral97(sort, units, ascending, dest)
             : EncodeGeneral(sort, units, ascending, dest);
     }
+
+    /// <summary>Stack scratch up to this many bytes; a longer Seek argument rents it, so no BSTR length overflows the stack.</summary>
+    private const int StackScratchBytes = 8192;
 
     /// <summary>
     /// General and General – Legacy (II-05 §5): primary bytes, 01, the secondary stream with trailing 00..02 removed;
@@ -309,9 +317,25 @@ internal static class TextKeys
     /// </summary>
     private static int EncodeGeneral(SortDescriptor sort, ReadOnlySpan<char> units, bool ascending, Span<byte> dest)
     {
-        Span<byte> secondary = stackalloc byte[units.Length * Math.Max(sort.MaxExtraBytes, 1)];
-        Span<byte> flags = stackalloc byte[units.Length];
-        Span<byte> positional = stackalloc byte[units.Length * (3 + sort.MaxUnprintableBytes)];
+        int secondaryBytes = units.Length * Math.Max(sort.MaxExtraBytes, 1), positionalBytes = units.Length * (3 + sort.MaxUnprintableBytes);
+        int scratchBytes = secondaryBytes + units.Length + positionalBytes;
+        byte[]? rented = scratchBytes > StackScratchBytes ? ArrayPool<byte>.Shared.Rent(scratchBytes) : null;
+        Span<byte> scratch = rented is null ? stackalloc byte[scratchBytes] : rented.AsSpan(0, scratchBytes);
+        try
+        {
+            return EncodeGeneral(sort, units, ascending, dest, scratch[..secondaryBytes], scratch.Slice(secondaryBytes, units.Length), scratch[(secondaryBytes + units.Length)..]);
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
+    }
+
+    private static int EncodeGeneral(SortDescriptor sort, ReadOnlySpan<char> units, bool ascending, Span<byte> dest, Span<byte> secondary, Span<byte> flags, Span<byte> positional)
+    {
         int p = 0, s = 0, f = 0, u = 0;
 
         // II-05 §5.2: a position counts the character records that emitted primary bytes before it (one per record,
@@ -446,7 +470,23 @@ internal static class TextKeys
     /// </summary>
     private static int EncodeGeneral97(SortDescriptor sort, ReadOnlySpan<char> units, bool ascending, Span<byte> dest)
     {
-        Span<byte> nibbles = stackalloc byte[units.Length];
+        byte[]? rented = units.Length > StackScratchBytes ? ArrayPool<byte>.Shared.Rent(units.Length) : null;
+        Span<byte> nibbles = rented is null ? stackalloc byte[units.Length] : rented.AsSpan(0, units.Length);
+        try
+        {
+            return EncodeGeneral97(sort, units, ascending, dest, nibbles);
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
+    }
+
+    private static int EncodeGeneral97(SortDescriptor sort, ReadOnlySpan<char> units, bool ascending, Span<byte> dest, Span<byte> nibbles)
+    {
         int p = 0, n = 0;
         foreach (char c in units)
         {

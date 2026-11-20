@@ -367,6 +367,85 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
         Assert.Equal(backTwice, Id(rs));
     }
 
+    private const string KeysFixture = "1969595a7bf160ed36ce7ce610a78a5ae4385f66a945e1fb57cbd0346eeab7e1";
+    private const string MemoFixture = "75c5396af6bc118572f97337ae8f3033df537b73c2da936c866ecb52164afd6c";
+
+    private static string Rep(string unit, int count) => string.Concat(Enumerable.Repeat(unit, count));
+
+    [Theory]
+    // r-cursor-1-seek-keys/long-partial-keys-accdb (CUR-SEEK): a partial key past 510 bytes takes the stored long-key
+    // finish, so `=` is NoMatch and the others land at its digest's place (both é×255 rows on IX_KN come before it).
+    [InlineData("IX_KN", "é", 255, "=", null)]
+    [InlineData("IX_KN", "é", 255, ">=", 29L)]
+    [InlineData("IX_KN", "é", 255, ">", 29L)]
+    [InlineData("IX_KN", "é", 255, "<=", 19L)]
+    [InlineData("IX_KN", "é", 255, "<", 19L)]
+    [InlineData("IX_KN", "ß", 255, "=", null)]
+    [InlineData("IX_KN", "ß", 255, ">=", 26L)]
+    [InlineData("IX_KN", "ß", 255, "<=", 24L)]
+    [InlineData("IX_KN", "一", 255, ">=", 34L)]
+    [InlineData("IX_KN", "一", 255, "<", 25L)]
+    [InlineData("IX_KND", "é", 255, ">=", 30L)]
+    [InlineData("IX_KND", "é", 255, "<=", 20L)]
+    [InlineData("IX_KND", "ß", 255, ">", 33L)]
+    [InlineData("IX_KND", "ß", 255, "<", 26L)]
+    // Controls at and below the 508-byte cut: ordinary prefix bounds.
+    [InlineData("IX_KN", "é", 128, "=", 17L)]
+    [InlineData("IX_KN", "é", 128, "<", 28L)]
+    [InlineData("IX_KN", "A", 255, "=", 5L)]
+    [InlineData("IX_KN", "A", 255, "<", 4L)]
+    public void A_long_partial_Text_key_lands_where_ACE_lands(string index, string unit, int count, string op, long? landing)
+    {
+        (TableCursor rs, _) = OpenTable(KeysFixture, "LK");
+        Assert.Equal(IndexRefusal.None, rs.SetIndex(index));
+        Assert.Equal(IndexRefusal.None, rs.Seek(Op(op), [T(Rep(unit, count))], out bool found));
+        Assert.Equal(landing is not null, found);
+        Assert.Equal(landing, Id(rs));
+    }
+
+    [Theory]
+    // r-cursor-1-seek-keys/long-partial-keys-accdb: full (K, N) keys past 510 bytes, ordered by their digests (18, 20, 19, 29).
+    [InlineData(1, "=", 19L)]
+    [InlineData(1, ">", 29L)]
+    [InlineData(1, "<", 20L)]
+    [InlineData(2, "=", 20L)]
+    [InlineData(2, ">", 19L)]
+    [InlineData(2, "<", 18L)]
+    public void A_long_full_key_lands_where_ACE_lands(long n, string op, long landing)
+    {
+        (TableCursor rs, _) = OpenTable(KeysFixture, "LK");
+        rs.SetIndex("IX_KN");
+        Assert.Equal(IndexRefusal.None, rs.Seek(Op(op), [T(Rep("é", 255)), new SeekKey(new KeyValue(KeyValueKind.Integer, Integer: n))], out _));
+        Assert.Equal(landing, Id(rs));
+    }
+
+    [Theory]
+    // r-cursor-1-seek-keys/over-length-text-keys and r-sort-3b/memo-text255-key on MM.IX_TK (Text(255)): a Seek key is
+    // the whole argument less trailing blanks (TextKeyExtent.WholeSeekArgument), never cut to 255 units. The A×255 group
+    // is 6..15, then 10, 11 (A×254 B), 12 (A×254 C).
+    [InlineData("A", 256, "", "=", null)]
+    [InlineData("A", 256, "", ">=", 10L)]
+    [InlineData("A", 256, "", "<=", 15L)]
+    [InlineData("A", 1000, "", "=", null)]
+    [InlineData("A", 5000, "", ">", 10L)]
+    [InlineData("a", 256, "", "<", 15L)]
+    [InlineData("A", 255, " ", "=", 6L)]
+    [InlineData("A", 255, "   ", ">", 10L)]
+    [InlineData("A", 255, " ", "<", 4L)]
+    [InlineData("A", 254, "Bx", "=", null)]
+    [InlineData("A", 254, "Bx", ">=", 12L)]
+    [InlineData("A", 254, "Bx", "<=", 11L)]
+    [InlineData(" ", 300, "", "=", 2L)]
+    [InlineData(" ", 300, "", "<", 1L)]
+    public void An_over_length_Text_key_is_compared_whole_as_in_ACE(string unit, int count, string tail, string op, long? landing)
+    {
+        (TableCursor rs, _) = OpenTable(MemoFixture, "MM");
+        Assert.Equal(IndexRefusal.None, rs.SetIndex("IX_TK"));
+        Assert.Equal(IndexRefusal.None, rs.Seek(Op(op), [T(Rep(unit, count) + tail)], out bool found));
+        Assert.Equal(landing is not null, found);
+        Assert.Equal(landing, Id(rs));
+    }
+
     private static SeekOperator Op(string op) => op switch
     {
         "=" => SeekOperator.Equal,

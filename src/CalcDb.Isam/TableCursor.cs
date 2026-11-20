@@ -248,12 +248,6 @@ public enum IndexRefusal
     /// </summary>
     SortOrderNotModelled,
 
-    /// <summary>
-    /// A key of the first fields longer than the 508 bytes a shortened entry keeps: its range under the digest has no
-    /// proved lowering (II-05 §§6, 7.1), so it is refused rather than widened.
-    /// </summary>
-    LongKeyPrefix,
-
     /// <summary>A storage or format failure in the index or the row traversal.</summary>
     Storage,
 }
@@ -395,15 +389,16 @@ public sealed class TableCursor : IRecordCursor
     private static TableOccurrence? Locate(IndexNavigator? navigator, RowId root) =>
         navigator is null ? new TableOccurrence(root, null) : navigator.Find(root) is { } entry ? new TableOccurrence(root, entry) : null;
 
-    /// <summary>
-    /// Seek in the current index (R-CURSOR-1 CUR-SEEK, II-05 §7.3): the keys are the first index columns' values. With a
-    /// full key, `=`, `>=` and `<=` take the first duplicate, `>` the row after the group and `<` the row before it; with
-    /// a short key the bounds are field prefixes, `>` lands like `>=` and `<=` like `<`. A miss sets NoMatch and the
-    /// seek-miss state of its direction. A refusal changes nothing.
-    /// </summary>
     /// <summary>The column of the current index's key field <paramref name="i"/>, or null when the table has none.</summary>
     public ColumnDescriptor? KeyColumn(int i) => _keyColumns[i];
 
+    /// <summary>
+    /// Seek in the current index (R-CURSOR-1 CUR-SEEK, II-05 §7.3): the keys are the first index columns' values, Text
+    /// arguments whole. With a full key, `=`, `>=` and `<=` take the first duplicate, `>` the row after the group and `<`
+    /// the row before it; with a short key the bounds are field prefixes, `>` lands like `>=` and `<=` like `<`. A key
+    /// past 510 bytes, full or short, takes the stored long-key finish first. A miss sets NoMatch and the seek-miss state
+    /// of its direction. A refusal changes nothing.
+    /// </summary>
     public IndexRefusal Seek(SeekOperator op, ReadOnlySpan<SeekKey> keys, out bool found)
     {
         found = false;
@@ -416,12 +411,11 @@ public sealed class TableCursor : IRecordCursor
         {
             return IndexRefusal.TooManyKeys;
         }
-        // The key is built in the cursor's scratch, sized by SetIndex for the index's codecs (task v4n6: no allocation
-        // per Seek). Only the fields the Seek gives are encoded: a later Text column of another order does not refuse
-        // a Seek on the fields before it, whose order needs no Text comparison.
-        Span<byte> buffer = _keyScratch;
-        int length = 0;
-        bool inexact = false;
+        // The key is built in the cursor's scratch, sized by SetIndex for the index's codecs and grown once for a Text
+        // argument longer than 255 units (task v4n6: no allocation per Seek in the steady state). Only the fields the
+        // Seek gives are encoded: a later Text column of another order does not refuse a Seek on the fields before it,
+        // whose order needs no Text comparison.
+        int needed = 0;
         for (int i = 0; i < keys.Length; i++)
         {
             if (_keyCodecs[i] is not { } codec)
@@ -433,7 +427,19 @@ public sealed class TableCursor : IRecordCursor
                 }
                 return IndexRefusal.KeyNotEncodable;
             }
-            if (!IndexKeys.TryWriteField(buffer[length..], codec, index.Index.Columns[i].Ascending, keys[i].Value, out int written))
+            needed += keys[i].Value.Kind == KeyValueKind.Text ? codec.MaxFieldBytesFor(keys[i].Value.Text.Length) : codec.MaxFieldBytes;
+        }
+        if (_keyScratch.Length < needed)
+        {
+            _keyScratch = new byte[needed];
+        }
+        Span<byte> buffer = _keyScratch;
+        int length = 0;
+        bool inexact = false;
+        for (int i = 0; i < keys.Length; i++)
+        {
+            // CUR-SEEK: a Text argument is encoded whole, not cut to the 255 units an entry keeps (TextKeyExtent).
+            if (!IndexKeys.TryWriteField(buffer[length..], _keyCodecs[i]!.Value, index.Index.Columns[i].Ascending, keys[i].Value, out int written, TextKeyExtent.WholeSeekArgument))
             {
                 return IndexRefusal.KeyNotEncodable;
             }
@@ -445,15 +451,11 @@ public sealed class TableCursor : IRecordCursor
             }
         }
         bool full = !inexact && keys.Length == columns;
-        if (full)
-        {
-            // A complete key is stored shortened past 510 bytes (II-05 §6); the Seek key takes the same finish.
-            length = IndexKeys.FinishComposite(buffer, length);
-        }
-        else if (length > IndexKeys.RetainedPrefix)
-        {
-            return IndexRefusal.LongKeyPrefix;
-        }
+        // A key past 510 bytes is stored shortened (II-05 §6), and ACE finishes a Seek key the same way, a partial one
+        // too, then compares bytes (CUR-SEEK, r-cursor-1-seek-keys/long-partial-keys-accdb, -mdb): a shortened partial
+        // key is a prefix of no entry, so `=` is NoMatch, and the other operators land at its digest's place among the
+        // entries that share its first 508 bytes (`>=` é×255 on (K, N) lands beyond both é×255 rows).
+        length = IndexKeys.FinishComposite(buffer, length);
         ReadOnlySpan<byte> q = buffer[..length];
         IndexPosition? lowerBound = index.LowerBound(KeyBound.Low(q));
         IndexPosition? landing;

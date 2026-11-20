@@ -56,6 +56,9 @@ internal static class DaoErrors
     /// <summary>3421 (r-cursor-1/seek-arguments: a non-numeric text key for a Long column).</summary>
     public const string ConversionError = "Data type conversion error.";
 
+    /// <summary>3162 (r-sort-3b/mix-seek-b, r-cursor-1-seek-keys/yes-no-null-key: a Null or Empty key for a Yes/No index column).</summary>
+    public const string NullToNonVariant = "You tried to assign the Null value to a variable that is not a Variant data type.";
+
     /// <summary>3032 (r-cat-1b/tabledef-members-ddl: ConflictTable, ReplicaFilter of a TableDef).</summary>
     public const string CannotPerform = "Cannot perform this operation.";
 

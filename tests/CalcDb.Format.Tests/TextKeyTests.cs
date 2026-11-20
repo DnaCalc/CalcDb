@@ -19,6 +19,30 @@ public sealed class TextKeyTests
     private static SortDescriptor G => SortDescriptors.General;
     private static SortDescriptor L => SortDescriptors.GeneralLegacy;
 
+    private static string SeekKey(SortDescriptor sort, string text)
+    {
+        var codec = new FieldKeyCodec(NativeTypes.Text, sort);
+        byte[] key = new byte[codec.MaxFieldBytesFor(text.Length)];
+        Assert.True(IndexKeys.TryWriteField(key, codec, true, KeyValue.OfText(text.AsMemory()), out int written, TextKeyExtent.WholeSeekArgument));
+        return Convert.ToHexString(key, 0, written);
+    }
+
+    [Theory]
+    [InlineData(TextSortFamily.General)]
+    [InlineData(TextSortFamily.General97)]
+    public void A_Seek_argument_is_encoded_whole_and_a_stored_value_cut_to_255_units(TextSortFamily family)
+    {
+        // R-CURSOR-1 CUR-SEEK (r-cursor-1-seek-keys/over-length-text-keys): A×256 is a different key from the stored A×255;
+        // trailing blanks go in both extents; a 100,000-unit argument encodes (its scratch is rented, not stacked).
+        SortDescriptor sort = family == TextSortFamily.General ? G : SortDescriptors.General97;
+        string a255 = new('A', 255);
+        Assert.Equal(Key(sort, a255), Key(sort, a255 + "x"));
+        Assert.NotEqual(Key(sort, a255), SeekKey(sort, a255 + "A"));
+        Assert.Equal(Key(sort, a255), SeekKey(sort, a255 + "   "));
+        Assert.Equal(Key(sort, "abc"), SeekKey(sort, "abc"));
+        Assert.True(SeekKey(sort, new string('A', 100_000)).Length > 2 * 100_000);
+    }
+
     [Fact]
     public void Descriptors_compile_from_the_pinned_inputs_and_cover_every_code_unit()
     {

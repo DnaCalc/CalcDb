@@ -30,6 +30,22 @@ public readonly record struct KeyValue(KeyValueKind Kind, long Integer = 0, ulon
     public static KeyValue OfText(ReadOnlyMemory<char> text) => new(KeyValueKind.Text, Text: text);
 }
 
+/// <summary>
+/// How much of a Text or Memo value a key takes (II-05 §§5–6; R-CURSOR-1 CUR-SEEK). <b>ACE cuts a stored value, not a
+/// Seek argument.</b> An index entry keeps the first 255 units; a DAO Seek key is the whole argument less its trailing
+/// U+0020, so a key longer than 255 units equals no entry and orders after the 255-unit entries it extends
+/// (r-cursor-1-seek-keys/over-length-text-keys: `=` A×256 and A×5000 are NoMatch, `>=` lands after the A×255 group;
+/// A×255 followed by blanks finds it; A×254 B x lands between A×254 B and A×254 C).
+/// </summary>
+public enum TextKeyExtent
+{
+    /// <summary>A stored value: the first 255 units, then trailing U+0020 removed.</summary>
+    IndexedPrefix,
+
+    /// <summary>A Seek argument: every unit, then trailing U+0020 removed.</summary>
+    WholeSeekArgument,
+}
+
 /// <summary>Why a column has no key codec in this build.</summary>
 public enum KeyCodecRefusal
 {
@@ -50,6 +66,9 @@ public readonly record struct FieldKeyCodec(byte Type, SortDescriptor? Sort)
 {
     /// <summary>The most bytes this field contributes: the marker and the largest payload.</summary>
     public int MaxFieldBytes => Sort is { } s ? 1 + s.MaxPayloadBytes : IndexKeys.MaxFieldBytes;
+
+    /// <summary>The most bytes this field contributes for a Text value of <paramref name="units"/> key units (a scalar ignores it).</summary>
+    public int MaxFieldBytesFor(int units) => Sort is { } s ? 1 + TextKeys.MaxPayloadBytes(s, units) : IndexKeys.MaxFieldBytes;
 }
 
 /// <summary>
@@ -104,9 +123,10 @@ public static class IndexKeys
 
     /// <summary>
     /// Write one field's contribution at the start of <paramref name="key"/> (at least the codec's
-    /// <see cref="FieldKeyCodec.MaxFieldBytes"/> long); false, with nothing written, when the value does not fit it.
+    /// <see cref="FieldKeyCodec.MaxFieldBytes"/> long, or <see cref="FieldKeyCodec.MaxFieldBytesFor"/> the text's length
+    /// for a whole Seek argument); false, with nothing written, when the value does not fit it.
     /// </summary>
-    public static bool TryWriteField(Span<byte> key, FieldKeyCodec codec, bool ascending, KeyValue value, out int written)
+    public static bool TryWriteField(Span<byte> key, FieldKeyCodec codec, bool ascending, KeyValue value, out int written, TextKeyExtent extent = TextKeyExtent.IndexedPrefix)
     {
         if (codec.Sort is not { } sort)
         {
@@ -124,7 +144,7 @@ public static class IndexKeys
             return false;
         }
         key[0] = ascending ? (byte)0x7F : (byte)0x80;
-        written = 1 + TextKeys.Encode(sort, value.Text.Span, ascending, key[1..]);
+        written = 1 + TextKeys.Encode(sort, value.Text.Span, ascending, key[1..], extent);
         return true;
     }
 

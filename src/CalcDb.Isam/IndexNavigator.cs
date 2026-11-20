@@ -12,7 +12,8 @@ public readonly record struct IndexPosition(uint Leaf, int Ordinal, RowId Row);
 /// it. With a full key these are KeyLow/KeyHigh; with the key of the first fields they are FieldPrefixLow/High, which
 /// is a byte prefix because field contributions are self-delimiting (II-05 §4): scalars by width, General-family Text
 /// by its final 00, since no record payload of the pinned tables contains 00 (a secondary modifier sum that wraps to 00
-/// is the unproved case). A key cut by the long-key finish is never a prefix bound (IndexRefusal.LongKeyPrefix). The empty Low is BeforeAll and
+/// is the unproved case). A key cut by the long-key finish is compared as the bytes it is, as ACE does (CUR-SEEK): as a
+/// prefix it matches no entry, and its digest orders it among the entries sharing its first 508 bytes. The empty Low is BeforeAll and
 /// the empty High is AfterAll. No fictitious locator is serialized. The key is borrowed for the call (task v4n6).
 /// </summary>
 public readonly ref struct KeyBound(ReadOnlySpan<byte> key, bool high)
