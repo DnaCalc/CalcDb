@@ -73,6 +73,12 @@ internal sealed class SqlFixture : ISqlDatabase
         return reader;
     }
 
+    public IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+    {
+        failure = null;
+        return new IndexNavigator(_cache, D, index, table.FirstPage);
+    }
+
     private static ReadOnlyMemory<byte> Copy(PagePin pin)
     {
         using (pin)

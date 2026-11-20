@@ -461,6 +461,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private NativeVariant[] _constants = [];
         private int _slotWidth;
         private int _group = -1;
+        private bool _joinOrderIdentified;
         private TextCollation? Collation => plan.Context.DatabaseOrder;
 
         IRecordCursor? IExpressionRow.Source(int source) => _nullExtended[source] ? null : readers[source];
@@ -669,7 +670,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             var roots = new List<ResultRow>();
             if (plan.Tree is { } tree)
             {
-                List<RowId?[]>? tuples = Produce(tree, out failure);
+                List<RowId?[]>? tuples = plan.TwoTable is { } two
+                    ? ProduceTwoTable(two, out failure)
+                    : Produce(tree, out failure);
                 if (tuples is null)
                 {
                     return null;
@@ -734,6 +737,200 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         /// <summary>The bound on candidate pairs a join evaluates at open; beyond it the join is named, not run.</summary>
         private const long PairBudget = 4_000_000;
+
+        /// <summary>
+        /// Two-table join order (qualified.md R-SQL-1 SQL-J, PAR-ORDER; evidence/r-q5-join-order/* and
+        /// evidence/r-sql-13b/join-cross-forms):
+        /// - Cross join: more rows outer (tie: second-listed outer); outer and inner in forward storage order.
+        /// - Equality join (INNER or comma list with WHERE a = b): single-indexed -> unindexed outer, indexed inner;
+        ///   both or neither indexed -> fewer rows outer (tie: second-listed outer).
+        /// - Outer join (LEFT or RIGHT): preserved side is always outer.
+        /// - Outer is read in forward storage order; for equality/outer joins, inner matches come in index order
+        ///   through an index, or in reverse storage order without one.
+        /// Order is marked identified only within the note's Conditions (Snapshot, each table on at most one data page,
+        /// at most 6 rows per table, LONG keys for equality/outer joins, unindexed tables for cross joins, no extra
+        /// multi-table or indexed WHERE filter, and an opened index when inner is indexed).
+        /// </summary>
+        private List<RowId?[]>? ProduceTwoTable(TwoTableJoin two, out SqlFailure? failure)
+        {
+            failure = null;
+            List<RowId>? rows0 = ScanAll(0, out failure);
+            List<RowId>? rows1 = rows0 is null ? null : ScanAll(1, out failure);
+            if (rows0 is null || rows1 is null)
+            {
+                return null;
+            }
+            int count0 = rows0.Count, count1 = rows1.Count;
+            if ((long)count0 * count1 > PairBudget)
+            {
+                string kindText = two.Form == TwoTableJoinForm.Cross ? "the cross product" : "the nested loop";
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.JoinSize", $"{count0} x {count1} candidate pairs: {kindText} is bounded at {PairBudget}");
+                return null;
+            }
+            bool singlePage = readers[0].Scan.Navigator.PageCount <= 1 && readers[1].Scan.Navigator.PageCount <= 1;
+            int outerSlot = two.Form switch
+            {
+                TwoTableJoinForm.Cross => count0 > count1 ? 0 : 1,
+                TwoTableJoinForm.LeftEquality => 0,
+                TwoTableJoinForm.RightEquality => 1,
+                _ => (two.LeftIndex is not null, two.RightIndex is not null) switch
+                {
+                    (true, false) => 1,
+                    (false, true) => 0,
+                    _ => count0 < count1 ? 0 : 1,
+                },
+            };
+            int innerSlot = 1 - outerSlot;
+            List<RowId> outerRows = outerSlot == 0 ? rows0 : rows1;
+            List<RowId> innerStorage = innerSlot == 0 ? rows0 : rows1;
+            if (two.Form == TwoTableJoinForm.Cross)
+            {
+                _joinOrderIdentified = kind == ResultKind.Snapshot
+                    && singlePage
+                    && count0 <= 6 && count1 <= 6
+                    && plan.Sources[0].Table.PhysicalIndexes.Count == 0
+                    && plan.Sources[1].Table.PhysicalIndexes.Count == 0
+                    && !two.WhereTouchesBothOrIndexed;
+                var crossList = new List<RowId?[]>(outerRows.Count * innerStorage.Count);
+                foreach (RowId o in outerRows)
+                {
+                    foreach (RowId i in innerStorage)
+                    {
+                        var t = new RowId?[2];
+                        t[outerSlot] = o;
+                        t[innerSlot] = i;
+                        crossList.Add(t);
+                    }
+                }
+                return crossList;
+            }
+
+            Format.PhysicalIndex? innerIndex = innerSlot == 0 ? two.LeftIndex : two.RightIndex;
+            bool innerAmbiguous = innerSlot == 0 ? two.AmbiguousLeftIndex : two.AmbiguousRightIndex;
+            List<RowId> innerRows;
+            bool innerOrderKnown;
+            if (innerIndex is not null)
+            {
+                if (innerStorage.Count <= 1)
+                {
+                    innerRows = innerStorage;
+                    innerOrderKnown = true;
+                }
+                else if (!innerAmbiguous && innerIndex.Columns[0].Ascending)
+                {
+                    IndexNavigator? nav = database.OpenIndex(plan.Sources[innerSlot].Table, innerIndex, out string? indexFailure);
+                    if (indexFailure is not null)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", indexFailure);
+                        return null;
+                    }
+                    if (nav is not null)
+                    {
+                        var indexed = new List<RowId>(innerStorage.Count);
+                        for (IndexPosition? at = nav.First(); at is { } p; at = nav.Next(p))
+                        {
+                            indexed.Add(p.Row);
+                        }
+                        if (nav.LastFailure is { } navFailure)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", navFailure.Predicate);
+                            return null;
+                        }
+                        innerRows = indexed;
+                        innerOrderKnown = true;
+                    }
+                    else
+                    {
+                        innerRows = innerStorage;
+                        innerOrderKnown = false;
+                    }
+                }
+                else
+                {
+                    innerRows = innerStorage;
+                    innerOrderKnown = false;
+                }
+            }
+            else
+            {
+                innerStorage.Reverse();
+                innerRows = innerStorage;
+                innerOrderKnown = true;
+            }
+
+            _joinOrderIdentified = kind == ResultKind.Snapshot
+                && singlePage
+                && count0 <= 6 && count1 <= 6
+                && two.LeftKey!.TypeCode == Format.NativeTypes.Long
+                && two.RightKey!.TypeCode == Format.NativeTypes.Long
+                && !two.WhereTouchesBothOrIndexed
+                && innerOrderKnown;
+
+            if (plan.Tree is CrossNode)
+            {
+                // Comma equality join (FROM A, B WHERE A.k = B.k): emit pairs in (outer, inner) order; Qualifying applies WHERE.
+                var pairs = new List<RowId?[]>(outerRows.Count * innerRows.Count);
+                foreach (RowId o in outerRows)
+                {
+                    foreach (RowId i in innerRows)
+                    {
+                        var t = new RowId?[2];
+                        t[outerSlot] = o;
+                        t[innerSlot] = i;
+                        pairs.Add(t);
+                    }
+                }
+                return pairs;
+            }
+
+            var join = (JoinNode)plan.Tree!;
+            var list = new List<RowId?[]>();
+            foreach (RowId o in outerRows)
+            {
+                bool matched = false;
+                foreach (RowId i in innerRows)
+                {
+                    var t = new RowId?[2];
+                    t[outerSlot] = o;
+                    t[innerSlot] = i;
+                    StandOn(t);
+                    RowTest test = join.On!.Test(this);
+                    if (test == RowTest.Failed)
+                    {
+                        failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.OnFailure", join.On.LastFailure!.ToString());
+                        return null;
+                    }
+                    if (test == RowTest.Match)
+                    {
+                        matched = true;
+                        list.Add(t);
+                    }
+                }
+                if (!matched && join.Kind != JoinKind.Inner)
+                {
+                    var t = new RowId?[2];
+                    t[outerSlot] = o;
+                    list.Add(t);
+                }
+            }
+            return list;
+        }
+
+        private List<RowId>? ScanAll(int slot, out SqlFailure? failure)
+        {
+            failure = null;
+            var list = new List<RowId>();
+            for (RowId? root = readers[slot].Scan.Next(null); root is { } r; root = readers[slot].Scan.Next(r))
+            {
+                list.Add(r);
+            }
+            if (readers[slot].Scan.LastFailure is { } storage)
+            {
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.Storage", storage.Predicate);
+                return null;
+            }
+            return list;
+        }
 
         /// <summary>
         /// The tuples of a FROM subtree (II-11 §8, F-101): a table's rows in scan order; for a join, each preserved-side
@@ -874,10 +1071,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 return null;
             }
-            if (plan.Tree is not null && !plan.Grouped && plan.Predicate != SelectPredicate.Distinct && plan.Order.Count == 0 && rows.Count > 1)
+            if (plan.Tree is not null && !_joinOrderIdentified && !plan.Grouped && plan.Predicate != SelectPredicate.Distinct && plan.Order.Count == 0 && rows.Count > 1)
             {
-                // qualified.md PAR-ORDER, r-par-1/order-join-duplicate-matches, r-sql-13b/join-cross-forms: the row order of a
-                // join depends on the pairing and the indexes and is not identified.
+                // qualified.md R-SQL-1 SQL-J, PAR-ORDER, r-par-1/order-join-duplicate-matches, r-sql-13b/join-cross-forms:
+                // outside the identified two-table join cases, the row order of a join is not identified.
                 _runs.Add((0, rows.Count, "the row order of a join is not identified (PAR-ORDER)"));
             }
             if (plan.Order.Count > 0)

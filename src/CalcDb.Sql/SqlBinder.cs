@@ -22,6 +22,16 @@ public interface ISqlDatabase
     /// <summary>A reader over the table's rows, or null with the storage failure.</summary>
     RowReader? OpenRows(TableDefinition table, out string? failure);
 
+    /// <summary>
+    /// A navigator over one physical index of <paramref name="table"/>, or null when the database adapter does not expose
+    /// indexes (with <paramref name="failure"/> null) or when opening the index fails (with <paramref name="failure"/> set).
+    /// </summary>
+    IndexNavigator? OpenIndex(TableDefinition table, PhysicalIndex index, out string? failure)
+    {
+        failure = null;
+        return null;
+    }
+
     ExpressionContext Context { get; }
 }
 
@@ -110,6 +120,33 @@ internal sealed class CrossNode : SourceNode
 
     public List<SourceNode> Items { get; }
 }
+
+/// <summary>
+/// The form of a two-table join covered by qualified.md R-SQL-1 SQL-J, PAR-ORDER ("the row order of a two-table join
+/// without ORDER BY"): a comma cross join, an equality join (INNER JOIN ... ON a = b or comma list with WHERE a = b),
+/// or an outer equality join (LEFT / RIGHT JOIN ... ON a = b).
+/// </summary>
+internal enum TwoTableJoinForm : byte
+{
+    Cross,
+    InnerEquality,
+    LeftEquality,
+    RightEquality,
+}
+
+/// <summary>
+/// Bound classification of a two-table join: its form, the join key column and leading physical index on each side
+/// (for equality and outer joins), and whether an extra WHERE clause touches both tables or any indexed column.
+/// </summary>
+internal sealed record TwoTableJoin(
+    TwoTableJoinForm Form,
+    ColumnDescriptor? LeftKey,
+    ColumnDescriptor? RightKey,
+    PhysicalIndex? LeftIndex,
+    PhysicalIndex? RightIndex,
+    bool AmbiguousLeftIndex,
+    bool AmbiguousRightIndex,
+    bool WhereTouchesBothOrIndexed);
 
 /// <summary>
 /// A parameter of a statement (II-11 §2: declaration origin and inferred uses kept apart): a PARAMETERS declaration or a
@@ -286,6 +323,9 @@ public sealed class BoundSelect : IDisposable
 
     /// <summary>The FROM tree when the statement has more than one source; null for one table (the streamed scan).</summary>
     internal SourceNode? Tree { get; private set; }
+
+    /// <summary>The two-table join classification when the statement is a two-table join covered by PAR-ORDER; null otherwise.</summary>
+    internal TwoTableJoin? TwoTable { get; private set; }
 
     /// <summary>The arms of a union (II-11 §15), in order; null for a plain SELECT.</summary>
     internal List<BoundSelect>? Arms { get; private set; }
@@ -604,6 +644,8 @@ public sealed class BoundSelect : IDisposable
 
     internal void SetWhere(BoundExpression where) => Where = where;
 
+    internal void SetTwoTable(TwoTableJoin two) => TwoTable = two;
+
     internal void SetHaving(BoundExpression having) => Having = having;
 
     internal void SetGrouped() => Grouped = true;
@@ -847,6 +889,7 @@ public sealed class BoundSelect : IDisposable
                 }
                 bound.SetWhere(w!);
             }
+            ClassifyTwoTable();
             if (Aliases() is { } aliasFailure)
             {
                 return aliasFailure;
@@ -1103,6 +1146,110 @@ public sealed class BoundSelect : IDisposable
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// Classify a two-table join for ACE's row-order rules (qualified.md R-SQL-1 SQL-J, PAR-ORDER): a comma cross join
+        /// with no join predicate in WHERE, an equality join (INNER JOIN ... ON a = b or comma list with WHERE a = b), or an
+        /// outer equality join (LEFT / RIGHT JOIN ... ON a = b). Three or more tables, non-equality ON, and other forms stay
+        /// unclassified (null).
+        /// </summary>
+        private void ClassifyTwoTable()
+        {
+            if (bound.SourceList.Count != 2 || bound.Tree is null)
+            {
+                return;
+            }
+            if (bound.Tree is JoinNode { Left: TableNode { Slots: [0] }, Right: TableNode { Slots: [1] } } join)
+            {
+                if (!TryTwoTableEquality(join.OnSyntax.Syntax.Root!, out ColumnDescriptor? leftKey, out ColumnDescriptor? rightKey))
+                {
+                    return;
+                }
+                TwoTableJoinForm form = join.Kind switch
+                {
+                    JoinKind.Left => TwoTableJoinForm.LeftEquality,
+                    JoinKind.Right => TwoTableJoinForm.RightEquality,
+                    _ => TwoTableJoinForm.InnerEquality,
+                };
+                FindLeadingIndex(bound.SourceList[0].Table, leftKey!, out PhysicalIndex? leftIndex, out bool ambiguousLeft);
+                FindLeadingIndex(bound.SourceList[1].Table, rightKey!, out PhysicalIndex? rightIndex, out bool ambiguousRight);
+                AnalyzeWhere(syntax.Where, out bool touchesBoth, out bool touchesIndexed);
+                bound.SetTwoTable(new TwoTableJoin(form, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, touchesBoth || touchesIndexed));
+                return;
+            }
+            if (bound.Tree is CrossNode { Items: [TableNode { Slots: [0] }, TableNode { Slots: [1] }] })
+            {
+                if (syntax.Where is { } where && TryTwoTableEquality(where.Syntax.Root!, out ColumnDescriptor? leftKey, out ColumnDescriptor? rightKey))
+                {
+                    FindLeadingIndex(bound.SourceList[0].Table, leftKey!, out PhysicalIndex? leftIndex, out bool ambiguousLeft);
+                    FindLeadingIndex(bound.SourceList[1].Table, rightKey!, out PhysicalIndex? rightIndex, out bool ambiguousRight);
+                    bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.InnerEquality, leftKey, rightKey, leftIndex, rightIndex, ambiguousLeft, ambiguousRight, WhereTouchesBothOrIndexed: false));
+                    return;
+                }
+                AnalyzeWhere(syntax.Where, out bool touchesBoth, out bool touchesIndexed);
+                if (touchesBoth)
+                {
+                    return;
+                }
+                bound.SetTwoTable(new TwoTableJoin(TwoTableJoinForm.Cross, null, null, null, null, false, false, touchesIndexed));
+            }
+        }
+
+        private bool TryTwoTableEquality(SyntaxNode root, out ColumnDescriptor? leftKey, out ColumnDescriptor? rightKey)
+        {
+            leftKey = null;
+            rightKey = null;
+            if (root is not { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal, Left: { Kind: SyntaxKind.Name, Text: { } lt }, Right: { Kind: SyntaxKind.Name, Text: { } rt } })
+            {
+                return false;
+            }
+            if (_scope.Resolve(lt, out _) is not { } lb || _scope.Resolve(rt, out _) is not { } rb || lb.Source == rb.Source)
+            {
+                return false;
+            }
+            leftKey = lb.Source == 0 ? lb.Column : rb.Column;
+            rightKey = lb.Source == 0 ? rb.Column : lb.Column;
+            return true;
+        }
+
+        private void AnalyzeWhere(Fragment? where, out bool touchesBoth, out bool touchesIndexed)
+        {
+            touchesBoth = false;
+            touchesIndexed = false;
+            if (where is null)
+            {
+                return;
+            }
+            int mask = 0;
+            foreach (SyntaxNode node in Walk(where.Syntax.Root!))
+            {
+                if (node.Kind == SyntaxKind.Name && node.Text is { } name && _scope.Resolve(name, out _) is { } binding)
+                {
+                    mask |= 1 << binding.Source;
+                    if (bound.SourceList[binding.Source].IndexLeaders.Contains(binding.Column.PhysicalNumber))
+                    {
+                        touchesIndexed = true;
+                    }
+                }
+            }
+            touchesBoth = mask == 3;
+        }
+
+        private static void FindLeadingIndex(TableDefinition table, ColumnDescriptor column, out PhysicalIndex? index, out bool ambiguous)
+        {
+            index = null;
+            ambiguous = false;
+            int matches = 0;
+            foreach (PhysicalIndex pi in table.PhysicalIndexes)
+            {
+                if (pi.Columns.Count > 0 && pi.Columns[0].PhysicalNumber == column.PhysicalNumber)
+                {
+                    index ??= pi;
+                    matches++;
+                }
+            }
+            ambiguous = matches > 1;
         }
 
         private static bool Has(SourceNode node, Func<JoinNode, bool> test) =>
