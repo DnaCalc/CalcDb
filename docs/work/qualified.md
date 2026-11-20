@@ -1281,7 +1281,33 @@ is summarised in [qualification-report.md](qualification-report.md).
 **Claim.** CInt/CLng/CByte accept `' 12 '`, `'1e2'`(100), `'&H10'`(16), `'&O17'`(15), `'+5'`, `'1.5E+2'`(150) and `'1 2'`(12); `'(12)'` converts to -12; `'&HFFFF'` is -1 for CInt and 65535 for CLng; `'1,234'`, `'12abc'`, `''`, `'$12'` and full-width digits fail 0x800A0D88; CDbl of `'1E+400'` overflows (6), `'1,5'`, `'NaN'`, `'Infinity'` fail 0x800A0D88. `Val('1d3')` is 1000, `Val('&HFFFF')` is -1, `Val(Null)` fails 0x800A0D88. Null arguments: CInt(Null) and `Mid('a',1,Null)` fail 0x800A005E; `Abs/Int/Fix/Round/Trim/UCase/Hex/Oct(Null)` and `InStr(Null,'a')` return Null.
 **Conditions.** DAO, ACCDB, en-ZA, one expression per snapshot.
 **Records.** `evidence/r-expr-1b/conv-text-to-integer/r-expr-1b.conv-text-to-integer.b0637e2413.a1.json`, `evidence/r-expr-1b/conv-text-to-floating/r-expr-1b.conv-text-to-floating.3213e9b55c.a1.json`, `evidence/r-expr-1b/conv-val-forms/r-expr-1b.conv-val-forms.614ad20e3c.a1.json`, `evidence/r-expr-1b/null-propagation-functions/r-expr-1b.null-propagation-functions.b2d04aed9f.a1.json`, `evidence/r-expr-1/a-optional-arguments/r-expr-1.a-optional-arguments.7b1e2e3cf6.a1.json`.
-**Open.** Locale-bound results (en-ZA only). This is a sample of the function manifest, not the manifest.
+**Open.** Locale-bound results (en-ZA only); which locale decides them is the next note. This is a sample of the function manifest, not the manifest.
+
+### R-EXPR-1 EXPR-LOCALE (5zh9): ACE's text conversions take the user locale, not the thread locale or the invoke LCID
+**Claim.** A DAO `Field.Value` put of text and the expression service's conversions (CDbl, CCur, CDate, CStr, CBool,
+Format, `'1,5' + 0`) give the same answer whatever the caller's thread locale and the LCID of its `IDispatch::Invoke` are.
+Seven variants gave identical results, call by call: thread locale 1031 or 1033 set before `DAO.DBEngine.120` is created,
+1031 set after it, invoke LCID 1031, 1033 or 7177, and invoke 1031 with thread 1033. The answers are the user locale's
+answers with the user's own settings (en-ZA, `sDecimal` ".", `sShortDate` yyyy/MM/dd):
+- `"1.5"` puts into Double, Currency and Bit; `"1,5"`, `"1.234,5"`, `"1,234.5"` and `"1 234,5"` are 3421 from
+  DAO.Field (with an IErrorInfo) for Double, Currency and Bit, also under German.
+- `"Yes"`, `"True"` and `"Wahr"` are 3421 into Bit; `"-1"` puts.
+- Into Date/Time, `"1,5"` puts as 2026-01-05 (a date of the current year), `"3/4/2020"` and `"2020/03/04"` as
+  2020-03-04, and `"13/4/2020"` as 2020-04-13; `"4.3.2020"` is 3421.
+- `CStr(1.5)` and `Format(1.5)` are `"1.5"`, and `CStr(#2020-03-04 13:30#)` is `"2020/03/04 13:30:00"` (the user's short
+  date). `CDbl('1,5')`, `CCur('1,5')` and `CBool('Wahr')` are 3464 at OpenRecordset, from DAO.Database; `'1,5' + 0`
+  is 3464 at the value read, from DAO.Field; `Val('1,5')` is 1.
+- In FindFirst criteria a text literal against a Double or Date/Time field, and a number against a Text field, are
+  3464 "Data type mismatch in criteria expression." from DAO.Recordset; `S = '1,5'` finds no row.
+So CalcDb's rule is one locale per process: the user default locale with its overrides (`LOCALE_USER_DEFAULT`, the
+locale that oleaut32's `VariantChangeType` uses). The caller's thread locale and invoke LCID are not consulted.
+**Conditions.** DAO, ACCDB created with `;LANGID=0x0409;CP=1252;COUNTRY=0`, STA, native IDispatch caller; user locale
+en-ZA with the settings above; one process per variant.
+**Records.** `evidence/r-expr-locale/` (thread-1031, thread-1033, thread-1031-late, invoke-1031, invoke-1033, invoke-7177,
+invoke-1031-thread-1033).
+**Open.** Whether ACE reads the user's overrides or the locale's defaults: deciding it needs another user locale or
+other settings for the run's account, which is an owner setup step. Whether the database's LANGID or a QueryDef's
+locale changes conversions has not been asked.
 
 ### R-EXPR-1 Branch B, EXPR-RUNTIME: inner result types follow oleaut32's Var* rules, with eight ACE rules above them
 **Claim.** The inner value of an operator or numeric function (what `VarType` sees) is what oleaut32 computes: `VarAdd`, `VarSub`, `VarMul`, `VarDiv`, `VarIdiv`, `VarMod`, `VarPow`, `VarNeg`, `VarAbs`, `VarInt`, `VarFix`, `VarRound` and `VariantChangeTypeEx` under LCID 7177 give ACE's types, values and text forms (Byte + Byte overflow is Integer, Integer overflow is Long, Single / Single is Single, Currency + Double is Currency, Date + Decimal is Decimal, text + text concatenates, `Abs(CInt(-32768))` is Long; the conversion grammar of `CInt('(12)')`, `CDbl('1,5')`, `CBool('FALSE')` and the text of `CStr(1/3)` or `#2024-03-05# & ''`). ACE adds these rules: (1) a Long result that overflows widens to Double only when both operands are literals (`2147483647 + 1`, `65536 * 65536`, `-2147483648 - 1`); with a typed source (`CLng(…)`, a stored Long) it fails 6, where `VarAdd` widens; (2) unary minus overflowing Integer or Long fails 6 (`-CInt(-32768)`, `-CLng(-2147483648)`), where `VarNeg` widens; (3) `^` fails 440 where `VarPow` answers E_INVALIDARG (`0 ^ -1`, `(-2) ^ 0.5`); (4) `Round` with negative digits fails 5 and with Null digits 3464; (5) `CByte` checks Byte's range and returns an Integer (`VarType(CVar(CByte(1)))` is 2), and `CBool`, `True`, comparisons, `IsNull` and the logical operators return VT_I2 -1/0, never VT_BOOL; (6) `And`, `Or`, `Xor`, `Eqv`, `Imp`, `Not` are logical with Kleene tables, not bitwise; (7) a number against text fails 3464, a date against text is less than any text with no conversion, and a Decimal against a Single compares equal where `VarCmp` does not (`0.1 = CSng(0.1)` is -1); (8) `CDate` of a numeric text is that number of days (`CDate('45000')`), which `VarDateFromStr` refuses. The mapping of oleaut32 failures is fixed: DISP_E_TYPEMISMATCH 3464, DISP_E_OVERFLOW 6 (`0 / 0` included), DISP_E_DIVBYZERO 11; a Null into a value conversion is 94.
