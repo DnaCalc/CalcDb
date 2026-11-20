@@ -464,3 +464,40 @@ sort-order, ADO and activation folders joined the compare set. Two owner decisio
 **Next candidates.** The compare set and the diff script belong in the repository (a `calcdb-oracle compare-set`
 with the folder list and the per-question diff against a named run); the session is long: hand over to a fresh
 session after `tdt9`, with the two owner decisions in the handoff.
+
+## 2026-11-20 (day) · compare-set in the repository, 685w, x866, parallel tracks (fresh session, Claude Opus 5.5)
+
+**Work observed.** A fresh session from the handoff. The last round's first candidate became tooling
+(`calcdb-oracle compare-set`, a committed per-question baseline); then 685w (CalcDb.Values, the one oleaut32 table, stand-ins,
+the scalar kernel by an Opus child, the CalcVBA brief), x866 (Find, Opus child), 2b3c (Sonnet child), and probe rounds for
+x6bq and b999 run by this session beside the children. Compared questions matching or accepted: 78 → 85 of 1038.
+
+**Last round's change measured.** The compare set in the repository replaced the temp-folder scripts: every comparison
+this session was `compare-set` plus its diff, and the diff named each gain, loss and moved first difference without a
+script. Adopt. The handoff worked again: register, notes and process log were enough to start.
+
+**What worked.**
+- *A byte-level comparison test for the stand-ins.* It caught three wrong assumptions about oleaut32 before any Linux
+  run could have depended on them (VariantInit writes 24 bytes, SAFEARRAY index order, VARIANT_TRUE to Byte).
+- *Parallel tracks that do not share a writer's files.* While one child wrote CalcDb.Values or CalcDb.Com, this session
+  designed and ran probes (tools/CalcDb.Probes, evidence) and a Sonnet child changed the ETW recorder. Nothing collided;
+  the owner's push for more parallel work was right.
+- *A control set for a rule change.* The 15,133-entry native key corpus showed at once that the first form of the
+  placeholder rule overreached (General 1033/1's two-byte é), so the rule was narrowed to the evidence.
+- *Stopping a formula search on time.* x6bq's three-page landing fit neither the two- nor the four-page shape; the shape
+  found so far was recorded and the stretch closed, as the last-but-one round's rule asked.
+
+**What cost time:**
+
+| Cause | Effect | Change made |
+| --- | --- | --- |
+| `compare-set` ignored an unknown option | A child's `--help` started the whole set; one attempt left Uncertain until a `--rerun` | compare-set refuses unknown options before anything runs |
+| A fixture built with rows ACE refuses (3047, SQL text is two bytes a character) | One fixture round repeated under a new name | Fixture creation runs alone and `fixtures --failed-only` is read before dependents, as the earlier rule says; it was followed |
+| Two agents' edits in one doc (qualified.md) | My note had to be committed by staging one hunk | When a child edits shared docs, commit mine before or after it, not alongside |
+| The intermittent w-10 lock-range question | It shows as a gain or a loss in every diff | Named in the register; a candidate to fix at its cause (lock-file length 64 or 128) |
+
+**Rule.** Parallel writers are fine when their files and the build or publish they need do not overlap; say which files
+each one owns in its brief.
+
+**Next candidates.** The owner's request for the next process round: CodeAlta work items as the sole tracker (`6v2c`).
+The w-10 lock-length flake at its cause.
