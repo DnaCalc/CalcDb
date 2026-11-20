@@ -90,8 +90,23 @@ public sealed class PositionState<T> where T : struct
 
     public bool NoMatch { get; private set; }
 
-    /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS).</summary>
+    /// <summary>A Find that found nothing: NoMatch, position kept (CUR-POS, CUR-FIND).</summary>
     public void FindFailed() => NoMatch = true;
+
+    /// <summary>A Find that found its row: current there, NoMatch cleared (CUR-FIND).</summary>
+    public void FindFound(T occurrence)
+    {
+        Tag = PositionTag.At;
+        Current = occurrence;
+        NoMatch = false;
+    }
+
+    /// <summary>Return to a position read before a Find tested other rows (Tag and Current only; NoMatch is the caller's).</summary>
+    public void Return(PositionTag tag, T? current)
+    {
+        Tag = tag;
+        Current = current;
+    }
 
     /// <summary>A Seek that found its row: current there, NoMatch cleared (R-CURSOR-1 CUR-SEEK).</summary>
     public void SeekFound(T occurrence)

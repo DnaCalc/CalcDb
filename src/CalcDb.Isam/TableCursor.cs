@@ -843,6 +843,95 @@ public sealed class PopulationCursor : IRecordCursor
 
     public TextFieldRead ReadText(ColumnDescriptor column) => _row.ReadText(CurrentRoot, column);
 
+    /// <summary>
+    /// Find (R-CURSOR-1 CUR-FIND, qualified.md): FindFirst tests from the first occurrence forward, FindLast from the last
+    /// backward (populating the store), FindNext and FindPrevious from the occurrence after or before the current one; no
+    /// wrap. A match becomes current and clears NoMatch. A miss sets NoMatch: FindFirst leaves the first row current,
+    /// FindNext and FindPrevious the row that was current; where a FindLast miss leaves the cursor is not recorded. At
+    /// BOF or EOF FindNext and FindPrevious test nothing; an empty recordset sets NoMatch. A failing test is
+    /// <see cref="CriteriaFailed"/>'s rule. A forward-only cursor does not Find (the adapter refuses it, 3219).
+    /// </summary>
+    public FindResult Find(FindDirection direction, IRowPredicate predicate)
+    {
+        PositionTag tag = _position.Tag;
+        int? current = _position.Current;
+        if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))
+        {
+            _position.FindFailed();
+            return new FindResult(FindOutcome.NotFound);
+        }
+        bool forward = direction is FindDirection.First or FindDirection.Next;
+        int? start = direction switch
+        {
+            FindDirection.First => _store.Next(null),
+            FindDirection.Last => _store.Previous(null),
+            FindDirection.Next => _store.Next(current),
+            _ => _store.Previous(current),
+        };
+        for (int? at = start; at is int ordinal; at = forward ? _store.Next(ordinal) : _store.Previous(ordinal))
+        {
+            _row.Unbind();
+            _position.Seek(ordinal);
+            switch (predicate.Test(this))
+            {
+                case RowTest.Match:
+                    _position.FindFound(ordinal);
+                    return new FindResult(FindOutcome.Found);
+                case RowTest.Failed:
+                    _row.Unbind();
+                    _position.Return(tag, current);
+                    return CriteriaFailed(direction);
+            }
+        }
+        _row.Unbind();
+        switch (direction)
+        {
+            case FindDirection.First:
+                // find-expression-forms: FindFirst "1=0" and "N > ID * 10" from row 2 end on row 1.
+                _position.Seek(0);
+                break;
+            case FindDirection.Last when tag == PositionTag.At && current == _store.ObservedCount - 1:
+                _position.Return(tag, current); // the last row: where it was and the search start agree
+                break;
+            case FindDirection.Last:
+                _position.Return(tag, current);
+                return new FindResult(FindOutcome.NotModelled, FindOpen.FindLastMissPosition);
+            default:
+                _position.Return(tag, current);
+                break;
+        }
+        _position.FindFailed();
+        return new FindResult(FindOutcome.NotFound);
+    }
+
+    /// <summary>
+    /// A Find whose criteria failed, before the search or on a row (CUR-FIND): NoMatch is unchanged, and FindFirst leaves
+    /// the first row current (find-expression-forms: syntax, name and acceptance failures from row 2 end on row 1). For
+    /// FindNext, FindPrevious and FindLast the records hold only failures on the first row, where the first row and the
+    /// row that was current agree; elsewhere the position is <see cref="FindOpen.FailurePosition"/>. On an empty
+    /// recordset, and at BOF or EOF for FindNext and FindPrevious, whether the failure is reported at all is
+    /// <see cref="FindOpen.FailureWithoutSearch"/>.
+    /// </summary>
+    public FindResult CriteriaFailed(FindDirection direction)
+    {
+        PositionTag tag = _position.Tag;
+        if (tag == PositionTag.Empty || (direction is FindDirection.Next or FindDirection.Previous && tag != PositionTag.At))
+        {
+            return new FindResult(FindOutcome.NotModelled, FindOpen.FailureWithoutSearch);
+        }
+        if (direction == FindDirection.First)
+        {
+            _row.Unbind();
+            _position.Seek(0);
+            return new FindResult(FindOutcome.Failed);
+        }
+        if (tag == PositionTag.At && _position.Current == 0 && (direction != FindDirection.Last || (_store.Complete && _store.ObservedCount == 1)))
+        {
+            return new FindResult(FindOutcome.Failed);
+        }
+        return new FindResult(FindOutcome.NotModelled, FindOpen.FailurePosition);
+    }
+
     public void Dispose()
     {
         _row.Dispose();

@@ -39,8 +39,11 @@ public enum Verdict
 /// <summary>Builders for <see cref="X"/> trees and the comparison of one case with its record.</summary>
 public static unsafe class ExpressionHarness
 {
-    /// <summary>The oracle's locale (env lcid=7177, en-ZA) and SQL's Database compare without a bound sort order.</summary>
-    public static readonly ExpressionContext Context = new(7177, TextCompareMode.Database);
+    /// <summary>
+    /// The oracle's locale (env lcid=7177, en-ZA) and SQL's Database compare under the General sort order of the
+    /// r-expr-1 fixtures (1033, version 1), through the one key codec (W-06/restricted-scalar).
+    /// </summary>
+    public static readonly ExpressionContext Context = new(7177, TextCompareMode.Database, new CalcDb.Expressions.DatabaseCollation(CalcDb.Format.SortDescriptors.General, "1033/1"));
 
     // ---- Literals ----
 

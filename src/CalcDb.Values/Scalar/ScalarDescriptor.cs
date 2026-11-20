@@ -55,6 +55,17 @@ public enum ScalarOperation : byte
     IsEmpty,
     Nz,
     Len,
+
+    // Text, date and number functions of the Find criteria records (W-06/restricted-scalar; qualified.md "R-EXPR-1
+    // EXPR-BIND, EXPR-INVENTORY (Find criteria)").
+    UCase,
+    Chr,
+    Val,
+    Left,
+    DateSerial,
+
+    /// <summary>The Like operator (II-10 §§16–18); applied by <see cref="ScalarKernel.Match"/> with a compiled <see cref="LikePattern"/>.</summary>
+    Like,
 }
 
 /// <summary>
@@ -79,7 +90,7 @@ public readonly record struct ScalarDescriptor
     /// <summary>The bound node's identity, reported with any failure.</summary>
     public int Site { get; }
 
-    /// <summary>The operands supplied: 1 or 2 (Round and Nz take an optional second).</summary>
+    /// <summary>The operands supplied: 1, 2 or 3 (Round and Nz take an optional second; DateSerial takes three).</summary>
     public int Arity { get; }
 
     public OperandContract First { get; }
@@ -92,6 +103,8 @@ public readonly record struct ScalarDescriptor
         ScalarOperation.Negate or ScalarOperation.Not => (1, 1),
         <= ScalarOperation.Imp => (2, 2),
         ScalarOperation.Round or ScalarOperation.Nz => (1, 2),
+        ScalarOperation.Left or ScalarOperation.Like => (2, 2),
+        ScalarOperation.DateSerial => (3, 3),
         _ => (1, 1),
     };
 
@@ -120,6 +133,10 @@ public readonly record struct ScalarDescriptor
     /// <summary>A binary operator or two-argument function.</summary>
     public static ScalarDescriptor Binary(ScalarOperation operation, int site, OperandContract left, OperandContract right) =>
         Bind(operation, site, 2, left, right);
+
+    /// <summary>A three-argument function (DateSerial); its third operand's contract decides nothing and is not kept.</summary>
+    public static ScalarDescriptor Ternary(ScalarOperation operation, int site, OperandContract first, OperandContract second) =>
+        Bind(operation, site, 3, first, second);
 
     private static ScalarDescriptor Bind(ScalarOperation operation, int site, int arity, OperandContract first, OperandContract second) =>
         TryBind(operation, site, arity, first, second, out ScalarDescriptor d, out ScalarFailure refusal)

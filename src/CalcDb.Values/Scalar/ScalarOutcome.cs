@@ -17,6 +17,9 @@ public static class AceError
 
     public const int DivisionByZero = 11;
 
+    /// <summary>"Invalid pattern string": a malformed Like pattern, when matching reaches the fault (qualified.md PAT-02).</summary>
+    public const int InvalidPatternString = 93;
+
     /// <summary>"Invalid use of Null" (CInt(Null) and the other value conversions).</summary>
     public const int InvalidUseOfNull = 94;
 
@@ -36,6 +39,7 @@ public static class AceError
     public static string Describe(int number) => number switch
     {
         InvalidProcedureCall => "Invalid procedure call",
+        InvalidPatternString => "Invalid pattern string",
         Overflow => "Overflow",
         DivisionByZero => "Division by zero",
         InvalidUseOfNull => "Invalid use of Null",
@@ -127,6 +131,33 @@ public enum NotModelledCase : byte
 
     /// <summary>Nz with its replacement omitted: Empty in VBA, "" for a query field (II-10 §10), not recorded.</summary>
     NzOmittedReplacement,
+
+    /// <summary>UCase of text outside ASCII: the locale's casing rules are not recorded (only ASCII subjects were asked).</summary>
+    NonAsciiCase,
+
+    /// <summary>Chr of a code outside 0–127: the code page ACE maps it through is not recorded.</summary>
+    ChrCodePage,
+
+    /// <summary>Val of a value that is not text, or of a radix form (&amp;H, &amp;O) or an overflowing number: not recorded.</summary>
+    ValForm,
+
+    /// <summary>DateSerial with a year of 0–99: read through the machine's two-digit year setting, not recorded.</summary>
+    TwoDigitYear,
+
+    /// <summary>A date outside 100-01-01..9999-12-31 from DateSerial: not recorded.</summary>
+    DateOutOfRange,
+
+    /// <summary>A malformed Like pattern whose fault lies after a <c>*</c>: when ACE reports it is not recorded (PAT-02 asks faults before any star).</summary>
+    PatternFaultAfterStar,
+
+    /// <summary>A Like class opening with <c>^</c>: PAT-02 records <c>[^a-c]</c> as the set of <c>[a-c]</c> but not whether "^" is a member.</summary>
+    PatternCaretClass,
+
+    /// <summary>Two different text units under Text compare mode or without the database sort order, in Like.</summary>
+    PatternUnitCompare,
+
+    /// <summary>A Date from a parameter or a function result against text: literals order, a stored field fails 3464, these are not recorded.</summary>
+    DateAgainstText,
 }
 
 /// <summary>

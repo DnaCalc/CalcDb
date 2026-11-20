@@ -257,10 +257,13 @@ public sealed unsafe class OwnedVariant : IDisposable
         return hr >= 0;
     }
 
-    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, out int hr)
+    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, out int hr) => ChangeType(source, target, 0, out hr);
+
+    /// <summary>VariantChangeType with its <paramref name="flags"/> (VARIANT_ALPHABOOL 0x2: a VT_BOOL reads as "True"/"False").</summary>
+    public static OwnedVariant? ChangeType(NativeVariant* source, VarType target, ushort flags, out int hr)
     {
         var result = new OwnedVariant();
-        hr = OleAut.VariantChangeType(result._cell, source, 0, (ushort)target);
+        hr = OleAut.VariantChangeType(result._cell, source, flags, (ushort)target);
         if (hr < 0)
         {
             result.Dispose();

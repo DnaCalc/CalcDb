@@ -461,13 +461,13 @@ public static class ExpressionCatalog
         Plain(CrossTypes, "'12:00' = 0.5", Eq(S("12:00"), Dc("0.5")));
         Plain(CrossTypes, "CDate('12:00') = 0.5", Eq(Fn(CDate, S("12:00")), Dc("0.5")));
         Plain(CrossTypes, "Null = ''", Eq(N, S("")));
-        Plain(CrossTypes, "'' = ''", Eq(S(""), S("")), NotModelledCase.DatabaseCollationMissing);
-        Plain(CrossTypes, "'' < 'a'", Lt(S(""), S("a")), NotModelledCase.DatabaseCollationMissing);
+        Plain(CrossTypes, "'' = ''", Eq(S(""), S("")));
+        Plain(CrossTypes, "'' < 'a'", Lt(S(""), S("a")));
         Plain(CrossTypes, "'a' < Null", Lt(S("a"), N));
         Plain(CrossTypes, "2 < '10'", Lt(I(2), S("10")));
         Plain(CrossTypes, "2 < '10a'", Lt(I(2), S("10a")));
-        Plain(CrossTypes, "'abc' = 'ABC'", Eq(S("abc"), S("ABC")), NotModelledCase.DatabaseCollationMissing);
-        Plain(CrossTypes, "'abc' <> 'abd'", Ne(S("abc"), S("abd")), NotModelledCase.DatabaseCollationMissing);
+        Plain(CrossTypes, "'abc' = 'ABC'", Eq(S("abc"), S("ABC")));
+        Plain(CrossTypes, "'abc' <> 'abd'", Ne(S("abc"), S("abd")));
         Plain(CrossTypes, "1E308 = 1E308", Eq(R(1E308), R(1E308)));
         Plain(CrossTypes, "1 = '1.0'", Eq(I(1), S("1.0")));
         Plain(CrossTypes, "1 = '1 '", Eq(I(1), S("1 ")));
@@ -490,7 +490,7 @@ public static class ExpressionCatalog
             ("'æ' = 'ae'", Eq(S("æ"), S("ae"))), ("'ß' = 'ss'", Eq(S("ß"), S("ss"))), ("'ab' < 'a-b'", Lt(S("ab"), S("a-b"))),
         })
         {
-            Plain(TextOperators, e, tree, NotModelledCase.DatabaseCollationMissing);
+            Plain(TextOperators, e, tree);
         }
 
         // ---- Null into functions (T-EXPR-09, T-EXPR-11), r-expr-1b null-propagation-functions ----

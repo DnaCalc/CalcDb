@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The expression service (W-06/restricted-scalar, II-10 §§1-5, 12, 14-18, 21; D-EXPR-1): the one parser, binder and
+       iterative evaluator over the shared scalar kernel (CalcDb.Values.Scalar), with the database sort order's text
+       compare over the one key codec (CalcDb.Format) and the Find adapter over the ISAM cursors. W-06/parser-binder-scan's
+       SQL extends these, never a second copy. Portable: no I/O of its own. -->
+  <PropertyGroup>
+    <RootNamespace>CalcDb.Expressions</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="CalcDb.Expressions.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CalcDb.Foundation\CalcDb.Foundation.csproj" />
+    <ProjectReference Include="..\CalcDb.Values\CalcDb.Values.csproj" />
+    <ProjectReference Include="..\CalcDb.Format\CalcDb.Format.csproj" />
+    <ProjectReference Include="..\CalcDb.Isam\CalcDb.Isam.csproj" />
+  </ItemGroup>
+</Project>

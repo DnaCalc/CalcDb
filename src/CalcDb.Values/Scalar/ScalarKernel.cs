@@ -10,7 +10,7 @@ namespace CalcDb.Values.Scalar;
 /// Operands are borrowed for the call; the outcome owns its value. Nothing is allocated on the path of a fixed-width
 /// result, and failure text is built only on request (The Plan §3.2).
 /// </summary>
-public static unsafe class ScalarKernel
+public static unsafe partial class ScalarKernel
 {
     /// <summary>VarCmp's VARCMP_EQ and VARCMP_NULL; VARCMP_LT and VARCMP_GT are one below and one above EQ.</summary>
     private const int VarCmpEqual = 1, VarCmpNull = 3;
@@ -44,6 +44,21 @@ public static unsafe class ScalarKernel
         }
     }
 
+    /// <summary>A three-argument function (DateSerial).</summary>
+    public static ScalarOutcome Apply(in ScalarDescriptor d, in NativeVariant first, in NativeVariant second, in NativeVariant third, ExpressionContext context)
+    {
+        if (d.Arity != 3)
+        {
+            throw new ArgumentException("A three-operand descriptor is expected.", nameof(d));
+        }
+        fixed (NativeVariant* a = &first)
+        fixed (NativeVariant* b = &second)
+        fixed (NativeVariant* t = &third)
+        {
+            return d.Operation == ScalarOperation.DateSerial ? DateSerial(d, a, b, t, context) : throw new ArgumentOutOfRangeException(nameof(d));
+        }
+    }
+
     private static ScalarOutcome Dispatch(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c) => d.Operation switch
     {
         ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply or ScalarOperation.Divide
@@ -70,6 +85,10 @@ public static unsafe class ScalarKernel
         ScalarOperation.IsEmpty => Boolean(Tag(a) == VarType.Empty),
         ScalarOperation.Nz => Nz(d, a, b),
         ScalarOperation.Len => Length(d, a, c),
+        ScalarOperation.UCase => UpperCase(d, a, c),
+        ScalarOperation.Chr => Character(d, a, c),
+        ScalarOperation.Val => Value(d, a),
+        ScalarOperation.Left => LeftPart(d, a, b, c),
         _ => throw new ArgumentOutOfRangeException(nameof(d)),
     };
 
@@ -241,9 +260,10 @@ public static unsafe class ScalarKernel
     /// <summary>
     /// = &lt;&gt; &lt; &lt;= &gt; &gt;= (qualified.md "text against number comparison"; cmp-cross-types): VT_I2 -1 or 0, or
     /// Null when an operand is Null. Two texts compare under the context's mode; a number against text fails 3464; a date
-    /// against text compares as less than any text, with no conversion (<c>#2024-03-05# = '2024-03-05'</c> is 0,
-    /// <c>&lt; 'abc'</c> is -1). Numbers compare through VarCmp, except a Single against a Decimal: ACE finds 0.1 and
-    /// CSng(0.1) equal, VarCmp does not.
+    /// literal or computed date against text compares as less than any text, with no conversion (<c>#2024-03-05# =
+    /// '2024-03-05'</c> is 0, <c>&lt; 'abc'</c> is -1), while a stored Date field against text fails 3464 (Find
+    /// <c>D = '1/15/2020'</c>, r-cursor-1b/find-date-forms). Numbers compare through VarCmp, except a Single against a
+    /// Decimal: ACE finds 0.1 and CSng(0.1) equal, VarCmp does not.
     /// </summary>
     private static ScalarOutcome Compare(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
     {
@@ -280,6 +300,15 @@ public static unsafe class ScalarKernel
             if (number != VarType.Date)
             {
                 return Fail(d, AceError.TypeMismatch);
+            }
+            OperandOrigin dateOrigin = ta == VarType.Date ? d.First.Origin : d.Second.Origin;
+            if (dateOrigin == OperandOrigin.Field)
+            {
+                return Fail(d, AceError.TypeMismatch);
+            }
+            if (dateOrigin is OperandOrigin.Parameter or OperandOrigin.FunctionResult)
+            {
+                return Open(d, NotModelledCase.DateAgainstText);
             }
             order = ta == VarType.Date ? -1 : 1;
         }

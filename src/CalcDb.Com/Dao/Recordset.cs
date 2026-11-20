@@ -1,7 +1,9 @@
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
+using CalcDb.Expressions;
 using CalcDb.Foundation;
 using CalcDb.Values;
+using CalcDb.Values.Scalar;
 using CalcDb.Format;
 using CalcDb.Isam;
 
@@ -38,6 +40,10 @@ internal sealed unsafe class RecordsetObject : DaoObject
         .Put("Index", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetIndex(value)); })
         .Method("Requery", (self, args) => Live(self, r => r.Requery()))
         .Method("Seek", static (self, args) => (RecordsetObject)self is { Closed: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).Seek(args))
+        .Method("FindFirst", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.First, args[0]))
+        .Method("FindLast", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Last, args[0]))
+        .Method("FindNext", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Next, args[0]))
+        .Method("FindPrevious", static (self, args) => ((RecordsetObject)self).FindRow(FindDirection.Previous, args[0]))
         .Method("Close", (self, args) => Live(self, r => r.Close()));
 
     private FieldsObject? _fields;
@@ -78,6 +84,12 @@ internal sealed unsafe class RecordsetObject : DaoObject
     /// </summary>
     protected override Failure? ArgumentConversionFailure(MemberDecl member, bool missing) =>
         missing ? InvalidArgumentCount() : Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true };
+
+    /// <summary>The Find criteria coerces a VT_BOOL as "True" (VARIANT_ALPHABOOL; R-CURSOR-1 CUR-FIND, find-expression-forms against findfirst-fresh-recordset).</summary>
+    protected override ushort CoercionFlags(MemberDecl member, int parameter) =>
+        parameter == 0 && member.Name is "FindFirst" or "FindLast" or "FindNext" or "FindPrevious" ? VariantAlphaBool : (ushort)0;
+
+    private const ushort VariantAlphaBool = 0x2;
 
     private FieldsObject FieldsCollection => _fields ??= new FieldsObject(this);
 
@@ -302,6 +314,71 @@ internal sealed unsafe class RecordsetObject : DaoObject
         }
     }
 
+    /// <summary>
+    /// FindFirst, FindLast, FindNext, FindPrevious (R-CURSOR-1 CUR-FIND; qualified.md "R-EXPR-1 EXPR-BIND, EXPR-INVENTORY
+    /// (Find criteria)"). The criteria arrives as text (the binder coerced it, a VT_BOOL as "True"; Null is 3421 and
+    /// Missing 3001 there, with IErrorInfo). It is bound once per text and kept (W-06/restricted-scalar, task x866: a
+    /// repeated FindNext binds nothing). Table-type refuses with 3251 and forward-only with 3219; a criteria that does
+    /// not bind on those is the not-recorded order of the two refusals. The cursor applies the position rules; a
+    /// criteria failure is ACE's error with EXCEPINFO alone, entered in Errors.
+    /// </summary>
+    private CallResult FindRow(FindDirection direction, nint argument)
+    {
+        if (Closed)
+        {
+            return Fail(3420, DaoErrors.ObjectInvalid);
+        }
+        ReadOnlySpan<char> text = argument != 0 && Args.TypeOf(argument) == VarType.Bstr ? Bstrs.Chars(Args.Cell(argument)->Pointer) : (Args.Text(argument) ?? "").AsSpan();
+        FindCriteria? criteria = Criteria(text, out ExpressionFailure? failure);
+        if (Cursor is not PopulationCursor { ForwardOnly: false } cursor)
+        {
+            if (criteria is null)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.FindRefusalOrder", "a criteria that does not bind on a table-type or forward-only recordset: which error ACE reports first is not recorded (CUR-FIND)"));
+            }
+            return Cursor is TableCursor ? Fail(3251, DaoErrors.NotSupportedForType) : Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (failure is { IsNotModelled: true })
+        {
+            return Published(failure);
+        }
+        FindResult result = criteria is null ? cursor.CriteriaFailed(direction) : cursor.Find(direction, criteria);
+        return result.Outcome switch
+        {
+            FindOutcome.Found or FindOutcome.NotFound => CallResult.Nothing,
+            FindOutcome.Failed => Published(criteria is null ? failure! : criteria.LastFailure!),
+            _ => CallResult.Fail(Failure.NotModelled("NotModelled.Find." + result.Open, "a Find position the records do not decide (qualified.md CUR-FIND, Open)")),
+        };
+    }
+
+    /// <summary>An expression failure as DAO publishes it: ACE's number and text from DAO.Recordset, or the named case.</summary>
+    private CallResult Published(ExpressionFailure failure) => failure.IsNotModelled
+        ? CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message))
+        : Fail(failure.Number, failure.Message);
+
+    private FindCriteria? _criteria;
+    private ExpressionSchema? _schema;
+    private ExpressionContext? _context;
+
+    /// <summary>The bound criteria for this text: the kept one when the text is the same, else a new binding (kept when it binds).</summary>
+    private FindCriteria? Criteria(ReadOnlySpan<char> text, out ExpressionFailure? failure)
+    {
+        failure = null;
+        if (_criteria is { } kept && text.SequenceEqual(kept.Text))
+        {
+            return kept;
+        }
+        _schema ??= new ExpressionSchema(Cursor.Table);
+        _context ??= new ExpressionContext((uint)System.Globalization.CultureInfo.CurrentCulture.LCID, TextCompareMode.Database, Database.Collation, ExpressionUse.Find);
+        FindCriteria? bound = FindCriteria.Bind(text.ToString(), _schema, _context, out failure);
+        if (bound is not null)
+        {
+            _criteria?.Dispose();
+            _criteria = bound;
+        }
+        return bound;
+    }
+
     private static CallResult Live(ComObject self, Func<RecordsetObject, CallResult> op)
     {
         var r = (RecordsetObject)self;
@@ -445,6 +522,8 @@ internal sealed unsafe class RecordsetObject : DaoObject
         if (!Closed)
         {
             Cursor.Dispose();
+            _criteria?.Dispose();
+            _criteria = null;
             Closed = true;
         }
     }

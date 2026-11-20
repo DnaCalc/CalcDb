@@ -109,6 +109,27 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     public CatalogSnapshot Catalog { get; }
 
+    /// <summary>
+    /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
+    /// made once per database from page 0's sort descriptor; null outside the General family (the kernel then names
+    /// DatabaseCollationMissing).
+    /// </summary>
+    public CalcDb.Expressions.DatabaseCollation? Collation
+    {
+        get
+        {
+            if (!_collationMade)
+            {
+                _collation = CalcDb.Expressions.DatabaseCollation.For(Header.SortOrder);
+                _collationMade = true;
+            }
+            return _collation;
+        }
+    }
+
+    private CalcDb.Expressions.DatabaseCollation? _collation;
+    private bool _collationMade;
+
     public bool Closed => _file is null;
 
     protected override OperationTable Table => Operations;

@@ -124,6 +124,13 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
     protected virtual Failure? ArgumentConversionFailure(MemberDecl member, bool missing) => null;
 
     /// <summary>
+    /// The VariantChangeType flags of a declared scalar parameter's coercion: 0, as DispInvoke coerces, unless a class
+    /// knows otherwise. DAO's Find criteria reads a VT_BOOL True as the text "True" (VARIANT_ALPHABOOL), not "-1"
+    /// (R-CURSOR-1 CUR-FIND: FindFirst(VT_BOOL -1) finds every row, while the criteria "-1" fails 3001).
+    /// </summary>
+    protected virtual ushort CoercionFlags(MemberDecl member, int parameter) => 0;
+
+    /// <summary>
     /// The DISPID a class's live IDispatch gives a member where it differs from the captured type library, or null.
     /// ADO's Parameters answers Append 3 and Delete 4 although its library declares 1610809344 and 1610809345
     /// (every r-ado-1b, r-fix-wire-ado and r-str-ado-act record that appends a parameter). GetIDsOfNames returns it and
@@ -349,7 +356,7 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
                 // Declared scalar parameters are coerced as DispInvoke does; a failure names the argument.
                 if (TypedCall.ScalarType(member.Parameters[k].Type) is { } vt && ((NativeVariant*)args[k])->Vt != (ushort)vt)
                 {
-                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, out int hr);
+                    OwnedVariant? c = OwnedVariant.ChangeType((NativeVariant*)args[k], vt, CoercionFlags(member, k), out int hr);
                     if (c is null)
                     {
                         // The argument's position is reported on both routes (r-cursor-1b/seek-operator-spelling: puArgErr 1 with 3421).
