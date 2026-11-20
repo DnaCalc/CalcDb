@@ -1,0 +1,298 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-act-1-meta/support-dao-objects",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-META",
+    "ACT-PROJECT",
+    "R-ERR-1"
+  ],
+  "description": "QueryInterface results for ISupportErrorInfo, IProvideClassInfo, IDispatchEx, IConnectionPointContainer, IPersist and IProvideClassInfo2 on DAO.DBEngine.120, its Workspaces collection and default Workspace, a read-only Database of the R-LOCK fixture, its TableDefs and a snapshot Recordset with its Fields and first Field, and DBEngine.Errors.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-lock-1-2-accdb.accdb",
+      "sha256": "a867cc3246834b57ed4e1209749e8b1007e37743fb0ab3189d59de7374a5da24",
+      "length": 8663040,
+      "provenance": "r-lock-1-2.create-accdb.e3664f5138.a1 qk1-e3664f5138e67743b9278668168a70b00bd351d782b985f1e5f889cd52772eed output:r-lock-1-2-accdb.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "eng",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Workspaces",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "wss"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "wss",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "wss",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "ws"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "ws",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "db",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "tds",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "OpenRecordset",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "rs"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "rs",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flds"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "flds",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "flds",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "f"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "f",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "errs",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "f"
+    },
+    {
+      "op": "release",
+      "target": "flds"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "release",
+      "target": "ws"
+    },
+    {
+      "op": "release",
+      "target": "wss"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    }
+  ]
+}

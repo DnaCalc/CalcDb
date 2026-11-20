@@ -153,9 +153,8 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
 
 ## II-12 §16 and II-13 §§2, 11: ADO construction (gw6c, 2026-11-20)
 
-- **II-13 §11, in-memory type library.** Proposed: "An in-memory library reports LIBFLAGS 0; ACE's libraries report
-  FHASDISKIMAGE (8). This is a named difference while CalcDb's type library is never saved." Saving and loading a
-  `.tlb` instead is the alternative (task 77wt).
+- **II-13 §11, type-library image.** Superseded by the 6w9p entry below: the library is now saved and loaded
+  (task 77wt), so there is no named difference.
 - **II-13 §2 / ACT-DECL, live DISPIDs.** Proposed: "A live IDispatch can answer DISPIDs that differ from its type
   library: ADO's Parameters answers Append 3 and Delete 4 against the declared 1610809344/1610809345. The manifest
   records the live DISPID where the two differ." The describe capture does not record an alias's target type; the
@@ -163,5 +162,45 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
 - **II-12 §16, Properties pinning.** Proposed: "A Properties read pins only an admitted provider. Under the default
   provider it is the NotModelled.AdoProvider refusal and pins nothing, so a later ACE Provider assignment succeeds where
   ACE fails `0x800A0C94`." A deliberate, named difference.
+
+## II-13 §§11, 16–18 and 20: activation route matrix (6w9p, 2026-11-20)
+
+- **II-13 §11 and §16, the library is a saved image.** Evidence: ACE's DAO library reports SYS_WIN32 and ADO's
+  SYS_WIN64, both LIBFLAG_FHASDISKIMAGE, in an x64 process (`r-str-ado-act/act-dao120`, `ado-describe`,
+  `act-ado-classes`). Measured (TypeLibraryTests): a library used in memory reports LIBFLAGS 0 whatever SetLibFlags
+  asked, and a SYS_WIN32 one its vtable offsets in 4-byte units; loaded from a saved image it reports the flags, and
+  oleaut32 scales a SYS_WIN32 image's offsets to 8 bytes. Implemented: the published module saves `CalcDb.DAO.tlb` and
+  `CalcDb.ADODB.tlb` beside itself and serves type information only from them; all three questions match. Proposed
+  text, §11 after "This graph can be serialized as a build artifact": "On Windows the deployment image carries the
+  graph as saved type libraries in the captured system kind, with the captured library flags, help strings and type
+  order; type information is served from the loaded image, never from a library built in memory, whose attributes and,
+  for SYS_WIN32, vtable offsets differ from what callers see of ACE." §16's deployment-image sentence: "…the native
+  module, its saved type-library images and a manifest…".
+- **II-13 §11, the whole declaration graph.** Implemented: types CalcDb does not implement (ADO's event dispinterfaces,
+  *EventsVt sinks and ADO*Construction interfaces) and DAO's LanguageConstants module are published as declarations, so
+  the library's type count and indexes are ACE's. Proposed, §11 after "not only the names currently called by a smoke
+  test": "A declared type that no object implements yet is still published; implementing it is the member work."
+- **II-13 §17, host registration is per apartment.** Evidence: with the factory registered on the main STA, DAO and
+  ADO created from an MTA or a second STA loaded ACE (`r-act-1-thread` candidate runs before this change). Implemented
+  in the worker's host role: each apartment the host enters registers too, an STA with the module's own factories, the
+  MTA with the factory COM hands out under the compatibility context (a proxy from COM's host STA). DAO then matches
+  ACE's placement: direct on a second STA, proxy from the MTA. Proposed text, §17 after "Use a separate record for every
+  successful registration": "Registration is visible only in the registering apartment. A host that registers enters
+  every apartment it owns and registers there; for the MTA it registers the factory obtained under the compatibility
+  context, so an Apartment class is still served from COM's host STA. Threads the host does not own see no
+  registration, and their creation falls to the registry: that route stays open (ACT-PROPAGATE)."
+- **II-13 §18, ADO's free-threaded shape (conflict, owner decision).** Evidence (qualified ACT-THREAD SAME-STA and
+  MTA-CREATE): ACE's ADO Connection, Recordset, Command and Stream answer IMarshal on every apartment and are never
+  proxied from an MTA, also the Apartment-registered classes; `CoCreateInstance` for IMarshal succeeds
+  (`r-q2-wire/act-ado-clsctx-iids`). §18 says "Do not advertise Both, Free, agility or a free-threaded marshaler". CalcDb
+  follows the book, so all ADO thread questions keep this first difference. Decision needed: keep §18 and name the
+  difference, or admit ADO's observed free-threaded marshaling as ACE's own behaviour (with the retained-reference
+  obligations §18 lists). No change was made.
+- **II-13 §20, ISupportErrorInfo.** Evidence: every ACE DAO and ADO object answers ISupportErrorInfo
+  (`r-act-1-meta/support-dao-objects`, `support-ado-objects`). Without it the .NET runtime discarded CalcDb's
+  IErrorInfo (the PIA lane's exception had the runtime's generic text). Implemented on every CalcDb dispatch object.
+  Proposed, §20 after "HRESULT, EXCEPINFO, logical-thread IErrorInfo … are not interchangeable": "A runtime reads
+  IErrorInfo only from an object that answers ISupportErrorInfo for the interface called; every DAO and ADO object
+  answers it." Open: ACE's per-IID InterfaceSupportsErrorInfo answers (a vtable call the harness cannot make).
 
 

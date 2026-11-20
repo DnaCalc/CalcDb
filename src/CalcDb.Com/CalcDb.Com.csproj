@@ -29,4 +29,15 @@
     <ProjectReference Include="..\CalcDb.Isam\CalcDb.Isam.csproj" />
     <ProjectReference Include="..\CalcDb.Catalog\CalcDb.Catalog.csproj" />
   </ItemGroup>
+  <!-- The deployment image's type libraries (II-13 §§11, 16; R-ACT-1 ACT-META, 77wt): the published module saves its
+       own declarations as CalcDb.DAO.tlb and CalcDb.ADODB.tlb beside itself. Nothing is registered. -->
+  <Target Name="SaveTypeLibraryImages" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <PropertyGroup>
+      <_CalcDbModule>$([System.IO.Path]::GetFullPath('$(PublishDir)CalcDb.dll'))</_CalcDbModule>
+      <_CalcDbImageDir>$([System.IO.Path]::GetDirectoryName('$(_CalcDbModule)'))</_CalcDbImageDir>
+    </PropertyGroup>
+    <Delete Files="$(_CalcDbImageDir)\CalcDb.DAO.tlb;$(_CalcDbImageDir)\CalcDb.ADODB.tlb" />
+    <Exec Command="&quot;$(SystemRoot)\System32\rundll32.exe&quot; &quot;$(_CalcDbModule)&quot;,CalcDbSaveTypeLibraries" />
+    <Error Condition="!Exists('$(_CalcDbImageDir)\CalcDb.DAO.tlb') Or !Exists('$(_CalcDbImageDir)\CalcDb.ADODB.tlb')" Text="$(_CalcDbModule) did not save its type libraries." />
+  </Target>
 </Project>

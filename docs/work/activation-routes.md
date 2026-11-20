@@ -65,6 +65,23 @@ activation's steps (`2nqn`).
 - On a machine without ACE's registration, no route gives an unchanged client's `CLSIDFromProgID` the reference CLSID:
   the context gives a configured one, host registration gives none (and `CLSIDFromProgID` on an absent name may
   synthesize an OLE1 identity, II-13 §15). ACT-NAME stays open there.
-- Host registration is process-wide, so it gives up the context's scoping (ACT-SCOPE, ACT-COEXIST). A class object
-  registered on the host's STA also places objects that an MTA caller creates in that STA, where under the context
-  COM picks its own host apartment (ACT-THREAD MTA-CREATE): not yet compared.
+- Host registration is process-wide, so it gives up the context's scoping (ACT-SCOPE, ACT-COEXIST).
+
+## Apartments (6w9p, 2026-11-20)
+
+- **Observed.** A class object registered on the main STA is not reached from another apartment: in the candidate
+  runs of `r-act-1-thread`, DAO and ADO created from a new MTA or a second STA loaded ACEDAO.DLL, or msado15.dll and
+  ACEOLEDB.DLL.
+- **Done.** The worker's host enters every apartment it starts (`CandidateDeployment.EnterApartment`). An STA
+  registers the module's own factories there. The MTA registers the factory that `CoGetClassObject` hands out under
+  the compatibility context, held only around that call: a proxy from COM's host STA, so the MTA caller gets a
+  proxy, as from ACE. DAO now reaches CalcDb in all three apartments, with ACE's proxy and direct answers. ADO keeps
+  its free-threaded difference (book-proposals.md, II-13 §18).
+- **Inheritance.** [FactoryHostCoreTests](../../tests/CalcDb.Com.Tests/FactoryHostCoreTests.cs) shows it under
+  CalcDb.Own's context (ACT-PROPAGATE, T-INT-13). A thread started while the context is active keeps the context after
+  the parent pops it. From an MTA the object is a proxy whose calls reach CalcDb.dll; from a second STA it is direct. A
+  thread started after the pop finds no class.
+- **Open.** Threads the host does not own see no registration (a native worker pool, a managed Task). Marshaling
+  CalcDb's interfaces across apartments uses the interface registration of the installed DAO and ADO. On a machine
+  without ACE it needs CalcDb's own proxy and type-library entries in the manifest
+  (`comInterfaceExternalProxyStub`, `typelib`), which the saved images now make possible. Neither is tried yet.

@@ -34,13 +34,128 @@ internal sealed unsafe partial class CandidateDeployment : IDisposable
     private readonly nint _context;
     private readonly nuint _cookie;
     private readonly uint[] _registrations;
+    private readonly nint _module;
+    private readonly string _manifest;
+    private readonly List<(Guid Clsid, string ProgId)> _classes;
 
-    private CandidateDeployment(nint context, nuint cookie, uint[] registrations, string description)
+    private CandidateDeployment(nint context, nuint cookie, uint[] registrations, string description, nint module, string manifest, List<(Guid, string)> classes)
     {
         _context = context;
         _cookie = cookie;
         _registrations = registrations;
         Description = description;
+        _module = module;
+        _manifest = manifest;
+        _classes = classes;
+    }
+
+    /// <summary>
+    /// The host's entry into another apartment it owns (an <c>onThread</c> block), called on that thread after its
+    /// CoInitializeEx; dispose it there before CoUninitialize. Under host registration a class object registered on one
+    /// apartment is not reached from another: there the unchanged creation fell to the registry and loaded ACE
+    /// (r-act-1-thread dao-new-mta, dao-second-sta, ado-new-mta, ado-second-sta; W-08/activation-route-matrix). So the host
+    /// registers in each apartment it enters, as ACT-THREAD's native placement requires:
+    /// <list type="bullet">
+    /// <item>an STA registers the module's own factories, so objects are created directly in it (SAME-STA, ACE's direct
+    /// objects on a second STA);</item>
+    /// <item>the MTA registers, for each class, the factory COM itself hands out under the compatibility manifest's
+    /// context: an Apartment class asked for from the MTA is served from COM's host STA, so the MTA holds a proxy of the
+    /// factory and every object it creates is a proxy (MTA-CREATE), as ACE's are. The context is active only around that
+    /// CoGetClassObject, so the caller's CLSIDFromProgID still gives the reference CLSID.</item>
+    /// </list>
+    /// Under the context route the block thread inherits the creating thread's context (CreateThread) and nothing is
+    /// registered. Null when there is nothing to undo or the registration failed (the error is recorded).
+    /// </summary>
+    public ApartmentEntry? EnterApartment(bool multithreaded, List<string> errors)
+    {
+        if (_registrations.Length == 0)
+        {
+            return null; // the context route
+        }
+        uint[]? registrations = multithreaded ? RegisterFromHostApartment(errors) : Register(_module, _classes, errors);
+        return registrations is null ? null : new ApartmentEntry(registrations);
+    }
+
+    /// <summary>The registrations of one entered apartment, revoked on the thread that made them.</summary>
+    internal sealed class ApartmentEntry(uint[] registrations) : IDisposable
+    {
+        public void Dispose()
+        {
+            foreach (uint registration in registrations)
+            {
+                _ = CoRevokeClassObject(registration); // the block ends; nothing reads a revocation failure
+            }
+        }
+    }
+
+    /// <summary>
+    /// For the MTA: each class's factory as COM hands it out under the compatibility context (a proxy to the factory in
+    /// COM's host STA, for the Apartment classes), registered in the MTA in-process and multi-use.
+    /// </summary>
+    private uint[]? RegisterFromHostApartment(List<string> errors)
+    {
+        nint context;
+        fixed (char* source = _manifest)
+        {
+            var ctx = new ActCtx { Size = (uint)sizeof(ActCtx), Source = source };
+            context = CreateActCtxW(&ctx);
+        }
+        if (context == -1)
+        {
+            errors.Add($"CreateActCtxW({_manifest}) failed: {Marshal.GetLastPInvokeError()}.");
+            return null;
+        }
+        var factories = new List<(Guid Clsid, string ProgId, nint Factory)>();
+        try
+        {
+            if (!ActivateActCtx(context, out nuint cookie))
+            {
+                errors.Add("ActivateActCtx failed: " + Marshal.GetLastPInvokeError());
+                return null;
+            }
+            try
+            {
+                Guid iidClassFactory = new("00000001-0000-0000-C000-000000000046");
+                foreach ((Guid clsid, string progId) in _classes)
+                {
+                    int hr = CoGetClassObject(clsid, ClsctxInprocServer, 0, iidClassFactory, out nint factory);
+                    if (hr < 0)
+                    {
+                        errors.Add($"CoGetClassObject of {progId} {clsid:B} from the MTA under the compatibility context failed: 0x{(uint)hr:X8}.");
+                        return null;
+                    }
+                    factories.Add((clsid, progId, factory));
+                }
+            }
+            finally
+            {
+                DeactivateActCtx(0, cookie);
+            }
+            var cookies = new List<uint>();
+            foreach ((Guid clsid, string progId, nint factory) in factories)
+            {
+                int hr = CoRegisterClassObject(clsid, factory, ClsctxInprocServer, RegclsMultipleUse, out uint registration);
+                if (hr < 0)
+                {
+                    errors.Add($"Host registration of {progId} {clsid:B} in the MTA failed: 0x{(uint)hr:X8}.");
+                    foreach (uint done in cookies)
+                    {
+                        _ = CoRevokeClassObject(done);
+                    }
+                    return null;
+                }
+                cookies.Add(registration);
+            }
+            return [.. cookies];
+        }
+        finally
+        {
+            foreach ((_, _, nint factory) in factories)
+            {
+                Marshal.Release(factory); // each registration holds its own reference
+            }
+            ReleaseActCtx(context);
+        }
     }
 
     /// <summary>What ran: the implementation, its module hash, the host binding it bootstrapped and the activation route.</summary>
@@ -113,11 +228,12 @@ internal sealed unsafe partial class CandidateDeployment : IDisposable
         string described = $"{selection.Name} CalcDb.dll sha256 {selection.ModuleSha256} binding {answer.BindingIdentity}";
         if (!register)
         {
-            return new CandidateDeployment(context, cookie, [], described + " via CalcDb.Compat.manifest");
+            return new CandidateDeployment(context, cookie, [], described + " via CalcDb.Compat.manifest", handle, manifest, classes);
         }
         uint[]? registrations = Register(handle, classes, errors);
         return registrations is null ? null : new CandidateDeployment(0, 0, registrations,
-            described + " via host registration of " + string.Join(", ", classes.Select(c => $"{c.ProgId} {c.Clsid:B}")));
+            described + " via host registration of " + string.Join(", ", classes.Select(c => $"{c.ProgId} {c.Clsid:B}"))
+            + " (per apartment the host enters; the MTA's from COM's host STA under CalcDb.Compat.manifest)", handle, manifest, classes);
     }
 
     /// <summary>
@@ -247,4 +363,7 @@ internal sealed unsafe partial class CandidateDeployment : IDisposable
 
     [LibraryImport("ole32.dll")]
     private static partial int CoRevokeClassObject(uint cookie);
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoGetClassObject(in Guid clsid, uint context, nint serverInfo, in Guid iid, out nint result);
 }

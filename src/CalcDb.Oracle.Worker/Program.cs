@@ -114,6 +114,7 @@ internal sealed unsafe partial class Run : IDisposable
     {
         // A candidate attempt activates its deployment before anything else; a failed activation runs nothing.
         using CandidateDeployment? candidate = _attempt.Implementation is { } selection ? CandidateDeployment.Activate(selection, _captureErrors) : null;
+        _candidate = candidate;
         EnvironmentReceipt environment = DescribeEnvironment() with { Implementation = candidate?.Description };
         _environment = environment;
         if (_attempt.Implementation is not null && candidate is null)
@@ -374,7 +375,13 @@ internal sealed unsafe partial class Run : IDisposable
         _events.Add(new InterfacesEvent { Seq = ++_seq, ProgramPath = path, Target = qi.Target, Results = results });
     }
 
-    /// <summary>Run a block on a new thread of the requested apartment; its own binds are released there.</summary>
+    /// <summary>The candidate deployment of this attempt, which the host enters on each thread it starts; null under ACE.</summary>
+    private CandidateDeployment? _candidate;
+
+    /// <summary>
+    /// Run a block on a new thread of the requested apartment; its own binds are released there. A candidate attempt's
+    /// host enters the new apartment first (<see cref="CandidateDeployment.EnterApartment"/>) and leaves it last.
+    /// </summary>
     private void DoOnThread(OnThread block, string path)
     {
         Exception? failure = null;
@@ -382,6 +389,7 @@ internal sealed unsafe partial class Run : IDisposable
         {
             uint coinit = block.Apartment == "mta" ? 0x0u : 0x2u; // COINIT_MULTITHREADED / COINIT_APARTMENTTHREADED
             int hr = Native.CoInitializeEx(0, coinit);
+            CandidateDeployment.ApartmentEntry? entry = hr >= 0 ? _candidate?.EnterApartment(block.Apartment == "mta", _captureErrors) : null;
             int aptHr = Native.CoGetApartmentType(out int aptType, out int aptQualifier);
             _events.Add(new ThreadEvent
             {
@@ -405,6 +413,7 @@ internal sealed unsafe partial class Run : IDisposable
                 }
             }
             _events.Add(new ThreadEvent { Seq = ++_seq, ProgramPath = path, Kind = "end", Requested = block.Apartment, ThreadId = (int)Native.GetCurrentThreadId() });
+            entry?.Dispose();
             if (hr >= 0)
             {
                 Native.CoUninitialize();

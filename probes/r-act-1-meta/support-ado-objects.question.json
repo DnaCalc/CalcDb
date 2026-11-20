@@ -1,0 +1,140 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-act-1-meta/support-ado-objects",
+  "bookRefs": [
+    "R-ACT-1",
+    "ACT-META",
+    "ACT-PROJECT",
+    "R-ERR-1",
+    "R-ADO-1"
+  ],
+  "description": "QueryInterface results for ISupportErrorInfo, IProvideClassInfo, IDispatchEx, IConnectionPointContainer, IPersist and IProvideClassInfo2 on new ADODB.Connection, Recordset, Command and Stream objects (never opened), the Connection's Errors and Properties collections.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeModules",
+      "label": "before-create"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "cn",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cerrs"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "cerrs",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "rs",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Command",
+      "bind": "cmd"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "cmd",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "st"
+    },
+    {
+      "op": "queryInterfaces",
+      "target": "st",
+      "iids": [
+        "{DF0B3D60-548F-101B-8E65-08002B2BD119}",
+        "{B196B283-BAB4-101A-B69C-00AA00341D07}",
+        "{A6EF9860-C720-11D0-9337-00A0C90DCAA9}",
+        "{B196B284-BAB4-101A-B69C-00AA00341D07}",
+        "{0000010C-0000-0000-C000-000000000046}",
+        "{A6BC3AC0-DBAA-11CE-9DE3-00AA004BB851}"
+      ]
+    },
+    {
+      "op": "release",
+      "target": "st"
+    },
+    {
+      "op": "release",
+      "target": "cmd"
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "release",
+      "target": "cerrs"
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-close"
+    }
+  ]
+}

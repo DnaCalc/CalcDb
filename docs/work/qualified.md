@@ -279,6 +279,21 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Records.** `r-q2-wire/act-typecreate-ado-coclasses/`, `act-typecreate-dao-identity/`; `r-ops/activation-routes/`.
 - **Open.** Type information retained across a context change (CalcDb side).
 
+### R-ACT-1 ACT-META: the type libraries report SYS_WIN32 (DAO) and SYS_WIN64 (ADO) with FHASDISKIMAGE; every object answers ISupportErrorInfo, and Workspace, Database, Recordset and the ADO Connection and Recordset answer IConnectionPointContainer
+- **Claim.** In an x64 process, the library of DAO.DBEngine.120's type information is DAO 12.0, `sysKind` 1, flags 8,
+  77 types, help string "Microsoft Office 16.0 Access database engine Object Library". ADODB.Connection's library is
+  ADODB 6.1, `sysKind` 3, flags 8, 120 types. Of ISupportErrorInfo, IProvideClassInfo, IDispatchEx,
+  IConnectionPointContainer, IPersist and IProvideClassInfo2, every object asked answers ISupportErrorInfo: DBEngine,
+  Workspaces, Workspace, Database, TableDefs, a snapshot Recordset, its Fields and a Field, DBEngine.Errors, and ADO's
+  Connection, its Errors, Recordset, Command and Stream. IConnectionPointContainer is answered by Workspace, Database
+  and Recordset, and by ADO's Connection and Recordset. None answers the other four.
+- **Conditions.** Raw QueryInterface on the worker's main STA. Each object kind is asked once, nothing else is called
+  in between, and the ADO objects are never opened.
+- **Records.** `r-act-1-meta/support-dao-objects/`, `support-ado-objects/`; `r-str-ado-act/act-dao120/`,
+  `ado-describe/`, `act-ado-classes/`.
+- **Open.** The per-IID answers of InterfaceSupportsErrorInfo (a vtable call the harness lacks: T). Other DAO objects
+  (QueryDef, Index, Relation, Container). Which connection points the containers enumerate (ADO-EVENT, DAO events).
+
 ### R-ORACLE-1 OR-FREEZE: a live writer frozen after a return leaves a stable image: an explicit commit is on disk at return, an implicit INSERT reaches disk about half a second after it returned, and Close adds one more change
 - **Claim.** With the writer suspended (all threads, 31 to 44 threads) at the named boundary, the database and lock files are byte-identical at 0, 1.5 and 4 s: *after `CommitTrans` returned* the database is already 8,658,944 bytes (hash ee5c7fd421be) and unchanged for 2.5 s after the writer resumes,
   and changes only at `Close` (hash ab4a093dae48); *after an implicit `Execute` of an INSERT returned* the frozen image is the old 196,608-byte file (e8563962cf5a) for the whole 4 s and becomes 8,658,944 bytes 2.5 s after the resume; *after `Close`* the image is 8,658,944 bytes and

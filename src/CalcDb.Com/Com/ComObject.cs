@@ -153,6 +153,7 @@ internal static class ComIids
     public static readonly Guid IDispatch = new("00020400-0000-0000-C000-000000000046");
     public static readonly Guid IClassFactory = new("00000001-0000-0000-C000-000000000046");
     public static readonly Guid IErrorInfo = new("1CF2B120-547D-101B-8E65-08002B2BD119");
+    public static readonly Guid ISupportErrorInfo = new("DF0B3D60-548F-101B-8E65-08002B2BD119");
 }
 
 internal static class HResults

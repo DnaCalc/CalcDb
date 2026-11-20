@@ -28,8 +28,11 @@ internal sealed record MemberDecl(int MemberId, string Name, InvokeKind Kind, in
     public int Slot => VtableOffset / 8;
 }
 
-/// <summary>One entry of the vtable view the interface itself declares (inherited entries belong to its base).</summary>
-internal sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, int FuncFlags, string ReturnType, IReadOnlyList<ParamDecl> Parameters);
+/// <summary>
+/// One entry of the vtable view the interface itself declares (inherited entries belong to its base), with FUNCDESC's
+/// cParamsOpt as captured (the optional VARIANT parameters without a default; R-ACT-1 ACT-META).
+/// </summary>
+internal sealed record VtableEntryDecl(int MemberId, string Name, InvokeKind Kind, int VtableOffset, int FuncFlags, string ReturnType, IReadOnlyList<ParamDecl> Parameters, int OptionalCount = 0);
 
 /// <summary>
 /// A captured dual interface (II-13 F-138 InterfaceDecl): IID, native vtable size, base interface, type flags of the
@@ -106,15 +109,38 @@ internal sealed unsafe class InterfaceDecl(string name, Guid iid, int vtableByte
     }
 }
 
-internal sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Name, int MemberId, int Value)> Constants);
+/// <summary>An enum; its constants are declared VT_INT with a VT_I4 value and their VARFLAGS (0x40 hidden) as captured.</summary>
+internal sealed record EnumDecl(string Name, Guid Guid, IReadOnlyList<(string Name, int MemberId, int Value, int Flags)> Constants);
 
 internal sealed record CoclassDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Interface, int ImplFlags)> Implements);
 
 /// <summary>A type alias (TKIND_ALIAS) and the captured type text it stands for.</summary>
 internal sealed record AliasDecl(string Name, Guid Guid, int TypeFlags, string Target);
 
+/// <summary>
+/// A type CalcDb publishes in its type library but does not implement (R-ACT-1 ACT-META: the whole declaration graph):
+/// ADO's event dispinterfaces (TKIND_DISPATCH, <see cref="Kind"/> 4, FUNC_DISPATCH members) and its vtable-only sink and
+/// construction interfaces (TKIND_INTERFACE, 3). No object answers their IIDs (ADO-EVENT and the OLE DB construction
+/// route are W-09/events-persistence-inventory).
+/// </summary>
+internal sealed record MetadataDecl(string Name, Guid Guid, int Kind, int TypeFlags, string BaseName, IReadOnlyList<VtableEntryDecl> Functions);
+
+/// <summary>A module of constants (TKIND_MODULE): DAO's LanguageConstants, string constants declared VT_LPSTR.</summary>
+internal sealed record ModuleDecl(string Name, Guid Guid, int TypeFlags, IReadOnlyList<(string Name, int MemberId, string Text)> Constants);
+
+/// <summary>
+/// The captured library attributes the image reproduces (R-ACT-1 ACT-META): TLIBATTR's system kind and flags, the
+/// library's help string, the order of its types (ITypeLib::GetTypeInfo indexes; types CalcDb does not generate are
+/// left out) and the help strings of the types that have one.
+/// </summary>
+internal sealed record LibraryImage(int SysKind, int Flags, string? HelpString, IReadOnlyList<string> TypeOrder, IReadOnlyList<(string Type, string HelpString)> TypeHelp);
+
 /// <summary>The captured library identity and its types (II-13 F-138 TypeLibraryImage).</summary>
-internal sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses, IReadOnlyList<AliasDecl>? Aliases = null)
+internal sealed record LibraryDecl(string Name, Guid Guid, ushort Major, ushort Minor, int Lcid, LibraryImage Image, IReadOnlyList<InterfaceDecl> Interfaces, IReadOnlyList<EnumDecl> Enums, IReadOnlyList<CoclassDecl> Coclasses, IReadOnlyList<AliasDecl>? Aliases = null, IReadOnlyList<ModuleDecl>? Modules = null, IReadOnlyList<MetadataDecl>? Metadata = null)
 {
     public IReadOnlyList<AliasDecl> AliasList => Aliases ?? [];
+
+    public IReadOnlyList<ModuleDecl> ModuleList => Modules ?? [];
+
+    public IReadOnlyList<MetadataDecl> MetadataList => Metadata ?? [];
 }

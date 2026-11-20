@@ -95,9 +95,12 @@ internal struct DispParams
 /// binds and coerces arguments, the typed adapter (<see cref="TypedCall"/>) converts native arguments; both reach the
 /// same operation. A declared member without an operation fails with the named not-implemented outcome.
 /// </summary>
-internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable)
+internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vtable) : ComObject(vtable, SupportErrorInfo.Vtable)
 {
     public InterfaceDecl Declaration { get; } = declaration;
+
+    /// <summary>The head of ISupportErrorInfo (head 1, after the dual interface).</summary>
+    private const int SupportErrorInfoHead = 1;
 
     protected abstract Operation? Find(MemberDecl member);
 
@@ -144,7 +147,51 @@ internal abstract unsafe class DispatchObject(InterfaceDecl declaration, nint vt
         {
             return 0;
         }
+        if (iid == ComIids.ISupportErrorInfo)
+        {
+            return SupportErrorInfoHead;
+        }
         return DeclarationIndex.Chain(Declaration).AsSpan().Contains(iid) ? 0 : -1;
+    }
+
+    /// <summary>
+    /// ISupportErrorInfo (R-ACT-1 ACT-PROJECT; r-act-1-meta support-dao-objects, support-ado-objects: every ACE DAO and ADO
+    /// object answers it). A runtime reads the IErrorInfo a failed call leaves only when the object says it supports error
+    /// information for the interface called: without it the .NET marshaller dropped CalcDb's description. CalcDb answers
+    /// S_OK for IDispatch and its dual interface chain, the interfaces whose failures publish IErrorInfo, and S_FALSE for
+    /// any other IID; ACE's per-IID answers are not asked (the harness cannot call InterfaceSupportsErrorInfo).
+    /// </summary>
+    private static class SupportErrorInfo
+    {
+        public static readonly nint Vtable = Build();
+
+        private static nint Build()
+        {
+            nint* table = (nint*)NativeMemory.AllocZeroed(4, (nuint)sizeof(nint));
+            table[0] = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&DualEntries.QueryInterface;
+            table[1] = (nint)(delegate* unmanaged<nint, uint>)&DualEntries.AddRef;
+            table[2] = (nint)(delegate* unmanaged<nint, uint>)&DualEntries.Release;
+            table[3] = (nint)(delegate* unmanaged<nint, Guid*, int>)&InterfaceSupportsErrorInfo;
+            return (nint)table;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int InterfaceSupportsErrorInfo(nint self, Guid* iid)
+        {
+            if (iid is null)
+            {
+                return HResults.E_POINTER;
+            }
+            try
+            {
+                DispatchObject owner = Recover<DispatchObject>(self);
+                return *iid == ComIids.IDispatch || DeclarationIndex.Chain(owner.Declaration).AsSpan().Contains(*iid) ? HResults.S_OK : HResults.S_FALSE;
+            }
+            catch (Exception)
+            {
+                return HResults.E_UNEXPECTED;
+            }
+        }
     }
 
     public CallResult Run(MemberDecl member, ReadOnlySpan<nint> args)

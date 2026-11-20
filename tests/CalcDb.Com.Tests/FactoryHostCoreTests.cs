@@ -36,6 +36,7 @@ public sealed unsafe class FactoryHostCoreTests
             {
                 OwnClassStandalone();
                 CompatibilityClassUnderTheHost();
+                OtherApartmentsUnderAnInheritedContext();
             }
             catch (Exception e)
             {
@@ -205,6 +206,7 @@ public sealed unsafe class FactoryHostCoreTests
         Assert.False(IsLoaded("msado15.dll"));
         Release(connection);
         HostRegistration(engine, ref scope);
+        ManagedPiaRoute(engine);
 
         // A factory retained across shutdown keeps its captured binding (T-INT-09); new creation stops (Stopping).
         Assert.Equal(0, ClassObject(CompatClsid, ClsctxInprocServer, IidIClassFactory, out nint retained));
@@ -218,7 +220,7 @@ public sealed unsafe class FactoryHostCoreTests
         Release(retained);
         Release(engine);
         Release(_outer);
-        Assert.Equal(0, Counts().Objects);
+        Assert.Equal(1, Counts().Objects); // the engine state's default Workspace (ManagedPiaRoute)
         Assert.Equal((int)Host.HostLifecycle.Stopping, Counts().HostState);
         scope.Dispose();
     }
@@ -258,6 +260,103 @@ public sealed unsafe class FactoryHostCoreTests
             Release(p);
         }
         scope = new Scope(manifest);
+    }
+
+    /// <summary>
+    /// The .NET 11 diagnostic managed lane (R-ACT-1 ACT-MANAGED, ACT-DECL, ACT-PROJECT; II-13 §§19–20): a client
+    /// compiled against the DAO PIA (ExcelDna.Interop.Dao, types embedded) constructs the imported coclass under the
+    /// compatibility context and the Active host. The constructor's CoCreateInstance reaches CalcDb.dll and returns the
+    /// apartment's one engine; the imported vtable declaration, with _DAO's inherited slots, reaches the right entries
+    /// (Version); a failure arrives as the runtime's COMException with the HRESULT and IErrorInfo text of the vtable
+    /// channel. This rebuilt probe is no Framework 4.8 or .NET 10 result and no unchanged-client result (T-INT-19/20/22).
+    /// </summary>
+    private static void ManagedPiaRoute(nint engine)
+    {
+        long before = Counts().Objects;
+        ManagedCalls(engine);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        // The probe leaves one CalcDb object behind: the engine's default Workspace, which OpenDatabase created and the
+        // apartment's engine state keeps beyond every DBEngine reference (DAO-BOOT, ENGINE-IDENTITY).
+        Assert.Equal(before + 1, Counts().Objects);
+    }
+
+    private static void ManagedCalls(nint engine)
+    {
+        var managed = new Microsoft.Office.Interop.Access.Dao.DBEngine();
+        nint unknown = Marshal.GetIUnknownForObject(managed);
+        Assert.Equal(Identity(engine), unknown); // ENGINE-IDENTITY: the PIA route gives the same engine
+        Assert.Equal(Path.GetFullPath(PublishedModule), ModuleOf(Vtable(unknown)[0]), ignoreCase: true);
+        Marshal.Release(unknown);
+        Assert.Equal("16.0", managed.Version);
+        // The runtime maps CalcDb's named not-implemented outcome (E_NOTIMPL) to NotImplementedException, not to
+        // COMException (ACT-PROJECT: a projection fact of this lane, no ACE outcome). It reads the IErrorInfo only
+        // because the object answers ISupportErrorInfo, as every ACE DAO object does (r-act-1-meta support-dao-objects).
+        var notImplemented = Assert.Throws<NotImplementedException>(() => managed.IniPath);
+        Assert.Equal(HResults.E_NOTIMPL, notImplemented.HResult);
+        Assert.Contains("_DBEngine.IniPath", notImplemented.Message, StringComparison.Ordinal);
+        Assert.Equal("CalcDb", notImplemented.Source);
+        var absent = Assert.Throws<COMException>(() => managed.OpenDatabase(Path.Combine(Path.GetTempPath(), "calcdb-absent", "absent.accdb")));
+        Assert.Equal(unchecked((int)0x800A0BE4), absent.HResult); // 3044 (absent path, as ACE: qualified ENGINE-IDENTITY), through the vtable channel
+        Assert.Equal("DAO.Workspace", absent.Source);
+        Assert.False(IsLoaded("ACEDAO.DLL"));
+        Marshal.FinalReleaseComObject(managed); // this probe's own RCW only
+    }
+
+    /// <summary>
+    /// ACT-PROPAGATE and ACT-THREAD placement (T-INT-13, T-INT-28; II-13 §§16, 18): a thread started while CalcDb.Own's
+    /// context is active inherits it, also after the parent popped the context before the child created anything. From
+    /// such an MTA thread COM serves the Apartment class from its own host STA: the caller holds a proxy (it answers
+    /// IClientSecurity, as ACE's DBEngine created from an MTA does, r-act-1-thread dao-new-mta) whose calls reach
+    /// CalcDb.dll; from a second STA the object is direct (dao-second-sta). A thread started after the pop finds no
+    /// mapping of the own class (REGDB_E_CLASSNOTREG): inheritance is taken when the thread is created.
+    /// </summary>
+    private static void OtherApartmentsUnderAnInheritedContext()
+    {
+        var own = new Scope(Path.Combine(Path.GetDirectoryName(PublishedModule)!, "CalcDb.Own.manifest"));
+        using var popped = new ManualResetEventSlim();
+        var results = new Dictionary<string, string>();
+        Thread Start(string name, ApartmentState apartment)
+        {
+            var t = new Thread(() =>
+            {
+                popped.Wait(); // the parent has deactivated its context before this thread creates
+                results[name] = CreateAndProbe();
+            });
+            t.SetApartmentState(apartment);
+            t.Start();
+            return t;
+        }
+        Thread mta = Start("mta", ApartmentState.MTA);
+        Thread sta = Start("sta", ApartmentState.STA);
+        own.Dispose();
+        Thread after = Start("after-pop", ApartmentState.MTA);
+        popped.Set();
+        foreach (Thread t in new[] { mta, sta, after })
+        {
+            t.Join();
+        }
+        Assert.Equal("S_OK proxy 16.0", results["mta"]);
+        Assert.Equal("S_OK direct 16.0", results["sta"]);
+        Assert.Equal($"0x{RegdbEClassNotReg:X8}", results["after-pop"]);
+    }
+
+    /// <summary>Create CalcDb's own DBEngine on this thread: the outcome, proxy or direct, and Version through IDispatch.</summary>
+    private static string CreateAndProbe()
+    {
+        int hr = Create(OwnClsid, 0, ClsctxInprocServer, IidIDispatch, out nint engine);
+        if (hr < 0)
+        {
+            return $"0x{hr:X8}";
+        }
+        bool proxy = QueryInterface(engine, IidIClientSecurity, out nint security) == 0;
+        if (proxy)
+        {
+            Release(security);
+        }
+        string? version = InvokeGetText(engine, VersionDispId, out _);
+        Release(engine);
+        return $"S_OK {(proxy ? "proxy" : "direct")} {version}";
     }
 
     private static nint _outer;

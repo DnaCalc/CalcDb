@@ -67,6 +67,24 @@ internal static unsafe class Exports
         }
     }
 
+    /// <summary>
+    /// Writes the type-library images beside the module (II-13 §§11, 16; R-ACT-1 ACT-META): the deployment step of
+    /// publish runs it as <c>rundll32 CalcDb.dll,CalcDbSaveTypeLibraries</c>, so the published module saves its own
+    /// declarations. rundll32's entry signature; it reports nothing, and publish checks that the files exist.
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "CalcDbSaveTypeLibraries")]
+    public static void CalcDbSaveTypeLibraries(nint window, nint instance, byte* commandLine, int show)
+    {
+        try
+        {
+            _ = TypeLibrary.SaveImages(TypeLibrary.ImageDirectory);
+        }
+        catch (Exception)
+        {
+            // Nothing crosses the export; the missing image is the failure publish reports.
+        }
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "CalcDbModuleCounts")]
     public static int CalcDbModuleCounts(ModuleCounts* counts)
     {
