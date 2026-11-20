@@ -1,6 +1,6 @@
 {
   "schema": "calcdb.question/1",
-  "probe": "w-10-readers-only/lock-ranges-two-readers",
+  "probe": "w-10-readers-only/lock-ranges-two-readers-ordered",
   "bookRefs": [
     "W-10/native-readers-only",
     "R-LOCK-2",
@@ -8,7 +8,7 @@
     "RO-NATIVE",
     "T-LOCK-11"
   ],
-  "description": "How two shared read-only DAO sessions in two processes share the lock file (R-LOCK-2 RO-PAIR: it grows 64 -> 128 B): which byte ranges each session holds locked, and what the file holds when both are open and after the second closes. Participant a opens r-cursor-1-nav shared read-only; b opens it the same way; a bisects [0, 2^62) of the .laccdb with exclusive fail-immediately LockFileEx requests through its own native handle and reads the file's first 256 bytes; b closes; a scans and reads again; a closes. Both files are kept at each scan. The fixture copy is opened read-only.",
+  "description": "How two shared read-only DAO sessions in two processes share the lock file (R-LOCK-2 RO-PAIR: it grows 64 -> 128 B): which byte ranges each session holds locked, and what the file holds when both are open and after the second closes. Participant a opens r-cursor-1-nav shared read-only; b opens it the same way; a bisects [0, 2^62) of the .laccdb with exclusive fail-immediately LockFileEx requests through its own native handle and reads the file's first 256 bytes; b closes; a scans and reads again; a closes. Both files are kept at each scan. The fixture copy is opened read-only. Repairs lock-ranges-two-readers, where b opened as soon as a had opened, so a's first scan raced b's open (ACE's 360 ms open hid it; a fast candidate's did not): here b waits until a has scanned and kept the file alone.",
   "callerSurface": "native-idispatch/x64",
   "invokeLcid": 1033,
   "observationRecipe": [
@@ -55,10 +55,6 @@
       "bind": "db"
     },
     {
-      "op": "signal",
-      "name": "a-open"
-    },
-    {
       "op": "nativeOpen",
       "bind": "lf",
       "file": "lock:main",
@@ -87,6 +83,10 @@
       "op": "observeFiles",
       "label": "a-alone",
       "keep": true
+    },
+    {
+      "op": "signal",
+      "name": "a-alone-scanned"
     },
     {
       "op": "await",
@@ -181,7 +181,7 @@
       "program": [
         {
           "op": "await",
-          "name": "a-open",
+          "name": "a-alone-scanned",
           "timeoutMs": 30000
         },
         {
