@@ -22,6 +22,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, d => Text(d.Name)))
+        .Get("Version", (self, args) => Live(self, d => d.Version()))
         .Method("OpenRecordset", (self, args) => ((DatabaseObject)self).OpenRecordset(args))
         .Get("TableDefs", (self, args) => Live(self, d => Object(d.TableDefsCollection())))
         .Method("Close", (self, args) => Live(self, d => d.Close()));
@@ -38,7 +39,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     private const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FormatDescriptor format, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, WindowsFile file, LockFile? lockFile, PageCache cache, FileProfile profile, ulong pageCount, CatalogSnapshot catalog)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
@@ -46,7 +47,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _file = file;
         _lockFile = lockFile;
         Cache = cache;
-        Format = format;
+        Profile = profile;
+        Format = profile.Descriptor;
         PageCount = pageCount;
         Catalog = catalog;
         (_openOnThread ??= []).Add(this);
@@ -70,6 +72,22 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public PageCache Cache { get; }
 
     public FormatDescriptor Format { get; }
+
+    /// <summary>The file's profile, selected from its header at open (R-FMT-1).</summary>
+    public FileProfile Profile { get; }
+
+    /// <summary>
+    /// Version: the file format's engine version, "4.0" for a Jet 4 MDB, "12.0" and "14.0" for the ACE formats of
+    /// CreateDatabase options 128 and 256 (qualified, R-FMT-1 FMT1-CREATE: r-fmt-1/create-*-empty, r-q-fmt-sort/v64,
+    /// v128 and v256-corpus). The later ACE format codes are not observed.
+    /// </summary>
+    private CallResult Version() => Profile.Format switch
+    {
+        FileFormat.Jet4 => Text("4.0"),
+        FileFormat.Ace2007 => Text("12.0"),
+        FileFormat.Ace2010 => Text("14.0"),
+        var other => CallResult.Fail(Failure.NotImplemented($"Database.Version of the {other} format (not observed)")),
+    };
 
     public ulong PageCount { get; }
 
@@ -151,7 +169,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
             }
         }
-        database = new DatabaseObject(workspace, full, file, lockFile, cache, format, pages, catalog);
+        database = new DatabaseObject(workspace, full, file, lockFile, cache, profile, pages, catalog);
         return CallResult.Nothing;
     }
 
