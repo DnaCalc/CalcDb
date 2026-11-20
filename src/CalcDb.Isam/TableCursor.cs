@@ -360,7 +360,7 @@ public sealed class TableCursor : IRecordCursor
             for (int i = 0; i < keyColumns.Length; i++)
             {
                 KeyCodecRefusal refusal = KeyCodecRefusal.TypeNotEncoded;
-                codecs[i] = keyColumns[i] is { } column ? IndexKeys.CodecFor(column, out refusal) : null;
+                codecs[i] = keyColumns[i] is { } column ? IndexKeys.CodecFor(column, out refusal, physical.Columns[i].Ascending) : null;
                 refusals[i] = refusal;
                 keyBytes += codecs[i]?.MaxFieldBytes ?? 0;
             }

@@ -63,12 +63,18 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
         NativeKind.Boolean => new KeyValue(KeyValueKind.Boolean, Boolean: v.Boolean),
         NativeKind.Currency => new KeyValue(KeyValueKind.ScaledCurrency, Integer: v.Integer),
         NativeKind.Single or NativeKind.Double or NativeKind.DateTime => new KeyValue(KeyValueKind.FloatBits, Bits: v.Bits),
+        NativeKind.Decimal => KeyValue.OfNumeric(v.Decimal),
+        NativeKind.Guid or NativeKind.Binary or NativeKind.ExtendedDateTime => KeyValue.OfBytes(v.Bytes),
         _ when type is NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long => new KeyValue(KeyValueKind.Integer, Integer: v.Integer),
-        _ => throw new InvalidOperationException($"no key value for {v.Kind}"),
+        _ => throw new InvalidOperationException($"no key value for {v}"),
     };
 
     /// <summary>Compare every Text-bearing physical index of every local table (system tables included) of one file.</summary>
-    private static List<IndexTally> CompareFile(string fixture, byte[] file, bool includeSystem)
+    private static List<IndexTally> CompareFile(string fixture, byte[] file, bool includeSystem) =>
+        CompareFile(fixture, file, includeSystem, static c => IndexKeys.IsText(c.TypeCode));
+
+    /// <summary>Compare every physical index with a column <paramref name="selects"/> chooses.</summary>
+    private static List<IndexTally> CompareFile(string fixture, byte[] file, bool includeSystem, Func<ColumnDescriptor, bool> selects)
     {
         var tallies = new List<IndexTally>();
         if (Open(file) is not { } db)
@@ -88,12 +94,12 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
             {
                 PhysicalIndex physical = table.PhysicalOf(logical)!;
                 ColumnDescriptor?[] columns = [.. physical.Columns.Select(ic => table.Columns.FirstOrDefault(c => c.PhysicalNumber == ic.PhysicalNumber))];
-                if (!columns.Any(c => c is not null && IndexKeys.IsText(c.TypeCode)))
+                if (!columns.Any(c => c is not null && selects(c)))
                 {
                     continue;
                 }
                 string orders = string.Join(",", columns.Where(c => c?.TextSort is not null).Select(c => c!.TextSort!.Value.ToString()));
-                FieldKeyCodec?[] codecs = [.. columns.Select(c => c is null ? null : IndexKeys.CodecFor(c, out _))];
+                FieldKeyCodec?[] codecs = [.. columns.Select((c, i) => c is null ? null : IndexKeys.CodecFor(c, out _, physical.Columns[i].Ascending))];
                 if (codecs.Any(c => c is null))
                 {
                     tallies.Add(new IndexTally(fixture, entry.Name, logical.Name, orders, 0, 0, [], true, null));
@@ -197,12 +203,7 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
             foreach (IndexTally t in CompareFile(record, Fixture(sha), includeSystem: true))
             {
                 Assert.Null(t.Failure);
-                if (t.Refused)
-                {
-                    // Only r-sort-3/create-keys-accdb's IX_KG: (Text, GUID), and GUID keys are W-04/private-codecs.
-                    Assert.Equal(("r-sort-3/create-keys-accdb", "IX_KG"), (t.Fixture, t.Index));
-                    continue;
-                }
+                Assert.False(t.Refused);
                 entries += t.Entries;
                 matched += t.Matched;
                 general += t.Orders.Contains("1033/1", StringComparison.Ordinal) ? t.Entries : 0;
@@ -250,6 +251,44 @@ public sealed class NativeTextKeyTests(ITestOutputHelper output)
         }
         output.WriteLine($"{matched} of {entries} designed entries equal the encoder");
         Assert.Equal(entries, matched);
+    }
+
+    /// <summary>
+    /// W-04/private-codecs (II-05 §§4.1, 4.4; R-SORT-3 SORT-CHECK; T-IDX-04): every entry of every physical index with a
+    /// NUMERIC, GUID, Binary or Extended Date/Time column in every retained database fixture, system tables included
+    /// (MSysQueries' (Long, Byte, Binary) index), equals the key the codec builds from the row's stored values.
+    /// </summary>
+    [Fact]
+    public void Native_NUMERIC_GUID_Binary_and_extended_date_entries_equal_the_encoder()
+    {
+        var byType = new SortedDictionary<string, (int Entries, int Matched)>(StringComparer.Ordinal);
+        int indexes = 0;
+        string artifacts = Path.Combine(Root(), "evidence", "artifacts");
+        foreach (string path in Directory.EnumerateFiles(artifacts, "*.gz").Order(StringComparer.Ordinal))
+        {
+            string sha = Path.GetFileNameWithoutExtension(path);
+            foreach (IndexTally t in CompareFile(sha[..12], Fixture(sha), includeSystem: true, static c => IndexKeys.IsChunked(c.TypeCode) || c.TypeCode == NativeTypes.Numeric))
+            {
+                Assert.Null(t.Failure);
+                Assert.False(t.Refused, $"{t.Fixture} {t.Table}.{t.Index}");
+                indexes++;
+                string kind = t.Table.StartsWith("MSys", StringComparison.Ordinal) ? t.Table + "." + t.Index : t.Index;
+                (int e, int m) = byType.GetValueOrDefault(kind);
+                byType[kind] = (e + t.Entries, m + t.Matched);
+                foreach ((string[] values, string? detail) in t.Mismatches.Take(5))
+                {
+                    output.WriteLine($"{t.Fixture} {t.Table}.{t.Index} ({string.Join(", ", values)}) {detail}");
+                }
+            }
+        }
+        foreach ((string kind, (int e, int m)) in byType)
+        {
+            output.WriteLine($"{kind}: {m} of {e}");
+        }
+        int entries = byType.Values.Sum(v => v.Entries), matched = byType.Values.Sum(v => v.Matched);
+        output.WriteLine($"{matched} of {entries} entries in {indexes} indexes equal the encoder");
+        Assert.Equal(entries, matched);
+        Assert.True(entries > 0);
     }
 
     [Fact]

@@ -319,7 +319,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public TableDefinition? Definition(CatalogEntry entry, out string? failure)
     {
         TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Cache.Pin(p).Pin is { } pin ? Copy(pin) : null, Format, 64, out failure);
-        return view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out failure);
+        TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out failure);
+        // A calculated column reads by its ResultType property (II-04 §5.6, CAT-P); an unreadable blob leaves it unbound.
+        return table is null || !table.Columns.Any(c => ScalarCodecs.IsCalculated(c, Format.Payload))
+            ? table
+            : ScalarCodecs.BindCalculatedResults(table, Blob(entry, out _), Format.Payload);
     }
 
     /// <summary>

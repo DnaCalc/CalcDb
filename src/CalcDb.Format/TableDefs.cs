@@ -135,6 +135,14 @@ public sealed record ColumnDescriptor
     /// <summary>The raw sort descriptor of a Text or Memo column (II-05 §4), null for other types.</summary>
     public TextSortOrder? TextSort { get; init; }
 
+    /// <summary>The declared precision and scale of a NUMERIC column (II-04 §5.3), zero for other types.</summary>
+    public byte NumericPrecision { get; init; }
+
+    public byte NumericScale { get; init; }
+
+    /// <summary>A calculated column's result type (ResultType, CAT-P), when bound (<see cref="ScalarCodecs.BindCalculatedResults"/>).</summary>
+    public byte? CalculatedResultType { get; init; }
+
     /// <summary>The column's position in <see cref="TableDefinition.Columns"/>, for per-column state of a consumer.</summary>
     public int Ordinal { get; init; }
 
@@ -159,6 +167,7 @@ public static class NativeTypes
     public const byte Memo = 12;
     public const byte Guid = 15;
     public const byte Numeric = 16;
+    public const byte ExtendedDateTime = 20;
 
     /// <summary>The fixed storage width of a fixed-size scalar, or null for variable/other kinds.</summary>
     public static int? FixedWidth(byte type) => type switch
@@ -304,6 +313,8 @@ public static class TableDefDecoder
                 Length = (int)c.Length.Read(r.Block),
                 IsFixed = ((byte)c.Flags.Read(r.Block) & c.FixedFlag) != 0,
                 TextSort = (byte)c.Type.Read(r.Block) is NativeTypes.Text or NativeTypes.Memo ? TextSortOrder.Read(r.Block, c) : null,
+                NumericPrecision = (byte)c.Type.Read(r.Block) == NativeTypes.Numeric ? (byte)c.NumericPrecision.Read(r.Block) : (byte)0,
+                NumericScale = (byte)c.Type.Read(r.Block) == NativeTypes.Numeric ? (byte)c.NumericScale.Read(r.Block) : (byte)0,
             }).ToList();
             return new TableDefinition
             {

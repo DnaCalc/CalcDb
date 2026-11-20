@@ -26,6 +26,8 @@ public sealed record FormatDescriptor
 
     public required RowRules Row { get; init; }
 
+    public required ScalarPayloadRules Payload { get; init; }
+
     public required IndexPageRules IndexPage { get; init; }
 
     public required IndexDescriptorRules IndexDescriptor { get; init; }
@@ -36,7 +38,7 @@ public sealed record FormatDescriptor
 
     /// <summary>Every rule of the description, for the inspector and for single-description checks (T-FMT-23).</summary>
     public IEnumerable<FieldRule> AllRules =>
-        Header.Rules.Concat(DataPage.Rules).Concat(TableDef.Rules).Concat(Column.Rules).Concat(Row.Rules).Concat(IndexPage.Rules).Concat(Map.Rules);
+        Header.Rules.Concat(DataPage.Rules).Concat(TableDef.Rules).Concat(Column.Rules).Concat(Row.Rules).Concat(Payload.Rules).Concat(IndexPage.Rules).Concat(Map.Rules);
 
     /// <summary>The Jet 4 / ACE family description with 4096-byte pages.</summary>
     public static FormatDescriptor Jet4Family { get; } = new()
@@ -106,11 +108,37 @@ public sealed record FormatDescriptor
             SortIdentifier = new("jet4.column.sort_identifier", "column block", 11, 2, ByteOrder.Little, "Text/Memo: sort identifier (1033 the General family); zero is not replaced by a default.", "S-JACK-COL; II-05 §4"),
             SortReserved = new("jet4.column.sort_reserved", "column block", 13, 1, ByteOrder.Little, "Text/Memo: sort descriptor byte +2, not interpreted, preserved.", "S-JACK-COL; II-05 §4"),
             SortVersion = new("jet4.column.sort_version", "column block", 14, 1, ByteOrder.Little, "Text/Memo: signed sort version: 1 General, 0 General - Legacy, -1 (FF) General 97.", "S-JACK-COL; II-05 §4"),
+            // Inside TypeInfo for a NUMERIC column (II-04 §5.3): precision 18 scale 4 reads 12 04, precision 28 scale 0
+            // 1C 00, a DAO CreateField(name, 20) column 26 00 (precision 38, R-ORACLE-1 OR-WIRE) in the retained fixtures.
+            NumericPrecision = new("jet4.column.numeric_precision", "column block", 11, 1, ByteOrder.Little, "NUMERIC: declared precision.", "S-JACK-COL; II-04 §5.3; native: r-sort-3/create-nums-accdb (18,4), r-fix-fmt-sort/sort3-nums-decimal-accdb"),
+            NumericScale = new("jet4.column.numeric_scale", "column block", 12, 1, ByteOrder.Little, "NUMERIC: declared scale; the 17-byte value has no scale of its own.", "S-JACK-COL; II-04 §5.3; native: as numeric_precision"),
             Flags = new("jet4.column.flags", "column block", 15, 1, ByteOrder.Little, "Flags; bit 0 set for fixed storage.", Reference + "; II-04 §1.3"),
             ExtendedFlags = new("jet4.column.extended_flags", "column block", 16, 1, ByteOrder.Little, "Extended type/profile-dependent flags.", Reference + "; II-04 §1.3"),
             FixedOffset = new("jet4.column.fixed_offset", "column block", 21, 2, ByteOrder.Little, "Fixed-data offset from row byte 2.", Reference + "; II-04 §1.3"),
             Length = new("jet4.column.length", "column block", 23, 2, ByteOrder.Little, "Declared column length.", Reference + "; II-04 §1.3"),
             FixedFlag = 0x01,
+        },
+        Payload = new ScalarPayloadRules
+        {
+            NumericBytes = 17,
+            NumericSign = new("jet4.numeric.sign", "NUMERIC payload", 0, 1, ByteOrder.Little, "Sign: 00 positive, 80 negative; other bytes are not modelled.", "S-JACK-COL; II-04 §5.3"),
+            NumericWords =
+            [
+                new("jet4.numeric.word0", "NUMERIC payload", 1, 4, ByteOrder.Little, "Most significant 32-bit magnitude word.", "S-JACK-COL; II-04 §5.3"),
+                new("jet4.numeric.word1", "NUMERIC payload", 5, 4, ByteOrder.Little, "Second magnitude word.", "S-JACK-COL; II-04 §5.3"),
+                new("jet4.numeric.word2", "NUMERIC payload", 9, 4, ByteOrder.Little, "Third magnitude word.", "S-JACK-COL; II-04 §5.3"),
+                new("jet4.numeric.word3", "NUMERIC payload", 13, 4, ByteOrder.Little, "Least significant magnitude word.", "S-JACK-COL; II-04 §5.3"),
+            ],
+            NumericNegative = 0x80,
+            GuidBytes = 16,
+            ExtendedBytes = 42,
+            CalculatedFlags = 0xC0,
+            CalculatedPrefixBytes = 16,
+            CalculatedLength = new("jet4.calculated.length", "calculated wrapper", 16, 4, ByteOrder.Little, "Length N of the result payload that starts at 20.", "S-JACK-CALC; II-04 §5.6"),
+            CalculatedTrailerBytes = 3,
+            CalculatedNumericLength = new("jet4.calculated.numeric_length", "calculated NUMERIC result", 0, 2, ByteOrder.Little, "Result payload length less 2.", "S-JACK-CALC; II-04 §5.6; native: r-cplx-rebuild/calc-admission C_dec"),
+            CalculatedNumericScale = new("jet4.calculated.numeric_scale", "calculated NUMERIC result", 2, 1, ByteOrder.Little, "The value's own scale.", "S-JACK-CALC; II-04 §5.6; native: as numeric_length"),
+            CalculatedNumericSign = new("jet4.calculated.numeric_sign", "calculated NUMERIC result", 3, 1, ByteOrder.Little, "Sign: 00 positive, 80 negative.", "S-JACK-CALC; II-04 §5.6; native: as numeric_length"),
         },
         Row = new RowRules
         {
@@ -318,13 +346,17 @@ public sealed record ColumnBlockRules
     public required FieldRule SortReserved { get; init; }
     public required FieldRule SortVersion { get; init; }
 
+    /// <summary>NUMERIC precision and scale inside <see cref="TypeInfo"/> (II-04 §5.3).</summary>
+    public required FieldRule NumericPrecision { get; init; }
+    public required FieldRule NumericScale { get; init; }
+
     public required FieldRule Flags { get; init; }
     public required FieldRule ExtendedFlags { get; init; }
     public required FieldRule FixedOffset { get; init; }
     public required FieldRule Length { get; init; }
     public required byte FixedFlag { get; init; }
 
-    public IEnumerable<FieldRule> Rules => [Type, Number, VariableIndex, ColumnId, TypeInfo, SortIdentifier, SortReserved, SortVersion, Flags, ExtendedFlags, FixedOffset, Length];
+    public IEnumerable<FieldRule> Rules => [Type, Number, VariableIndex, ColumnId, TypeInfo, SortIdentifier, SortReserved, SortVersion, NumericPrecision, NumericScale, Flags, ExtendedFlags, FixedOffset, Length];
 }
 
 /// <summary>The ordinary row envelope (II-04 §2).</summary>

@@ -348,7 +348,7 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
         .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
         .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
-        .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.TypeCode == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a Decimal TableDef field")) : Int16(0))))
+        .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
         .Get("Value", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true))))
         .Get("ValidateOnSet", (self, args) => Live(self, f => f.OfTable(t => f.Fail(3219, DaoErrors.InvalidOperation))))
@@ -422,13 +422,25 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
 /// <summary>The DAO Type and Size of a column, shared by recordset and definition fields (R-FMT-1 FMT1-FAMILIES).</summary>
 internal static class ColumnFacts
 {
-    public static int? DaoType(ColumnDescriptor column) => column.TypeCode is >= 1 and <= 12 or 15 ? column.TypeCode : null;
+    /// <summary>
+    /// DataTypeEnum: native 1-12 and 15 are DAO's own numbers, NUMERIC is dbDecimal 20 (FMT1-DECIMAL); a calculated
+    /// column reports its result type, not its stored code (r-cplx-rebuild/calc-schema-change: C_bool 1, C_dec 20).
+    /// </summary>
+    public static int? DaoType(ColumnDescriptor column) => (column.CalculatedResultType ?? column.TypeCode) switch
+    {
+        NativeTypes.Numeric => 20,
+        var t and (>= 1 and <= 12 or 15) => t,
+        _ => null,
+    };
 
     /// <summary>Size: Text in characters (the column length in bytes, halved), Memo and OLE 0, fixed types their length.</summary>
     public static int? Size(ColumnDescriptor column) => column.TypeCode switch
     {
         NativeTypes.Text => column.Length / 2,
         NativeTypes.Ole or NativeTypes.Memo => 0,
+        // Decimal: 16 for the ADO DDL columns (FMT1-DECIMAL, precision 1 to 28), 20 for DAO CreateField's precision 38
+        // (r-dec-read/*-daofield-*); other precisions are not observed.
+        NativeTypes.Numeric when column.CalculatedResultType is null => column.NumericPrecision is >= 1 and <= 28 ? 16 : column.NumericPrecision == 38 ? 20 : null,
         >= 1 and <= 9 or 15 => column.Length,
         _ => null,
     };

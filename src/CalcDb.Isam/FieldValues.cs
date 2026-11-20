@@ -24,8 +24,18 @@ public enum NativeKind
     /// <summary>A long-value field (Memo, OLE) whose payload is held as exact bytes; Memo text is in <see cref="NativeValue.Text"/>.</summary>
     LongBinary,
 
-    /// <summary>A Decimal/NUMERIC field kept as its exact native bytes until the scalar codec is qualified (II-04 §5.3).</summary>
-    NumericRaw,
+    /// <summary>
+    /// A Decimal/NUMERIC field (II-04 §5.3): the 128-bit magnitude in <see cref="NativeValue.Integer"/> (high 64 bits)
+    /// and <see cref="NativeValue.Bits"/> (low 64 bits), the sign in <see cref="NativeValue.Boolean"/> (true negative)
+    /// and the column's scale in <see cref="NativeValue.Scale"/>.
+    /// </summary>
+    Decimal,
+
+    /// <summary>
+    /// An Extended Date/Time field as its exact 42 row bytes in <see cref="NativeValue.Bytes"/>; their date meaning is
+    /// not modelled, because ACE's digit layout is not II-04 §5.5's (<see cref="ScalarPayloadRules.ExtendedBytes"/>).
+    /// </summary>
+    ExtendedDateTime,
 
     /// <summary>A failure to read this field: the value is never a partial or lossy one.</summary>
     Failed,
@@ -46,6 +56,14 @@ public readonly record struct NativeValue(NativeKind Kind)
     public byte[]? Bytes { get; init; }
     public string? Failure { get; init; }
 
+    /// <summary>The scale of a <see cref="NativeKind.Decimal"/> value.</summary>
+    public byte Scale { get; init; }
+
+    /// <summary>A <see cref="NativeKind.Decimal"/> value's exact fields.</summary>
+    public NativeDecimal Decimal => new(Boolean, ((UInt128)(ulong)Integer << 64) | Bits, Scale);
+
+    public static NativeValue Of(NativeDecimal value) => new(NativeKind.Decimal) { Boolean = value.Negative, Integer = (long)(ulong)(value.Magnitude >> 64), Bits = (ulong)value.Magnitude, Scale = value.Scale };
+
     public static NativeValue Null { get; } = new(NativeKind.Null);
 
     public static NativeValue Fail(string why) => new(NativeKind.Failed) { Failure = why };
@@ -56,6 +74,7 @@ public readonly record struct NativeValue(NativeKind Kind)
         NativeKind.Boolean => Boolean ? "True" : "False",
         NativeKind.Byte or NativeKind.Integer or NativeKind.Long => Integer.ToString(System.Globalization.CultureInfo.InvariantCulture),
         NativeKind.Text => $"\"{Text}\"",
+        NativeKind.Decimal => $"Decimal {(Boolean ? "-" : "")}{Decimal.Magnitude}e-{Scale}",
         NativeKind.Failed => "failed: " + Failure,
         _ => $"{Kind} bits={Bits:x16}{(Bytes is null ? "" : " bytes=" + Convert.ToHexStringLower(Bytes))}",
     };
@@ -137,7 +156,8 @@ public static class FieldDecoder
     public static TextFieldRead ReadText(RowView row, TableDefinition table, ColumnDescriptor column, PageCache cache, FormatDescriptor d, out Range? location, long longValueBudget = DefaultLongValueBudget)
     {
         location = null;
-        if (column.TypeCode is not (NativeTypes.Text or NativeTypes.Memo))
+        // A calculated Text or Memo is wrapped (II-04 §5.6): it is decoded whole, not borrowed.
+        if (column.TypeCode is not (NativeTypes.Text or NativeTypes.Memo) || ScalarCodecs.IsCalculated(column, d.Payload))
         {
             return new TextFieldRead(FieldResult.Of(Read(row, table, column, cache, d, longValueBudget)));
         }
@@ -170,7 +190,88 @@ public static class FieldDecoder
         {
             return located;
         }
+        if (ScalarCodecs.IsCalculated(column, d.Payload))
+        {
+            return ReadCalculated(bytes, column, cache, d, longValueBudget);
+        }
         switch (column.TypeCode)
+        {
+            case NativeTypes.Memo or NativeTypes.Ole:
+            {
+                byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
+                if (payload is null)
+                {
+                    return NativeValue.Fail(failure!);
+                }
+                if (column.TypeCode == NativeTypes.Memo)
+                {
+                    return DecodeText(payload);
+                }
+                return new NativeValue(NativeKind.LongBinary) { Bytes = payload };
+            }
+            default:
+                return Decode(bytes, column.TypeCode, column.NumericScale, d);
+        }
+    }
+
+    /// <summary>
+    /// A calculated column (II-04 §5.6; R-FMT-2 calculated wrappers): the wrapper is unwrapped from the row bytes, or for
+    /// Memo from the long value's content, and the result payload decodes by the column's bound result type
+    /// (<see cref="ColumnDescriptor.CalculatedResultType"/>), not its type code. An empty result payload is Null, as ACE
+    /// reads it (r-cplx-rebuild/calc-schema-change: every fixed-type result of the row whose inputs are Null); a calculated
+    /// Yes/No is a payload byte (nonzero True), not the row-mask bit; a calculated Decimal has its own scale and sign.
+    /// Without a bound result type the value is NotModelled.CalculatedResultType.
+    /// </summary>
+    private static NativeValue ReadCalculated(ReadOnlySpan<byte> bytes, ColumnDescriptor column, PageCache cache, FormatDescriptor d, long longValueBudget)
+    {
+        if (column.CalculatedResultType is not byte type)
+        {
+            return NativeValue.Fail("NotModelled.CalculatedResultType: the column's ResultType property is not bound");
+        }
+        byte[]? content = null;
+        if (column.TypeCode is NativeTypes.Memo or NativeTypes.Ole)
+        {
+            content = LongValue(bytes, cache, d, longValueBudget, out string? lvFailure);
+            if (content is null)
+            {
+                return NativeValue.Fail(lvFailure!);
+            }
+            bytes = content;
+        }
+        if (!ScalarCodecs.TryUnwrapCalculated(bytes, d.Payload, out Range at, out string? failure))
+        {
+            return NativeValue.Fail(failure!);
+        }
+        ReadOnlySpan<byte> payload = bytes[at];
+        if (payload.IsEmpty && type is not (NativeTypes.Text or NativeTypes.Memo))
+        {
+            return NativeValue.Null;
+        }
+        return type switch
+        {
+            NativeTypes.Boolean => payload.Length == 1 ? new NativeValue(NativeKind.Boolean) { Boolean = payload[0] != 0 } : NativeValue.Fail($"calculated Yes/No payload of {payload.Length} bytes"),
+            NativeTypes.Numeric => ScalarCodecs.TryDecodeCalculatedNumeric(payload, d.Payload, out NativeDecimal number, out string? numericFailure) ? NativeValue.Of(number) : NativeValue.Fail(numericFailure!),
+            NativeTypes.Memo => DecodeText(payload),
+            NativeTypes.Ole => new NativeValue(NativeKind.LongBinary) { Bytes = payload.ToArray() },
+            _ => Decode(payload, type, 0, d),
+        };
+    }
+
+    private static NativeValue DecodeText(ReadOnlySpan<byte> bytes)
+    {
+        TextDecode text = TextCodec.Decode(bytes);
+        CostCounters.Current.TextDecodedUnits += text.Text?.Length ?? 0;
+        return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text } : NativeValue.Fail(text.Failure!);
+    }
+
+    /// <summary>One in-row payload by its native type (a NUMERIC at <paramref name="scale"/>); a fixed scalar must have exactly its width.</summary>
+    private static NativeValue Decode(ReadOnlySpan<byte> bytes, byte type, byte scale, FormatDescriptor d)
+    {
+        if (NativeTypes.FixedWidth(type) is int width && bytes.Length != width)
+        {
+            return NativeValue.Fail($"a {bytes.Length}-byte payload for native type {type} of width {width}");
+        }
+        switch (type)
         {
             case NativeTypes.Byte:
                 return new NativeValue(NativeKind.Byte) { Integer = bytes[0], Bits = bytes[0] };
@@ -189,32 +290,19 @@ public static class FieldDecoder
             case NativeTypes.Guid:
                 return new NativeValue(NativeKind.Guid) { Bytes = bytes.ToArray() };
             case NativeTypes.Numeric:
-                return new NativeValue(NativeKind.NumericRaw) { Bytes = bytes.ToArray() };
+                return ScalarCodecs.TryDecodeNumeric(bytes, d.Payload, scale, out NativeDecimal number, out string? numericFailure)
+                    ? NativeValue.Of(number)
+                    : NativeValue.Fail(numericFailure!);
+            case NativeTypes.ExtendedDateTime:
+                return bytes.Length == d.Payload.ExtendedBytes
+                    ? new NativeValue(NativeKind.ExtendedDateTime) { Bytes = bytes.ToArray() }
+                    : NativeValue.Fail($"an Extended Date/Time payload of {bytes.Length} bytes, not {d.Payload.ExtendedBytes}");
             case NativeTypes.Text:
-            {
-                TextDecode text = TextCodec.Decode(bytes);
-                CostCounters.Current.TextDecodedUnits += text.Text?.Length ?? 0;
-                return text.Succeeded ? new NativeValue(NativeKind.Text) { Text = text.Text } : NativeValue.Fail(text.Failure!);
-            }
+                return DecodeText(bytes);
             case NativeTypes.Binary:
                 return new NativeValue(NativeKind.Binary) { Bytes = bytes.ToArray() };
-            case NativeTypes.Memo or NativeTypes.Ole:
-            {
-                byte[]? payload = LongValue(bytes, cache, d, longValueBudget, out string? failure);
-                if (payload is null)
-                {
-                    return NativeValue.Fail(failure!);
-                }
-                if (column.TypeCode == NativeTypes.Memo)
-                {
-                    TextDecode memo = TextCodec.Decode(payload);
-                    CostCounters.Current.TextDecodedUnits += memo.Text?.Length ?? 0;
-                    return memo.Succeeded ? new NativeValue(NativeKind.Text) { Text = memo.Text } : NativeValue.Fail(memo.Failure!);
-                }
-                return new NativeValue(NativeKind.LongBinary) { Bytes = payload };
-            }
             default:
-                return NativeValue.Fail($"native type {column.TypeCode} has no qualified codec yet");
+                return NativeValue.Fail($"native type {type} has no qualified codec yet");
         }
     }
 }

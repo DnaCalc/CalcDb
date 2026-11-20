@@ -240,4 +240,31 @@ entries (NativeTextKeyTests: 15,097 of 15,133 match, the rest the kana residual 
   above that interface." README, Values and expressions: add "(for the C# reference, through the oleaut32 interface;
   see II-16 §7)".
 
+## II-04 §5.5: ACE's Extended Date/Time digits are not the pinned layout (open, reported by W-04/private-codecs)
+
+- **Book.** "0 / 19 ASCII decimal digits, zero-padded: day count since 0001-01-01 … 19 / 1 colon … 20 / 12 whole seconds
+  … 32 / 7 fraction … 39 / 3 `3A 37 00`", from the pinned reference.
+- **Evidence.** The three non-Null values of NU.DX in r-sort-3/create-nums-accdb's fixture (2ec61b52…) are 15 day digits,
+  a colon at 15, 12 second and 7 fraction digits at 16 to 34, `:7` at 35 and five NUL bytes:
+  `000000000693594:0000000432000000000:7` (1899-12-30 12:00:00) and `000000000730119:0000000432005000000:7`
+  (2000-01-01 12:00:00.5). The 42-byte width holds; the field widths and trailer do not. The index key frames the 42
+  bytes as they are (II-05 §4.4's chunked framing; IX_DX's 84 entries match, NativeTextKeyTests).
+- **Not decided.** Whether the reference layout is ever written (the R-SORT-3 open note on two write routes ordering
+  apart suggests a second form), and which day origin and width rules hold at the range ends. CalcDb keeps the bytes and
+  does not interpret them (`NativeKind.ExtendedDateTime`) until designed probes settle the layout.
+- **Proposed text.** II-04 §5.5's table becomes "0 / 15 day digits; 15 / 1 colon; 16 / 12 whole seconds; 28 / 7
+  fraction; 35 / 2 `3A 37`; 37 / 5 zero bytes" once R-FMT-2 asks both write routes and the range ends.
+
+## II-04 §5.6: ResultType holds the native type code; the stored type code is not the result type
+
+- **Book.** "reads the named column's ResultType property when present, and resolves the effective kind from that
+  property before dispatch."
+- **Evidence.** r-cplx-rebuild-cx-calc.accdb (da6db6ad…): ResultType is a Byte holding the native code (C_bool 01, C_dec
+  10, C_text 0A), while the column blocks store C_bool under 03 and C_dec under 07. With the result type bound, every
+  value of the four rows equals what r-cplx-rebuild/calc-schema-change read through DAO, -0 and the calculated Decimal's
+  own scale (14, 15, 0) included; an empty result payload reads Null (NativeScalarValueTests).
+- **Proposed text.** After "before dispatch": "The property is a Byte with the native type code (NUMERIC is 10, not
+  dbDecimal 20); the column block's type code need not equal it. An empty result payload is Null for every fixed result
+  type."
+
 

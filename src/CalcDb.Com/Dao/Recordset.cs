@@ -737,13 +737,13 @@ internal sealed unsafe class FieldObject : DaoObject
             {
                 return CallResult.OfOwnedBstr(Bstrs.FromUnits(text.Shape.Units, text, static (dest, t) => t.DecodeInto(dest)));
             }
-            return Published(text.Result);
+            return Published(text.Result, column);
         }
-        return Published(Recordset.Cursor.Read(column));
+        return Published(Recordset.Cursor.Read(column), column);
     }
 
     /// <summary>The published result of a field read that is not borrowed text.</summary>
-    private CallResult Published(FieldResult read)
+    private CallResult Published(FieldResult read, ColumnDescriptor column)
     {
         if (read.Failure == CursorFailure.NoCurrentRecord)
         {
@@ -756,6 +756,10 @@ internal sealed unsafe class FieldObject : DaoObject
         if (Scalar(read.Value) is { } scalar)
         {
             return scalar;
+        }
+        if (read.Value.Kind == NativeKind.Decimal && DecimalRefusal(read.Value.Decimal, column) is { } refused)
+        {
+            return refused;
         }
         return Project(read.Value) is { } value ? CallResult.Of(value) : CallResult.Fail(Failure.NotImplemented($"Field.Value of a {read.Value.Kind} value"));
     }
@@ -786,10 +790,29 @@ internal sealed unsafe class FieldObject : DaoObject
     /// </summary>
     private static OwnedVariant? Project(NativeValue v) => v.Kind switch
     {
+        NativeKind.Decimal => OwnedVariant.FromDecimal(new DecimalValue(v.Scale, v.Decimal.Negative, v.Decimal.High32, v.Decimal.Low64)),
         NativeKind.Binary or NativeKind.LongBinary => v.Bytes is { Length: > 0 } bytes ? ByteArray(bytes) : OwnedVariant.Null(),
         NativeKind.Guid => OwnedVariant.FromText("{guid " + new Guid(v.Bytes!).ToString("B").ToUpperInvariant() + "}"),
         _ => null,
     };
+
+    /// <summary>
+    /// When a Decimal does not read as VT_DECIMAL (R-ORACLE-1 OR-WIRE, T-INT-34). A column of precision 38, which DAO
+    /// CreateField(name, 20) makes, fails every non-Null read with 3000 "Reserved error (-1038)" and an IErrorInfo
+    /// (r-dec-read/*-daofield-*); a precision from 29 to 37 is not observed; a value beyond the DECIMAL's 96 bits or scale
+    /// 28 is not modelled. A calculated Decimal has no declared precision and reads as VT_DECIMAL
+    /// (r-cplx-rebuild/calc-schema-change).
+    /// </summary>
+    private CallResult? DecimalRefusal(NativeDecimal value, ColumnDescriptor column)
+    {
+        if (column.CalculatedResultType is null && column.NumericPrecision > 28)
+        {
+            return column.NumericPrecision == 38
+                ? Fail(3000, "Reserved error (-1038); there is no message for this error.", publishesErrorInfo: true)
+                : CallResult.Fail(Failure.NotImplemented($"Field.Value of a Decimal column of precision {column.NumericPrecision} (not observed)"));
+        }
+        return value.FitsAutomation ? null : CallResult.Fail(Failure.NotImplemented($"Field.Value of a Decimal beyond VT_DECIMAL ({value.Magnitude} at scale {value.Scale})"));
+    }
 
     private static OwnedVariant ByteArray(byte[] bytes)
     {

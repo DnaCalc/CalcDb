@@ -20,14 +20,30 @@ public enum KeyValueKind
 
     /// <summary>Text, Memo: the UTF-16 units, borrowed (II-05 §6.1: no temporary BSTR inside the encoder).</summary>
     Text,
+
+    /// <summary>NUMERIC: the sign and the 128-bit magnitude at the column's scale (II-05 §4.1).</summary>
+    Numeric,
+
+    /// <summary>Binary, GUID (its 16 row bytes) and Extended Date/Time (its 42 row bytes), borrowed.</summary>
+    Bytes,
 }
 
 /// <summary>One field value for a key: its kind and payload.</summary>
 public readonly record struct KeyValue(KeyValueKind Kind, long Integer = 0, ulong Bits = 0, bool Boolean = false, ReadOnlyMemory<char> Text = default)
 {
+    /// <summary>A NUMERIC magnitude; the sign is <see cref="Boolean"/> (true negative).</summary>
+    public UInt128 Magnitude { get; init; }
+
+    /// <summary>A Binary, GUID or Extended Date/Time value as its row bytes.</summary>
+    public ReadOnlyMemory<byte> Bytes { get; init; }
+
     public static KeyValue Null => new(KeyValueKind.Null);
 
     public static KeyValue OfText(ReadOnlyMemory<char> text) => new(KeyValueKind.Text, Text: text);
+
+    public static KeyValue OfNumeric(NativeDecimal value) => new(KeyValueKind.Numeric, Boolean: value.Negative) { Magnitude = value.Magnitude };
+
+    public static KeyValue OfBytes(ReadOnlyMemory<byte> bytes) => new(KeyValueKind.Bytes) { Bytes = bytes };
 }
 
 /// <summary>
@@ -51,24 +67,31 @@ public enum KeyCodecRefusal
 {
     None,
 
-    /// <summary>GUID, Binary, NUMERIC and other types: their checked forms are W-04/private-codecs.</summary>
+    /// <summary>A type with no key codec: OLE, Large Number, complex and the unknown codes (II-05 §4.1: OLE is not indexable).</summary>
     TypeNotEncoded,
 
     /// <summary>A Text or Memo column whose sort order is outside the General family: NotModelled.SortOrder (T-IDX-06).</summary>
     SortOrderNotModelled,
+
+    /// <summary>
+    /// A descending NUMERIC, GUID, Binary or Extended Date/Time column: no retained fixture has one, so neither the
+    /// book's complement rule (II-05 §§4.1, 4.4) nor the reference's Jet 4 "legacy" NUMERIC form is decided
+    /// (NotModelled.DescendingKey).
+    /// </summary>
+    DescendingNotDecided,
 }
 
 /// <summary>
 /// The codec of one index column, chosen once per prepared index (II-05 §6.1), never per row: its native type and, for
 /// Text and Memo, the compiled sort descriptor its raw descriptor selects.
 /// </summary>
-public readonly record struct FieldKeyCodec(byte Type, SortDescriptor? Sort)
+public readonly record struct FieldKeyCodec(byte Type, SortDescriptor? Sort, int MaxBytes = 0)
 {
     /// <summary>The most bytes this field contributes: the marker and the largest payload.</summary>
-    public int MaxFieldBytes => Sort is { } s ? 1 + s.MaxPayloadBytes : IndexKeys.MaxFieldBytes;
+    public int MaxFieldBytes => Sort is { } s ? 1 + s.MaxPayloadBytes : MaxBytes > 0 ? MaxBytes : IndexKeys.MaxFieldBytes;
 
-    /// <summary>The most bytes this field contributes for a Text value of <paramref name="units"/> key units (a scalar ignores it).</summary>
-    public int MaxFieldBytesFor(int units) => Sort is { } s ? 1 + TextKeys.MaxPayloadBytes(s, units) : IndexKeys.MaxFieldBytes;
+    /// <summary>The most bytes this field contributes for a Text value of <paramref name="units"/> key units (another type ignores it).</summary>
+    public int MaxFieldBytesFor(int units) => Sort is { } s ? 1 + TextKeys.MaxPayloadBytes(s, units) : MaxFieldBytes;
 }
 
 /// <summary>
@@ -78,13 +101,28 @@ public readonly record struct FieldKeyCodec(byte Type, SortDescriptor? Sort)
 /// Boolean True 00 / False FF; descending complements the payload. Text and Memo: the General-family weights of the
 /// column's <see cref="SortDescriptor"/> (W-04/weight-tables-per-sort-order; II-05 §5). Field contributions follow each
 /// other with no delimiter; a composite key longer than 510 bytes is shortened by <see cref="FinishComposite"/>.
-/// Binary, GUID and NUMERIC are W-04/private-codecs.
+/// NUMERIC, Binary, GUID and Extended Date/Time are W-04/private-codecs' (II-05 §§4.1, 4.4).
 /// </summary>
 public static class IndexKeys
 {
     /// <summary>Whether this codec encodes scalar fields of the native type (Text and Memo need a sort descriptor).</summary>
     public static bool Encodes(byte type) => type is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
         or NativeTypes.Currency or NativeTypes.Single or NativeTypes.Double or NativeTypes.DateTime;
+
+    /// <summary>Whether the type's key is the chunked byte framing (II-05 §4.4): Binary, GUID, Extended Date/Time.</summary>
+    public static bool IsChunked(byte type) => type is NativeTypes.Binary or NativeTypes.Guid or NativeTypes.ExtendedDateTime;
+
+    /// <summary>The NUMERIC key payload: a sign byte and the 16-byte big-endian magnitude.</summary>
+    public const int NumericPayloadBytes = 17;
+
+    /// <summary>Data bytes per chunk of the byte framing; each chunk is followed by one count byte.</summary>
+    public const int ChunkBytes = 8;
+
+    /// <summary>The count byte of a chunk that more input follows.</summary>
+    public const byte MoreChunks = 0x09;
+
+    /// <summary>The most bytes a chunked field of <paramref name="dataBytes"/> contributes: the marker and its chunks.</summary>
+    public static int ChunkedFieldBytes(int dataBytes) => 1 + (dataBytes + ChunkBytes - 1) / ChunkBytes * (ChunkBytes + 1);
 
     public static bool IsText(byte type) => type is NativeTypes.Text or NativeTypes.Memo;
 
@@ -101,12 +139,29 @@ public static class IndexKeys
     /// The codec of an index column: scalar by type, Text and Memo by their raw sort descriptor (II-05 §4, D-SORT-1).
     /// A descriptor outside the General family is <see cref="KeyCodecRefusal.SortOrderNotModelled"/>, never a fallback.
     /// </summary>
-    public static FieldKeyCodec? CodecFor(ColumnDescriptor column, out KeyCodecRefusal refusal)
+    public static FieldKeyCodec? CodecFor(ColumnDescriptor column, out KeyCodecRefusal refusal, bool ascending = true)
     {
         refusal = KeyCodecRefusal.None;
         if (Encodes(column.TypeCode))
         {
             return new FieldKeyCodec(column.TypeCode, null);
+        }
+        if (!ascending && (column.TypeCode == NativeTypes.Numeric || IsChunked(column.TypeCode)))
+        {
+            refusal = KeyCodecRefusal.DescendingNotDecided;
+            return null;
+        }
+        switch (column.TypeCode)
+        {
+            case NativeTypes.Numeric:
+                return new FieldKeyCodec(column.TypeCode, null, 1 + NumericPayloadBytes);
+            case NativeTypes.Guid:
+                return new FieldKeyCodec(column.TypeCode, null, ChunkedFieldBytes(16));
+            case NativeTypes.ExtendedDateTime:
+                return new FieldKeyCodec(column.TypeCode, null, ChunkedFieldBytes(42));
+            case NativeTypes.Binary:
+                // A longer value (a Seek argument past the column length) does not fit and is refused by TryWriteField.
+                return new FieldKeyCodec(column.TypeCode, null, ChunkedFieldBytes(Math.Max(column.Length, 1)));
         }
         if (IsText(column.TypeCode) && column.TextSort is { } order)
         {
@@ -130,7 +185,12 @@ public static class IndexKeys
     {
         if (codec.Sort is not { } sort)
         {
-            return TryWriteField(key, codec.Type, ascending, value, out written);
+            return codec.Type switch
+            {
+                NativeTypes.Numeric => TryWriteNumeric(key, ascending, value, out written),
+                _ when IsChunked(codec.Type) => TryWriteChunked(key, codec.Type, ascending, value, out written),
+                _ => TryWriteField(key, codec.Type, ascending, value, out written),
+            };
         }
         written = 0;
         if (value.Kind == KeyValueKind.Null)
@@ -212,6 +272,89 @@ public static class IndexKeys
             key[1 + i] = ascending ? payload[i] : (byte)~payload[i];
         }
         written = 1 + width;
+        return true;
+    }
+
+    /// <summary>
+    /// An ascending NUMERIC field (II-05 §4.1, R-SORT-3): a nonnegative value is FF then the 16-byte big-endian magnitude
+    /// at the column's scale, a negative one 00 then the complemented magnitude. ACCDB and MDB agree
+    /// (r-fix-fmt-sort/sort3-nums-decimal-accdb and -mdb, ND (18,4) from -12345678901234.5678 to 12345678901234.5678;
+    /// r-sort-3/create-nums-accdb and -mdb, precision 38). Descending is <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
+    /// </summary>
+    private static bool TryWriteNumeric(Span<byte> key, bool ascending, KeyValue value, out int written)
+    {
+        written = 0;
+        if (value.Kind == KeyValueKind.Null)
+        {
+            key[0] = ascending ? (byte)0x00 : (byte)0xFF;
+            written = 1;
+            return true;
+        }
+        if (!ascending || value.Kind != KeyValueKind.Numeric || key.Length < 1 + NumericPayloadBytes)
+        {
+            return false;
+        }
+        bool negative = value.Boolean;
+        key[0] = 0x7F;
+        key[1] = negative ? (byte)0x00 : (byte)0xFF;
+        BinaryPrimitives.WriteUInt128BigEndian(key[2..], negative ? ~value.Magnitude : value.Magnitude);
+        written = 1 + NumericPayloadBytes;
+        return true;
+    }
+
+    /// <summary>
+    /// The ascending chunked byte framing of Binary, GUID and Extended Date/Time (II-05 §4.4): eight data bytes then 09
+    /// while more follow; the last chunk padded with zeroes and ended by its count of data bytes (1 to 8). A GUID is
+    /// framed in its canonical text order, the first three components reversed from the row's (IX_GU and IX_KG of
+    /// r-sort-3/create-nums-* and create-keys-*, the complex-value tables of r-fix-cat-txn/create-cx-types-accdb);
+    /// Extended Date/Time frames its 42 row bytes as they are (IX_DX); Binary its bytes (the MSysQueries
+    /// ObjectIdAttribute index of every retained database). An empty Binary value writes the marker alone (no fixture
+    /// has one). Descending is <see cref="KeyCodecRefusal.DescendingNotDecided"/>.
+    /// </summary>
+    private static bool TryWriteChunked(Span<byte> key, byte type, bool ascending, KeyValue value, out int written)
+    {
+        written = 0;
+        if (value.Kind == KeyValueKind.Null)
+        {
+            key[0] = ascending ? (byte)0x00 : (byte)0xFF;
+            written = 1;
+            return true;
+        }
+        if (!ascending || value.Kind != KeyValueKind.Bytes)
+        {
+            return false;
+        }
+        Span<byte> guid = stackalloc byte[16];
+        scoped ReadOnlySpan<byte> data = value.Bytes.Span;
+        if (type == NativeTypes.Guid)
+        {
+            if (data.Length != 16)
+            {
+                return false;
+            }
+            ScalarCodecs.GuidTextOrder(data, guid);
+            data = guid;
+        }
+        else if (type == NativeTypes.ExtendedDateTime && data.Length != 42)
+        {
+            return false;
+        }
+        if (key.Length < ChunkedFieldBytes(data.Length))
+        {
+            return false;
+        }
+        key[0] = 0x7F;
+        int at = 1;
+        for (int start = 0; start < data.Length; start += ChunkBytes)
+        {
+            int count = Math.Min(ChunkBytes, data.Length - start);
+            for (int i = 0; i < ChunkBytes; i++)
+            {
+                key[at++] = i < count ? data[start + i] : (byte)0;
+            }
+            key[at++] = start + ChunkBytes < data.Length ? MoreChunks : (byte)count;
+        }
+        written = at;
         return true;
     }
 
